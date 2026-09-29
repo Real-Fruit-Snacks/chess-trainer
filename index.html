@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Chess Trainer — learn, practice and solve at any level</title>
+    <meta
+      name="description"
+      content="A free, open-source chess trainer that runs entirely in your browser: interactive lessons, rating-aware puzzles, games against a scalable engine and a full analysis board. Works offline."
+    />
+    <meta name="theme-color" content="#1f6f5b" />
+    <meta name="color-scheme" content="light dark" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Chess" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Chess Trainer" />
+    <meta
+      property="og:description"
+      content="Learn, practice and solve chess puzzles — free, offline-capable, no account needed."
+    />
+    <meta property="og:image" content="/icons/icon-512.png" />
+  </head>
+  <body>
+    <noscript>
+      <div
+        style="padding: 2rem; font-family: system-ui, sans-serif; max-width: 40rem; margin: 0 auto"
+      >
+        <h1>JavaScript is required</h1>
+        <p>
+          Chess Trainer runs entirely in your browser — the lessons, puzzles and engine all need
+          JavaScript enabled.
+        </p>
+      </div>
+    </noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

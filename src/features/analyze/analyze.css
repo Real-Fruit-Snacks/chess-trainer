@@ -1,0 +1,48 @@
+.analyze__import {
+  margin-bottom: var(--space-4);
+}
+
+.analyze__mini {
+  width: auto;
+  min-height: 30px;
+  padding: 2px 6px;
+  font-size: 0.85rem;
+  display: inline-block;
+}
+
+.review-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.review-table th,
+.review-table td {
+  padding: 6px 8px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.review-table th[scope='row'] {
+  text-align: left;
+}
+
+.review-table thead th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.review-table__inaccuracy {
+  color: var(--info);
+}
+
+.review-table__mistake {
+  color: var(--warning);
+}
+
+.review-table__blunder {
+  color: var(--danger);
+  font-weight: 700;
+}

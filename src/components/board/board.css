@@ -1,0 +1,69 @@
+/* Board container: always square, fills the width it is given. */
+.board {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-board);
+  overflow: hidden;
+  container-type: inline-size;
+}
+
+.board__cg,
+.board .cg-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+/* Theme colours come from settings via a CSS variable on .board */
+.board cg-board {
+  background-image: var(--board-bg);
+}
+
+/* Coordinates scale with the board rather than the viewport */
+.board .cg-wrap coords {
+  font-size: clamp(8px, 2.6cqw, 13px);
+  font-weight: 600;
+  font-family: var(--font-sans);
+}
+
+/* Slightly stronger highlights than the default theme for readability */
+.board cg-board square.last-move {
+  background-color: rgba(255, 204, 0, 0.42);
+}
+
+.board cg-board square.selected {
+  background-color: rgba(31, 111, 91, 0.55);
+}
+
+.board cg-board square.move-dest {
+  background: radial-gradient(rgba(31, 111, 91, 0.6) 22%, transparent 24%);
+}
+
+.board cg-board square.oc.move-dest {
+  background: radial-gradient(transparent 0%, transparent 78%, rgba(31, 111, 91, 0.45) 80%);
+}
+
+.board cg-board square.move-dest:hover,
+.board cg-board square.move-dest.hover {
+  background: rgba(31, 111, 91, 0.35);
+}
+
+/* Custom square highlights used by lessons */
+.board cg-board square.hint {
+  background-color: rgba(31, 111, 91, 0.45);
+}
+
+.board cg-board square.wrong {
+  background-color: rgba(214, 69, 65, 0.55);
+}
+
+.board cg-board square.right {
+  background-color: rgba(60, 170, 90, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board piece.anim {
+    transition: none;
+  }
+}

@@ -1,0 +1,24 @@
+name: Lesson proposal
+description: Propose a new lesson or corrections to an existing one.
+labels: [content, triage]
+body:
+  - type: input
+    id: title
+    attributes:
+      label: Lesson title
+    validations:
+      required: true
+  - type: dropdown
+    id: level
+    attributes:
+      label: Target level
+      options: [Beginner (< 800), Intermediate (800–1600), Advanced (1600+)]
+    validations:
+      required: true
+  - type: textarea
+    id: outline
+    attributes:
+      label: Outline
+      description: The key idea and the positions (FEN) you would use to teach it. See docs/CONTENT_GUIDE.md.
+    validations:
+      required: true

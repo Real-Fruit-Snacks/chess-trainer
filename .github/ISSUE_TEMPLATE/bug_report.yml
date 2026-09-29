@@ -1,0 +1,39 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly.
+labels: [bug, triage]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to Puzzles
+        2. Play the move Nf3
+        3. See error
+    validations:
+      required: true
+  - type: input
+    id: position
+    attributes:
+      label: Position (FEN) or puzzle ID
+      description: If the bug involves a specific position, paste the FEN or the puzzle ID shown on screen.
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      placeholder: e.g. Safari 17 on iOS, Chrome 128 on Windows 11 (installed as app)
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: Anything printed in the browser developer console.
+      render: text

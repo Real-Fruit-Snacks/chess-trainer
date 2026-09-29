@@ -1,0 +1,186 @@
+.learn__summary {
+  margin-bottom: var(--space-6);
+}
+
+.learn__level {
+  margin-bottom: var(--space-6);
+}
+
+.learn__level-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.learn__level-header h2 {
+  margin: 0;
+}
+
+.learn__grid {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.lesson-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color var(--transition),
+    transform var(--transition),
+    box-shadow var(--transition);
+}
+
+.lesson-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  color: inherit;
+}
+
+.lesson-card--done {
+  border-color: color-mix(in srgb, var(--success) 50%, var(--border));
+}
+
+.lesson-card__top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.lesson-card__index {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  display: inline-grid;
+  place-items: center;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.lesson-card__category {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.lesson-card__time {
+  margin-left: auto;
+}
+
+.lesson-card__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.lesson-card__summary {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.lesson-card__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ---------- Lesson page ---------- */
+.lesson__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.lesson__steps {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.lesson__stepdot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.lesson__stepdot[aria-current='step'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.lesson__stepdot--done {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.lesson__text {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.lesson__text p {
+  margin-bottom: var(--space-3);
+}
+
+.lesson__text ul,
+.lesson__text ol {
+  margin: 0 0 var(--space-3);
+  padding-left: 1.3em;
+}
+
+.lesson__text li + li {
+  margin-top: 4px;
+}
+
+.lesson__task {
+  border-left: 3px solid var(--accent);
+  padding: var(--space-2) var(--space-3);
+  background: var(--accent-soft);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  font-weight: 600;
+}
+
+.lesson__feedback {
+  min-height: 3em;
+}
+
+.lesson__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.lesson__complete {
+  text-align: center;
+  padding: var(--space-5);
+}
+
+.lesson__complete h2 {
+  margin-bottom: var(--space-2);
+}

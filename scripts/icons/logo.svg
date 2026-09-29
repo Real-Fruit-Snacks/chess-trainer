@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Chess Trainer">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a8a72"/>
+      <stop offset="1" stop-color="#155646"/>
+    </linearGradient>
+    <pattern id="checker" width="128" height="128" patternUnits="userSpaceOnUse">
+      <rect width="64" height="64" fill="#ffffff" fill-opacity="0.07"/>
+      <rect x="64" y="64" width="64" height="64" fill="#ffffff" fill-opacity="0.07"/>
+    </pattern>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="96" fill="url(#checker)"/>
+  <!-- Pawn -->
+  <g fill="#f4efe2">
+    <circle cx="256" cy="150" r="54"/>
+    <path d="M226 196h60c8 0 14 6 14 14s-6 14-14 14h-4c4 40 18 78 42 104h-136c24-26 38-64 42-104h-4c-8 0-14-6-14-14s6-14 14-14z"/>
+    <path d="M160 340h192c14 0 24 10 24 24v6c0 6-4 10-10 10H146c-6 0-10-4-10-10v-6c0-14 10-24 24-24z"/>
+    <path d="M132 392h248c10 0 16 8 16 16v6c0 8-6 14-14 14H130c-8 0-14-6-14-14v-6c0-8 6-16 16-16z"/>
+  </g>
+</svg>

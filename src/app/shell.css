@@ -1,0 +1,204 @@
+.shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Header ---------- */
+.shell__header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--header-height);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(160%) blur(10px);
+  border-bottom: 1px solid var(--border);
+  /* Window Controls Overlay (installed desktop app) */
+  padding-left: env(titlebar-area-x, 0);
+  padding-right: calc(100% - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100%));
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.shell__header-inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.shell__header a,
+.shell__header button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.shell__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--text);
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+
+.shell__brand:hover {
+  color: var(--text);
+}
+
+.shell__nav {
+  display: none;
+  gap: var(--space-1);
+  margin-left: var(--space-2);
+}
+
+.shell__navlink {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.shell__navlink:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.shell__navlink.is-active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.shell__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.shell__install {
+  display: none;
+}
+
+.shell__iconbtn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+
+.shell__iconbtn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* ---------- Main ---------- */
+.shell__main {
+  flex: 1;
+  padding-bottom: calc(var(--bottom-nav-height) + var(--space-5));
+  outline: none;
+}
+
+.shell__loading {
+  display: grid;
+  place-items: center;
+  min-height: 40vh;
+}
+
+/* ---------- Footer ---------- */
+.shell__footer {
+  border-top: 1px solid var(--border);
+  padding: var(--space-4) 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: var(--bottom-nav-height);
+}
+
+.shell__footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  justify-content: space-between;
+}
+
+/* ---------- Bottom navigation (mobile) ---------- */
+.shell__bottomnav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  z-index: 50;
+}
+
+.shell__bottomlink {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.shell__bottomlink.is-active {
+  color: var(--accent);
+}
+
+.shell__bottomicon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+@media (min-width: 900px) {
+  .shell__nav {
+    display: flex;
+  }
+
+  .shell__install {
+    display: block;
+  }
+
+  .shell__bottomnav {
+    display: none;
+  }
+
+  .shell__main {
+    padding-bottom: var(--space-7);
+  }
+
+  .shell__footer {
+    margin-bottom: 0;
+  }
+}
+
+/* ---------- Install banner ---------- */
+.install-banner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  margin-top: var(--space-4);
+}
