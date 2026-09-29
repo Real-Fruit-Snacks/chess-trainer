@@ -24,6 +24,13 @@
   transform: translateY(1px);
 }
 
+/* Link buttons are <a> elements: neutralise the global anchor styles. */
+a.btn,
+a.btn:hover,
+a.btn:focus {
+  text-decoration: none;
+}
+
 .btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -36,6 +43,7 @@
 
 .btn--primary:hover:not(:disabled) {
   background: var(--accent-strong);
+  color: var(--accent-contrast);
 }
 
 .btn--secondary {
@@ -46,6 +54,7 @@
 
 .btn--secondary:hover:not(:disabled) {
   background: var(--surface-3);
+  color: var(--text);
 }
 
 .btn--ghost {
