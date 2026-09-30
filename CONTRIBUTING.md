@@ -18,7 +18,7 @@ starts Vite with hot reload. Node 22 or newer is required (see `.nvmrc`).
 Before opening a pull request run:
 
 ```bash
-npm run check        # lint + typecheck + unit tests + production build
+npm run check        # lint + format check + typecheck + unit tests + production build
 npm run e2e          # optional, needs: npx playwright install --with-deps chromium
 ```
 

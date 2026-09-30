@@ -102,8 +102,9 @@ interface LaunchParams {
  * Calls `onFile` for each; returns false when the browser has no launch queue.
  */
 export function consumeLaunchFiles(onFile: (file: File) => void): boolean {
-  const queue = (window as unknown as { launchQueue?: { setConsumer: (fn: (p: LaunchParams) => void) => void } })
-    .launchQueue;
+  const queue = (
+    window as unknown as { launchQueue?: { setConsumer: (fn: (p: LaunchParams) => void) => void } }
+  ).launchQueue;
   if (!queue) return false;
   queue.setConsumer((params) => {
     for (const handle of params.files ?? []) {
