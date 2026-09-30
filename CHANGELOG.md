@@ -57,7 +57,8 @@ All notable changes to this project are documented here. The format follows
   readable on every theme. The eval bar lines up with the playing surface.
 - Endgame drills show the position you are about to play behind the Start card instead of the
   initial position.
-- The "Install app" button uses an icon instead of a text glyph.
+- The "Install app" button uses an icon instead of a text glyph; the pawn (Play) and knight icons are
+  redrawn.
 - The daily plan's drill picks the next rung of the endgame ladder; the Drills page shows rungs and
   per-group progress; each drill page links to the theory lesson and the next rung.
 - The nine mating-pattern themes that had no name are now named and described in the puzzle catalogue.
