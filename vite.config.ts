@@ -58,6 +58,13 @@ export default defineConfig(({ mode }) => {
           lang: 'en',
           dir: 'ltr',
           categories: ['education', 'games'],
+          // Backups exported from the app can be opened with it from a file manager.
+          file_handlers: [
+            {
+              action: base,
+              accept: { 'application/json': ['.json'] },
+            },
+          ],
           icons: [
             { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
             { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -93,8 +100,13 @@ export default defineConfig(({ mode }) => {
           // Everything the app needs offline is static, so precache all of it —
           // including the single-threaded engine WASM and the puzzle chunks.
           globPatterns: ['**/*.{js,css,html,ico,png,svg,wasm,json,webmanifest,woff2}'],
-          // The threaded engine build is optional and cached on first use instead.
-          globIgnores: ['**/engine/stockfish-19-lite.js', '**/engine/stockfish-19-lite.wasm'],
+          // The threaded engine build is optional and cached on first use instead, and so
+          // are the puzzle chunks beyond the first one of each rating band (b*-00.json).
+          globIgnores: [
+            '**/engine/stockfish-19-lite.js',
+            '**/engine/stockfish-19-lite.wasm',
+            '**/puzzles/b*-@(0[1-9]|[1-9][0-9]).json',
+          ],
           // The Stockfish WASM binary is ~1.8 MB; Workbox's default cap is 2 MB.
           maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         },

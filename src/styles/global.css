@@ -106,7 +106,9 @@ kbd {
   width: 100%;
   max-width: var(--content-max);
   margin: 0 auto;
-  padding: 0 var(--space-4);
+  /* Keep content clear of notches and rounded corners on phones (viewport-fit=cover). */
+  padding: 0 max(var(--space-4), env(safe-area-inset-right, 0px)) 0
+    max(var(--space-4), env(safe-area-inset-left, 0px));
 }
 
 .stack > * + * {
@@ -126,6 +128,17 @@ kbd {
 
 .row--between {
   justify-content: space-between;
+}
+
+/* Card headers: the title wraps, the badge stays on the first line. */
+.card > .row--between:first-child {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+.card > .row--between:first-child > .badge {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .grid {
@@ -195,6 +208,16 @@ kbd {
   max-width: min(100%, calc(100dvh - var(--header-height) - var(--bottom-nav-height) - 96px));
   margin: 0 auto;
   width: 100%;
+  container-type: inline-size;
+}
+
+/*
+ * The eval bar stands beside the playing surface, not beside the coordinate
+ * gutter below it: its bottom margin is the board's gutter, worked out from the
+ * board's width (this container minus the 22px bar and the 8px gap).
+ */
+.trainer__board:has(.board--coords) > .evalbar {
+  margin-bottom: clamp(16px, calc(5.5cqw - 1.65px), 24px);
 }
 
 .trainer__board .board {
@@ -237,6 +260,46 @@ kbd {
   color: var(--text-muted);
   margin: 0;
   max-width: 60ch;
+}
+
+/* Phones held sideways: put the board and its panel side by side and keep the
+   whole board on screen, since the height is the scarce dimension. */
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 899px) {
+  .trainer {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 0.9fr);
+    gap: var(--space-3);
+  }
+
+  /* Header, bottom bar and a compact page title leave this much for the board. */
+  .trainer__board {
+    margin: 0;
+    max-width: calc(100dvh - var(--header-height) - var(--bottom-nav-height) - 84px);
+  }
+
+  /* A page whose title row also carries mode tabs (puzzles) needs that row's height too. */
+  main:has(.page-header .segmented) .trainer__board {
+    max-width: calc(100dvh - var(--header-height) - var(--bottom-nav-height) - 100px);
+  }
+
+  .trainer__panel {
+    max-height: calc(100dvh - var(--header-height) - var(--bottom-nav-height) - 84px);
+    overflow-y: auto;
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-2));
+  }
+
+  .page-header {
+    padding: var(--space-2) 0;
+  }
+
+  .page-header h1 {
+    font-size: 1.15rem;
+    margin: 0;
+  }
+
+  .page-header p {
+    display: none;
+  }
 }
 
 /* ---------- Motion ---------- */

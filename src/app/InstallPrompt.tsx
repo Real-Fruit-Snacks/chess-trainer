@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Dialog } from '@/components/ui';
+import { Button, Dialog, Icon } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import { siteConfig } from '@/site.config';
 import { canOfferInstall, useInstall } from './pwa';
@@ -38,7 +38,7 @@ export function InstallButton({
   return (
     <>
       <Button variant={variant} size={size} block={block} onClick={onClick}>
-        <span aria-hidden="true">⤓</span> Install app
+        <Icon name="download" size={16} /> Install app
       </Button>
       <Dialog
         open={showIosHelp}

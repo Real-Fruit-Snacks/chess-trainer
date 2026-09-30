@@ -1,12 +1,29 @@
-/* Board container: always square, fills the width it is given. */
+/*
+ * Board container: always square, fills the width it is given. With
+ * coordinates on, a gutter down the left and along the bottom holds the rank
+ * numbers and file letters; the playing surface fills the rest.
+ */
 .board {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
+  container-type: inline-size;
+  --coord-gutter: 0px;
+}
+
+.board--coords {
+  --coord-gutter: clamp(16px, 5.5cqw, 24px);
+}
+
+.board__surface {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: var(--coord-gutter);
+  left: var(--coord-gutter);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-board);
   overflow: hidden;
-  container-type: inline-size;
 }
 
 .board__cg,
@@ -20,11 +37,45 @@
   background-image: var(--board-bg);
 }
 
-/* Coordinates scale with the board rather than the viewport */
-.board .cg-wrap coords {
-  font-size: clamp(8px, 2.6cqw, 13px);
-  font-weight: 600;
+/* Coordinates: one label per square, centred in the gutter beside or below it. */
+.board__coords {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   font-family: var(--font-sans);
+  font-size: clamp(10px, 3cqw, 13px);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.board__ranks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--coord-gutter);
+  height: calc(100% - var(--coord-gutter));
+  display: grid;
+  grid-template-rows: repeat(8, 1fr);
+}
+
+.board__files {
+  position: absolute;
+  bottom: 0;
+  left: var(--coord-gutter);
+  width: calc(100% - var(--coord-gutter));
+  height: var(--coord-gutter);
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+}
+
+.board__ranks span,
+.board__files span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Slightly stronger highlights than the default theme for readability */

@@ -17,6 +17,8 @@ import {
 import { toast } from '@/components/ui/toastStore';
 import { useEngine } from '@/engine/useEngine';
 import { reviewGame } from '@/features/analyze/gameReview';
+import { digestReview } from './insights';
+import { InsightsCard } from './InsightsCard';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
 import { HANDOFF_PGN_KEY } from '@/features/play/PlayPage';
 import { type OwnPuzzle, ownPuzzlesFromReview } from '@/features/puzzles/ownPuzzles';
@@ -83,6 +85,7 @@ export default function MyGamesPage() {
         <div className="stack">
           <ImportCard />
           {list.length > 0 ? <OverviewCard list={list} player={player} /> : null}
+          {list.length > 0 ? <InsightsCard list={list} player={player} /> : null}
           {list.length > 0 ? <OpeningsCard list={list} player={player} /> : null}
           {list.length > 0 ? <RepertoireCard list={list} player={player} /> : null}
         </div>
@@ -547,6 +550,7 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
         counts: summary.counts,
         depth: summary.depth,
         at: Date.now(),
+        digest: digestReview(summary),
       });
       const side = learnerColor(game, player);
       const puzzles = ownPuzzlesFromReview(

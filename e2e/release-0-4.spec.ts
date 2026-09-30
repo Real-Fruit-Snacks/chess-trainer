@@ -58,10 +58,10 @@ test.describe('own-game puzzles', () => {
     await completeOnboarding(page);
     await expectBoard(page);
     await expect(page.locator('.puzzle-status')).toContainText(/Your move/i, { timeout: 20_000 });
-    await page.getByRole('button', { name: '☆ Bookmark' }).click();
-    await expect(page.getByRole('button', { name: '★ Bookmarked' })).toBeVisible();
+    await page.getByRole('button', { name: 'Bookmark', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Bookmarked' })).toBeVisible();
     await expect(page.locator('.segmented__option', { hasText: 'Review' })).toContainText('1');
-    await page.getByRole('button', { name: '★ Bookmarked' }).click();
+    await page.getByRole('button', { name: 'Bookmarked' }).click();
     await expect(page.locator('.segmented__option', { hasText: 'Review' })).not.toContainText('1');
   });
 });
@@ -133,8 +133,9 @@ test.describe('my games', () => {
       .getByRole('button', { name: 'As Black' })
       .click();
     await expect(page.getByTestId('openings-black')).toContainText("Bishop's Opening");
-    await expect(page.getByTestId('deviations')).toContainText('Bb5');
-    await expect(page.getByTestId('deviations')).toContainText('instead of');
+    // 3. Bb5 now follows the Ruy Lopez repertoire; the Black games left the Caro-Kann on move one.
+    await expect(page.getByTestId('deviations')).toContainText('e5 instead of c6');
+    await expect(page.getByTestId('deviations')).toContainText('Caro-Kann');
 
     // Batch review at the fast depth, then save the learner's mistakes as puzzles.
     await page.goto('/progress');

@@ -22,6 +22,14 @@ export interface SettingsState {
   sounds: boolean;
   /** 'soft' plays the same cues quieter and rounder. */
   soundTheme: SoundTheme;
+  /** Short vibrations on moves, solves and mistakes (phones with a vibration motor). */
+  haptics: boolean;
+  /** Show the number of due reviews on the installed app's icon (Badging API). */
+  appBadge: boolean;
+  /** When the progress was last exported or shared, for the backup reminder. */
+  lastBackupAt: number | null;
+  /** Rated puzzle attempts at the time of the last backup. */
+  lastBackupAttempts: number;
   /** Promote to a queen without asking. */
   autoQueen: boolean;
   /** Target depth for the analysis board. */
@@ -38,8 +46,13 @@ export interface SettingsState {
   moveInput: boolean;
   /** Hide the pieces while playing (blindfold training). */
   playBlindfold: boolean;
+  /** Coach mode in untimed engine games: pause after a mistake and offer a take-back. */
+  playCoach: boolean;
   /** Query the Lichess tablebase API for positions with 7 or fewer pieces (network). */
   tablebase: boolean;
+  /** Query the Lichess opening explorer for move statistics (network). */
+  explorer: boolean;
+  explorerDatabase: 'masters' | 'lichess';
   /**
    * Experimental: run the multi-threaded engine build. Needs cross-origin
    * isolation, which the service worker switches on at the next reload.
@@ -68,6 +81,10 @@ export const DEFAULT_SETTINGS = {
   animations: true,
   sounds: true,
   soundTheme: 'standard' as SoundTheme,
+  haptics: true,
+  appBadge: true,
+  lastBackupAt: null as number | null,
+  lastBackupAttempts: 0,
   autoQueen: false,
   analysisDepth: 18,
   analysisLines: 3,
@@ -77,7 +94,10 @@ export const DEFAULT_SETTINGS = {
   playTimeControl: 'none',
   moveInput: false,
   playBlindfold: false,
+  playCoach: true,
   tablebase: false,
+  explorer: false,
+  explorerDatabase: 'masters' as 'masters' | 'lichess',
   engineThreads: false,
   lichessUsername: '',
   chesscomUsername: '',

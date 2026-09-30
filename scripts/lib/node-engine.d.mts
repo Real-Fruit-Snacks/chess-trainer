@@ -21,6 +21,9 @@ export class NodeEngine {
   send(command: string): void;
   collect(until: (line: string) => boolean): Promise<string[]>;
   init(options?: { hashMb?: number }): Promise<void>;
-  analyse(fen: string, options?: { depth?: number; multipv?: number }): Promise<NodeEngineResult>;
+  analyse(
+    fen: string,
+    options?: { depth?: number; multipv?: number; maxMs?: number },
+  ): Promise<NodeEngineResult>;
   quit(): void;
 }

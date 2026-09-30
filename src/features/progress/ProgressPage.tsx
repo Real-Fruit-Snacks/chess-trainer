@@ -30,7 +30,9 @@ import { formatDate, formatDuration, trainingStreak } from '@/lib/dates';
 import { isProvisional, PROVISIONAL_RD } from '@/lib/glicko';
 import { CALIBRATION_PUZZLES, formatRating, ratingBand, STARTING_RATINGS } from '@/lib/rating';
 import { approximateGameRatings, formatRange } from '@/lib/ratingScales';
+import { hapticsSupported } from '@/lib/haptics';
 import { playSound } from '@/lib/sound';
+import { badgingSupported } from '@/app/useAppBadge';
 import { siteConfig } from '@/site.config';
 import { summarizeProgress, useProgress } from '@/store/progress';
 import {
@@ -40,7 +42,13 @@ import {
   type ReviewDepth,
   useSettings,
 } from '@/store/settings';
+import { BackupNudge } from './BackupNudge';
+import { ProfilesCard } from './ProfilesCard';
+import { buildEngineLadder } from '@/features/play/ladder';
+import { LevelResults } from './LevelResults';
+import { useBackupActions } from './useBackupActions';
 import { EngineDiagnostics } from './EngineDiagnostics';
+import { OfflinePuzzles } from './OfflinePuzzles';
 import { EngineThreadsSetting } from './EngineThreadsSetting';
 import { RatingChart } from './RatingChart';
 import { WeeklyCard } from './WeeklyCard';
@@ -52,6 +60,7 @@ export default function ProgressPage() {
   const settings = useSettings();
   const location = useLocation();
   const stats = summarizeProgress(progress);
+  const engineLadder = buildEngineLadder(progress.games);
   const [confirmReset, setConfirmReset] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const install = useInstall();
@@ -66,15 +75,7 @@ export default function ProgressPage() {
     }
   }, [location.hash]);
 
-  const exportData = () => {
-    const blob = new Blob([progress.exportState()], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `chess-trainer-progress-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const backup = useBackupActions();
 
   const importData = async (file: File) => {
     try {
@@ -130,6 +131,7 @@ export default function ProgressPage() {
         <h1>Progress</h1>
         <p>Everything is stored on this device only. Export a backup before switching browsers.</p>
       </div>
+      <BackupNudge />
 
       <div className="progress__grid">
         <div className="stack">
@@ -349,7 +351,15 @@ export default function ProgressPage() {
 
           {progress.games.length > 0 ? (
             <Card>
-              <h2 style={{ fontSize: '1.15rem' }}>Recent games</h2>
+              <h2 style={{ fontSize: '1.15rem' }}>Games against the engine</h2>
+              <p className="small muted" style={{ margin: '0 0 8px' }} data-testid="ladder-height">
+                {engineLadder.height > 0
+                  ? `Engine ladder: Level ${engineLadder.height} beaten · ${engineLadder.reason}`
+                  : `Engine ladder: ${engineLadder.reason}`}{' '}
+                <Link to="/play">Play</Link>
+              </p>
+              <LevelResults games={progress.games} />
+              <h3 style={{ fontSize: '0.95rem', margin: '16px 0 4px' }}>Recent games</h3>
               <div className="history__scroll">
                 <table className="history">
                   <thead>
@@ -392,6 +402,7 @@ export default function ProgressPage() {
         </div>
 
         <div className="stack" id="settings">
+          <ProfilesCard />
           <Card>
             <h2 style={{ fontSize: '1.15rem' }}>Appearance</h2>
             <div className="settings__group">
@@ -519,6 +530,38 @@ export default function ProgressPage() {
                 label="Endgame tablebase lookups"
                 description="In analysis, ask the Lichess tablebase for exact results in positions with 7 pieces or fewer. Uses the network; off by default."
               />
+              <Switch
+                checked={settings.haptics}
+                onChange={(v) => settings.update({ haptics: v })}
+                label="Vibration"
+                description={
+                  hapticsSupported()
+                    ? 'A short buzz on moves, solves and mistakes.'
+                    : 'A short buzz on moves, solves and mistakes — this device does not support it.'
+                }
+              />
+              <Switch
+                checked={settings.appBadge}
+                onChange={(v) => settings.update({ appBadge: v })}
+                label="Badge on the app icon"
+                description={
+                  badgingSupported()
+                    ? 'Show how many reviews are due on the installed app’s icon.'
+                    : 'Show how many reviews are due on the installed app’s icon (needs the installed app).'
+                }
+              />
+              <Switch
+                checked={settings.explorer}
+                onChange={(v) => settings.update({ explorer: v })}
+                label="Opening explorer lookups"
+                description="In Analyze and Openings, show what masters and Lichess players play in the position and how it goes. Uses the network; off by default."
+              />
+              <Switch
+                checked={settings.playCoach}
+                onChange={(v) => settings.update({ playCoach: v })}
+                label="Coach mode by default"
+                description="New untimed games against the engine start with the coach on: mistakes pause the game with an explanation and a take-back."
+              />
               <Field label="Default engine strength">
                 {(id) => (
                   <Select
@@ -618,7 +661,7 @@ export default function ProgressPage() {
             <div className="settings__group">
               {install.isStandalone ? (
                 <p className="small muted" style={{ margin: 0 }}>
-                  Installed as an app ✓ — works offline.
+                  Installed as an app — works offline.
                 </p>
               ) : (
                 <div className="settings__row">
@@ -626,10 +669,27 @@ export default function ProgressPage() {
                   <InstallButton size="sm" />
                 </div>
               )}
+              <OfflinePuzzles />
               <div className="settings__row">
-                <span className="small">Backup or move your progress.</span>
+                <span className="small">
+                  Backup or move your progress
+                  {backup.canShare ? ' — share it straight to another device' : ''}.
+                  {settings.lastBackupAt
+                    ? ` Last backup ${formatDate(settings.lastBackupAt, siteConfig.locale)}.`
+                    : ''}
+                </span>
                 <div className="row">
-                  <Button size="sm" onClick={exportData}>
+                  {backup.canShare ? (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => void backup.share()}
+                      disabled={backup.busy}
+                    >
+                      Share
+                    </Button>
+                  ) : null}
+                  <Button size="sm" onClick={backup.download}>
                     Export
                   </Button>
                   <Button size="sm" onClick={() => fileInput.current?.click()}>

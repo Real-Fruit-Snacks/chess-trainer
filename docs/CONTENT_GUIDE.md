@@ -1,11 +1,12 @@
 # Content guide: lessons, courses, drills, studies, repertoires and classic games
 
 All chess content is plain data: lessons in `src/features/learn/lessons/*.ts` (one file per level and
-batch — `beginner.ts`, `beginner2.ts`, `intermediate.ts` … `advanced4.ts` — registered in
+batch — `beginner.ts`, `beginner2.ts`, `intermediate.ts` … `advanced6.ts` — registered in
 `lessons/index.ts` in curriculum order), courses in `src/features/learn/courses.ts`, endgame drills in
-`src/features/drills/endgameDrills.ts`, endgame studies in `src/features/studies/studies.ts`, opening
-repertoires in `src/features/openings/repertoires.ts`, classic games in
-`src/features/classics/games.ts` and the reference pages in `src/features/reference/content.ts`. No
+`src/features/drills/endgameDrills.ts`, mating patterns in `src/features/patterns/matingPatterns.ts`,
+endgame studies in `src/features/studies/studies.ts`, opening repertoires in
+`src/features/openings/repertoires.ts`, classic games in `src/features/classics/games.ts`
+(`games2.ts`, `games3.ts`) and the reference pages in `src/features/reference/content.ts`. No
 React knowledge is needed to add any of it — but every position must be _right_, so this guide is
 mostly about verification.
 
@@ -138,14 +139,32 @@ confirms with Stockfish that every fixed position is won (for `mate`/`promote`/`
 a check to answer — and the random position generator.
 
 Adjudication is automatic (`useDrillGame`): checkmate, promotion, stalemate, losing the mating material
-or the pawn, the move limit, and the engine evaluation after each learner move (a drawn evaluation in a
-winning drill, or a lost one in a holding drill, ends the attempt with an explanation).
+or the last pawn, the move limit, and the engine evaluation after each learner move (a drawn evaluation in
+a winning drill, or a lost one in a holding drill, ends the attempt with an explanation). Material is
+counted from the learner's side, so a drill can have the learner play either colour, hold with pawns of
+its own (Réti) or give up material deliberately (the outside passed pawn).
+
+Every drill is a rung of the **endgame ladder** (`endgameLadder.ts`): rungs are ordered by `difficulty`
+(1–4) and then by group, so give a new drill the difficulty that matches where a learner should meet
+it. Set `lessonId` to the lesson that teaches the theory; the drill page links to it. Holding drills
+whose "draw" the engine does not recognise (a knight and rook pawn on the seventh, say) cannot be used:
+`drills:verify` would fail and the in-game adjudication would end the attempt at once.
 
 The vision drills (`src/features/drills/vision.ts`) generate their own tasks; the blindfold option only
 changes what the board shows (`VisionDrill.tsx`), so no content changes are needed for it. The "Guess the
 position" drill takes its move sequences from the classic games (the first 6–12 plies of a random game),
 so every classic game you add also feeds it; `trackPieces()` follows each piece through captures, castling
 and en passant to produce the questions.
+
+## Mating patterns
+
+`src/features/patterns/matingPatterns.ts` holds the nineteen named mates that the puzzle library tags
+(one entry per `…Mate` theme in `themes.ts`). Each is a `before` position with the defender to move, the
+`setup` move that leads to the diagram, and the mating `line` from the diagram, plus the explanation and
+a "spot it" paragraph. The tests require the setup move and the line to be legal, the line to end in mate,
+the mate to be forced in that many moves (a small exhaustive search), and the set of ids to match the
+themes exactly — add a theme to `themes.ts` and a pattern together. Keep diagrams minimal: only the pieces
+the pattern needs, plus whatever blocks the king's escape.
 
 ## Endgame studies
 
@@ -190,9 +209,20 @@ and every referenced lesson, drill and classic id must exist.
 Each built-in repertoire is a PGN string with variations and comments. Every branch becomes a line the
 learner will be asked to recall; comments become tips shown after the move. The unit tests parse every
 repertoire, require at least four lines of at least eight plies, and fail on any illegal move. Keep
-lines about eight to twelve moves deep and prefer plans over sharp theory; the spaced-repetition
-scheduler treats every learner move as a separate card, so a repertoire with 50–60 learner moves is a
+lines about eight to fifteen moves deep and prefer plans over sharp theory; the spaced-repetition
+scheduler treats every learner move as a separate card, so a repertoire with 50–90 learner moves is a
 comfortable size.
+
+Legality is not soundness: before shipping a repertoire, run every line through the engine and make sure
+no learner move loses more than about a pawn compared with the engine's choice (opponent moves may be
+inaccurate — they are what people play — but not outright blunders). A quick way is a script that walks
+the PGN, evaluates each position at depth 14 and prints any move whose evaluation drops by more than 120
+centipawns for the learner or 300 for the opponent; the 0.6.0 release did this for all sixteen
+repertoires and repaired the lines it flagged.
+
+Learners can also build repertoires in the app: **Add line to repertoire** on the analysis board merges
+the current line into a custom repertoire (`mergeLine.ts`), and a custom repertoire's **Edit lines** mode
+adds moves from the board or the opening explorer, stores per-move notes and deletes branches.
 
 ## Classic games
 
@@ -202,14 +232,24 @@ first (it must land on the guesser's move). The tests replay every game, check t
 games that end in `#`, and require that every note belongs to the guessed side. Annotations should be
 original prose in your own words. Game scores themselves are facts and not copyrightable; type them in
 from a reliable source and replay them (the tests will catch an illegal move but not a wrong legal one, so
-compare the final position with the source).
+compare the final position with the source). The Classic games page groups games into eras by `year`
+(`eras.ts`: Romantic to 1880, Classical to 1945, Modern to 1990, Contemporary after) and filters by
+`difficulty`, so both fields matter for where a game shows up.
 
 ## Sourcing positions
 
-- Constructed positions are fine for basic patterns and are easiest to keep clean.
+- Constructed positions are fine for basic patterns and are easiest to keep clean — but probe them with
+  the engine before writing the prose. A quick script over `scripts/lib/node-engine.mjs` that prints the
+  top four moves (MultiPV) and the score of the intended answer catches hanging pieces, side-to-move
+  mistakes and "obvious" moves that are not best. For endgame tasks with a unique winning or drawing
+  move, a random search over a small family of positions (king + rook vs king + pawn, say) filtered for
+  "best move wins, second best draws" produces crisp, teachable positions in minutes.
 - Real positions are more convincing for intermediate/advanced material. The bundled Lichess puzzles
   are CC0 — search `public/puzzles/*.json` by theme, use the FEN _after_ the setup move, and cite
-  "From a Lichess puzzle" in the step text as the existing lessons do.
+  "From a Lichess game" in the step text as the existing lessons do. Themes such as `intermezzo`,
+  `quietMove`, `advancedPawn`, `trappedPiece` and `defensiveMove` map well onto lesson topics, and a
+  puzzle's follow-up moves make natural two-step tasks (the first move with a scripted reply, then the
+  finish).
 - Do not copy annotated positions from books or databases with restrictive licences.
 
 ## Style

@@ -111,7 +111,7 @@ export function Board({
     turnColor: effectiveTurn,
     check,
     lastMove: lastMove ? [...lastMove] : undefined,
-    coordinates: showCoordinates,
+    coordinates: false,
     viewOnly,
     disableContextMenu: true,
     addDimensionsCssVarsTo: containerRef.current ?? undefined,
@@ -176,7 +176,6 @@ export function Board({
       turnColor: effectiveTurn,
       check,
       lastMove: lastMove ? [...lastMove] : undefined,
-      coordinates: showCoordinates,
       highlight: { custom: highlights ?? new Map() },
       animation: { enabled: animationsEnabled },
       movable: {
@@ -196,7 +195,6 @@ export function Board({
     check,
     lastMove,
     highlights,
-    showCoordinates,
     animationsEnabled,
     dests,
     movableColor,
@@ -283,34 +281,44 @@ export function Board({
 
   return (
     <div
-      className={['board', `board--theme-${boardTheme}`, className].filter(Boolean).join(' ')}
+      className={[
+        'board',
+        `board--theme-${boardTheme}`,
+        showCoordinates ? 'board--coords' : null,
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
       style={style}
       data-animated={animationsEnabled}
       data-orientation={orientation}
     >
-      <div
-        ref={containerRef}
-        className="board__cg"
-        role={interactive ? 'application' : 'img'}
-        aria-roledescription={interactive ? 'chess board' : undefined}
-        aria-label={ariaLabel ?? `Chess board, ${effectiveTurn} to move`}
-        tabIndex={interactive ? 0 : undefined}
-        onKeyDown={interactive ? onKeyDown : undefined}
-        onFocus={() => {
-          if (!interactive) return;
-          setFocused(true);
-          if (!cursor) setCursor(defaultCursor(orientation));
-        }}
-        onBlur={() => setFocused(false)}
-      />
-      {cursorStyle ? (
+      <div className="board__surface">
         <div
-          className="board__cursor"
-          style={cursorStyle}
-          aria-hidden="true"
-          data-testid="board-cursor"
+          ref={containerRef}
+          className="board__cg"
+          role={interactive ? 'application' : 'img'}
+          aria-roledescription={interactive ? 'chess board' : undefined}
+          aria-label={ariaLabel ?? `Chess board, ${effectiveTurn} to move`}
+          tabIndex={interactive ? 0 : undefined}
+          onKeyDown={interactive ? onKeyDown : undefined}
+          onFocus={() => {
+            if (!interactive) return;
+            setFocused(true);
+            if (!cursor) setCursor(defaultCursor(orientation));
+          }}
+          onBlur={() => setFocused(false)}
         />
-      ) : null}
+        {cursorStyle ? (
+          <div
+            className="board__cursor"
+            style={cursorStyle}
+            aria-hidden="true"
+            data-testid="board-cursor"
+          />
+        ) : null}
+      </div>
+      {showCoordinates ? <BoardCoords orientation={orientation} /> : null}
       {interactive ? (
         <button
           type="button"
@@ -325,6 +333,35 @@ export function Board({
       </div>
       <div className="sr-only board__cursor-announce" aria-live="polite" aria-atomic="true">
         {cursorText}
+      </div>
+    </div>
+  );
+}
+
+const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const;
+const RANKS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+
+/**
+ * Coordinates drawn by the app in a gutter outside the playing surface: rank
+ * numbers down the left, file letters along the bottom, each centred on its
+ * square. Off the board they never sit under a piece and read the same on
+ * every square colour and theme.
+ */
+function BoardCoords({ orientation }: { orientation: LongColor }) {
+  // Ranks top to bottom, files left to right, as seen from the orientation.
+  const ranks = orientation === 'white' ? [...RANKS].reverse() : [...RANKS];
+  const files = orientation === 'white' ? [...FILES] : [...FILES].reverse();
+  return (
+    <div className="board__coords" aria-hidden="true" data-testid="board-coords">
+      <div className="board__ranks">
+        {ranks.map((rank) => (
+          <span key={rank}>{rank}</span>
+        ))}
+      </div>
+      <div className="board__files">
+        {files.map((file) => (
+          <span key={file}>{file}</span>
+        ))}
       </div>
     </div>
   );

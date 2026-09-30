@@ -10,7 +10,7 @@ import { pickRandom } from '@/lib/random';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { CLASSIC_GAMES } from '@/features/classics/games';
-import { loadBucket, loadPuzzleIndex, type Puzzle } from '@/features/puzzles/puzzleService';
+import { loadBucketChunk, loadPuzzleIndex, type Puzzle } from '@/features/puzzles/puzzleService';
 import {
   generateMovesTask,
   generateRecallTask,
@@ -146,7 +146,8 @@ export default function VisionDrill() {
     if (poolRef.current.length === 0) {
       const index = await loadPuzzleIndex();
       const buckets = index.buckets.filter((b) => b.min >= 800 && b.max <= 1999);
-      const pools = await Promise.all(buckets.map((b) => loadBucket(b)));
+      // The first chunk of each bucket (500 puzzles) is plenty for a 60-second drill.
+      const pools = await Promise.all(buckets.map((b) => loadBucketChunk(b, 0)));
       poolRef.current = pools.flat();
     }
     for (let i = 0; i < 50; i++) {

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { LongColor } from '@/chess/types';
 import { newCard, type Quality, reviewCard, type SrsCard } from '@/lib/srs';
+import { storageKeyFor } from './profiles';
 
 export interface CustomRepertoire {
   id: string;
@@ -26,6 +27,11 @@ export interface RepertoireState {
 
   review: (repertoireId: string, key: string, quality: Quality, now?: number) => void;
   addCustom: (rep: Omit<CustomRepertoire, 'id' | 'createdAt'>) => CustomRepertoire;
+  /** Changes a custom repertoire's name, colour or lines. */
+  updateCustom: (
+    id: string,
+    patch: Partial<Pick<CustomRepertoire, 'name' | 'color' | 'pgn'>>,
+  ) => void;
   removeCustom: (id: string) => void;
   recordSession: (session: Omit<RepertoireSession, 'at'>) => void;
   resetRepertoire: (repertoireId: string) => void;
@@ -83,6 +89,10 @@ export const useRepertoire = create<RepertoireState>()(
         return created;
       },
 
+      updateCustom: (id, patch) => {
+        set({ custom: get().custom.map((r) => (r.id === id ? { ...r, ...patch } : r)) });
+      },
+
       removeCustom: (id) => {
         const prefix = `${id}|`;
         const cards = Object.fromEntries(
@@ -120,7 +130,7 @@ export const useRepertoire = create<RepertoireState>()(
       resetAll: () => set({ ...initialState }),
     }),
     {
-      name: REPERTOIRE_STORAGE_KEY,
+      name: storageKeyFor(REPERTOIRE_STORAGE_KEY),
       version: 1,
       storage: createJSONStorage(() => localStorage),
       partialize: ({ cards, custom, sessions }) => ({ cards, custom, sessions }),

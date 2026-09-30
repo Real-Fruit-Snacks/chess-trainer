@@ -184,6 +184,53 @@ export const THEMES: Record<string, ThemeInfo> = {
     description: 'Rook and knight mate a king on the edge, the knight guarding the rook.',
     group: 'Mates',
   },
+  balestraMate: {
+    name: 'Balestra mate',
+    description: 'The bishop gives the check while the queen covers every flight square.',
+    group: 'Mates',
+  },
+  blindSwineMate: {
+    name: 'Blind swine mate',
+    description: 'Two rooks on the seventh rank mate a king on the back rank.',
+    group: 'Mates',
+  },
+  cornerMate: {
+    name: 'Corner mate',
+    description: 'A knight mates a king in the corner while a rook covers the file.',
+    group: 'Mates',
+  },
+  epauletteMate: {
+    name: 'Epaulette mate',
+    description: 'The queen mates a king blocked in by its own rooks on either side.',
+    group: 'Mates',
+  },
+  morphysMate: {
+    name: 'Morphy’s mate',
+    description: 'A bishop mates on the long diagonal while a rook keeps the king in the corner.',
+    group: 'Mates',
+  },
+  operaMate: {
+    name: 'Opera mate',
+    description: 'A rook mates on the back rank, supported by a bishop.',
+    group: 'Mates',
+  },
+  pillsburysMate: {
+    name: 'Pillsbury’s mate',
+    description: 'A rook mates along the edge while a bishop takes the flight squares.',
+    group: 'Mates',
+  },
+  swallowstailMate: {
+    name: 'Swallow’s tail mate',
+    description:
+      'A protected queen mates from in front of a king whose diagonal escapes are blocked.',
+    group: 'Mates',
+  },
+  triangleMate: {
+    name: 'Triangle mate',
+    description:
+      'Queen and rook form a triangle with the king: the rook protects the mating queen.',
+    group: 'Mates',
+  },
 
   // Special moves
   promotion: {

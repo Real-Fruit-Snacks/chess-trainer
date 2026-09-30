@@ -1,7 +1,16 @@
 import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { InstallBanner } from '@/app/InstallPrompt';
-import { Badge, Button, CardLink, LinkButton, ProgressBar, Stat } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  CardLink,
+  LinkButton,
+  ProgressBar,
+  Stat,
+  Icon,
+  type IconName,
+} from '@/components/ui';
 import { activeCourse } from '@/features/learn/courseProgress';
 import { COURSES } from '@/features/learn/courses';
 import { LESSON_META } from '@/features/learn/lessonMeta';
@@ -12,62 +21,65 @@ import { siteConfig } from '@/site.config';
 import { summarizeProgress, useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
 import { useSettings } from '@/store/settings';
+import { useGames } from '@/store/games';
+import { buildInsights } from '@/features/games/insights';
+import { BackupNudge } from '@/features/progress/BackupNudge';
 import { buildDailyPlan } from './dailyPlan';
 import './home.css';
 
 const FEATURES = [
   {
     to: '/learn',
-    icon: '📖',
+    icon: 'learn' as IconName,
     title: 'Learn',
     text: 'From how the knight moves to the Greek gift sacrifice. Interactive lessons with engine-checked positions.',
     cta: 'Browse lessons',
   },
   {
     to: '/puzzles',
-    icon: '🧩',
+    icon: 'puzzles' as IconName,
     title: 'Puzzles',
     text: 'Thousands of tactics from real games, chosen to match your rating. Daily puzzle, themed drills and a rating that tracks you.',
     cta: 'Solve puzzles',
   },
   {
     to: '/play',
-    icon: '♞',
+    icon: 'play' as IconName,
     title: 'Play',
     text: 'Eight opponents from “just learned the rules” to master strength. Take back moves, ask for hints, review afterwards.',
     cta: 'Play the engine',
   },
   {
     to: '/analyze',
-    icon: '🔍',
+    icon: 'analyze' as IconName,
     title: 'Analyze',
     text: 'Paste any game or position, explore variations, name the opening and let Stockfish grade every move.',
     cta: 'Open the board',
   },
   {
     to: '/drills',
-    icon: '🎯',
+    icon: 'drills' as IconName,
     title: 'Drills',
     text: 'Coordinates, board vision and the essential checkmates and endgames — played out against a full-strength engine.',
     cta: 'Start a drill',
   },
   {
     to: '/openings',
-    icon: '📚',
+    icon: 'openings' as IconName,
     title: 'Openings',
-    text: 'Six ready-made repertoires (or your own PGN), trained move by move with spaced repetition.',
+    text: 'Sixteen ready-made repertoires (or your own PGN), trained move by move with spaced repetition and practised against the engine.',
     cta: 'Learn a repertoire',
   },
   {
     to: '/classics',
-    icon: '🏛',
+    icon: 'classics' as IconName,
     title: 'Classic games',
     text: 'Guess the moves of Morphy, Anderssen, Rubinstein and Lasker, with notes on every key moment.',
     cta: 'Guess the move',
   },
   {
     to: '/reference',
-    icon: '📘',
+    icon: 'reference' as IconName,
     title: 'Reference',
     text: 'The rules, how to read notation, a glossary of chess terms and answers to common questions.',
     cta: 'Look something up',
@@ -86,8 +98,15 @@ export default function HomePage() {
     () => activeCourse(COURSES, progress, repertoireCards),
     [progress, repertoireCards],
   );
+  const storedGames = useGames((s) => s.games);
+  const player = useGames((s) => s.player);
+  const workOn = useMemo(
+    () => buildInsights(Object.values(storedGames), player, progress.games).workOn,
+    [storedGames, player, progress.games],
+  );
   const plan = useMemo(
-    () => buildDailyPlan(progress, { cards: repertoireCards, custom: customRepertoires }, now),
+    () =>
+      buildDailyPlan(progress, { cards: repertoireCards, custom: customRepertoires }, now, workOn),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the plan depends on these slices only
     [
       progress.daily,
@@ -98,6 +117,7 @@ export default function HomePage() {
       repertoireCards,
       customRepertoires,
       now,
+      workOn,
     ],
   );
   const streak = useMemo(() => trainingStreak(progress.trainingDays), [progress.trainingDays]);
@@ -138,6 +158,7 @@ export default function HomePage() {
       </section>
 
       <InstallBanner />
+      <BackupNudge compact />
 
       {!hasActivity && !tourDismissed ? (
         <section className="home__welcome card" aria-labelledby="welcome-title">
@@ -155,8 +176,10 @@ export default function HomePage() {
           </div>
           <ol className="home__steps">
             <li>
-              <strong>Set your level.</strong> Open <Link to="/puzzles">Puzzles</Link> and pick how
-              much chess you have played — this sets a starting rating that adjusts as you solve.
+              <strong>Set your level.</strong> Take the two-minute{' '}
+              <Link to="/placement">placement quiz</Link> to get a course and a starting puzzle
+              rating, or open <Link to="/puzzles">Puzzles</Link> and pick how much chess you have
+              played.
             </li>
             <li>
               <strong>Do the first lesson.</strong>{' '}
@@ -204,7 +227,7 @@ export default function HomePage() {
               <li key={item.id}>
                 <Link to={item.to} className={`home__plan-item${item.done ? ' is-done' : ''}`}>
                   <span className="home__plan-check" aria-hidden="true">
-                    {item.done ? '✓' : ''}
+                    {item.done ? <Icon name="check" size={14} /> : null}
                   </span>
                   <span className="home__plan-text">
                     <span className="home__plan-title">{item.title}</span>
@@ -262,7 +285,7 @@ export default function HomePage() {
         {FEATURES.map((f) => (
           <CardLink key={f.to} to={f.to} className="feature">
             <div className="feature__icon" aria-hidden="true">
-              {f.icon}
+              <Icon name={f.icon} size={26} />
             </div>
             <h2 className="card__title">{f.title}</h2>
             <p className="small muted">{f.text}</p>

@@ -107,16 +107,37 @@ function toFen(pieces: { square: Square; piece: string }[], turn: 'w' | 'b'): Fe
   return `${rows.join('/')} ${turn} - - 0 1`;
 }
 
-/** Number of pieces (excluding kings) each side has on the board. */
-export function countMaterial(fen: Fen): { white: number; black: number; whitePawns: number } {
+export interface MaterialCount {
+  white: number;
+  black: number;
+  whitePawns: number;
+  blackPawns: number;
+}
+
+/** Number of pieces (excluding kings) and pawns each side has on the board. */
+export function countMaterial(fen: Fen): MaterialCount {
   const board = fen.split(' ')[0] ?? '';
-  let white = 0;
-  let black = 0;
-  let whitePawns = 0;
+  const count: MaterialCount = { white: 0, black: 0, whitePawns: 0, blackPawns: 0 };
   for (const ch of board) {
-    if ('QRBNP'.includes(ch)) white++;
-    if ('qrbnp'.includes(ch)) black++;
-    if (ch === 'P') whitePawns++;
+    if ('QRBNP'.includes(ch)) count.white++;
+    if ('qrbnp'.includes(ch)) count.black++;
+    if (ch === 'P') count.whitePawns++;
+    if (ch === 'p') count.blackPawns++;
   }
-  return { white, black, whitePawns };
+  return count;
+}
+
+/** The same counts seen from one side: own material and the opponent's. */
+export function materialFor(
+  count: MaterialCount,
+  color: 'white' | 'black',
+): { own: number; ownPawns: number; opp: number; oppPawns: number } {
+  return color === 'white'
+    ? { own: count.white, ownPawns: count.whitePawns, opp: count.black, oppPawns: count.blackPawns }
+    : {
+        own: count.black,
+        ownPawns: count.blackPawns,
+        opp: count.white,
+        oppPawns: count.whitePawns,
+      };
 }

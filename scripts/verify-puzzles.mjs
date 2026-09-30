@@ -44,21 +44,31 @@ function playThrough(puzzle) {
   return moves;
 }
 
+/** Chunk files of a bucket; older indexes had a single file per bucket. */
+function bucketFiles(bucket) {
+  return bucket.files?.length ? bucket.files : bucket.file ? [bucket.file] : [];
+}
+
 async function structural() {
   const index = JSON.parse(await readFile(join(DIR, 'index.json'), 'utf8'));
   const ids = new Set();
   let total = 0;
 
   for (const bucket of index.buckets) {
-    let puzzles;
-    try {
-      puzzles = JSON.parse(await readFile(join(DIR, bucket.file), 'utf8'));
-    } catch (err) {
-      fail(`${bucket.file}: cannot read (${err.message})`);
-      continue;
+    const puzzles = [];
+    for (const file of bucketFiles(bucket)) {
+      try {
+        const chunk = JSON.parse(await readFile(join(DIR, file), 'utf8'));
+        if (chunk.length > (index.chunk ?? Infinity)) {
+          fail(`${file}: ${chunk.length} puzzles in a chunk of ${index.chunk}`);
+        }
+        puzzles.push(...chunk);
+      } catch (err) {
+        fail(`${file}: cannot read (${err.message})`);
+      }
     }
     if (puzzles.length !== bucket.count) {
-      fail(`${bucket.file}: index says ${bucket.count} puzzles, file has ${puzzles.length}`);
+      fail(`${bucket.id}: index says ${bucket.count} puzzles, files have ${puzzles.length}`);
     }
     for (const p of puzzles) {
       total++;
@@ -91,8 +101,9 @@ async function engineCheck(index, samples) {
   }
   const all = [];
   for (const bucket of index.buckets) {
-    const puzzles = JSON.parse(await readFile(join(DIR, bucket.file), 'utf8'));
-    all.push(...puzzles);
+    for (const file of bucketFiles(bucket)) {
+      all.push(...JSON.parse(await readFile(join(DIR, file), 'utf8')));
+    }
   }
   // Deterministic sample so results are comparable between runs.
   const picked = [];

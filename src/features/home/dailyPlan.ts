@@ -1,5 +1,5 @@
 import { GameTree } from '@/chess/tree';
-import { ENDGAME_DRILLS } from '@/features/drills/endgameDrills';
+import { ladderOrder } from '@/features/drills/endgameLadder';
 import { LESSON_META } from '@/features/learn/lessonMeta';
 import { repertoireStats } from '@/features/openings/model';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
@@ -10,6 +10,7 @@ import { dueReviews } from '@/lib/puzzleReview';
 import type { ProgressState } from '@/store/progress';
 import { cardsFor, type CustomRepertoire } from '@/store/repertoire';
 import type { SrsCard } from '@/lib/srs';
+import type { WorkItem } from '@/features/games/insights';
 
 export interface PlanItem {
   id: string;
@@ -31,9 +32,9 @@ const RATED_TARGET = 5;
 /** A theme is "weak" below this accuracy; the plan then targets it instead of rated puzzles. */
 const WEAK_THEME_ACCURACY = 70;
 
-/** Drills the plan rotates through: never done first, then the least recent. */
+/** Drills the plan rotates through: never done first (in endgame-ladder order), then the least recent. */
 const DRILL_ROTATION: { id: string; title: string; description: string; to: string }[] = [
-  ...ENDGAME_DRILLS.map((d) => ({
+  ...ladderOrder().map((d) => ({
     id: d.id,
     title: d.title,
     description: d.description,
@@ -82,6 +83,8 @@ export function buildDailyPlan(
     Partial<Pick<ProgressState, 'themeStats' | 'lessonRecall'>>,
   repertoire: { cards: Record<string, SrsCard>; custom: CustomRepertoire[] },
   now: number,
+  /** From the game insights: the mistake or phase to work on (see features/games/insights). */
+  workOn: WorkItem[] = [],
 ): DailyPlan {
   const today = localDateKey(new Date(now));
   const startOfDay = new Date(now);
@@ -164,6 +167,8 @@ export function buildDailyPlan(
   ];
   let openingDue = 0;
   let openingLearned = 0;
+  // The built-in repertoire with the most learned moves supplies "tactics from your openings".
+  let bestRepertoire: { id: string; name: string; tag: string; learned: number } | null = null;
   for (const rep of all) {
     try {
       const stats = repertoireStats(
@@ -174,6 +179,11 @@ export function buildDailyPlan(
       );
       openingDue += stats.due;
       openingLearned += stats.learned;
+      const builtIn = BUILT_IN_REPERTOIRES.find((r) => r.id === rep.id);
+      const tag = builtIn?.openingTags[0];
+      if (builtIn && tag && stats.learned > 0 && stats.learned > (bestRepertoire?.learned ?? 0)) {
+        bestRepertoire = { id: rep.id, name: builtIn.name, tag, learned: stats.learned };
+      }
     } catch {
       // ignore broken custom PGN
     }
@@ -189,6 +199,55 @@ export function buildDailyPlan(
       to: '/openings',
       done: openingDue === 0,
       minutes: Math.min(10, Math.ceil(openingDue / 4) + 2),
+    });
+  }
+
+  // 4b. Tactics from the opening you are learning most.
+  if (bestRepertoire) {
+    const openingSolvedToday = progress.attempts.some(
+      (a) => a.at >= dayStart && a.opening !== undefined && a.opening === bestRepertoire?.tag,
+    );
+    items.push({
+      id: 'openingTactics',
+      title: `Tactics from the ${bestRepertoire.name}`,
+      detail: openingSolvedToday
+        ? 'Done today'
+        : 'Puzzles that arose from your opening in real games',
+      to: `/puzzles/openings?opening=${encodeURIComponent(bestRepertoire.tag)}`,
+      done: openingSolvedToday,
+      minutes: 5,
+    });
+  }
+
+  // 4c. What the reviewed games say to work on.
+  const work = workOn[0];
+  if (work) {
+    const lesson = work.lessonId ? LESSON_META.find((l) => l.id === work.lessonId) : undefined;
+    const solvedTheme =
+      work.theme !== null &&
+      progress.attempts.some(
+        (a) => a.at >= dayStart && a.themes.split(' ').includes(work.theme ?? ''),
+      );
+    const lessonToday =
+      lesson !== undefined && (progress.lessons[lesson.id]?.completedAt ?? 0) >= dayStart;
+    items.push({
+      id: 'workOn',
+      title: `Work on: ${work.title}`,
+      detail:
+        solvedTheme || lessonToday
+          ? 'Practised today'
+          : work.theme
+            ? `${work.detail} · puzzles on this theme`
+            : lesson
+              ? `${work.detail} · lesson: ${lesson.title}`
+              : work.detail,
+      to: work.theme
+        ? `/puzzles/themes?theme=${encodeURIComponent(work.theme)}`
+        : lesson
+          ? `/learn/${lesson.id}`
+          : '/games',
+      done: solvedTheme || lessonToday,
+      minutes: 6,
     });
   }
 

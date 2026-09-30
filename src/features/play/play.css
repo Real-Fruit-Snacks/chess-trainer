@@ -24,3 +24,38 @@
   gap: var(--space-2);
   margin-top: var(--space-3);
 }
+
+/* Engine ladder */
+.ladder__rungs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ladder__rung {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-faint);
+  background: var(--surface-2);
+}
+
+.ladder__rung--climbed {
+  background: var(--success-soft);
+  border-color: var(--success);
+  color: var(--success);
+  font-weight: 600;
+}
+
+.ladder__rung--current {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}

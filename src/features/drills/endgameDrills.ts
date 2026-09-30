@@ -1,16 +1,19 @@
 import type { Fen, LongColor } from '@/chess/types';
 
 /**
- * mate — checkmate the lone king; promote — queen the pawn; hold — survive as
+ * mate — checkmate the lone king; promote — queen a pawn; hold — survive as
  * the defender; capture — win the opponent's last piece or pawn (then the rest
  * is elementary), or mate.
  */
 export type DrillGoal = 'mate' | 'promote' | 'hold' | 'capture';
 
+export type DrillGroup =
+  'Checkmates' | 'Pawn endgames' | 'Rook endgames' | 'Queen endgames' | 'Minor pieces';
+
 export interface EndgameDrill {
   id: string;
   title: string;
-  group: 'Checkmates' | 'Pawn endgames' | 'Rook endgames' | 'Queen endgames' | 'Minor pieces';
+  group: DrillGroup;
   description: string;
   /** What the user is trying to do; drives adjudication. */
   goal: DrillGoal;
@@ -24,11 +27,19 @@ export interface EndgameDrill {
   tip: string;
   /** Moves allowed before the drill counts as failed (also bounded by the 50-move rule). */
   moveLimit: number;
-  /** Rough difficulty for ordering. */
+  /** Rough difficulty for ordering; also the endgame ladder's rung order. */
   difficulty: 1 | 2 | 3 | 4;
+  /** Lesson that teaches the theory behind the drill. */
+  lessonId?: string;
 }
 
+/**
+ * The endgame library: every position was checked with the engine
+ * (`npm run drills:verify`) — winning drills are won with best play, holding
+ * drills are drawn.
+ */
 export const ENDGAME_DRILLS: readonly EndgameDrill[] = [
+  // ---------------------------------------------------------------- Checkmates
   {
     id: 'mate-kq',
     title: 'Queen vs king',
@@ -41,6 +52,21 @@ export const ENDGAME_DRILLS: readonly EndgameDrill[] = [
     tip: 'Use the queen a knight’s move away from the king to shrink the box, then bring your king up. Watch out for stalemate!',
     moveLimit: 30,
     difficulty: 1,
+    lessonId: 'basic-checkmates',
+  },
+  {
+    id: 'mate-krr',
+    title: 'Two rooks vs king',
+    group: 'Checkmates',
+    description: 'The ladder mate: two rooks take one rank at a time.',
+    goal: 'mate',
+    color: 'white',
+    positions: 'random',
+    material: 'RR',
+    tip: 'One rook cuts the king off, the other checks it back a rank; when a rook is attacked, move it to the far side of the board. Your king can stay at home.',
+    moveLimit: 25,
+    difficulty: 1,
+    lessonId: 'basic-checkmates',
   },
   {
     id: 'mate-kr',
@@ -54,6 +80,7 @@ export const ENDGAME_DRILLS: readonly EndgameDrill[] = [
     tip: 'Cut the king off with the rook, take the opposition with your king, then check to push it back a rank.',
     moveLimit: 40,
     difficulty: 2,
+    lessonId: 'basic-checkmates',
   },
   {
     id: 'mate-kbb',
@@ -67,6 +94,7 @@ export const ENDGAME_DRILLS: readonly EndgameDrill[] = [
     tip: 'Keep the bishops side by side to form a wall, drive the king to any corner, and use your king to take away escape squares.',
     moveLimit: 45,
     difficulty: 3,
+    lessonId: 'basic-checkmates',
   },
   {
     id: 'mate-kbn',
@@ -80,6 +108,57 @@ export const ENDGAME_DRILLS: readonly EndgameDrill[] = [
     tip: 'Mate only happens in a corner of the bishop’s colour. Drive the king to the edge, then to the right corner with the “W” knight manoeuvre.',
     moveLimit: 50,
     difficulty: 4,
+    lessonId: 'basic-checkmates',
+  },
+  {
+    id: 'mate-kbn-corner',
+    title: 'Bishop and knight: wrong corner',
+    group: 'Checkmates',
+    description: 'The king is already in the corner — but the wrong one. Drive it across.',
+    goal: 'mate',
+    color: 'white',
+    positions: ['k7/8/2K5/4N3/5B2/8/8/8 w - - 0 1', '7k/8/5K2/3N4/2B5/8/8/8 w - - 0 1'],
+    tip: 'Mate only happens on the corner of the bishop’s colour. Use the knight’s “W” manoeuvre (knight to c7/b5-type squares) to herd the king along the edge to the right corner without letting it slip back to the centre.',
+    moveLimit: 50,
+    difficulty: 4,
+    lessonId: 'basic-checkmates',
+  },
+
+  // ------------------------------------------------------------- Pawn endgames
+  {
+    id: 'kp-run',
+    title: 'Run or escort?',
+    group: 'Pawn endgames',
+    description:
+      'A pawn against a distant king: count whether it can simply run, or needs its king.',
+    goal: 'promote',
+    color: 'white',
+    positions: [
+      '8/8/8/8/8/1K6/P7/4k3 w - - 0 1',
+      '8/8/8/8/8/8/PK6/5k2 w - - 0 1',
+      '8/8/8/7k/8/8/2P5/2K5 w - - 0 1',
+    ],
+    tip: 'Draw the “square” from the pawn to its queening square: if the enemy king cannot step into it, push. If it can, bring your king first — in front of the pawn, not behind it.',
+    moveLimit: 20,
+    difficulty: 1,
+    lessonId: 'pawn-races',
+  },
+  {
+    id: 'kp-square-hold',
+    title: 'The square of the pawn',
+    group: 'Pawn endgames',
+    description: 'A lone pawn is running. Catch it — or prove that you can.',
+    goal: 'hold',
+    color: 'black',
+    positions: [
+      '8/8/8/5k2/1P6/8/8/6K1 b - - 0 1',
+      '8/8/8/4k3/8/8/P7/7K b - - 0 1',
+      '8/8/8/8/2k5/8/6P1/K7 b - - 0 1',
+    ],
+    tip: 'If your king is inside the square of the pawn (the box from the pawn to its queening square) it catches the pawn. A pawn on its starting square can move two — count the square from the third rank.',
+    moveLimit: 20,
+    difficulty: 1,
+    lessonId: 'pawn-races',
   },
   {
     id: 'kp-promote',
@@ -100,6 +179,7 @@ export const ENDGAME_DRILLS: readonly EndgameDrill[] = [
     tip: 'Keep your king in front of the pawn and take the opposition. Only push the pawn when the king cannot make progress.',
     moveLimit: 25,
     difficulty: 2,
+    lessonId: 'king-and-pawn-endgames',
   },
   {
     id: 'kp-hold',
@@ -117,6 +197,162 @@ export const ENDGAME_DRILLS: readonly EndgameDrill[] = [
     tip: 'Stay in front of the pawn and take the opposition when the pawn is beside the enemy king. Rook pawns and a king in the corner are always a draw.',
     moveLimit: 30,
     difficulty: 2,
+    lessonId: 'king-and-pawn-endgames',
+  },
+  {
+    id: 'kp-rook-pawn-hold',
+    title: 'Rook pawn: the corner draws',
+    group: 'Pawn endgames',
+    description: 'King against king and rook pawn — reach the corner and nothing can shift you.',
+    goal: 'hold',
+    color: 'black',
+    positions: [
+      '8/2k5/8/1K6/P7/8/8/8 b - - 0 1',
+      '8/8/8/8/1k6/8/P7/2K5 b - - 0 1',
+      '8/8/8/8/6k1/8/7P/5K2 b - - 0 1',
+      '8/8/2k5/8/8/1K6/P7/8 b - - 0 1',
+    ],
+    tip: 'Head for the queening corner (or the square in front of the pawn). A king in the corner cannot be driven out: every attempt ends in stalemate. Trapping the enemy king in front of its own rook pawn draws too.',
+    moveLimit: 30,
+    difficulty: 1,
+    lessonId: 'king-and-pawn-endgames',
+  },
+  {
+    id: 'kp-key-squares',
+    title: 'Key squares',
+    group: 'Pawn endgames',
+    description:
+      'Your king is in front of the pawn on a key square: win without needing the opposition.',
+    goal: 'promote',
+    color: 'white',
+    positions: [
+      '3k4/8/3K4/3P4/8/8/8/8 w - - 0 1',
+      '4k3/8/3P4/4K3/8/8/8/8 w - - 0 1',
+      '8/8/8/2k5/8/3K4/3P4/8 w - - 0 1',
+    ],
+    tip: 'With the king on the sixth rank in front of the pawn, the win is automatic: step to the side the enemy king is not on, then push. Never push the pawn to the seventh with check unless it queens next move.',
+    moveLimit: 20,
+    difficulty: 2,
+    lessonId: 'king-and-pawn-endgames',
+  },
+  {
+    id: 'kp-connected',
+    title: 'Two connected pawns',
+    group: 'Pawn endgames',
+    description:
+      'Two connected pawns against a king: they protect each other while your king walks up.',
+    goal: 'promote',
+    color: 'white',
+    positions: ['8/8/8/3k4/8/2PP4/8/4K3 w - - 0 1', '8/8/2k5/8/8/8/1PP5/4K3 w - - 0 1'],
+    tip: 'Do not rush the pawns forward: side by side or one step apart they defend each other, so the king cannot take either. Bring your own king up, then push the pawn the enemy king is not blocking.',
+    moveLimit: 25,
+    difficulty: 2,
+    lessonId: 'pawn-endgames-2',
+  },
+  {
+    id: 'kp-outside-passer',
+    title: 'The outside passed pawn',
+    group: 'Pawn endgames',
+    description:
+      'A passed pawn far from the action decoys the enemy king while yours eats the rest.',
+    goal: 'promote',
+    color: 'white',
+    positions: ['8/8/4k3/5p2/P4P2/8/4K3/8 w - - 0 1', '8/8/3k4/5p2/5P2/1P1K4/8/8 w - - 0 1'],
+    tip: 'Push the outside passer only when the enemy king must go after it — then race your king to the other pawns. Giving the outside pawn away is fine if it wins the rest.',
+    moveLimit: 30,
+    difficulty: 2,
+    lessonId: 'pawn-endgames-2',
+  },
+  {
+    id: 'kp-protected-passer',
+    title: 'The protected passed pawn',
+    group: 'Pawn endgames',
+    description: 'A protected passed pawn ties the enemy king down; walk your king round to win.',
+    goal: 'promote',
+    color: 'white',
+    positions: ['8/3k4/8/2pP4/2P5/3K4/8/8 w - - 0 1', '8/8/3k4/2pP4/2P5/8/8/3K4 w - - 0 1'],
+    tip: 'The enemy king can never leave the square of your passed pawn, so it cannot both guard its own pawn and stop yours. March your king to attack the enemy pawn from the side.',
+    moveLimit: 30,
+    difficulty: 3,
+    lessonId: 'pawn-endgames-2',
+  },
+  {
+    id: 'kp-triangulation',
+    title: 'Triangulation',
+    group: 'Pawn endgames',
+    description:
+      'Blocked pawns, kings guarding them — take the long way round to hand the move to Black.',
+    goal: 'promote',
+    color: 'white',
+    positions: ['8/2k5/3p4/1K1P4/8/8/8/8 w - - 0 1', '8/4k3/3p4/3P1K2/8/8/8/8 w - - 0 1'],
+    tip: 'Going straight at the pawn (Kc4, Kb4) lets Black keep the opposition for ever. Walk round the outside instead — a6, b6, c6 — so that you arrive next to the pawn with Black to move. Then the pawn falls.',
+    moveLimit: 25,
+    difficulty: 3,
+    lessonId: 'fortresses-and-zugzwang',
+  },
+  {
+    id: 'kp-breakthrough',
+    title: 'The breakthrough',
+    group: 'Pawn endgames',
+    description: 'Three pawns against three, kings far away: sacrifice two to queen the third.',
+    goal: 'promote',
+    color: 'white',
+    positions: [
+      '7k/ppp5/8/PPP5/8/8/8/7K w - - 0 1',
+      'k7/5ppp/8/5PPP/8/8/8/K7 w - - 0 1',
+      '8/ppp5/8/PPP5/8/6k1/8/6K1 w - - 0 1',
+    ],
+    tip: 'Push the middle pawn first. Whichever way it is captured, push the pawn on the other side next — one of yours ends up passed and out of reach.',
+    moveLimit: 15,
+    difficulty: 3,
+    lessonId: 'pawn-endgames-2',
+  },
+  {
+    id: 'reti-hold',
+    title: 'Réti’s manoeuvre',
+    group: 'Pawn endgames',
+    description:
+      'Your king is outside the square of the enemy pawn — and still draws, by chasing two goals at once.',
+    goal: 'hold',
+    color: 'white',
+    positions: ['7K/8/k1P5/7p/8/8/8/8 w - - 0 1'],
+    tip: 'Walk diagonally: every step towards the enemy pawn is also a step towards supporting your own. If the enemy king stops your pawn, your king catches theirs; if their pawn runs, your pawn queens too.',
+    moveLimit: 20,
+    difficulty: 4,
+    lessonId: 'pawn-races',
+  },
+
+  // ------------------------------------------------------------- Rook endgames
+  {
+    id: 'rook-vs-pawn',
+    title: 'Rook vs pawn',
+    group: 'Rook endgames',
+    description: 'A rook against a king and pawn: stop the pawn, then win it.',
+    goal: 'capture',
+    color: 'white',
+    positions: [
+      '8/8/8/8/3pk3/8/8/R5K1 w - - 0 1',
+      '8/8/8/2k5/2p5/8/8/2R2K2 w - - 0 1',
+      '8/8/8/8/1k1p4/8/8/4K2R w - - 0 1',
+    ],
+    tip: 'Put the rook behind the pawn (or cut the king off on the rank), then bring your king across. The rook alone cannot win the pawn while the king protects it — your king must help.',
+    moveLimit: 25,
+    difficulty: 2,
+    lessonId: 'rook-vs-pawn',
+  },
+  {
+    id: 'rook-vs-pawn-hold',
+    title: 'Pawn vs rook: the draw',
+    group: 'Rook endgames',
+    description:
+      'King and pawn against a rook whose king is far away — force the rook to give itself up.',
+    goal: 'hold',
+    color: 'black',
+    positions: ['R7/8/8/8/8/2p5/1k6/7K b - - 0 1', '7R/8/8/8/8/5p2/6k1/K7 b - - 0 1'],
+    tip: 'Push with the king beside the pawn, and when the rook checks, step in front of the pawn or beside it so the pawn stays protected. Promote when the rook has to take.',
+    moveLimit: 20,
+    difficulty: 2,
+    lessonId: 'rook-vs-pawn',
   },
   {
     id: 'lucena',
@@ -129,6 +365,7 @@ export const ENDGAME_DRILLS: readonly EndgameDrill[] = [
     tip: 'Cut the enemy king off, lift your rook to the fourth rank, step the king out, and use the rook as a bridge against the checks.',
     moveLimit: 30,
     difficulty: 3,
+    lessonId: 'rook-endgames',
   },
   {
     id: 'philidor',
@@ -141,6 +378,52 @@ export const ENDGAME_DRILLS: readonly EndgameDrill[] = [
     tip: 'Keep your rook on the third rank until the pawn advances, then swing it behind the pawn and check from a distance.',
     moveLimit: 30,
     difficulty: 3,
+    lessonId: 'rook-endgames',
+  },
+  {
+    id: 'rook-cut-off',
+    title: 'Cutting off the king',
+    group: 'Rook endgames',
+    description: 'Rook and pawn vs rook, the enemy king cut off by files: escort the pawn home.',
+    goal: 'promote',
+    color: 'white',
+    positions: ['7r/k7/8/8/3KP3/8/8/2R5 w - - 0 1', '8/1k6/8/4P3/8/2R1K3/8/7r w - - 0 1'],
+    tip: 'Keep the rook on the file that fences the enemy king out. Advance the pawn with your king in front or beside it; when the checks start, hide the king next to the pawn or walk it towards the checking rook.',
+    moveLimit: 35,
+    difficulty: 3,
+    lessonId: 'rook-endgames-2',
+  },
+  {
+    id: 'rook-short-side',
+    title: 'The short-side defence',
+    group: 'Rook endgames',
+    description:
+      'Driven off the queening square, the defending king goes to the short side and the rook checks from the long side.',
+    goal: 'hold',
+    color: 'black',
+    positions: [
+      '5k2/1R6/4K3/4P3/8/8/8/r7 b - - 0 1',
+      '5k2/R7/3KP3/8/8/8/8/1r6 b - - 0 1',
+      '5k2/R7/8/3KP3/8/8/8/1r6 b - - 0 1',
+    ],
+    tip: 'Keep your king on the side of the pawn with fewer files, so the rook has the wide side for checking. Check from far away — at least three files from the king — and only stop checking to go behind the pawn.',
+    moveLimit: 30,
+    difficulty: 4,
+    lessonId: 'rook-endgames-2',
+  },
+  {
+    id: 'rook-passive',
+    title: 'Knight pawn: the back-rank defence',
+    group: 'Rook endgames',
+    description:
+      'Against a knight pawn the passive defence holds: king in front, rook on the back rank.',
+    goal: 'hold',
+    color: 'black',
+    positions: ['1r4k1/8/6P1/6K1/8/8/8/R7 b - - 0 1', '1k4r1/8/1P6/1K6/8/8/8/7R b - - 0 1'],
+    tip: 'Stay in front of the pawn and keep your rook on the back rank; there is no room for the attacking king to hide from checks beside a knight pawn. Do not leave the back rank until the pawn advances with check.',
+    moveLimit: 30,
+    difficulty: 3,
+    lessonId: 'rook-endgames-3',
   },
   {
     id: 'vancura',
@@ -153,30 +436,100 @@ export const ENDGAME_DRILLS: readonly EndgameDrill[] = [
     tip: 'Keep your rook on the third rank (from White’s side the sixth), attacking the pawn from the side, and check the white king whenever it comes to support the pawn. Never let your king get cut off from g7/h7.',
     moveLimit: 30,
     difficulty: 4,
+    lessonId: 'rook-endgames-3',
   },
   {
-    id: 'bishop-pawn-hold',
-    title: 'Wrong bishop: hold the draw',
-    group: 'Minor pieces',
-    description: 'Defend king against king, bishop and a rook pawn of the wrong colour.',
+    id: 'rook-two-pawns',
+    title: 'Rook and two connected pawns',
+    group: 'Rook endgames',
+    description:
+      'Two connected pawns with rook against rook: advance them together behind your king.',
+    goal: 'promote',
+    color: 'white',
+    positions: ['1r6/5k2/8/8/4PP2/8/5K2/R7 w - - 0 1', '7r/8/3k4/8/2PP4/8/3K4/R7 w - - 0 1'],
+    tip: 'Keep the pawns side by side so neither can be attacked, put your king in front of them and let the rook cover the checks. Only advance to the sixth rank when the king is already there.',
+    moveLimit: 40,
+    difficulty: 3,
+    lessonId: 'rook-endgames-3',
+  },
+  {
+    id: 'rook-vs-bishop',
+    title: 'Rook vs bishop: the safe corner',
+    group: 'Rook endgames',
+    description:
+      'A rook against a bishop is a draw — as long as your king sits in the corner the bishop does not control.',
     goal: 'hold',
     color: 'black',
-    positions: ['7k/8/6K1/7P/8/3B4/8/8 b - - 0 1', '6k1/8/5K2/7P/4B3/8/8/8 b - - 0 1'],
-    tip: 'The bishop does not control h8, so a king in the corner can never be driven out. Stay on g8, h8, g7 or h7 and watch for stalemate tricks — they are all fine for you.',
+    positions: ['7k/8/5K2/8/8/8/4b3/R7 b - - 0 1', 'k7/8/2K5/8/8/8/3b4/7R b - - 0 1'],
+    tip: 'Stay in the corner of the opposite colour to your bishop and keep the bishop far away on a long diagonal. Checks along the rank are met by stepping back into the corner; the rook cannot win a tempo.',
     moveLimit: 30,
-    difficulty: 2,
+    difficulty: 3,
+    lessonId: 'rook-vs-minor-piece',
   },
   {
-    id: 'mate-kbn-corner',
-    title: 'Bishop and knight: wrong corner',
-    group: 'Checkmates',
-    description: 'The king is already in the corner — but the wrong one. Drive it across.',
-    goal: 'mate',
+    id: 'rook-vs-knight',
+    title: 'Rook vs knight: stay together',
+    group: 'Rook endgames',
+    description: 'A rook against a knight draws when king and knight stay close and off the edge.',
+    goal: 'hold',
+    color: 'black',
+    positions: ['3k4/3n4/4K3/8/8/8/8/R7 b - - 0 1', '8/8/8/3kn3/8/4K3/8/R7 b - - 0 1'],
+    tip: 'Keep the knight next to your king, ideally protected by it, and head for the centre. A knight on the rim or a king in the corner is what the rook needs — never allow either.',
+    moveLimit: 30,
+    difficulty: 3,
+    lessonId: 'rook-vs-minor-piece',
+  },
+
+  // ------------------------------------------------------------ Queen endgames
+  {
+    id: 'queen-vs-pawn',
+    title: 'Queen vs pawn on the seventh',
+    group: 'Queen endgames',
+    description:
+      'Stop a centre pawn one step from queening with the queen alone, then bring the king.',
+    goal: 'capture',
     color: 'white',
-    positions: ['k7/8/2K5/4N3/5B2/8/8/8 w - - 0 1', '7k/8/5K2/3N4/2B5/8/8/8 w - - 0 1'],
-    tip: 'Mate only happens on the corner of the bishop’s colour. Use the knight’s “W” manoeuvre (knight to c7/b5-type squares) to herd the king along the edge to the right corner without letting it slip back to the centre.',
-    moveLimit: 50,
-    difficulty: 4,
+    positions: ['K7/8/8/8/7Q/8/3kp3/8 w - - 0 1', 'K7/8/8/8/8/8/3pk3/2Q5 w - - 0 1'],
+    tip: 'Check and pin until the black king is forced in front of its own pawn. Each time it blocks the pawn, step your king one square closer. Repeat until the pawn falls.',
+    moveLimit: 30,
+    difficulty: 3,
+    lessonId: 'queen-vs-pawn',
+  },
+  {
+    id: 'queen-vs-knight-pawn',
+    title: 'Queen vs knight pawn',
+    group: 'Queen endgames',
+    description:
+      'A knight pawn on the seventh: the same winding technique, with no stalemate trick to fear.',
+    goal: 'capture',
+    color: 'white',
+    positions: [
+      'K7/8/8/8/7Q/8/1pk5/8 w - - 0 1',
+      '7K/8/8/8/Q7/8/5kp1/8 w - - 0 1',
+      'K7/8/8/8/8/6Q1/1pk5/8 w - - 0 1',
+    ],
+    tip: 'Force the king in front of the pawn with checks and pins, gain a tempo with the king each time, and repeat. A knight pawn gives the defender no stalemate resource.',
+    moveLimit: 30,
+    difficulty: 3,
+    lessonId: 'queen-vs-pawn',
+  },
+  {
+    id: 'queen-vs-pawn-hold',
+    title: 'Bishop or rook pawn vs queen: the draw',
+    group: 'Queen endgames',
+    description:
+      'With a bishop pawn or rook pawn on the seventh and the enemy king far away, stalemate saves you.',
+    goal: 'hold',
+    color: 'black',
+    positions: [
+      '8/7K/8/8/8/4Q3/2p5/1k6 b - - 0 1',
+      '8/7K/8/8/8/4Q3/p7/1k6 b - - 0 1',
+      '8/8/7K/8/8/3Q4/5p2/6k1 b - - 0 1',
+    ],
+    tip: 'When the queen forces your king in front of the pawn, step into the corner instead: taking the pawn is then stalemate. Promote whenever the queen is not covering the queening square.',
+    moveLimit: 25,
+    difficulty: 2,
+    lessonId: 'queen-vs-pawn',
   },
   {
     id: 'queen-vs-rook',
@@ -193,23 +546,124 @@ export const ENDGAME_DRILLS: readonly EndgameDrill[] = [
     tip: 'Keep the rook and king tied together: with the black king and rook on the same file or rank, a quiet queen move (a triangulation) forces the rook to leave its king, and then a check wins it.',
     moveLimit: 40,
     difficulty: 4,
+    lessonId: 'queen-endgames',
   },
   {
-    id: 'queen-vs-pawn',
-    title: 'Queen vs pawn on the seventh',
+    id: 'queen-vs-knight',
+    title: 'Queen vs knight',
     group: 'Queen endgames',
     description:
-      'Stop a centre pawn one step from queening with the queen alone, then bring the king.',
+      'Queen against knight: drive the king back and pick the knight off with a fork or a pin.',
     goal: 'capture',
     color: 'white',
-    positions: ['K7/8/8/8/7Q/8/3kp3/8 w - - 0 1', 'K7/8/8/8/8/8/3pk3/2Q5 w - - 0 1'],
-    tip: 'Check and pin until the black king is forced in front of its own pawn. Each time it blocks the pawn, step your king one square closer. Repeat until the pawn falls.',
+    positions: ['8/8/8/3nk3/8/1Q6/8/5K2 w - - 0 1', '8/8/4k3/8/3n4/8/8/3QK3 w - - 0 1'],
+    tip: 'Centralise the queen first so the knight has no safe squares, bring your king up, and look for checks that also attack the knight. A knight separated from its king is lost.',
+    moveLimit: 35,
+    difficulty: 3,
+    lessonId: 'queen-endgames',
+  },
+  {
+    id: 'queen-vs-bishop',
+    title: 'Queen vs bishop',
+    group: 'Queen endgames',
+    description: 'Queen against bishop: the bishop cannot defend both colours, so win it or mate.',
+    goal: 'capture',
+    color: 'white',
+    positions: ['8/8/2k5/8/8/1b6/8/1K4Q1 w - - 0 1', '8/8/8/3kb3/8/8/8/2Q1K3 w - - 0 1'],
+    tip: 'Use the squares of the opposite colour to the bishop — it can never contest them. Push the king to the edge with your king and queen together, then a check on the right diagonal picks up the bishop.',
+    moveLimit: 35,
+    difficulty: 3,
+    lessonId: 'queen-endgames',
+  },
+
+  // -------------------------------------------------------------- Minor pieces
+  {
+    id: 'bishop-right-pawn',
+    title: 'Bishop and rook pawn: the right bishop',
+    group: 'Minor pieces',
+    description: 'The bishop controls the queening square, so the pawn goes through.',
+    goal: 'promote',
+    color: 'white',
+    positions: ['7k/8/6K1/7P/8/4B3/8/8 w - - 0 1', '6k1/8/5K2/7P/3B4/8/8/8 w - - 0 1'],
+    tip: 'The bishop takes the corner away from the king. Use a check to force the king out, then push — but never give stalemate by taking away its last square.',
+    moveLimit: 20,
+    difficulty: 1,
+    lessonId: 'minor-piece-endgames',
+  },
+  {
+    id: 'bishop-pawn-hold',
+    title: 'Wrong bishop: hold the draw',
+    group: 'Minor pieces',
+    description: 'Defend king against king, bishop and a rook pawn of the wrong colour.',
+    goal: 'hold',
+    color: 'black',
+    positions: ['7k/8/6K1/7P/8/3B4/8/8 b - - 0 1', '6k1/8/5K2/7P/4B3/8/8/8 b - - 0 1'],
+    tip: 'The bishop does not control h8, so a king in the corner can never be driven out. Stay on g8, h8, g7 or h7 and watch for stalemate tricks — they are all fine for you.',
+    moveLimit: 30,
+    difficulty: 2,
+    lessonId: 'minor-piece-endgames',
+  },
+  {
+    id: 'bishop-wrong-race',
+    title: 'Wrong bishop: race for the corner',
+    group: 'Minor pieces',
+    description:
+      'The wrong bishop wins after all if the enemy king cannot reach the corner in time.',
+    goal: 'promote',
+    color: 'white',
+    positions: ['8/8/8/3k3P/8/8/8/4KB2 w - - 0 1', '8/8/8/8/2k4P/8/8/1K1B4 w - - 0 1'],
+    tip: 'Count: can the enemy king reach the queening corner before the pawn queens? If not, push at once; if it can, use the bishop to take squares from the king on the way.',
+    moveLimit: 15,
+    difficulty: 2,
+    lessonId: 'minor-piece-endgames',
+  },
+  {
+    id: 'knight-vs-pawn-hold',
+    title: 'Knight vs pawn',
+    group: 'Minor pieces',
+    description: 'A knight alone against king and pawn: block the pawn or win it.',
+    goal: 'hold',
+    color: 'black',
+    positions: [
+      '8/6k1/8/PK3n2/8/8/8/8 b - - 0 1',
+      '8/8/8/8/1P6/8/3n4/K5k1 b - - 0 1',
+      '8/8/8/2P5/2K5/8/6k1/5n2 b - - 0 1',
+    ],
+    tip: 'Get the knight in front of the pawn or onto a square that controls the pawn’s path, and keep it away from the corner where it can be trapped. Giving the knight up for the pawn is a draw too.',
+    moveLimit: 25,
+    difficulty: 2,
+    lessonId: 'knight-endgames',
+  },
+  {
+    id: 'bishop-vs-pawns-hold',
+    title: 'Bishop vs two pawns',
+    group: 'Minor pieces',
+    description: 'Bishop and king against two connected pawns: stop them together.',
+    goal: 'hold',
+    color: 'black',
+    positions: ['8/8/8/8/PP6/5k2/8/K3b3 b - - 0 1', '8/8/8/8/6PP/8/2k5/1b5K b - - 0 1'],
+    tip: 'Put the bishop on the diagonal in front of the pawns so neither can advance without being lost, and walk your king over. The pawns only win if they reach the sixth rank with king support.',
+    moveLimit: 30,
+    difficulty: 2,
+    lessonId: 'minor-piece-endgames',
+  },
+  {
+    id: 'ocb-split-hold',
+    title: 'Opposite bishops: two split pawns',
+    group: 'Minor pieces',
+    description:
+      'A pawn down two, but with bishops of opposite colours: king stops one pawn, bishop the other.',
+    goal: 'hold',
+    color: 'black',
+    positions: ['8/8/2k5/P4P2/8/1B1K4/8/4b3 b - - 0 1', '8/8/8/2k2P2/8/PB2K3/8/3b4 b - - 0 1'],
+    tip: 'Blockade one pawn with your king on a square of your bishop’s colour and control the other pawn’s path with the bishop from a distance. Then shuffle the bishop along that diagonal — there is nothing White can do.',
     moveLimit: 30,
     difficulty: 3,
+    lessonId: 'opposite-bishops',
   },
 ];
 
-export const DRILL_GROUPS: readonly EndgameDrill['group'][] = [
+export const DRILL_GROUPS: readonly DrillGroup[] = [
   'Checkmates',
   'Pawn endgames',
   'Rook endgames',

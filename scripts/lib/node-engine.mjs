@@ -79,14 +79,17 @@ export class NodeEngine {
   }
 
   /**
-   * Analyses a position to a fixed depth.
+   * Analyses a position to a fixed depth. `maxMs` caps the search time (a few
+   * positions — long forced mates, say — take minutes to reach a deep fixed
+   * depth, and a search that is cut off by a test timeout leaves the engine's
+   * output out of step with every later request).
    * Returns { bestmove, lines: Map<multipv, { depth, score: {type, value}, pv: string[] }> }.
    */
-  async analyse(fen, { depth = 16, multipv = 1 } = {}) {
+  async analyse(fen, { depth = 16, multipv = 1, maxMs = 90_000 } = {}) {
     this.send('ucinewgame');
     this.send(`setoption name MultiPV value ${multipv}`);
     this.send(`position fen ${fen}`);
-    this.send(`go depth ${depth}`);
+    this.send(`go depth ${depth} movetime ${maxMs}`);
     const output = await this.collect((l) => l.startsWith('bestmove'));
     const lines = new Map();
     for (const line of output) {

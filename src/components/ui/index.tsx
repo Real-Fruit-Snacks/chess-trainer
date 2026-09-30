@@ -389,3 +389,5 @@ export function EmptyState({
     </div>
   );
 }
+
+export { Icon, type IconName, type IconProps, Stars } from './Icon';

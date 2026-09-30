@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Badge, ProgressBar } from '@/components/ui';
+import { Badge, LinkButton, ProgressBar } from '@/components/ui';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { CoursesSection } from './CoursesSection';
@@ -22,12 +22,17 @@ export default function LearnPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <h1>Learn</h1>
-        <p>
-          Short interactive lessons — read a little, then play the idea on the board. Every position
-          is engine-checked.
-        </p>
+      <div className="page-header row row--between">
+        <div>
+          <h1>Learn</h1>
+          <p>
+            Short interactive lessons — read a little, then play the idea on the board. Every
+            position is engine-checked.
+          </p>
+        </div>
+        <LinkButton to="/placement" size="sm">
+          Not sure where to start? Placement quiz
+        </LinkButton>
       </div>
 
       <div className="learn__summary card">

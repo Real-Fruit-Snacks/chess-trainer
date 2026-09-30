@@ -285,3 +285,28 @@
 .course__item-title {
   font-weight: 600;
 }
+
+.lesson__complete-icon {
+  color: var(--accent);
+  display: flex;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.turn-dot {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-muted);
+  vertical-align: -0.05em;
+  margin-right: 0.35em;
+}
+
+.turn-dot--white {
+  background: #fff;
+}
+
+.turn-dot--black {
+  background: #222;
+}

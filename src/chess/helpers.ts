@@ -166,22 +166,6 @@ export function moveLabel(plyIndex: number, startFen: Fen = START_FEN): string {
   return ply % 2 === 0 ? `${moveNumber}.` : `${moveNumber}...`;
 }
 
-/** Unicode figurines for inline text. */
-export const PIECE_GLYPHS: Record<string, string> = {
-  K: '♔',
-  Q: '♕',
-  R: '♖',
-  B: '♗',
-  N: '♘',
-  P: '♙',
-  k: '♚',
-  q: '♛',
-  r: '♜',
-  b: '♝',
-  n: '♞',
-  p: '♟',
-};
-
 export function pieceName(symbol: string): string {
   const names: Record<string, string> = {
     p: 'pawn',

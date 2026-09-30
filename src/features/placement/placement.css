@@ -1,0 +1,57 @@
+.placement {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.placement__tactic {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.placement__board {
+  max-width: 360px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (min-width: 720px) {
+  .placement__tactic {
+    grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  }
+}
+
+.placement__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+}
+
+.placement__stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.placement__stat-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.placement__next {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.placement__lessons {
+  margin: 0;
+  padding-left: 1.2em;
+}

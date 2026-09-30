@@ -190,3 +190,76 @@
   margin: 0;
   text-align: right;
 }
+
+/* ---------- Results by engine level ---------- */
+.levels {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: var(--space-2);
+}
+
+.levels__row {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) 1fr auto;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.levels__bar {
+  display: flex;
+  height: 12px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.levels__win {
+  background: var(--success);
+}
+
+.levels__draw {
+  background: var(--border-strong);
+}
+
+.levels__loss {
+  background: var(--danger);
+}
+
+.levels__score {
+  font-variant-numeric: tabular-nums;
+  min-width: 4.5em;
+  text-align: right;
+}
+
+/* Profiles */
+.profiles__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.profiles__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.profiles__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.profiles__actions {
+  gap: 2px;
+}

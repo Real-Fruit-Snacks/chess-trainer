@@ -7,14 +7,21 @@
  * compressed CSV, filters for well-established puzzles, and uses reservoir
  * sampling to pick a fixed number per rating bucket so that every level from
  * absolute beginner to master gets appropriate material. The output is a set
- * of small JSON chunks the app loads on demand.
+ * of small JSON chunks (500 puzzles each) the app loads on demand; the first
+ * chunk of every bucket is precached for offline use, the rest are cached as
+ * they are fetched (or all at once from Settings).
  *
  * Usage:
  *   node scripts/import-lichess-puzzles.mjs [options]
  *
  * Options:
  *   --source <path|url>   CSV (.zst or plain) — default: the Lichess download URL
- *   --per-bucket <n>      puzzles to keep per rating bucket           (default 1000)
+ *   --per-bucket <n>      puzzles to keep per rating bucket           (default 6000)
+ *   --chunk <n>           puzzles per output file                     (default 500)
+ *   --keep <dir>          an existing output directory whose puzzles are kept
+ *                         (default: the output directory itself), so learners'
+ *                         history and review queues stay valid across imports
+ *   --no-keep             sample from scratch
  *   --min-plays <n>       minimum number of plays on Lichess          (default 500)
  *   --min-popularity <n>  minimum popularity score, -100..100         (default 70)
  *   --max-rd <n>          maximum rating deviation                    (default 90)
@@ -24,11 +31,12 @@
  *
  * The whole database is ~300 MB compressed; streaming it takes a few minutes.
  */
-import { createReadStream } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { createReadStream, existsSync } from 'node:fs';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import { countPuzzle, emptyCounts, sortedCounts } from './lib/puzzle-index.mjs';
 import { createZstdDecompress } from 'node:zlib';
 import { Chess } from 'chess.js';
 
@@ -55,7 +63,10 @@ export const BUCKETS = [
 function parseArgs(argv) {
   const opts = {
     source: DEFAULT_SOURCE,
-    perBucket: 1000,
+    perBucket: 6000,
+    chunk: 500,
+    keep: null,
+    noKeep: false,
     minPlays: 500,
     minPopularity: 70,
     maxRd: 90,
@@ -72,6 +83,15 @@ function parseArgs(argv) {
         break;
       case '--per-bucket':
         opts.perBucket = Number(next());
+        break;
+      case '--chunk':
+        opts.chunk = Number(next());
+        break;
+      case '--keep':
+        opts.keep = next();
+        break;
+      case '--no-keep':
+        opts.noKeep = true;
         break;
       case '--min-plays':
         opts.minPlays = Number(next());
@@ -95,7 +115,8 @@ function parseArgs(argv) {
       case '-h':
         console.log(
           `Usage: node scripts/import-lichess-puzzles.mjs [--source <path|url>] [--per-bucket n] ` +
-            `[--min-plays n] [--min-popularity n] [--max-rd n] [--seed n] [--out dir] [--limit n]`,
+            `[--chunk n] [--keep dir | --no-keep] [--min-plays n] [--min-popularity n] [--max-rd n] ` +
+            `[--seed n] [--out dir] [--limit n]`,
         );
         process.exit(0);
         break;
@@ -287,10 +308,42 @@ function bucketFor(rating) {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+/**
+ * Reads the puzzle ids of an existing output directory (either the old
+ * one-file-per-bucket layout or the chunked one), grouped by bucket.
+ */
+async function readExisting(dir) {
+  const kept = new Map(BUCKETS.map((b) => [b.id, new Set()]));
+  const indexPath = join(dir, 'index.json');
+  if (!existsSync(indexPath)) return kept;
+  const index = JSON.parse(await readFile(indexPath, 'utf8'));
+  for (const bucket of index.buckets ?? []) {
+    const files = bucket.files ?? (bucket.file ? [bucket.file] : []);
+    for (const file of files) {
+      const path = join(dir, file);
+      if (!existsSync(path)) continue;
+      const puzzles = JSON.parse(await readFile(path, 'utf8'));
+      const set = kept.get(bucket.id);
+      for (const p of puzzles) set?.add(p.id);
+    }
+  }
+  return kept;
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const rng = mulberry32(opts.seed);
-  const reservoirs = new Map(BUCKETS.map((b) => [b.id, new Reservoir(opts.perBucket, rng)]));
+  const keepDir = opts.noKeep ? null : (opts.keep ?? opts.out);
+  const keepIds = keepDir ? await readExisting(keepDir) : new Map();
+  const keepAll = new Set([...keepIds.values()].flatMap((set) => [...set]));
+  const reservoirs = new Map(
+    BUCKETS.map((b) => [
+      b.id,
+      new Reservoir(Math.max(0, opts.perBucket - (keepIds.get(b.id)?.size ?? 0)), rng),
+    ]),
+  );
+  const kept = new Map(BUCKETS.map((b) => [b.id, []]));
+  if (keepAll.size) console.log(`Keeping ${keepAll.size} puzzles from ${keepDir}`);
 
   console.log(`Reading ${opts.source}`);
   const stream = await openSource(opts.source);
@@ -321,17 +374,27 @@ async function main() {
 
     const row = parseRow(line);
     if (!row) continue;
+    const bucket = bucketFor(row.rating);
+    if (!bucket) continue;
+    if (keepAll.has(row.id)) {
+      // Bundled before: keep it whatever its current statistics say.
+      kept.get(bucket.id).push(row);
+      accepted++;
+      continue;
+    }
     if (row.plays < opts.minPlays) continue;
     if (row.popularity < opts.minPopularity) continue;
     if (row.rd > opts.maxRd) continue;
-    const bucket = bucketFor(row.rating);
-    if (!bucket) continue;
 
     accepted++;
     reservoirs.get(bucket.id).offer(row);
   }
 
   await mkdir(opts.out, { recursive: true });
+  // Remove stale chunk files from a previous import before writing the new set.
+  for (const name of await readdir(opts.out)) {
+    if (/^b\d{4}(-\d{2})?\.json$/.test(name)) await rm(join(opts.out, name));
+  }
 
   const index = {
     source: 'https://database.lichess.org/#puzzles',
@@ -339,14 +402,25 @@ async function main() {
     generatedAt: new Date().toISOString(),
     seed: opts.seed,
     filters: { minPlays: opts.minPlays, minPopularity: opts.minPopularity, maxRd: opts.maxRd },
+    chunk: opts.chunk,
     total: 0,
     buckets: [],
     themes: {},
+    openings: {},
+    openingVariations: {},
   };
+  const counts = emptyCounts();
 
   for (const bucket of BUCKETS) {
     const reservoir = reservoirs.get(bucket.id);
-    const puzzles = reservoir.items
+    const seenIds = new Set();
+    const puzzles = [...kept.get(bucket.id), ...reservoir.items]
+      .filter((p) => {
+        if (seenIds.has(p.id)) return false;
+        seenIds.add(p.id);
+        return true;
+      })
+      .slice(0, opts.perBucket)
       .filter((p) => isPlayable(p.fen, p.moves))
       .sort((a, b) => a.rating - b.rating)
       .map((p) => ({
@@ -362,33 +436,33 @@ async function main() {
         ...(p.opening ? { opening: p.opening } : {}),
       }));
 
-    for (const p of puzzles) {
-      for (const theme of p.themes.split(' ')) {
-        if (!theme) continue;
-        index.themes[theme] = (index.themes[theme] ?? 0) + 1;
-      }
-    }
+    for (const p of puzzles) countPuzzle(counts, p);
 
-    const file = `${bucket.id}.json`;
-    await writeFile(join(opts.out, file), JSON.stringify(puzzles));
+    const files = [];
+    for (let i = 0; i * opts.chunk < puzzles.length; i++) {
+      const file = `${bucket.id}-${String(i).padStart(2, '0')}.json`;
+      await writeFile(
+        join(opts.out, file),
+        JSON.stringify(puzzles.slice(i * opts.chunk, (i + 1) * opts.chunk)),
+      );
+      files.push(file);
+    }
     index.buckets.push({
       id: bucket.id,
       label: bucket.label,
       min: bucket.min,
       max: bucket.max,
       count: puzzles.length,
-      file,
+      files,
     });
     index.total += puzzles.length;
     console.log(
       `  ${bucket.id} ${String(bucket.min).padStart(4)}–${String(bucket.max).padEnd(4)} ` +
-        `kept ${puzzles.length}/${reservoir.seen} candidates`,
+        `kept ${puzzles.length} (${kept.get(bucket.id).length} carried over) of ${reservoir.seen} candidates in ${files.length} files`,
     );
   }
 
-  index.themes = Object.fromEntries(
-    Object.entries(index.themes).sort(([a], [b]) => a.localeCompare(b)),
-  );
+  Object.assign(index, sortedCounts(counts));
   await writeFile(join(opts.out, 'index.json'), JSON.stringify(index, null, 2) + '\n');
 
   const secs = ((Date.now() - started) / 1000).toFixed(0);

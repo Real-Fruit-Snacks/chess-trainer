@@ -25,6 +25,8 @@ const StudyPage = lazy(() => import('@/features/studies/StudyPage'));
 const ClassicsPage = lazy(() => import('@/features/classics/ClassicsPage'));
 const ClassicGamePage = lazy(() => import('@/features/classics/ClassicGamePage'));
 const ReferencePage = lazy(() => import('@/features/reference/ReferencePage'));
+const PlacementPage = lazy(() => import('@/features/placement/PlacementPage'));
+const PatternsPage = lazy(() => import('@/features/patterns/PatternsPage'));
 const NotFoundPage = lazy(() => import('@/features/home/NotFoundPage'));
 
 export const routes: RouteObject[] = [
@@ -40,6 +42,7 @@ export const routes: RouteObject[] = [
       { path: 'learn', element: <LearnPage /> },
       { path: 'learn/course/:courseId', element: <CoursePage /> },
       { path: 'learn/recall', element: <RecallPage /> },
+      { path: 'placement', element: <PlacementPage /> },
       { path: 'learn/:lessonId', element: <LessonPage /> },
       { path: 'puzzles', element: <PuzzlesPage /> },
       { path: 'puzzles/:mode', element: <PuzzlesPage /> },
@@ -49,6 +52,7 @@ export const routes: RouteObject[] = [
       { path: 'drills/coordinates', element: <CoordinatesDrill /> },
       { path: 'drills/vision', element: <VisionDrill /> },
       { path: 'drills/endgame/:drillId', element: <EndgameDrillPage /> },
+      { path: 'patterns', element: <PatternsPage /> },
       { path: 'openings', element: <OpeningsPage /> },
       { path: 'openings/:repertoireId', element: <RepertoirePage /> },
       { path: 'games', element: <MyGamesPage /> },

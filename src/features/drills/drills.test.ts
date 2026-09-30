@@ -145,3 +145,48 @@ describe('recall tasks', () => {
     }
   });
 });
+
+describe('endgame ladder', () => {
+  it('orders every drill by difficulty and counts climbed rungs', async () => {
+    const { buildEndgameLadder, describeLadder, ladderOrder } = await import('./endgameLadder');
+    const order = ladderOrder();
+    expect(order).toHaveLength(ENDGAME_DRILLS.length);
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i]?.difficulty ?? 0).toBeGreaterThanOrEqual(order[i - 1]?.difficulty ?? 0);
+    }
+    const empty = buildEndgameLadder({});
+    expect(empty.done).toBe(0);
+    expect(empty.total).toBeGreaterThanOrEqual(40);
+    expect(empty.next?.rung).toBe(1);
+    expect(describeLadder(empty)).toBe(`0 of ${empty.total} rungs climbed`);
+
+    const first = order[0];
+    const second = order[1];
+    if (!first || !second) throw new Error('missing drills');
+    const ladder = buildEndgameLadder({
+      [first.id]: { best: 90, attempts: 1, lastAt: 1 },
+      [second.id]: { best: 0, attempts: 2, lastAt: 1 },
+    });
+    expect(ladder.done).toBe(1);
+    expect(ladder.next?.drill.id).toBe(second.id);
+    expect(ladder.groups.reduce((n, g) => n + g.total, 0)).toBe(ladder.total);
+    expect(ladder.groups.find((g) => g.group === first.group)?.done).toBe(1);
+  });
+
+  it('links every drill to an existing lesson', async () => {
+    const { getLessonMeta } = await import('@/features/learn/lessonMeta');
+    for (const drill of ENDGAME_DRILLS) {
+      expect(drill.lessonId, `${drill.id} has no lesson`).toBeTruthy();
+      expect(getLessonMeta(drill.lessonId ?? ''), `${drill.id}: ${drill.lessonId}`).toBeDefined();
+    }
+  });
+
+  it('counts material for either side', async () => {
+    const { materialFor } = await import('./positions');
+    const count = countMaterial('7K/8/k1P5/7p/8/8/8/8 w - - 0 1');
+    expect(count).toEqual({ white: 1, black: 1, whitePawns: 1, blackPawns: 1 });
+    expect(materialFor(count, 'white')).toEqual({ own: 1, ownPawns: 1, opp: 1, oppPawns: 1 });
+    const rook = countMaterial('R7/8/8/8/8/2p5/1k6/7K b - - 0 1');
+    expect(materialFor(rook, 'black')).toEqual({ own: 1, ownPawns: 1, opp: 1, oppPawns: 0 });
+  });
+});

@@ -1,6 +1,6 @@
 import type { Move } from 'chess.js';
 import { useEffect, useRef } from 'react';
-import { Button, Kbd } from '@/components/ui';
+import { Button, Kbd, Icon } from '@/components/ui';
 import './chess-components.css';
 
 export type MoveJudgement = 'blunder' | 'mistake' | 'inaccuracy' | 'best' | 'good' | null;
@@ -135,7 +135,7 @@ export function MoveNavigation({
         onClick={() => onSelectPly(0)}
         disabled={(disabled ?? false) || currentPly === 0}
       >
-        ⏮
+        <Icon name="skip-back" size={16} />
       </Button>
       <Button
         size="sm"
@@ -144,7 +144,7 @@ export function MoveNavigation({
         onClick={() => onSelectPly(currentPly - 1)}
         disabled={(disabled ?? false) || currentPly === 0}
       >
-        ◀
+        <Icon name="chevron-left" size={16} />
       </Button>
       <Button
         size="sm"
@@ -153,7 +153,7 @@ export function MoveNavigation({
         onClick={() => onSelectPly(currentPly + 1)}
         disabled={(disabled ?? false) || currentPly >= total}
       >
-        ▶
+        <Icon name="chevron-right" size={16} />
       </Button>
       <Button
         size="sm"
@@ -162,7 +162,7 @@ export function MoveNavigation({
         onClick={() => onSelectPly(total)}
         disabled={(disabled ?? false) || currentPly >= total}
       >
-        ⏭
+        <Icon name="skip-forward" size={16} />
       </Button>
       <span className="small faint" style={{ alignSelf: 'center', marginLeft: 8 }}>
         <Kbd>←</Kbd> <Kbd>→</Kbd>

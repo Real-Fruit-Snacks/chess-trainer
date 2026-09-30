@@ -9,6 +9,8 @@ export interface ShareParams {
   fen?: string;
   /** 1-based ply to open the game at (0 = the starting position). */
   ply?: number;
+  /** Title of a shared analysis, shown when it opens. */
+  name?: string;
 }
 
 const hasStreams = () =>
@@ -67,6 +69,7 @@ export async function buildShareFragment(params: ShareParams): Promise<string> {
     if (hasStreams()) parts.push(`z=${await compressText(params.pgn)}`);
     else parts.push(`pgn=${encodeURIComponent(params.pgn)}`);
     if (params.ply !== undefined && params.ply > 0) parts.push(`ply=${params.ply}`);
+    if (params.name) parts.push(`name=${encodeURIComponent(params.name)}`);
   } else if (params.fen) {
     parts.push(`fen=${encodeURIComponent(params.fen)}`);
   }
@@ -92,5 +95,7 @@ export async function parseShareFragment(fragment: string): Promise<ShareParams 
     return null;
   }
   if (Number.isFinite(ply) && ply > 0) out.ply = Math.floor(ply);
+  const name = params.get('name');
+  if (name) out.name = name;
   return out;
 }

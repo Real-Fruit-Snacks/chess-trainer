@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Badge } from '@/components/ui';
+import { Badge, Stars } from '@/components/ui';
 import { siteConfig } from '@/site.config';
 import { type DrillResult, useProgress } from '@/store/progress';
-import { DRILL_GROUPS, ENDGAME_DRILLS } from './endgameDrills';
+import { DRILL_GROUPS } from './endgameDrills';
+import { buildEndgameLadder, describeLadder } from './endgameLadder';
 import './drills.css';
 
 interface DrillCard {
@@ -61,6 +62,15 @@ const SKILL_DRILLS: DrillCard[] = [
     meta: 'Visualisation · 90 s',
     difficulty: 2,
   },
+  {
+    id: 'mating-patterns',
+    to: '/patterns?drill=all',
+    title: 'Mating patterns',
+    description:
+      'The nineteen named mates, one after another: the defender moves, you find the mate.',
+    meta: 'Pattern recognition · 19 positions',
+    difficulty: 2,
+  },
 ];
 
 function bestLabel(result: DrillResult | undefined, kind: 'score' | 'endgame'): string | null {
@@ -77,6 +87,7 @@ export default function DrillsPage() {
   }, []);
 
   const groups = DRILL_GROUPS;
+  const ladder = buildEndgameLadder(drills);
 
   return (
     <div>
@@ -92,7 +103,12 @@ export default function DrillsPage() {
         <h2>Board vision and calculation</h2>
         <div className="grid grid--cards">
           {SKILL_DRILLS.map((card) => {
-            const best = bestLabel(drills[card.id], 'score');
+            const best =
+              card.id === 'mating-patterns'
+                ? drills[card.id]?.detail
+                  ? `Best ${drills[card.id]?.detail}`
+                  : null
+                : bestLabel(drills[card.id], 'score');
             return (
               <Link key={card.id} to={card.to} className="card card--interactive drill-card">
                 <div className="row row--between">
@@ -100,7 +116,9 @@ export default function DrillsPage() {
                   {best ? (
                     <Badge tone="success">{best}</Badge>
                   ) : (
-                    <Badge>{'★'.repeat(card.difficulty)}</Badge>
+                    <Badge>
+                      <Stars count={card.difficulty} />
+                    </Badge>
                   )}
                 </div>
                 <p className="small muted" style={{ margin: 0 }}>
@@ -113,39 +131,94 @@ export default function DrillsPage() {
         </div>
       </section>
 
+      <section className="drills__section" data-testid="endgame-ladder">
+        <h2>Endgame library</h2>
+        <div className="card ladder">
+          <div className="row row--between">
+            <div>
+              <p className="card__eyebrow">Endgame ladder</p>
+              <strong data-testid="ladder-progress">{describeLadder(ladder)}</strong>
+            </div>
+            {ladder.next ? (
+              <Link
+                className="btn btn--primary"
+                to={`/drills/endgame/${ladder.next.drill.id}`}
+                data-testid="ladder-next"
+              >
+                Rung {ladder.next.rung}: {ladder.next.drill.title}
+              </Link>
+            ) : (
+              <Badge tone="success">Complete</Badge>
+            )}
+          </div>
+          <div
+            className="ladder__bar"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={ladder.total}
+            aria-valuenow={ladder.done}
+            aria-label="Endgame ladder progress"
+          >
+            <span style={{ width: `${(ladder.done / ladder.total) * 100}%` }} />
+          </div>
+          <div className="ladder__groups">
+            {ladder.groups.map((g) => (
+              <span key={g.group} className="small muted">
+                {g.group} {g.done}/{g.total}
+              </span>
+            ))}
+          </div>
+          <p className="small muted" style={{ margin: 0 }}>
+            Every drill is a rung, from the elementary mates up to Réti and Vancura; a rung is
+            climbed the first time you complete it. Each position was checked with the engine, and
+            you play it out against Stockfish at full strength.
+          </p>
+        </div>
+      </section>
+
       {groups.map((group) => (
         <section key={group} className="drills__section">
-          <h2>{group}</h2>
+          <h2>
+            {group}{' '}
+            <span className="small muted" style={{ fontWeight: 400 }}>
+              {ladder.groups.find((g) => g.group === group)?.done ?? 0}/
+              {ladder.groups.find((g) => g.group === group)?.total ?? 0}
+            </span>
+          </h2>
           <div className="grid grid--cards">
-            {ENDGAME_DRILLS.filter((d) => d.group === group).map((drill) => {
-              const result = drills[drill.id];
-              const best = bestLabel(result, 'endgame');
-              return (
-                <Link
-                  key={drill.id}
-                  to={`/drills/endgame/${drill.id}`}
-                  className="card card--interactive drill-card"
-                >
-                  <div className="row row--between">
-                    <span className="card__title">{drill.title}</span>
-                    {best && result?.best ? (
-                      <Badge tone="success">{best}</Badge>
-                    ) : (
-                      <Badge>{'★'.repeat(drill.difficulty)}</Badge>
-                    )}
-                  </div>
-                  <p className="small muted" style={{ margin: 0 }}>
-                    {drill.description}
-                  </p>
-                  <span className="drill-card__meta">
-                    You play {drill.color} · vs full-strength engine
-                    {result?.attempts
-                      ? ` · ${result.attempts} attempt${result.attempts === 1 ? '' : 's'}`
-                      : ''}
-                  </span>
-                </Link>
-              );
-            })}
+            {ladder.rungs
+              .filter((r) => r.drill.group === group)
+              .map(({ drill, rung, done }) => {
+                const result = drills[drill.id];
+                const best = bestLabel(result, 'endgame');
+                return (
+                  <Link
+                    key={drill.id}
+                    to={`/drills/endgame/${drill.id}`}
+                    className={`card card--interactive drill-card${done ? ' drill-card--done' : ''}`}
+                  >
+                    <div className="row row--between">
+                      <span className="card__title">{drill.title}</span>
+                      {best && result?.best ? (
+                        <Badge tone="success">{best}</Badge>
+                      ) : (
+                        <Badge>
+                          <Stars count={drill.difficulty} max={4} />
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="small muted" style={{ margin: 0 }}>
+                      {drill.description}
+                    </p>
+                    <span className="drill-card__meta">
+                      Rung {rung} · You play {drill.color}
+                      {result?.attempts
+                        ? ` · ${result.attempts} attempt${result.attempts === 1 ? '' : 's'}`
+                        : ''}
+                    </span>
+                  </Link>
+                );
+              })}
           </div>
         </section>
       ))}

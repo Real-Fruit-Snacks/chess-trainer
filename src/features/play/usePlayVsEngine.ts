@@ -20,7 +20,22 @@ import {
 import { pickRandom } from '@/lib/random';
 import { playSound } from '@/lib/sound';
 import { useProgress } from '@/store/progress';
+import { useRepertoire } from '@/store/repertoire';
 import { useSettings } from '@/store/settings';
+import {
+  type BookDeviation,
+  type BookState,
+  bookReply,
+  createBook,
+  followBook,
+} from './openingBook';
+import {
+  COACH_DEPTH,
+  type CoachEvaluation,
+  coachShouldInterrupt,
+  type CoachVerdict,
+  coachVerdict,
+} from './coach';
 
 export interface GameOver {
   result: '1-0' | '0-1' | '1/2-1/2';
@@ -41,6 +56,25 @@ export interface GameSetup {
   opponent?: Opponent;
   /** Two-player games: turn the board towards the side to move after every move. */
   autoFlip?: boolean;
+  /** Pause after a mistake with an explanation and the offer to take it back (untimed engine games). */
+  coach?: boolean;
+  /** Practise this repertoire: the opponent follows its lines while the game stays in book. */
+  book?: { id: string; name: string; color: LongColor; pgn: string };
+}
+
+/** Where the game stands with respect to the practised repertoire. */
+export interface BookInfo {
+  repertoireId: string;
+  name: string;
+  status: BookState['status'];
+  endedAtPly: number | null;
+  deviation: BookDeviation | null;
+}
+
+/** A coach interruption: the move just played and why it was bad. */
+export interface CoachAlert {
+  san: string;
+  verdict: CoachVerdict;
 }
 
 export interface UsePlayVsEngine {
@@ -63,6 +97,23 @@ export interface UsePlayVsEngine {
   hinting: boolean;
   /** Suggested level after the last game, if the results call for a change. */
   suggestedLevel: EngineLevel | null;
+  /** Coach mode is on for this game. */
+  coach: boolean;
+  /** The coach is checking the last move or waiting for a decision on it. */
+  coachAlert: CoachAlert | null;
+  coachChecking: boolean;
+  /** Coach interruptions so far in this game. */
+  coachInterventions: number;
+  /** Take the flagged move back (coach) … */
+  coachTakeBack: () => void;
+  /** … or keep it and let the engine reply. */
+  coachPlayOn: () => void;
+  /** Opening practice: the repertoire being followed, if any. */
+  book: BookInfo | null;
+  /** The learner just left the repertoire: shown until they take it back or play on. */
+  bookAlert: BookDeviation | null;
+  bookTakeBack: () => void;
+  bookPlayOn: () => void;
   start: (setup: GameSetup) => void;
   playerMove: (from: Square, to: Square, promotion?: PromotionPiece) => void;
   /** Plays a typed move (SAN or UCI) for the player. Returns false if illegal. */
@@ -94,6 +145,17 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const [orientation, setOrientation] = useState<LongColor>('white');
   const [opponent, setOpponent] = useState<Opponent>('engine');
   const [autoFlip, setAutoFlip] = useState(false);
+  const [coach, setCoach] = useState(false);
+  const [coachAlert, setCoachAlert] = useState<CoachAlert | null>(null);
+  const [coachChecking, setCoachChecking] = useState(false);
+  const [coachInterventions, setCoachInterventions] = useState(0);
+  const [bookBase, setBookBase] = useState<BookState | null>(null);
+  const [bookAlert, setBookAlert] = useState<BookDeviation | null>(null);
+  /** Deviations already counted as lapses this game (by ply), so take-backs do not double-count. */
+  const bookLapsesRef = useRef(new Set<number>());
+  /** Evaluations of positions where it was the learner's turn, by FEN (for the coach). */
+  const coachEvals = useRef(new Map<string, Promise<CoachEvaluation>>());
+  const coachRunRef = useRef(0);
   const [levelId, setLevelId] = useState<number>(settings.playLevel);
   const [timeControlId, setTimeControlId] = useState<string>(settings.playTimeControl);
   const [started, setStarted] = useState(false);
@@ -135,6 +197,33 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   useEffect(() => {
     if (hotSeat && autoFlip && started && !gameOver) setOrientation(position.turn);
   }, [hotSeat, autoFlip, started, gameOver, position.turn]);
+
+  const bookNow = useMemo(
+    () => (bookBase ? followBook(bookBase, position.history) : null),
+    [bookBase, position.history],
+  );
+  const book: BookInfo | null = bookNow
+    ? {
+        repertoireId: bookNow.repertoireId,
+        name: bookNow.name,
+        status: bookNow.status,
+        endedAtPly: bookNow.endedAtPly,
+        deviation: bookNow.deviation,
+      }
+    : null;
+
+  // Leaving the book: pause like the coach does and mark the forgotten move as lapsed.
+  useEffect(() => {
+    const deviation = bookNow?.status === 'deviated' ? bookNow.deviation : null;
+    if (!bookNow || !deviation || gameOver) return;
+    if (bookLapsesRef.current.has(deviation.ply)) return;
+    bookLapsesRef.current.add(deviation.ply);
+    if (deviation.cardKey) {
+      useRepertoire.getState().review(bookNow.repertoireId, deviation.cardKey, 1);
+    }
+    playSound('failed');
+    setBookAlert(deviation);
+  }, [bookNow, gameOver]);
 
   const syncClockView = useCallback(() => {
     const now = Date.now();
@@ -250,6 +339,16 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       reason: gameOver.reason,
       plies: position.history.length,
       pgn: gameRef.current.pgn(pgnHeaders(playerColor, level, timeControl, gameOver.result)),
+      ...(bookNow
+        ? {
+            book: {
+              repertoireId: bookNow.repertoireId,
+              status: bookNow.status,
+              endedAtPly: bookNow.endedAtPly,
+              deviationPly: bookNow.deviation?.ply ?? null,
+            },
+          }
+        : {}),
     });
     const recent = useProgress
       .getState()
@@ -269,7 +368,16 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     } else {
       setSuggestedLevel(null);
     }
-  }, [gameOver, level, playerColor, position.history.length, recordGame, timeControl, hotSeat]);
+  }, [
+    gameOver,
+    level,
+    playerColor,
+    position.history.length,
+    recordGame,
+    timeControl,
+    hotSeat,
+    bookNow,
+  ]);
 
   const chooseEngineMove = useCallback(
     async (fen: string, movesUci: Uci[]): Promise<Uci | null> => {
@@ -323,9 +431,51 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     [engine, level, hasClock, engineColor],
   );
 
-  // Engine moves whenever it is its turn.
+  const evaluateForCoach = useCallback(
+    (fen: string): Promise<CoachEvaluation> => {
+      const cached = coachEvals.current.get(fen);
+      if (cached) return cached;
+      const promise = engine()
+        .search({ fen, depth: COACH_DEPTH, multipv: 1 })
+        .result.then((result) => {
+          const info = result.lines.get(1);
+          return {
+            fen,
+            score: info?.score ?? null,
+            best: result.bestmove.move,
+            pv: (info?.pv ?? []).slice(0, 6),
+          };
+        });
+      coachEvals.current.set(fen, promise);
+      promise.catch(() => coachEvals.current.delete(fen));
+      return promise;
+    },
+    [engine],
+  );
+
+  // Coach mode: know the engine's opinion of the position before the learner moves.
+  useEffect(() => {
+    if (!coach || hotSeat || !started || gameOver || engineStatus !== 'ready') return;
+    if (position.turn !== playerColor || thinking || coachChecking) return;
+    void evaluateForCoach(position.fen).catch(() => undefined);
+  }, [
+    coach,
+    hotSeat,
+    started,
+    gameOver,
+    engineStatus,
+    position.turn,
+    position.fen,
+    playerColor,
+    thinking,
+    coachChecking,
+    evaluateForCoach,
+  ]);
+
+  // Engine moves whenever it is its turn (from the repertoire while the game is in book).
   useEffect(() => {
     if (hotSeat) return;
+    if (coachChecking || coachAlert || bookAlert) return;
     if (!started || gameOver || position.turn !== engineColor || game.pendingPromotion) return;
     if (engineStatus !== 'ready') return;
     const id = ++searchIdRef.current;
@@ -333,8 +483,13 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     setThinking(true);
     const startedAt = Date.now();
     const movesUci = position.history.map((m) => toUci(m));
+    const bookMove =
+      bookNow?.status === 'in-book' ? bookReply(bookNow, useRepertoire.getState().cards) : null;
+    const choose = bookMove
+      ? Promise.resolve<Uci | null>(bookMove)
+      : chooseEngineMove(position.startFen, movesUci);
 
-    void chooseEngineMove(position.startFen, movesUci)
+    void choose
       .then(async (uci) => {
         if (cancelled || id !== searchIdRef.current || !uci) return;
         const wait = Math.max(0, MIN_THINK_MS - (Date.now() - startedAt));
@@ -361,6 +516,10 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     chooseEngineMove,
     game.pendingPromotion,
     hotSeat,
+    coachChecking,
+    coachAlert,
+    bookAlert,
+    bookNow,
   ]);
 
   const start = useCallback(
@@ -371,14 +530,33 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       fen,
       opponent: nextOpponent = 'engine',
       autoFlip: nextAutoFlip = false,
+      coach: nextCoach = false,
+      book: nextBook,
     }: GameSetup) => {
       engine().stop();
       searchIdRef.current++;
-      const chosen: LongColor =
-        color === 'random' ? (Math.random() < 0.5 ? 'white' : 'black') : color;
+      // A repertoire decides the colour and the opponent; the book only makes sense from the start.
+      const bookState = nextBook && nextOpponent === 'engine' && !fen ? createBook(nextBook) : null;
+      const chosen: LongColor = bookState
+        ? bookState.color
+        : color === 'random'
+          ? Math.random() < 0.5
+            ? 'white'
+            : 'black'
+          : color;
+      setBookBase(bookState);
+      setBookAlert(null);
+      bookLapsesRef.current = new Set();
       const control = getTimeControl(nextTc);
       setOpponent(nextOpponent);
       setAutoFlip(nextAutoFlip);
+      // The coach needs the engine free between moves and no clock to run down.
+      setCoach(nextCoach && nextOpponent === 'engine' && control.initialMs === 0);
+      setCoachAlert(null);
+      setCoachChecking(false);
+      setCoachInterventions(0);
+      coachEvals.current = new Map();
+      coachRunRef.current++;
       setPlayerColor(chosen);
       setOrientation(chosen);
       setLevelId(nextLevelId);
@@ -405,37 +583,102 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   );
 
   const canPlayerMove =
-    started && !gameOver && !thinking && (hotSeat || position.turn === playerColor);
+    started &&
+    !gameOver &&
+    !thinking &&
+    !coachChecking &&
+    !coachAlert &&
+    !bookAlert &&
+    (hotSeat || position.turn === playerColor);
+
+  /** After the learner's move: let the coach judge it before the engine answers. */
+  const coachCheck = useCallback(
+    (fenBefore: string, san: string, uci: Uci) => {
+      if (!coach || engineStatus !== 'ready') return;
+      const run = ++coachRunRef.current;
+      setCoachChecking(true);
+      // The React snapshot lags one render behind; the live instance already has the move.
+      const fenAfter = gameRef.current.chess().fen();
+      void Promise.all([evaluateForCoach(fenBefore), evaluateForCoach(fenAfter)])
+        .then(([before, after]) => {
+          if (run !== coachRunRef.current) return;
+          const verdict = coachVerdict(before, san, uci, after);
+          if (coachShouldInterrupt(verdict)) {
+            playSound('failed');
+            setCoachInterventions((n) => n + 1);
+            setCoachAlert({ san, verdict });
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (run === coachRunRef.current) setCoachChecking(false);
+        });
+    },
+    [coach, engineStatus, evaluateForCoach],
+  );
 
   const playerMove = useCallback(
     (from: Square, to: Square, promotion?: PromotionPiece) => {
       if (!canPlayerMove) return;
       setHintShapes([]);
-      game.playMove(from, to, promotion);
+      const fenBefore = position.fen;
+      const move = game.playMove(from, to, promotion);
+      if (move && move !== 'promotion' && !hotSeat) coachCheck(fenBefore, move.san, toUci(move));
     },
-    [canPlayerMove, game],
+    [canPlayerMove, game, position.fen, hotSeat, coachCheck],
   );
 
   const playerNotation = useCallback(
     (notation: string): boolean => {
       if (!canPlayerMove) return false;
       setHintShapes([]);
-      return game.playNotation(notation) !== null;
+      const fenBefore = position.fen;
+      const move = game.playNotation(notation);
+      if (move && !hotSeat) coachCheck(fenBefore, move.san, toUci(move));
+      return move !== null;
     },
-    [canPlayerMove, game],
+    [canPlayerMove, game, position.fen, hotSeat, coachCheck],
   );
+
+  const coachTakeBack = useCallback(() => {
+    if (!coachAlert) return;
+    coachRunRef.current++;
+    setCoachAlert(null);
+    setCoachChecking(false);
+    game.undo();
+  }, [coachAlert, game]);
+
+  const coachPlayOn = useCallback(() => {
+    setCoachAlert(null);
+  }, []);
+
+  const bookTakeBack = useCallback(() => {
+    if (!bookAlert) return;
+    setBookAlert(null);
+    game.undo();
+  }, [bookAlert, game]);
+
+  const bookPlayOn = useCallback(() => {
+    setBookAlert(null);
+  }, []);
 
   const resolvePromotion = useCallback(
     (piece: PromotionPiece | null) => {
-      game.resolvePromotion(piece);
+      const fenBefore = position.fen;
+      const move = game.resolvePromotion(piece);
+      if (move && !hotSeat) coachCheck(fenBefore, move.san, toUci(move));
     },
-    [game],
+    [game, position.fen, hotSeat, coachCheck],
   );
 
   const takeBack = useCallback(() => {
     if (!started || position.history.length === 0) return;
     engine().stop();
     searchIdRef.current++;
+    coachRunRef.current++;
+    setCoachAlert(null);
+    setCoachChecking(false);
+    setBookAlert(null);
     setThinking(false);
     setHintShapes([]);
     setGameOver(null);
@@ -531,6 +774,16 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     hintShapes,
     hinting,
     suggestedLevel,
+    coach,
+    coachAlert,
+    coachChecking,
+    coachInterventions,
+    coachTakeBack,
+    coachPlayOn,
+    book,
+    bookAlert,
+    bookTakeBack,
+    bookPlayOn,
     start,
     playerMove,
     playerNotation,

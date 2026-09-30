@@ -1,14 +1,17 @@
-import { useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { PlayerBar } from '@/components/chess/PlayerBar';
 import { MoveList } from '@/components/chess/MoveList';
 import { Alert, Button, Card, Spinner, Stat } from '@/components/ui';
+import type { LongColor } from '@/chess/types';
+import { getLessonMeta } from '@/features/learn/lessonMeta';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { type EndgameDrill, getDrill } from './endgameDrills';
-import { useDrillGame } from './useDrillGame';
+import { buildEndgameLadder } from './endgameLadder';
+import { pickStartFen, useDrillGame } from './useDrillGame';
 import '@/features/play/play.css';
 import './drills.css';
 
@@ -39,7 +42,24 @@ export default function EndgameDrillPage() {
 function DrillGame({ drill }: { drill: EndgameDrill }) {
   const game = useDrillGame();
   const best = useProgress((s) => s.drills[drill.id]);
+  const allResults = useProgress((s) => s.drills);
+  const ladder = buildEndgameLadder(allResults);
+  const rung = ladder.rungs.find((r) => r.drill.id === drill.id);
+  const nextRung = ladder.rungs.find((r) => !r.done && r.drill.id !== drill.id) ?? null;
+  const lesson = drill.lessonId ? getLessonMeta(drill.lessonId) : undefined;
+  // `?pos=N` starts from the drill's N-th fixed position (links from lessons and tests).
+  const [searchParams] = useSearchParams();
+  const requested = Number(searchParams.get('pos'));
+  const fixedStart =
+    drill.positions !== 'random' && Number.isInteger(requested) && requested >= 0
+      ? drill.positions[requested]
+      : undefined;
+  // The board shows the position that Start will use, so the task is visible before playing.
+  const [preview] = useState(() => fixedStart ?? pickStartFen(drill));
+  const begin = () => game.start(drill, preview);
   const { position } = game.game;
+  const shownFen = game.phase === 'idle' ? preview : position.fen;
+  const shownTurn: LongColor = shownFen.split(' ')[1] === 'b' ? 'black' : 'white';
   const userColor = drill.color;
   const engineColor = userColor === 'white' ? 'black' : 'white';
   const playerTurn = game.phase === 'playing' && position.turn === userColor && !game.thinking;
@@ -51,6 +71,7 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
       <div className="page-header">
         <p className="card__eyebrow">
           <Link to="/drills">Drills</Link> / {drill.group}
+          {rung ? ` · Rung ${rung.rung} of ${ladder.total}` : ''}
         </p>
         <h1>{drill.title}</h1>
         <p>{drill.description}</p>
@@ -70,22 +91,22 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
           <PlayerBar
             name={`Stockfish (full strength)`}
             color={engineColor}
-            fen={position.fen}
+            fen={shownFen}
             thinking={game.thinking}
             showMaterial={false}
           />
           <div className="trainer__board" style={{ position: 'relative' }}>
             <Board
-              fen={position.fen}
+              fen={shownFen}
               orientation={userColor}
-              turnColor={position.turn}
+              turnColor={shownTurn}
               movableColor={playerTurn ? userColor : undefined}
               dests={playerTurn ? position.dests : new Map()}
               lastMove={position.lastMove}
               check={position.inCheck}
               autoShapes={game.hintShapes}
               onMove={(from, to) => game.playerMove(from, to)}
-              ariaLabel={`${drill.title} board, ${position.turn} to move`}
+              ariaLabel={`${drill.title} board, ${shownTurn} to move`}
             />
             {game.game.pendingPromotion ? (
               <PromotionPicker
@@ -111,7 +132,7 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
                     <Button
                       variant="primary"
                       size="lg"
-                      onClick={() => game.start(drill)}
+                      onClick={begin}
                       disabled={game.engineStatus === 'error'}
                     >
                       Start
@@ -136,15 +157,25 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
                       New position
                     </Button>
                     <Button onClick={game.restart}>Same position</Button>
-                    <Link className="btn" to="/drills">
-                      All drills
-                    </Link>
+                    {game.result.outcome === 'won' && nextRung ? (
+                      <Link
+                        className="btn"
+                        to={`/drills/endgame/${nextRung.drill.id}`}
+                        data-testid="drill-next-rung"
+                      >
+                        Next rung: {nextRung.drill.title}
+                      </Link>
+                    ) : (
+                      <Link className="btn" to="/drills">
+                        All drills
+                      </Link>
+                    )}
                   </div>
                 </Card>
               </div>
             ) : null}
           </div>
-          <PlayerBar name="You" color={userColor} fen={position.fen} showMaterial={false} />
+          <PlayerBar name="You" color={userColor} fen={shownFen} showMaterial={false} />
         </div>
 
         <aside className="trainer__panel stack">
@@ -185,6 +216,11 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
             <div className="drill__tip">
               <strong>Technique.</strong> {drill.tip}
             </div>
+            {lesson ? (
+              <p className="small" style={{ margin: '8px 0 0' }}>
+                Theory: <Link to={`/learn/${lesson.id}`}>{lesson.title}</Link>
+              </p>
+            ) : null}
           </Card>
 
           <Card>

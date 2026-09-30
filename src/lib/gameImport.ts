@@ -23,6 +23,10 @@ export interface ImportedGame {
   speed: GameSpeed | null;
   /** Rated game, when the source says. */
   rated: boolean | null;
+  /** All PGN tags, for imports that need more than the standard ones (studies). */
+  headers?: Record<string, string>;
+  /** Starting position when the game has a FEN tag. */
+  startFen?: string;
   /** Start (or end) time in ms since the epoch, when known; used for paging. */
   timestamp: number | null;
 }
@@ -103,6 +107,8 @@ export function parsePgnGames(text: string): ImportedGame[] {
         speed: speedFromTimeControl(headers.TimeControl),
         rated: headers.Event ? /rated/i.test(headers.Event) : null,
         timestamp: timestampOf(headers),
+        headers,
+        ...(headers.FEN ? { startFen: headers.FEN } : {}),
       });
     } catch {
       // Skip games that do not parse; the rest of the file is still useful.

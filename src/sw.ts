@@ -63,6 +63,16 @@ registerRoute(
   }),
 );
 
+// Puzzle chunks beyond the precached first one of each band are cached as
+// they are fetched (or all at once from Settings → "Download every puzzle").
+registerRoute(
+  ({ url, sameOrigin }) => sameOrigin && /\/puzzles\/b\d{4}-\d{2}\.json$/.test(url.pathname),
+  new CacheFirst({
+    cacheName: 'chess-trainer-puzzles',
+    plugins: [new ExpirationPlugin({ maxEntries: 400 }), isolationPlugin],
+  }),
+);
+
 // The threaded engine build is fetched on demand and kept for offline use.
 registerRoute(
   ({ url, sameOrigin }) =>

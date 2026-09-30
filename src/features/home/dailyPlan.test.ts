@@ -82,6 +82,32 @@ describe('buildDailyPlan', () => {
     const openings = plan.items.find((i) => i.id === 'openings');
     expect(openings?.done).toBe(false);
     expect(openings?.detail).toBe('1 move due');
+    // The opening being learned also brings its tactics into the plan.
+    const tactics = plan.items.find((i) => i.id === 'openingTactics');
+    expect(tactics?.title).toBe('Tactics from the Italian Game');
+    expect(tactics?.to).toBe('/puzzles/openings?opening=Italian_Game');
+    expect(tactics?.done).toBe(false);
+    const solved = buildDailyPlan(
+      progress({
+        attempts: [
+          {
+            id: 'x',
+            puzzleRating: 1200,
+            outcome: 'solved',
+            hintUsed: false,
+            ratingBefore: 1200,
+            ratingAfter: 1200,
+            themes: 'fork',
+            at: now - 1000,
+            durationMs: 5000,
+            opening: 'Italian_Game',
+          },
+        ],
+      }),
+      { cards, custom: [] },
+      now,
+    );
+    expect(solved.items.find((i) => i.id === 'openingTactics')?.done).toBe(true);
   });
 });
 
@@ -159,5 +185,45 @@ describe('adaptive plan', () => {
     expect(drill?.title).toContain('Drill:');
     const recall = plan.items.find((i) => i.id === 'recall');
     expect(recall).toMatchObject({ to: '/learn/recall', done: false, detail: '1 due' });
+  });
+});
+
+describe('work-on item from game insights', () => {
+  it('adds the first work item and ticks it off after a puzzle of that theme', () => {
+    const workOn = [
+      {
+        id: 'motif:hanging-piece',
+        title: 'Hanging pieces',
+        detail: '3 times in your reviewed games',
+        lessonId: 'piece-values',
+        theme: 'hangingPiece',
+      },
+    ];
+    const plan = buildDailyPlan(progress(), { cards: {}, custom: [] }, now, workOn);
+    const item = plan.items.find((i) => i.id === 'workOn');
+    expect(item?.title).toBe('Work on: Hanging pieces');
+    expect(item?.to).toBe('/puzzles/themes?theme=hangingPiece');
+    expect(item?.done).toBe(false);
+    const practised = buildDailyPlan(
+      progress({
+        attempts: [
+          {
+            id: 'x',
+            puzzleRating: 1200,
+            outcome: 'failed',
+            hintUsed: false,
+            ratingBefore: 1200,
+            ratingAfter: 1200,
+            themes: 'hangingPiece middlegame',
+            at: now - 1000,
+            durationMs: 5000,
+          },
+        ],
+      }),
+      { cards: {}, custom: [] },
+      now,
+      workOn,
+    );
+    expect(practised.items.find((i) => i.id === 'workOn')?.done).toBe(true);
   });
 });

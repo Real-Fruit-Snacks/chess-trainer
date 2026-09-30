@@ -29,16 +29,20 @@ import {
   dailyPuzzle,
   findPuzzleById,
   loadPuzzleIndex,
+  openingTagName,
   type Puzzle,
   type PuzzleIndex,
   selectPuzzle,
 } from './puzzleService';
+import { OpeningCatalog } from './OpeningCatalog';
+import { WoodpeckerPanel } from './WoodpeckerPanel';
 import { RushTrainer } from './RushTrainer';
 import { PRACTICE_GROUPS, THEMES, themeDescription, themeName } from './themes';
 import { type PuzzleOutcomeEvent, usePuzzleTrainer } from './usePuzzleTrainer';
 import './puzzles.css';
+import { Icon } from '@/components/ui';
 
-type Mode = 'rated' | 'daily' | 'themes' | 'rush' | 'review' | 'mine';
+type Mode = 'rated' | 'daily' | 'themes' | 'openings' | 'rush' | 'review' | 'mine' | 'woodpecker';
 
 export default function PuzzlesPage() {
   const params = useParams<{ mode?: string }>();
@@ -52,6 +56,9 @@ export default function PuzzlesPage() {
   // The review queue empties while the last card is still on the board (its
   // reschedule happens on the outcome), so the empty state waits for "Next".
   const [reviewQueueEmpty, setReviewQueueEmpty] = useState(dueCount === 0);
+  // Woodpecker: the panel shows the set; "Continue" opens the trainer for the running cycle,
+  // which hands back to the panel when "Next" finds the cycle finished.
+  const [woodpeckerSolving, setWoodpeckerSolving] = useState(false);
   useEffect(() => {
     setReviewQueueEmpty(dueReviews(useProgress.getState().puzzleReviews, Date.now()).length === 0);
   }, [params.mode]);
@@ -67,8 +74,13 @@ export default function PuzzlesPage() {
             ? 'review'
             : params.mode === 'mine'
               ? 'mine'
-              : 'rated';
+              : params.mode === 'openings'
+                ? 'openings'
+                : params.mode === 'woodpecker'
+                  ? 'woodpecker'
+                  : 'rated';
   const themeFilter = searchParams.get('theme');
+  const openingFilter = searchParams.get('opening');
   const puzzleId = searchParams.get('id');
 
   useEffect(() => {
@@ -92,6 +104,7 @@ export default function PuzzlesPage() {
             { value: 'rated', label: 'Rated' },
             { value: 'daily', label: 'Daily' },
             { value: 'themes', label: 'By theme' },
+            { value: 'openings', label: 'By opening' },
             { value: 'rush', label: 'Rush' },
             {
               value: 'review',
@@ -100,6 +113,7 @@ export default function PuzzlesPage() {
               ),
             },
             { value: 'mine', label: 'Mine' },
+            { value: 'woodpecker', label: 'Woodpecker' },
           ]}
         />
       </div>
@@ -112,13 +126,20 @@ export default function PuzzlesPage() {
         <MineEmpty />
       ) : mode === 'themes' && !themeFilter ? (
         <ThemeCatalog />
+      ) : mode === 'openings' && !openingFilter ? (
+        <OpeningCatalog />
+      ) : mode === 'woodpecker' && !woodpeckerSolving ? (
+        <WoodpeckerPanel onContinue={() => setWoodpeckerSolving(true)} />
       ) : (
         <Trainer
-          key={`${mode}:${themeFilter ?? ''}:${puzzleId ?? ''}`}
+          key={`${mode}:${themeFilter ?? ''}:${openingFilter ?? ''}:${puzzleId ?? ''}`}
           mode={mode}
           theme={themeFilter}
+          opening={mode === 'openings' ? openingFilter : null}
           puzzleId={puzzleId}
-          onQueueEmpty={() => setReviewQueueEmpty(true)}
+          onQueueEmpty={() =>
+            mode === 'woodpecker' ? setWoodpeckerSolving(false) : setReviewQueueEmpty(true)
+          }
         />
       )}
     </div>
@@ -197,7 +218,9 @@ function Onboarding() {
         <h2>Where should your puzzle rating start?</h2>
         <p className="muted">
           The trainer keeps a puzzle rating that moves after every rated puzzle. Let it find your
-          level with a short run of puzzles, or tell it roughly how much chess you have played.
+          level with a short run of puzzles, or tell it roughly how much chess you have played. Not
+          sure? The <Link to="/placement">placement quiz</Link> suggests a starting point and a
+          course in two minutes.
         </p>
         <div className="onboarding__options" role="radiogroup" aria-label="Starting level">
           <label
@@ -307,11 +330,14 @@ function ThemeCatalog() {
 function Trainer({
   mode,
   theme,
+  opening,
   puzzleId,
   onQueueEmpty,
 }: {
   mode: Mode;
   theme: string | null;
+  /** Lichess opening tag to draw puzzles from (by-opening practice). */
+  opening: string | null;
   puzzleId: string | null;
   /** Review mode: called when "Next" finds nothing due any more. */
   onQueueEmpty?: () => void;
@@ -341,6 +367,7 @@ function Trainer({
         durationMs: event.durationMs,
         rated,
         review: mode === 'review',
+        ...(opening ? { opening } : {}),
       });
       setLastDelta(rated ? Math.round(after) - Math.round(before) : null);
       if (calibrationDone) {
@@ -352,13 +379,14 @@ function Trainer({
       }
       if (event.outcome === 'solved') setSessionSolved((n) => n + 1);
       else setSessionFailed((n) => n + 1);
+      if (mode === 'woodpecker') progress.recordWoodpeckerAttempt(event.outcome, event.durationMs);
       if (mode === 'daily') {
         progress.setDaily({ date: localDateKey(), id: puzzle.id, outcome: event.outcome });
       }
     },
     // progress actions are stable; recordPuzzle reads fresh state internally
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rated, mode],
+    [rated, mode, opening],
   );
 
   const trainer = usePuzzleTrainer(onOutcome);
@@ -391,6 +419,19 @@ function Trainer({
         }
         own.sort((a, b) => (lastAttempt.get(a.id) ?? 0) - (lastAttempt.get(b.id) ?? 0));
         puzzle = own[0] ?? null;
+      } else if (mode === 'woodpecker') {
+        const set = useProgress.getState().woodpecker;
+        const id = set?.current ? set.puzzleIds[set.current.index] : undefined;
+        if (!set?.current || !id) {
+          queueEmptyRef.current?.();
+          return;
+        }
+        puzzle = await findPuzzleById(id, set.rating);
+        if (!puzzle) {
+          // The bundled set changed since the Woodpecker set was made: skip the puzzle.
+          useProgress.getState().recordWoodpeckerAttempt('solved', 0);
+          throw new Error('That puzzle is no longer in the bundled set — skipped.');
+        }
       } else if (mode === 'review') {
         const due = dueReviews(useProgress.getState().puzzleReviews, Date.now()).filter(
           (c) => c.id !== currentIdRef.current,
@@ -400,7 +441,7 @@ function Trainer({
           queueEmptyRef.current?.();
           return;
         }
-        puzzle = await findPuzzleById(card.id);
+        puzzle = await findPuzzleById(card.id, card.rating);
         if (!puzzle) {
           // The bundled set changed since it was queued; drop it and move on.
           useProgress.getState().dismissReview(card.id);
@@ -414,10 +455,17 @@ function Trainer({
           rating: state.puzzleRating,
           seen: state.seen,
           themes: theme ? [theme] : undefined,
+          openings: opening ? [opening] : undefined,
           excludeId: currentIdRef.current,
         });
       }
-      if (!puzzle) throw new Error('No puzzles matched. Try another theme.');
+      if (!puzzle) {
+        throw new Error(
+          opening
+            ? 'No puzzles from that opening yet. Try another.'
+            : 'No puzzles matched. Try another theme.',
+        );
+      }
       currentIdRef.current = puzzle.id;
       load(puzzle);
     } catch (err) {
@@ -425,7 +473,7 @@ function Trainer({
     } finally {
       setLoading(false);
     }
-  }, [mode, theme, puzzleId, load]);
+  }, [mode, theme, opening, puzzleId, load]);
 
   useEffect(() => {
     void next();
@@ -643,13 +691,17 @@ function Trainer({
                 value={
                   theme
                     ? themeName(theme)
-                    : mode === 'daily'
-                      ? 'Daily'
-                      : mode === 'review'
-                        ? 'Review'
-                        : mode === 'mine'
-                          ? 'My puzzles'
-                          : 'Practice'
+                    : opening
+                      ? openingTagName(opening)
+                      : mode === 'woodpecker'
+                        ? 'Woodpecker'
+                        : mode === 'daily'
+                          ? 'Daily'
+                          : mode === 'review'
+                            ? 'Review'
+                            : mode === 'mine'
+                              ? 'My puzzles'
+                              : 'Practice'
                 }
                 label="Unrated practice"
               />
@@ -666,6 +718,11 @@ function Trainer({
           {theme ? (
             <p className="small muted" style={{ marginTop: 12, marginBottom: 0 }}>
               {themeDescription(theme)} <Link to="/puzzles/themes">All themes</Link>
+            </p>
+          ) : opening ? (
+            <p className="small muted" style={{ marginTop: 12, marginBottom: 0 }}>
+              Tactics that arose from the {openingTagName(opening)} in real games.{' '}
+              <Link to="/puzzles/openings">All openings</Link>
             </p>
           ) : null}
         </Card>
@@ -763,7 +820,8 @@ function PuzzleAbout({
               : bookmark({ id: puzzle.id, rating: puzzle.rating, themes: puzzle.themes })
           }
         >
-          {bookmarked ? '★ Bookmarked' : '☆ Bookmark'}
+          <Icon name={bookmarked ? 'bookmark-filled' : 'bookmark'} size={16} />{' '}
+          {bookmarked ? 'Bookmarked' : 'Bookmark'}
         </Button>
       </div>
       {own ? (

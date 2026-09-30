@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode, useEffect, useRef } from 'react';
 import { NAG_GLYPHS } from '@/chess/pgn';
 import type { GameTree, TreeNode } from '@/chess/tree';
-import { Button, Kbd } from '@/components/ui';
+import { Button, Kbd, Icon } from '@/components/ui';
 import type { MoveJudgement } from './MoveList';
 import './chess-components.css';
 
@@ -160,7 +160,7 @@ export function TreeNavigation({
         aria-label="First move"
         title="Start (Home)"
       >
-        ⏮
+        <Icon name="skip-back" size={16} />
       </Button>
       <Button
         size="sm"
@@ -169,7 +169,7 @@ export function TreeNavigation({
         aria-label="Previous move"
         title="Back (←)"
       >
-        ◀
+        <Icon name="chevron-left" size={16} />
       </Button>
       <Button
         size="sm"
@@ -178,7 +178,7 @@ export function TreeNavigation({
         aria-label="Next move"
         title="Forward (→)"
       >
-        ▶
+        <Icon name="chevron-right" size={16} />
       </Button>
       <Button
         size="sm"
@@ -187,7 +187,7 @@ export function TreeNavigation({
         aria-label="Last move"
         title="End (End)"
       >
-        ⏭
+        <Icon name="skip-forward" size={16} />
       </Button>
       <span className="movenav__hint small muted">
         <Kbd>←</Kbd> <Kbd>→</Kbd>

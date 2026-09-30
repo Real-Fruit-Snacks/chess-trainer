@@ -55,7 +55,7 @@ export function CoursesSection() {
             <span className="small">
               {status.next
                 ? `${status.doneItems ? 'Continue' : 'Start'}: ${status.next.title}`
-                : 'Course complete 🎓'}
+                : 'Course complete'}
             </span>
           </Link>
         ))}

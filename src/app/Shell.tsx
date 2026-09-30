@@ -1,10 +1,12 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Spinner } from '@/components/ui';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Spinner, Icon, type IconName } from '@/components/ui';
 import { Toasts } from '@/components/ui/toast';
 import { siteConfig } from '@/site.config';
+import { activeProfile, useProfiles } from '@/store/profiles';
 import { useSettings } from '@/store/settings';
 import { InstallButton } from './InstallPrompt';
+import { PlatformHooks } from './PlatformHooks';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { UpdatePrompt } from './UpdatePrompt';
 import { useColorScheme, usePieceSet } from './theme';
@@ -14,7 +16,7 @@ import './shell.css';
 interface NavItem {
   to: string;
   label: string;
-  icon: string;
+  icon: IconName;
   end?: boolean;
   /** Short explanation shown in the "More" menus. */
   blurb?: string;
@@ -22,46 +24,73 @@ interface NavItem {
 
 /** Desktop header links. */
 const DESKTOP_NAV: NavItem[] = [
-  { to: '/learn', label: 'Learn', icon: '📖' },
-  { to: '/puzzles', label: 'Puzzles', icon: '🧩' },
-  { to: '/drills', label: 'Drills', icon: '🎯' },
-  { to: '/openings', label: 'Openings', icon: '📚' },
-  { to: '/play', label: 'Play', icon: '♞' },
-  { to: '/analyze', label: 'Analyze', icon: '🔍' },
-  { to: '/progress', label: 'Progress', icon: '📈' },
+  { to: '/learn', label: 'Learn', icon: 'learn' },
+  { to: '/puzzles', label: 'Puzzles', icon: 'puzzles' },
+  { to: '/drills', label: 'Drills', icon: 'drills' },
+  { to: '/openings', label: 'Openings', icon: 'openings' },
+  { to: '/play', label: 'Play', icon: 'play' },
+  { to: '/analyze', label: 'Analyze', icon: 'analyze' },
+  { to: '/progress', label: 'Progress', icon: 'progress' },
 ];
 
 /** Extra sections behind the desktop "More" menu. */
 const DESKTOP_MORE: NavItem[] = [
-  { to: '/games', label: 'My games', icon: '🗂', blurb: 'Your openings, deviations and mistakes' },
+  {
+    to: '/games',
+    label: 'My games',
+    icon: 'games',
+    blurb: 'Your openings, deviations and mistakes',
+  },
   {
     to: '/studies',
     label: 'Endgame studies',
-    icon: '♔',
+    icon: 'studies',
     blurb: 'Composed positions with one solution',
   },
-  { to: '/classics', label: 'Classic games', icon: '🏛', blurb: 'Guess the moves of famous games' },
-  { to: '/reference', label: 'Reference', icon: '📘', blurb: 'Rules, notation and glossary' },
+  {
+    to: '/classics',
+    label: 'Classic games',
+    icon: 'classics',
+    blurb: 'Guess the moves of famous games',
+  },
+  {
+    to: '/patterns',
+    label: 'Mating patterns',
+    icon: 'patterns',
+    blurb: 'The named mates: gallery and drill',
+  },
+  {
+    to: '/reference',
+    label: 'Reference',
+    icon: 'reference',
+    blurb: 'Rules, notation and glossary',
+  },
 ];
 
 /** Mobile bottom bar. */
 const MOBILE_NAV: NavItem[] = [
-  { to: '/', label: 'Home', icon: '⌂', end: true },
-  { to: '/learn', label: 'Learn', icon: '📖' },
-  { to: '/puzzles', label: 'Puzzles', icon: '🧩' },
-  { to: '/play', label: 'Play', icon: '♞' },
+  { to: '/', label: 'Home', icon: 'home', end: true },
+  { to: '/learn', label: 'Learn', icon: 'learn' },
+  { to: '/puzzles', label: 'Puzzles', icon: 'puzzles' },
+  { to: '/play', label: 'Play', icon: 'play' },
 ];
 
 /** Everything else, in the mobile "More" sheet. */
 const MOBILE_MORE: NavItem[] = [
-  { to: '/analyze', label: 'Analyze', icon: '🔍', blurb: 'Engine analysis board' },
-  { to: '/drills', label: 'Drills', icon: '🎯', blurb: 'Coordinates, vision and endgames' },
-  { to: '/openings', label: 'Openings', icon: '📚', blurb: 'Repertoire trainer' },
-  { to: '/games', label: 'My games', icon: '🗂', blurb: 'Openings and mistakes from your games' },
-  { to: '/studies', label: 'Endgame studies', icon: '♔', blurb: 'Find the only move' },
-  { to: '/classics', label: 'Classic games', icon: '🏛', blurb: 'Guess the move' },
-  { to: '/reference', label: 'Reference', icon: '📘', blurb: 'Rules, notation, glossary' },
-  { to: '/progress', label: 'Progress', icon: '📈', blurb: 'Stats, backups and settings' },
+  { to: '/analyze', label: 'Analyze', icon: 'analyze', blurb: 'Engine analysis board' },
+  { to: '/drills', label: 'Drills', icon: 'drills', blurb: 'Coordinates, vision and endgames' },
+  { to: '/openings', label: 'Openings', icon: 'openings', blurb: 'Repertoire trainer' },
+  {
+    to: '/games',
+    label: 'My games',
+    icon: 'games',
+    blurb: 'Openings and mistakes from your games',
+  },
+  { to: '/studies', label: 'Endgame studies', icon: 'studies', blurb: 'Find the only move' },
+  { to: '/classics', label: 'Classic games', icon: 'classics', blurb: 'Guess the move' },
+  { to: '/patterns', label: 'Mating patterns', icon: 'patterns', blurb: 'The named mates' },
+  { to: '/reference', label: 'Reference', icon: 'reference', blurb: 'Rules, notation, glossary' },
+  { to: '/progress', label: 'Progress', icon: 'progress', blurb: 'Stats, backups and settings' },
 ];
 
 const MORE_PATHS = new Set([...DESKTOP_MORE, ...MOBILE_MORE].map((i) => i.to));
@@ -80,13 +109,31 @@ function Logo() {
   );
 }
 
+/** The active profile's name, shown only once a second profile exists. */
+function ProfileBadge() {
+  const profiles = useProfiles((s) => s.profiles);
+  const activeId = useProfiles((s) => s.activeId);
+  if (profiles.length < 2) return null;
+  const current = activeProfile({ profiles, activeId });
+  return (
+    <Link
+      to="/progress#profiles"
+      className="shell__profile"
+      title="Switch profile"
+      data-testid="profile-badge"
+    >
+      {current.name}
+    </Link>
+  );
+}
+
 function ThemeToggle() {
   const scheme = useSettings((s) => s.colorScheme);
   const update = useSettings((s) => s.update);
   const next = scheme === 'system' ? 'light' : scheme === 'light' ? 'dark' : 'system';
   const label =
     scheme === 'system' ? 'Theme: system' : scheme === 'light' ? 'Theme: light' : 'Theme: dark';
-  const icon = scheme === 'system' ? '◐' : scheme === 'light' ? '☀' : '☾';
+  const icon: IconName = scheme === 'system' ? 'auto' : scheme === 'light' ? 'sun' : 'moon';
   return (
     <button
       type="button"
@@ -95,7 +142,7 @@ function ThemeToggle() {
       aria-label={`${label}. Switch theme`}
       title={label}
     >
-      <span aria-hidden="true">{icon}</span>
+      <Icon name={icon} size={18} />
     </button>
   );
 }
@@ -147,10 +194,11 @@ function MoreMenu({
       >
         {variant === 'sheet' ? (
           <span className="shell__bottomicon" aria-hidden="true">
-            ⋯
+            <Icon name="more" size={22} />
           </span>
         ) : null}
-        <span>More{variant === 'dropdown' ? ' ▾' : ''}</span>
+        <span>More</span>
+        {variant === 'dropdown' ? <Icon name="chevron-down" size={14} /> : null}
       </button>
       {open ? (
         <div className="more__menu" role="menu" aria-label="More sections">
@@ -162,7 +210,7 @@ function MoreMenu({
               className={({ isActive }) => `more__item${isActive ? ' is-active' : ''}`}
             >
               <span className="more__icon" aria-hidden="true">
-                {item.icon}
+                <Icon name={item.icon} size={20} />
               </span>
               <span className="more__text">
                 <span className="more__label">{item.label}</span>
@@ -198,6 +246,7 @@ export function Shell() {
 
   return (
     <div className="shell">
+      <PlatformHooks />
       <a className="skip-link" href="#main">
         Skip to content
       </a>
@@ -228,6 +277,7 @@ export function Shell() {
             <div className="shell__install">
               <InstallButton size="sm" variant="ghost" />
             </div>
+            <ProfileBadge />
             <ThemeToggle />
           </div>
         </div>
@@ -273,7 +323,7 @@ export function Shell() {
             className={({ isActive }) => `shell__bottomlink${isActive ? ' is-active' : ''}`}
           >
             <span className="shell__bottomicon" aria-hidden="true">
-              {item.icon}
+              <Icon name={item.icon} size={22} />
             </span>
             <span>{item.label}</span>
           </NavLink>

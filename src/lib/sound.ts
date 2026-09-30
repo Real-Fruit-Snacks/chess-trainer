@@ -1,5 +1,6 @@
 import type { Chess, Move } from 'chess.js';
 import { useSettings } from '@/store/settings';
+import { vibrate } from './haptics';
 
 /**
  * Tiny synthesized sound effects via the Web Audio API — no audio files, no
@@ -134,8 +135,12 @@ const SOUNDS: Record<SoundName, () => void> = {
     ]),
 };
 
-/** Plays a named sound if sounds are enabled in settings. Never throws. */
+/**
+ * Plays a named sound if sounds are enabled in settings, and gives the matching
+ * haptic cue if haptics are. Never throws.
+ */
 export function playSound(name: SoundName): void {
+  vibrate(name);
   if (!useSettings.getState().sounds) return;
   try {
     SOUNDS[name]();

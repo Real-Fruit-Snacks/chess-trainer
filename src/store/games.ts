@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { ImportedGame } from '@/lib/gameImport';
 import { hashString } from '@/lib/random';
+import type { ReviewDigest } from '@/features/games/insights';
+import { storageKeyFor } from './profiles';
 
 export type GameSource = 'lichess' | 'chesscom' | 'pgn';
 
@@ -14,6 +16,8 @@ export interface StoredReview {
   };
   depth: number;
   at: number;
+  /** Where the errors happened and what kind they were (added in 0.7.0; older reviews lack it). */
+  digest?: ReviewDigest;
 }
 
 export interface StoredGame extends ImportedGame {
@@ -82,7 +86,7 @@ export const useGames = create<GamesState>()(
       clear: () => set({ games: {} }),
     }),
     {
-      name: GAMES_STORAGE_KEY,
+      name: storageKeyFor(GAMES_STORAGE_KEY),
       version: 1,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ games: state.games, player: state.player }),

@@ -32,3 +32,29 @@ describe('classic games', () => {
     expect(new Set(CLASSIC_GAMES.map((g) => g.id)).size).toBe(CLASSIC_GAMES.length);
   });
 });
+
+describe('classics filters', () => {
+  it('assigns every game to an era and filters by era, difficulty and status', async () => {
+    const { ERAS, eraOf, filterGames } = await import('./eras');
+    for (const game of CLASSIC_GAMES) {
+      expect(ERAS.map((e) => e.id)).toContain(eraOf(game));
+    }
+    expect(eraOf({ year: 1858 })).toBe('romantic');
+    expect(eraOf({ year: 1924 })).toBe('classical');
+    expect(eraOf({ year: 1972 })).toBe('modern');
+    expect(eraOf({ year: 1997 })).toBe('contemporary');
+    const played = new Set([CLASSIC_GAMES[0]?.id ?? '']);
+    const romantic = filterGames(
+      CLASSIC_GAMES,
+      { era: 'romantic', difficulty: 'all', status: 'all' },
+      played,
+    );
+    expect(romantic.length).toBeGreaterThanOrEqual(5);
+    expect(romantic.every((g) => g.year <= 1880)).toBe(true);
+    const easy = filterGames(CLASSIC_GAMES, { era: 'all', difficulty: 1, status: 'new' }, played);
+    expect(easy.every((g) => g.difficulty === 1 && !played.has(g.id))).toBe(true);
+    expect(
+      filterGames(CLASSIC_GAMES, { era: 'all', difficulty: 'all', status: 'played' }, played),
+    ).toHaveLength(1);
+  });
+});

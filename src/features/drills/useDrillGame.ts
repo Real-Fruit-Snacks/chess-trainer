@@ -11,7 +11,7 @@ import { playSound } from '@/lib/sound';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
 import type { EndgameDrill } from './endgameDrills';
-import { countMaterial, generateMatePosition } from './positions';
+import { countMaterial, generateMatePosition, materialFor } from './positions';
 
 export type DrillPhase = 'idle' | 'playing' | 'won' | 'lost';
 
@@ -55,7 +55,8 @@ export function drillScore(drill: EndgameDrill, userMoves: number, won: boolean)
   return Math.max(1, 100 - userMoves);
 }
 
-function pickStartFen(drill: EndgameDrill): Fen {
+/** The position a drill starts from: one of its fixed positions, or a generated one. */
+export function pickStartFen(drill: EndgameDrill): Fen {
   if (drill.positions === 'random') return generateMatePosition(drill.material ?? 'Q');
   return pickRandom(drill.positions) ?? (drill.positions[0] as Fen);
 }
@@ -92,7 +93,7 @@ export function useDrillGame(): UseDrillGame {
   const drillRef = useRef(drill);
   drillRef.current = drill;
   const skillAppliedRef = useRef(false);
-  const startMaterialRef = useRef({ white: 0, black: 0, whitePawns: 0 });
+  const startMaterialRef = useRef(countMaterial('8/8/8/8/8/8/8/8 w - - 0 1'));
 
   const { position } = game;
   const userColor: LongColor = drill?.color ?? 'white';
@@ -153,35 +154,47 @@ export function useDrillGame(): UseDrillGame {
         }
         return true;
       }
-      const material = countMaterial(chess.fen());
+      const material = materialFor(countMaterial(chess.fen()), current.color);
+      const start = materialFor(startMaterialRef.current, current.color);
       if (current.goal === 'promote') {
         const lastMove = chess.history({ verbose: true }).at(-1);
         if (lastMover === current.color && lastMove?.promotion) {
           finish('won', `Promoted to a ${lastMove.promotion === 'q' ? 'queen' : 'new piece'}!`);
           return true;
         }
-        if (material.whitePawns < startMaterialRef.current.whitePawns) {
-          finish('lost', 'The pawn was captured.');
+        if (material.ownPawns === 0 && start.ownPawns > 0) {
+          finish(
+            'lost',
+            start.ownPawns > 1 ? 'The last pawn was captured.' : 'The pawn was captured.',
+          );
           return true;
         }
       }
-      if (current.goal === 'mate' && material.white < startMaterialRef.current.white) {
+      if (current.goal === 'mate' && material.own < start.own) {
         finish('lost', 'You lost a piece — no more mating material.');
         return true;
       }
       if (current.goal === 'capture') {
-        if (material.black < startMaterialRef.current.black) {
+        if (material.opp < start.opp) {
           finish('won', 'Won the last piece — the rest is elementary.');
           return true;
         }
-        if (material.white < startMaterialRef.current.white) {
+        if (material.own < start.own) {
           finish('lost', 'Your piece was lost.');
           return true;
         }
       }
-      if (current.goal === 'hold' && material.white < startMaterialRef.current.white) {
-        finish('won', 'The pawn is gone — the draw is safe.');
-        return true;
+      if (current.goal === 'hold') {
+        // The attacker's winning chances are gone once every pawn has been taken (or, in a
+        // pawnless ending, once a piece has been won).
+        if (start.oppPawns > 0 && material.oppPawns === 0) {
+          finish('won', `The pawn${start.oppPawns > 1 ? 's are' : ' is'} gone — the draw is safe.`);
+          return true;
+        }
+        if (start.oppPawns === 0 && material.opp < start.opp) {
+          finish('won', 'You won material — the draw is safe.');
+          return true;
+        }
       }
       return false;
     },

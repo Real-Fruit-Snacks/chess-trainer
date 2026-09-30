@@ -197,7 +197,7 @@ test.describe('game import', () => {
 
 test.describe('puzzle review queue', () => {
   test('serves a due puzzle and reschedules a miss', async ({ page, request }) => {
-    const index = (await (await request.get('/puzzles/b1100.json')).json()) as {
+    const index = (await (await request.get('/puzzles/b1100-00.json')).json()) as {
       id: string;
       rating: number;
     }[];

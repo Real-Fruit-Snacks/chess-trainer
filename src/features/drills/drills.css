@@ -92,3 +92,34 @@
   line-height: 1.6;
   word-spacing: 2px;
 }
+
+/* Endgame ladder */
+.ladder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ladder__bar {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.ladder__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--success);
+  transition: width 300ms ease;
+}
+
+.ladder__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.drill-card--done {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+}

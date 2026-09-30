@@ -19,6 +19,7 @@ development-time tools only.
 | [Lichess puzzle database](https://database.lichess.org/#puzzles)                                                                                                    | CC0 1.0 (public domain)           | Puzzle positions and solutions (`public/puzzles/`)                    |
 | [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings)                                                                                         | CC0 1.0 (public domain)           | ECO opening names (`public/openings/openings.json`)                   |
 | [Lichess tablebase API](https://github.com/lichess-org/lila-tablebase) (optional, network)                                                                          | Service — not bundled             | Seven-piece endgame lookups when enabled in settings                  |
+| [Lichess opening explorer API](https://lichess.org/api#tag/Opening-Explorer) (optional, network)                                                                    | Service — not bundled             | Master and community game statistics per position when enabled in settings |
 | [Lichess](https://lichess.org/api) and [chess.com](https://www.chess.com/news/view/published-data-api) public game APIs (optional, network)                         | Services — not bundled            | Importing the learner's own games on request                          |
 
 The "Letters" piece set (`src/components/board/pieces-letters.css`), the sounds, the lessons, courses,
@@ -40,3 +41,4 @@ Run `npx license-checker --summary` for the full transitive list.
 - When redistributing the site, keep this file, `LICENSE`, and the engine's `Copying.txt` available.
 - The cburnett piece set requires attribution (CC BY-SA); it is credited here and in the app footer.
 - Puzzles are CC0 and need no attribution; a link to the source game on Lichess is shown anyway.
+  Some lesson tasks and the placement quiz use positions from the same database and say so.

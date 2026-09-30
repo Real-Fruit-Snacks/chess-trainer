@@ -1,21 +1,43 @@
-import { useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { MoveList } from '@/components/chess/MoveList';
-import { Alert, Badge, Button, Card, Kbd, Stat } from '@/components/ui';
+import { Alert, Badge, Button, Card, Kbd, Segmented, Stat, Stars } from '@/components/ui';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
+import { type ClassicsFilter, DEFAULT_FILTER, type Era, ERAS, eraOf, filterGames } from './eras';
 import { CLASSIC_GAMES, type ClassicGame, getClassicGame } from './games';
 import { useGuessTheMove } from './useGuessTheMove';
 import './classics.css';
 
 export default function ClassicsPage() {
   const results = useProgress((s) => s.guessGames);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [filter, setFilter] = useState<ClassicsFilter>(() => {
+    const era = searchParams.get('era');
+    const difficulty = Number(searchParams.get('difficulty'));
+    return {
+      ...DEFAULT_FILTER,
+      era: ERAS.some((e) => e.id === era) ? (era as Era) : 'all',
+      difficulty: difficulty === 1 || difficulty === 2 || difficulty === 3 ? difficulty : 'all',
+    };
+  });
 
   useEffect(() => {
     document.title = `Classic games · ${siteConfig.name}`;
   }, []);
+
+  const played = useMemo(() => new Set(Object.keys(results)), [results]);
+  const games = useMemo(() => filterGames(CLASSIC_GAMES, filter, played), [filter, played]);
+  const update = (patch: Partial<ClassicsFilter>) => {
+    const next = { ...filter, ...patch };
+    setFilter(next);
+    const params: Record<string, string> = {};
+    if (next.era !== 'all') params.era = next.era;
+    if (next.difficulty !== 'all') params.difficulty = String(next.difficulty);
+    setSearchParams(params, { replace: true });
+  };
 
   return (
     <div>
@@ -27,9 +49,55 @@ export default function ClassicsPage() {
           good.
         </p>
       </div>
+
+      <div className="classics__filters" data-testid="classics-filters">
+        <Segmented
+          ariaLabel="Era"
+          value={filter.era}
+          onChange={(era) => update({ era: era })}
+          options={[
+            { value: 'all', label: 'All eras' },
+            ...ERAS.map((e) => ({ value: e.id, label: e.label })),
+          ]}
+        />
+        <Segmented
+          ariaLabel="Difficulty"
+          value={String(filter.difficulty)}
+          onChange={(d) => update({ difficulty: d === 'all' ? 'all' : (Number(d) as 1 | 2 | 3) })}
+          options={[
+            { value: 'all', label: 'Any' },
+            { value: '1', label: <Stars count={1} label="1 star" /> },
+            { value: '2', label: <Stars count={2} label="2 stars" /> },
+            { value: '3', label: <Stars count={3} label="3 stars" /> },
+          ]}
+        />
+        <Segmented
+          ariaLabel="Status"
+          value={filter.status}
+          onChange={(status) => update({ status: status })}
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'new', label: 'Not played' },
+            { value: 'played', label: 'Played' },
+          ]}
+        />
+        <span className="small muted" data-testid="classics-count">
+          {games.length} of {CLASSIC_GAMES.length} games
+          {filter.era !== 'all' ? ` · ${ERAS.find((e) => e.id === filter.era)?.blurb ?? ''}` : ''}
+        </span>
+      </div>
+
+      {games.length === 0 ? (
+        <Card>
+          <p className="muted" style={{ margin: 0 }}>
+            No games match — try another era or difficulty.
+          </p>
+        </Card>
+      ) : null}
       <div className="grid grid--cards">
-        {CLASSIC_GAMES.map((game) => {
+        {games.map((game) => {
           const result = results[game.id];
+          const era = ERAS.find((e) => e.id === eraOf(game));
           return (
             <Link
               key={game.id}
@@ -43,7 +111,9 @@ export default function ClassicsPage() {
                     {result.score}/{result.maxScore}
                   </Badge>
                 ) : (
-                  <Badge>{'★'.repeat(game.difficulty)}</Badge>
+                  <Badge>
+                    <Stars count={game.difficulty} />
+                  </Badge>
                 )}
               </div>
               <span className="classic-card__players">
@@ -51,6 +121,7 @@ export default function ClassicsPage() {
               </span>
               <span className="small muted">
                 {game.event} {game.year} · {game.result} · you play {game.guessColor}
+                {era ? ` · ${era.label}` : ''}
               </span>
               <p className="small muted" style={{ margin: 0 }}>
                 {game.intro}

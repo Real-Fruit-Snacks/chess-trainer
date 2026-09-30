@@ -19,6 +19,15 @@ export interface ReviewedMove {
   best: string | null;
   bestUci: Uci | null;
   scoreBefore: Score | null;
+  /** Position before the move. */
+  fen: Fen;
+  /** Score after the move, from the mover's point of view. */
+  scoreAfter: Score | null;
+  /** The engine's line after its preferred move (a few plies). */
+  bestPv: Uci[];
+  /** The opponent's best answer to the move actually played, with its line. */
+  replyUci: Uci | null;
+  replyPv: Uci[];
 }
 
 export interface ReviewSummary {
@@ -85,7 +94,8 @@ export async function reviewGame(
 ): Promise<ReviewSummary> {
   const depth = options.depth ?? 12;
   const total = moves.length + 1;
-  const evaluations: { win: number; score: Score | null; best: Uci | null }[] = [];
+  const evaluations: { win: number; score: Score | null; best: Uci | null; pv: Uci[] }[] = [];
+  const PV_PLIES = 6;
 
   const chess = new Chess(startFen);
   for (let ply = 0; ply <= moves.length; ply++) {
@@ -95,13 +105,18 @@ export async function reviewGame(
 
     if (chess.isGameOver()) {
       const win = chess.isCheckmate() ? (moverIsWhite ? 0 : 1) : 0.5;
-      evaluations.push({ win, score: null, best: null });
+      evaluations.push({ win, score: null, best: null, pv: [] });
     } else {
       const result = await engine.search({ fen, depth, multipv: 1 }).result;
       const info = result.lines.get(1);
       const score = info?.score ?? null;
       const win = score ? cpToWinProbability(scoreToWhiteCp(score, moverIsWhite)) : 0.5;
-      evaluations.push({ win, score, best: result.bestmove.move });
+      evaluations.push({
+        win,
+        score,
+        best: result.bestmove.move,
+        pv: (info?.pv ?? []).slice(0, PV_PLIES),
+      });
     }
     options.onProgress?.(ply + 1, total);
     const move = moves[ply];
@@ -146,6 +161,10 @@ export async function reviewGame(
       }
     }
 
+    // The score after the move is reported for the side then to move: flip it to the mover's view.
+    const scoreAfter: Score | null = after.score
+      ? { type: after.score.type, value: -after.score.value }
+      : null;
     reviewed.push({
       ply: i + 1,
       san: move.san,
@@ -157,6 +176,11 @@ export async function reviewGame(
       best: bestSan,
       bestUci: isBest ? null : before.best,
       scoreBefore: before.score,
+      fen: replay.fen(),
+      scoreAfter,
+      bestPv: before.pv,
+      replyUci: after.best,
+      replyPv: after.pv,
     });
     replay.move(move.san);
   });

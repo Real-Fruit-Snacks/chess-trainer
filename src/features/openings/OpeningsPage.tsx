@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Badge, Button, Card, Dialog, Field, Input, Select, Stat } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import { GameTree } from '@/chess/tree';
 import type { LongColor } from '@/chess/types';
+import { decodeShare, type SharedRepertoire } from '@/lib/shareCodes';
 import { useNow } from '@/lib/useNow';
 import { siteConfig } from '@/site.config';
 import { cardsFor, useRepertoire } from '@/store/repertoire';
@@ -24,10 +25,44 @@ export default function OpeningsPage() {
   const [pgnText, setPgnText] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [shared, setShared] = useState<SharedRepertoire | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     document.title = `Openings · ${siteConfig.name}`;
   }, []);
+
+  // A shared repertoire link: `/openings#rep=…` offers to add it.
+  useEffect(() => {
+    if (!location.hash) return;
+    let cancelled = false;
+    void decodeShare(location.hash).then((payload) => {
+      if (cancelled) return;
+      if (payload?.kind === 'repertoire') setShared(payload);
+      else toast('That link does not contain a repertoire.', { tone: 'warning' });
+      void navigate(location.pathname, { replace: true });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the fragment matters
+  }, [location.hash]);
+
+  const acceptShared = () => {
+    if (!shared) return;
+    try {
+      const tree = GameTree.fromPgn(shared.pgn);
+      if (tree.root.children.length === 0) throw new Error('empty');
+      const rep = addCustom({ name: shared.name, color: shared.color, pgn: tree.toPgn() });
+      setShared(null);
+      toast(`Added "${rep.name}" to your repertoires.`, { tone: 'success' });
+      void navigate(`/openings/${rep.id}`);
+    } catch {
+      setShared(null);
+      toast('The shared repertoire could not be read.', { tone: 'warning' });
+    }
+  };
 
   const now = useNow();
   const all: Repertoire[] = useMemo(
@@ -40,6 +75,7 @@ export default function OpeningsPage() {
         line: 'Custom repertoire',
         description: 'Imported from your own PGN.',
         level: 'intermediate' as const,
+        openingTags: [],
         pgn: c.pgn,
       })),
     ],
@@ -153,6 +189,13 @@ export default function OpeningsPage() {
                             Delete
                           </Button>
                         ) : null}
+                        <Link
+                          className="btn btn--sm"
+                          to={`/play?book=${encodeURIComponent(rep.id)}`}
+                          title="Play a game in which the opponent follows this repertoire"
+                        >
+                          Play
+                        </Link>
                         <Link className="btn btn--primary btn--sm" to={`/openings/${rep.id}`}>
                           {s.learned === 0 ? 'Learn' : s.due > 0 ? 'Review' : 'Practise'}
                         </Link>
@@ -245,6 +288,37 @@ export default function OpeningsPage() {
       >
         <p className="muted">Its lines and your review history for them will be removed.</p>
       </Dialog>
+      <Dialog
+        open={shared !== null}
+        onClose={() => setShared(null)}
+        title="Add a shared repertoire"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setShared(null)}>
+              Not now
+            </Button>
+            <Button variant="primary" onClick={acceptShared} data-testid="accept-shared-repertoire">
+              Add to my repertoires
+            </Button>
+          </>
+        }
+      >
+        {shared ? (
+          <p>
+            Someone shared <strong>{shared.name}</strong> ({shared.color}) with you —{' '}
+            {countMoves(shared.pgn)} moves of lines. Adding it makes a copy you can edit and train
+            like any custom repertoire.
+          </p>
+        ) : null}
+      </Dialog>
     </div>
   );
+}
+
+function countMoves(pgn: string): number {
+  try {
+    return GameTree.fromPgn(pgn).mainLine().length;
+  } catch {
+    return 0;
+  }
 }

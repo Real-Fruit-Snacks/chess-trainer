@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
-import { Badge, Button, Card, Kbd, LinkButton } from '@/components/ui';
+import { Badge, Button, Card, Kbd, LinkButton, Icon } from '@/components/ui';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
@@ -116,8 +116,8 @@ function LessonView({ lesson }: { lesson: NonNullable<ReturnType<typeof getLesso
       <div>
         <LessonHeader lesson={lesson} />
         <Card className="lesson__complete">
-          <div aria-hidden="true" style={{ fontSize: '2.5rem' }}>
-            🎓
+          <div className="lesson__complete-icon" aria-hidden="true">
+            <Icon name="award" size={40} />
           </div>
           <h2>Lesson complete</h2>
           <p className="muted">
@@ -218,7 +218,8 @@ function LessonView({ lesson }: { lesson: NonNullable<ReturnType<typeof getLesso
             <LessonText text={step.text} />
             {step.task ? (
               <div className="lesson__task" role="note">
-                {state.turn === 'white' ? '♙ White' : '♟ Black'} to move —{' '}
+                <span className={`turn-dot turn-dot--${state.turn}`} aria-hidden="true" />
+                {state.turn === 'white' ? 'White' : 'Black'} to move —{' '}
                 {renderInline(step.task.prompt)}
               </div>
             ) : null}

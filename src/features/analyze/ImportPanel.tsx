@@ -9,6 +9,8 @@ import {
   type ImportedGame,
   parsePgnGames,
 } from '@/lib/gameImport';
+import { toast } from '@/components/ui/toastStore';
+import { studyChapters, useAnalyses } from '@/store/analyses';
 import { useSettings } from '@/store/settings';
 
 type Source = 'paste' | 'lichess' | 'chesscom';
@@ -50,6 +52,17 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
     setGames(null);
     setError(null);
   }, [source]);
+
+  const saveAllAsStudy = () => {
+    if (!games || games.length === 0) return;
+    const { collection, chapters } = studyChapters(games);
+    const save = useAnalyses.getState().save;
+    for (const chapter of chapters) save({ ...chapter, collection });
+    toast(`Saved ${chapters.length} chapters to the collection “${collection}”.`, {
+      tone: 'success',
+    });
+    onDone();
+  };
 
   const loadGame = (game: ImportedGame) => {
     if (onLoadPgn(game.pgn)) onDone();
@@ -208,6 +221,17 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
       ) : null}
 
       {error ? <Alert tone="danger">{error}</Alert> : null}
+
+      {games && games.length > 1 && source === 'paste' ? (
+        <div className="row row--between" data-testid="import-study">
+          <span className="small muted">
+            {games.length} games — a study or a collection? Keep every chapter in the library.
+          </span>
+          <Button size="sm" onClick={saveAllAsStudy}>
+            Save all {games.length} to the library
+          </Button>
+        </div>
+      ) : null}
 
       {games ? (
         <div className="import__games" role="list" aria-label="Games to import">

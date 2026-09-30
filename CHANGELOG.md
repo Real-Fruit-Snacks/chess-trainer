@@ -6,6 +6,123 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-30
+
+### Added
+
+- **Endgame library, three times the size.** Forty-one endgame drills, every position engine-verified:
+  pawn endings (the square of the pawn, key squares, connected and outside and protected passed pawns,
+  triangulation, the breakthrough, Réti's manoeuvre), rook endings (rook against a pawn from both sides,
+  cutting off the king, the short-side and back-rank defences, rook and two pawns, rook against bishop and
+  against knight), queen endings (against knight pawn, bishop or rook pawn, knight and bishop) and minor
+  pieces (the right and the wrong bishop, knight against a pawn, bishop against two pawns, opposite
+  bishops with split pawns), plus the two-rook ladder mate. The **endgame ladder** orders them as rungs,
+  tracks what is climbed, links each to its theory lesson and feeds the daily plan.
+- **Engine ladder** on the Play page: which levels you have beaten, the next rung with a one-click game,
+  a step down after three straight losses, and results per level on the Progress page.
+- **Opening practice games.** _Practise vs engine_ from any repertoire: the opponent follows the
+  repertoire's lines (weighted towards the moves you know least), the engine takes over when the book runs
+  out, and leaving the book pauses the game with a take-back and a lapse in the review queue.
+- **Puzzles by opening.** Every puzzle carries its opening; practise the tactics of a family or variation,
+  from your repertoires' openings, or from the daily plan's "Tactics from the …" item.
+- **Insights from your games.** Reviews are digested into phases, mistake types, colours, openings and
+  engine levels; the _Work on_ list turns the biggest gaps into lessons and puzzle themes.
+- **Position report** on the analysis board: material, pawn structure, king safety, open files, outposts
+  and loose pieces, with plans for both sides and lesson links; hovering highlights the squares.
+- **Woodpecker sets.** A fixed set of 50, 100 or 200 puzzles solved in spaced cycles, with time and
+  accuracy per cycle and the improvement spelled out.
+- **Mating patterns.** A gallery of the nineteen named mates (Anastasia's, Arabian, back-rank, Balestra,
+  blind swine, Boden's, corner, double bishop, dovetail, epaulette, hook, kill box, Morphy's, Opera,
+  Pillsbury's, smothered, swallow's tail, triangle, Vuković), each a minimal engine-checked diagram with
+  what to look for, a link to the library's puzzles of that shape, and a drill that runs through them.
+- **Twelve lessons:** attacking the fianchetto, defending the Greek gift, bishop endgames, pawn endgames
+  III, the bishop-and-knight mate, queen versus rook, rook and bishop versus rook, Catalan and Queen's
+  Gambit plans, French structures, exchange sacrifices II, calculation III and "when there is nothing to
+  do" — 72 engine-verified tasks, in new course units.
+- **Sixteen classic games** from Légal's mate and the Immortal Draw to Réti–Alekhine, Torre–Lasker,
+  Capablanca–Tartakower, Botvinnik–Tal 1960 and Karpov–Unzicker, with **era, difficulty and played
+  filters**.
+- **Analysis library.** Save an analysis under a name and a collection, reopen, rename, share or delete
+  it; a pasted Lichess study export saves every chapter as a collection.
+- **Share links** for repertoires and Woodpecker sets: the whole thing travels compressed in the link.
+- **Profiles.** Several learners on one device, each with their own progress, repertoires, games and
+  library; switch from the Progress page.
+
+### Changed
+
+- **Icons instead of emoji** throughout the interface (navigation, feature cards, difficulty stars,
+  move-list controls, theme toggle).
+- **Board coordinates** moved off the squares into a gutter beside and below the board: rank numbers
+  down the left, file letters along the bottom, each centred on its square, never under a piece and
+  readable on every theme. The eval bar lines up with the playing surface.
+- Endgame drills show the position you are about to play behind the Start card instead of the
+  initial position.
+- The "Install app" button uses an icon instead of a text glyph.
+- The daily plan's drill picks the next rung of the endgame ladder; the Drills page shows rungs and
+  per-group progress; each drill page links to the theory lesson and the next rung.
+- The nine mating-pattern themes that had no name are now named and described in the puzzle catalogue.
+- Backups (export version 5) include the analysis library.
+
+## [0.6.0] - 2026-09-30
+
+### Added
+
+- **48,000 puzzles.** Six times more tactics, sampled 6,000 per rating band with the ids of the previous
+  set kept so histories and review queues stay valid. Puzzles are served in chunks of 500: the first chunk
+  of every band is precached and the rest are cached as they are used, or all at once with _Settings →
+  Download every puzzle_ (with progress, cancel and a status that survives reloads).
+- **Move commentary.** Game review explains every judged move in words — hanging pieces (static exchange
+  evaluation), forks, pins and skewers, discovered checks, missed and allowed mates, what the best move
+  would have won — each with a link to the lesson and the puzzle theme; key moments carry a one-line why.
+- **Coach mode.** Untimed games against the engine pause after a mistake or blunder (or any missed or
+  allowed mate) with the same explanation, the lesson link and a take-back; the engine's reply waits.
+  On by default for new games, switchable in the setup and in Settings.
+- **Opening explorer** (opt-in, network): what masters or Lichess players play in the current position,
+  with results and top games, on the analysis board and in the repertoire explorer. Clicking a move plays
+  it.
+- **Repertoire building.** _Add line to repertoire_ on the analysis board merges the current line into a
+  custom repertoire or starts a new one; custom repertoires have an _Edit lines_ mode with a movable board,
+  explorer suggestions, per-move notes, "make main line" and "delete from here".
+- **Twelve lessons:** knight endgames, rook against a pawn, passed pawns in the middlegame, bishop
+  against knight, the initiative, transitions into the endgame, defending worse positions, zwischenzug and
+  quiet moves, plans in the Sicilian, plans in the King's Indian, practical play and the clock, attacking
+  with opposite-coloured bishops — 66 new engine-verified tasks, many from Lichess games, in new course
+  units.
+- **Six repertoires:** Ruy Lopez, Vienna, Alapin, Nimzo-Indian, King's Indian and Najdorf. Every learner
+  move in all sixteen repertoires was checked against the engine; the flagged lines in five older
+  repertoires were repaired.
+- **Fifteen classic games:** Lasker–Thomas, Levitsky–Marshall, Réti–Bogoljubov, Bernstein–Capablanca, the
+  Immortal Zugzwang, Adams–Torre, Alekhine–Nimzowitsch, Paulsen–Morphy, Zukertort–Blackburne,
+  Spassky–Bronstein, Robert Byrne–Fischer, Fischer–Benko, Botvinnik–Portisch, Petrosian–Spassky 1966 and
+  Deep Blue–Kasparov.
+- **Placement quiz** (`/placement`): five questions and three positions produce a recommended course,
+  first lessons, puzzle themes to practise and a starting rating for the calibration run.
+- **Device transfer.** Share a backup straight to another device (Web Share API) where supported; the
+  installed app opens `.json` backups from the file manager and imports them; a reminder appears after 40
+  rated puzzles or two weeks without a backup, and Settings shows the last backup date.
+- **App icon badge** with the number of due reviews (puzzles, lesson recall and repertoire moves), with a
+  setting.
+- **Haptic feedback** on moves, solves and mistakes on phones (setting).
+- **Layouts** for phones held sideways (board and panel side by side, compact chrome) and for notches and
+  rounded corners (safe-area insets).
+
+### Changed
+
+- Settings gained `haptics`, `appBadge`, `playCoach`, `explorer`, `explorerDatabase`, `lastBackupAt` and
+  `lastBackupAttempts` (defaults merged into existing saves); the progress store gained `placement`.
+- Reviewed moves keep the position, the best line and the reply line so they can be explained.
+- The repertoire explorer follows a path of moves rather than the tree cursor, so edits do not lose the
+  place.
+- The calibration run can start from a given rating (used by the placement quiz).
+- Engine verification (`NodeEngine.analyse`) caps every search at 90 seconds and each lesson task gets
+  five minutes, so a position with a long forced mate no longer times out and throws the rest of the run
+  out of step.
+- "Download every puzzle" retries a chunk that fails to download (three attempts with a short pause),
+  waits for the service worker to finish writing the cache before reporting, and says how many files
+  are missing if some could not be stored.
+- E2E: the review-queue test reads the first puzzle chunk; the my-games test expects the Caro-Kann
+  deviation now that 3. Bb5 follows the Ruy Lopez repertoire.
+
 ## [0.5.0] - 2026-09-30
 
 ### Added

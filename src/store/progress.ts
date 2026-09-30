@@ -1,4 +1,9 @@
 import { create } from 'zustand';
+import {
+  recordWoodpecker,
+  startWoodpeckerCycle,
+  type WoodpeckerSet,
+} from '@/features/puzzles/woodpecker';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { OwnPuzzle } from '@/features/puzzles/ownPuzzles';
 import { daysBetween, localDateKey } from '@/lib/dates';
@@ -19,6 +24,8 @@ import {
   SELF_ASSESSED_RD,
 } from '@/lib/rating';
 import { useRepertoire } from './repertoire';
+import { useAnalyses } from './analyses';
+import { storageKeyFor } from './profiles';
 
 export type PuzzleOutcome = 'solved' | 'failed';
 
@@ -37,6 +44,8 @@ export interface PuzzleAttempt {
   at: number;
   /** Solve time in milliseconds. */
   durationMs: number;
+  /** The opening practised when the puzzle came from by-opening mode (Lichess tag). */
+  opening?: string;
 }
 
 /** A short run of rated puzzles that finds a new learner's level. */
@@ -65,6 +74,13 @@ export interface GameRecord {
   reason: string;
   plies: number;
   pgn: string;
+  /** Opening practice: the repertoire followed and where the game left it. */
+  book?: {
+    repertoireId: string;
+    status: 'in-book' | 'out-of-book' | 'deviated';
+    endedAtPly: number | null;
+    deviationPly: number | null;
+  };
 }
 
 export interface Streak {
@@ -117,6 +133,13 @@ export interface StudyResult {
   clean: boolean;
 }
 
+export interface Placement {
+  at: number;
+  /** Suggested starting puzzle rating. */
+  rating: number;
+  courseId: string;
+}
+
 export interface ProgressState {
   onboarded: boolean;
   /** Glicko-2 puzzle rating (see lib/glicko.ts). */
@@ -128,6 +151,10 @@ export interface ProgressState {
   lastRatedAt: number | null;
   /** Level-finding run in progress, or null. */
   calibration: Calibration | null;
+  /** Result of the placement quiz, if taken. */
+  placement: Placement | null;
+  /** The active Woodpecker set (a fixed set of puzzles solved in repeated cycles). */
+  woodpecker: WoodpeckerSet | null;
   ratedAttempts: number;
   ratingHistory: RatingPoint[];
   attempts: PuzzleAttempt[];
@@ -157,7 +184,18 @@ export interface ProgressState {
    * (moderately uncertain); `'calibrate'` starts a short run of rated puzzles
    * that finds the level from a very uncertain start.
    */
+  /**
+   * Sets the starting rating. In 'calibrate' mode the level-finding run starts
+   * from `startingRating` when it is given, else from the default.
+   */
   completeOnboarding: (startingRating: number, mode?: 'self' | 'calibrate') => void;
+  setPlacement: (placement: Omit<Placement, 'at'>) => void;
+  /** Starts a new Woodpecker set (replacing any current one) with its first cycle running. */
+  startWoodpecker: (puzzleIds: string[], rating: number) => void;
+  /** Starts the next cycle of the current set. */
+  startWoodpeckerCycle: () => void;
+  recordWoodpeckerAttempt: (outcome: PuzzleOutcome, durationMs: number) => void;
+  abandonWoodpecker: () => void;
   recordPuzzle: (
     attempt: Omit<PuzzleAttempt, 'ratingBefore' | 'ratingAfter' | 'at' | 'score'> & {
       rated: boolean;
@@ -231,6 +269,8 @@ const initialState = {
   puzzleVolatility: DEFAULT_VOLATILITY,
   lastRatedAt: null as number | null,
   calibration: null as Calibration | null,
+  placement: null as Placement | null,
+  woodpecker: null as WoodpeckerSet | null,
   ratedAttempts: 0,
   ratingHistory: [] as RatingPoint[],
   attempts: [] as PuzzleAttempt[],
@@ -325,6 +365,8 @@ export function withRatingDefaults(stored: Partial<PersistedProgress>): Persiste
     state.lastRatedAt = history.length > 1 ? (history[history.length - 1]?.at ?? null) : null;
   }
   if (stored.calibration === undefined) state.calibration = null;
+  if (stored.placement === undefined) state.placement = null;
+  if (stored.woodpecker === undefined) state.woodpecker = null;
   return state;
 }
 
@@ -336,7 +378,7 @@ export const useProgress = create<ProgressState>()(
       completeOnboarding: (startingRating, mode = 'self') => {
         const now = Date.now();
         const calibrate = mode === 'calibrate';
-        const rating = calibrate ? CALIBRATION_START_RATING : startingRating;
+        const rating = calibrate ? startingRating || CALIBRATION_START_RATING : startingRating;
         set({
           onboarded: true,
           puzzleRating: rating,
@@ -347,6 +389,41 @@ export const useProgress = create<ProgressState>()(
           ratingHistory: [{ at: now, rating }],
         });
       },
+
+      setPlacement: (placement) => set({ placement: { ...placement, at: Date.now() } }),
+
+      startWoodpecker: (puzzleIds, rating) => {
+        const now = Date.now();
+        set({
+          woodpecker: startWoodpeckerCycle(
+            {
+              id: `wp-${now.toString(36)}`,
+              createdAt: now,
+              rating: Math.round(rating),
+              puzzleIds,
+              cycles: [],
+              current: null,
+            },
+            now,
+          ),
+        });
+      },
+
+      startWoodpeckerCycle: () => {
+        const current = get().woodpecker;
+        if (current) set({ woodpecker: startWoodpeckerCycle(current) });
+      },
+
+      recordWoodpeckerAttempt: (outcome, durationMs) => {
+        const current = get().woodpecker;
+        if (!current) return;
+        set({
+          woodpecker: recordWoodpecker(current, outcome, durationMs),
+          trainingDays: withToday(get().trainingDays),
+        });
+      },
+
+      abandonWoodpecker: () => set({ woodpecker: null }),
 
       recordPuzzle: ({ rated, review = false, puzzleRd, solverMoves, ...attempt }) => {
         const state = get();
@@ -655,12 +732,13 @@ export const useProgress = create<ProgressState>()(
         return JSON.stringify(
           {
             app: 'chess-trainer',
-            version: 4,
+            version: 5,
             exportedAt: new Date().toISOString(),
             progress: persisted(get()),
             repertoire: (({ cards, custom, sessions }) => ({ cards, custom, sessions }))(
               useRepertoire.getState(),
             ),
+            analyses: { items: useAnalyses.getState().items },
           },
           null,
           2,
@@ -673,6 +751,9 @@ export const useProgress = create<ProgressState>()(
         if (!isPersistedProgress(payload)) return false;
         if (typeof raw === 'object' && raw !== null && 'repertoire' in raw) {
           useRepertoire.getState().importState(raw.repertoire);
+        }
+        if (typeof raw === 'object' && raw !== null && 'analyses' in raw) {
+          useAnalyses.getState().importState(raw.analyses);
         }
         const next = withRatingDefaults(payload);
         if (Object.keys(next.themeStats).length === 0) {
@@ -687,11 +768,12 @@ export const useProgress = create<ProgressState>()(
 
       resetAll: () => {
         useRepertoire.getState().resetAll();
+        useAnalyses.getState().clear();
         set({ ...initialState });
       },
     }),
     {
-      name: PROGRESS_STORAGE_KEY,
+      name: storageKeyFor(PROGRESS_STORAGE_KEY),
       version: 5,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => persisted(state),

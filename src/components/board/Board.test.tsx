@@ -70,3 +70,27 @@ describe('Board keyboard control', () => {
     expect(screen.queryByRole('button', { name: 'Describe position' })).toBeNull();
   });
 });
+
+describe('Board coordinates', () => {
+  const labels = (container: HTMLElement, selector: string) =>
+    Array.from(container.querySelectorAll(`${selector} span`)).map((el) => el.textContent);
+
+  it('draws ranks down the left and files along the bottom, one per square', () => {
+    const { container } = render(<Board fen={START} viewOnly coordinates />);
+    expect(container.querySelector('.board')).toHaveClass('board--coords');
+    expect(labels(container, '.board__ranks')).toEqual(['8', '7', '6', '5', '4', '3', '2', '1']);
+    expect(labels(container, '.board__files')).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+  });
+
+  it('flips with the orientation', () => {
+    const { container } = render(<Board fen={START} viewOnly coordinates orientation="black" />);
+    expect(labels(container, '.board__ranks')).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
+    expect(labels(container, '.board__files')).toEqual(['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a']);
+  });
+
+  it('leaves no gutter when coordinates are off', () => {
+    const { container } = render(<Board fen={START} viewOnly coordinates={false} />);
+    expect(container.querySelector('.board')).not.toHaveClass('board--coords');
+    expect(container.querySelector('.board__coords')).toBeNull();
+  });
+});

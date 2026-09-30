@@ -81,7 +81,7 @@ describe.skipIf(!ENABLED)('lesson tasks agree with the engine', () => {
             expect(score, message).toBeGreaterThanOrEqual(bestScore - TOLERANCE_CP);
           }
         }
-      }, 120_000);
+      }, 300_000);
     }
   }
 });

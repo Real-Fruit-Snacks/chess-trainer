@@ -35,9 +35,20 @@ import {
 import { useProgress } from '@/store/progress';
 import { BoardEditor } from './BoardEditor';
 import { ImportPanel } from './ImportPanel';
+import { LibraryDialog, SaveAnalysisDialog } from './LibraryDialog';
+import { ExplorerPanel } from '@/components/chess/ExplorerPanel';
+import { PositionReportCard } from './PositionReportCard';
+import type { DrawShape } from '@/components/board/Board';
+import { AddToRepertoireDialog } from '@/features/openings/AddToRepertoireDialog';
+import { lineOf } from '@/features/openings/mergeLine';
+import { START_FEN } from '@/chess/helpers';
+import { getLessonMeta } from '@/features/learn/lessonMeta';
+import { themeName } from '@/features/puzzles/themes';
+import { explainReviewedMove, MOTIF_HELP } from './commentary';
 import { keyMoments, type ReviewSummary } from './gameReview';
 import { useAnalysis } from './useAnalysis';
 import './analyze.css';
+import { Icon } from '@/components/ui';
 
 const GLYPH_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: '–' },
@@ -64,9 +75,13 @@ export default function AnalyzePage() {
   const settings = useSettings();
   const ownPuzzleRating = useProgress((s) => Math.round(s.puzzleRating));
   const [orientation, setOrientation] = useState<LongColor>('white');
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [commentDraft, setCommentDraft] = useState<string | null>(null);
+  const [repertoireOpen, setRepertoireOpen] = useState(false);
+  const [reportShapes, setReportShapes] = useState<DrawShape[]>([]);
 
   useEffect(() => {
     document.title = `Analyze · ${siteConfig.name}`;
@@ -111,6 +126,7 @@ export default function AnalyzePage() {
           toast('The game in that link could not be loaded.', { tone: 'warning' });
           return;
         }
+        if (shared.name) toast(`Opened the shared analysis “${shared.name}”.`, { tone: 'info' });
       } else if (shared.fen) {
         if (!analysis.loadFen(shared.fen)) {
           toast('The position in that link could not be loaded.', { tone: 'warning' });
@@ -172,6 +188,8 @@ export default function AnalyzePage() {
   const currentGlyph = current.nags.find((n) => n >= 1 && n <= 6) ?? 0;
   const siblings = current.parent?.children ?? [];
   const siblingIndex = siblings.indexOf(current);
+  // Lines can only join a repertoire when they start from the normal starting position.
+  const canAddToRepertoire = tree.startFen === START_FEN && current.ply > 0;
 
   const copy = async (text: string, what: string) => {
     try {
@@ -217,6 +235,16 @@ export default function AnalyzePage() {
             {showImport ? 'Close import' : 'Import FEN / PGN'}
           </Button>
           <Button onClick={() => setEditorOpen(true)}>Board editor</Button>
+          <Button
+            onClick={() => setSaveOpen(true)}
+            disabled={!hasMoves}
+            data-testid="save-analysis"
+          >
+            Save
+          </Button>
+          <Button onClick={() => setLibraryOpen(true)} data-testid="open-library">
+            Library
+          </Button>
           <Button variant="ghost" onClick={analysis.reset}>
             Reset board
           </Button>
@@ -264,7 +292,7 @@ export default function AnalyzePage() {
                 dests={viewed.dests}
                 lastMove={viewed.lastMove}
                 check={viewed.inCheck}
-                autoShapes={analysis.bestMoveShape}
+                autoShapes={reportShapes.length ? reportShapes : analysis.bestMoveShape}
                 onMove={(from, to) => analysis.playMove(from, to)}
                 ariaLabel={`Analysis board, ${viewed.turn} to move`}
               />
@@ -390,6 +418,10 @@ export default function AnalyzePage() {
             </Card>
           ) : null}
 
+          <ExplorerPanel fen={viewed.fen} onPlay={analysis.playUci} />
+
+          <PositionReportCard fen={viewed.fen} onHighlight={setReportShapes} />
+
           <Card>
             <TreeNavigation
               canBack={current.parent !== null}
@@ -429,6 +461,7 @@ export default function AnalyzePage() {
                     Better was <strong>{reviewedCurrent.best}</strong>.
                   </>
                 ) : null}
+                <MoveExplanation move={reviewedCurrent} />
                 {current.parent ? (
                   <>
                     {' '}
@@ -469,6 +502,11 @@ export default function AnalyzePage() {
                   <Button size="sm" onClick={() => setCommentDraft(current.comment ?? '')}>
                     {current.comment ? 'Edit comment' : 'Add comment'}
                   </Button>
+                  {canAddToRepertoire ? (
+                    <Button size="sm" onClick={() => setRepertoireOpen(true)}>
+                      Add line to repertoire
+                    </Button>
+                  ) : null}
                   <Button
                     size="sm"
                     onClick={analysis.deleteFromHere}
@@ -636,6 +674,35 @@ export default function AnalyzePage() {
         </aside>
       </div>
 
+      <AddToRepertoireDialog
+        open={repertoireOpen}
+        onClose={() => setRepertoireOpen(false)}
+        line={repertoireOpen ? lineOf(tree, current) : []}
+        defaultColor={orientation}
+      />
+
+      {saveOpen ? (
+        <SaveAnalysisDialog
+          open
+          onClose={() => setSaveOpen(false)}
+          pgn={analysis.pgn()}
+          startFen={tree.startFen}
+          moves={Math.ceil(mainLine.length / 2)}
+          suggestedName={analysis.opening?.name ?? 'Analysis'}
+          onSaved={() => undefined}
+        />
+      ) : null}
+      <LibraryDialog
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        onOpen={(entry) => {
+          if (!analysis.loadPgn(entry.pgn)) {
+            toast('That analysis could not be loaded.', { tone: 'warning' });
+            return;
+          }
+          toast(`Opened “${entry.name}”.`, { tone: 'success' });
+        }}
+      />
       <Dialog open={editorOpen} onClose={() => setEditorOpen(false)} title="Board editor" wide>
         {editorOpen ? (
           <BoardEditor
@@ -760,6 +827,11 @@ function KeyMoments({
                   {m.best ? ` — better was ${m.best}` : ''}
                 </span>
                 <span className="small faint">−{Math.round(m.loss * 100)}%</span>
+                {moment ? (
+                  <span className="small moments__why" data-testid="moment-why">
+                    {explainReviewedMove(moment)?.text ?? ''}
+                  </span>
+                ) : null}
               </button>
               {puzzle ? (
                 <Button
@@ -771,7 +843,7 @@ function KeyMoments({
                   disabled={saved}
                   onClick={() => addOne(m.ply)}
                 >
-                  {saved ? '✓' : '+'}
+                  <Icon name={saved ? 'check' : 'plus'} size={14} />
                 </Button>
               ) : null}
             </li>
@@ -816,5 +888,34 @@ function ReviewSummaryView({ review }: { review: ReviewSummary }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+/**
+ * Why a judged move was bad, in words, with the lesson and puzzle theme that
+ * teach the motif. Empty when the review does not carry enough detail.
+ */
+function MoveExplanation({ move }: { move: ReviewSummary['moves'][number] }) {
+  const explanation = useMemo(() => explainReviewedMove(move), [move]);
+  if (!explanation) return null;
+  const help = MOTIF_HELP[explanation.motif];
+  const lesson = getLessonMeta(help.lesson);
+  return (
+    <span data-testid="move-explanation">
+      {' '}
+      {explanation.text}
+      {lesson ? (
+        <>
+          {' '}
+          <Link to={`/learn/${lesson.id}`}>Lesson: {lesson.title}</Link>
+        </>
+      ) : null}
+      {help.theme ? (
+        <>
+          {' · '}
+          <Link to={`/puzzles/themes?theme=${help.theme}`}>Practise: {themeName(help.theme)}</Link>
+        </>
+      ) : null}
+    </span>
   );
 }

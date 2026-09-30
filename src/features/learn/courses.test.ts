@@ -7,7 +7,7 @@ import { activeCourse, courseStatus } from './courseProgress';
 import { COURSES } from './courses';
 import { getLesson } from './lessons';
 
-const DRILL_IDS = new Set([...ENDGAME_DRILLS.map((d) => d.id), 'coordinates']);
+const DRILL_IDS = new Set([...ENDGAME_DRILLS.map((d) => d.id), 'coordinates', 'mating-patterns']);
 
 describe('courses content', () => {
   it('has unique ids and only references things that exist', () => {

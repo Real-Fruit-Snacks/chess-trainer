@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Badge, Card, LinkButton, ProgressBar } from '@/components/ui';
+import { Badge, Card, LinkButton, ProgressBar, Icon } from '@/components/ui';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
@@ -77,7 +77,7 @@ export default function CoursePage() {
           >
             <div className="course__unit-header">
               <span className="course__unit-number" aria-hidden="true">
-                {unit.done ? '✓' : index + 1}
+                {unit.done ? <Icon name="check" size={16} /> : index + 1}
               </span>
               <div>
                 <h2>{unit.unit.title}</h2>
@@ -98,7 +98,7 @@ export default function CoursePage() {
                     aria-label={`${item.title}${item.done ? ' (done)' : ''}`}
                   >
                     <span className="course__check" aria-hidden="true">
-                      {item.done ? '✓' : '○'}
+                      <Icon name={item.done ? 'check' : 'circle'} size={16} />
                     </span>
                     <span className="course__item-body">
                       <span className="course__item-title">{item.title}</span>

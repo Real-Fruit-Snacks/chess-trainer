@@ -569,3 +569,13 @@
 .moments__move--inaccuracy {
   color: var(--info);
 }
+
+/* Key moments: the one-line explanation spans the row under the move */
+.moments__why {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+}
+
+.moments__why:empty {
+  display: none;
+}

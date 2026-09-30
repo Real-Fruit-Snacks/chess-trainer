@@ -180,7 +180,8 @@ function RecallCard({
           </p>
           {task ? (
             <div className="lesson__task" role="note">
-              {state.turn === 'white' ? '♙ White' : '♟ Black'} to move — {renderInline(task.prompt)}
+              <span className={`turn-dot turn-dot--${state.turn}`} aria-hidden="true" />
+              {state.turn === 'white' ? 'White' : 'Black'} to move — {renderInline(task.prompt)}
             </div>
           ) : null}
           <p

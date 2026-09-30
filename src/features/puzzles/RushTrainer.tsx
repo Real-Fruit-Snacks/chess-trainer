@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
-import { Alert, Badge, Button, Card, Stat } from '@/components/ui';
+import { Alert, Badge, Button, Card, Stat, Icon } from '@/components/ui';
 import { formatDuration } from '@/lib/dates';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
@@ -139,7 +139,7 @@ export function RushTrainer() {
                     className={`rush__strike${hit ? ' rush__strike--hit' : ''}`}
                     aria-hidden="true"
                   >
-                    ✕
+                    <Icon name="close" size={14} />
                   </span>
                 ))}
               </span>

@@ -1,4 +1,6 @@
 import type { LongColor } from '@/chess/types';
+import { CLASSIC_GAMES_2 } from './games2';
+import { CLASSIC_GAMES_3 } from './games3';
 
 export interface ClassicGame {
   id: string;
@@ -22,7 +24,7 @@ export interface ClassicGame {
   difficulty: 1 | 2 | 3;
 }
 
-export const CLASSIC_GAMES: readonly ClassicGame[] = [
+const CLASSIC_GAMES_1: readonly ClassicGame[] = [
   {
     id: 'opera-game',
     title: 'The Opera Game',
@@ -543,6 +545,12 @@ export const CLASSIC_GAMES: readonly ClassicGame[] = [
     outro:
       'From an opening pin to a mating attack, every move improved a piece or created a weakness. Fischer never rushed: the decisive f5 break came only when every piece was ready.',
   },
+];
+
+export const CLASSIC_GAMES: readonly ClassicGame[] = [
+  ...CLASSIC_GAMES_1,
+  ...CLASSIC_GAMES_2,
+  ...CLASSIC_GAMES_3,
 ];
 
 export function getClassicGame(id: string): ClassicGame | undefined {

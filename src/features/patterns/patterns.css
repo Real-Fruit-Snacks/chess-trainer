@@ -1,0 +1,64 @@
+.patterns__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.patterns__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
+  gap: var(--space-4);
+}
+
+.pattern-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.pattern-card__board {
+  width: 100%;
+  max-width: 280px;
+  margin: 0 auto;
+}
+
+.pattern-card__board .cg-wrap {
+  border-radius: var(--radius-sm);
+}
+
+.pattern-card__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.pattern-card__title {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.pattern-card__text {
+  font-size: 0.9rem;
+  margin: 0 0 8px;
+  color: var(--text-muted);
+}
+
+.pattern-card__actions {
+  margin-top: auto;
+}
+
+@media (min-width: 720px) {
+  .pattern-card {
+    flex-direction: row;
+  }
+
+  .pattern-card__board {
+    flex: 0 0 200px;
+    max-width: 200px;
+    margin: 0;
+  }
+}
