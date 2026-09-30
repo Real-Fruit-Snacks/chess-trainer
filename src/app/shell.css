@@ -140,7 +140,7 @@
   height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   background: var(--bg-elevated);
   border-top: 1px solid var(--border);
   z-index: 50;
@@ -201,4 +201,138 @@
   background: var(--accent-soft);
   border: 1px solid transparent;
   margin-top: var(--space-4);
+}
+
+/* ---------- "More" menus ---------- */
+.more {
+  position: relative;
+}
+
+.more--sheet {
+  display: contents;
+}
+
+.more button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.more--sheet .shell__bottomlink {
+  width: 100%;
+  height: 100%;
+  background: none;
+  border: 0;
+}
+
+.more__menu {
+  position: absolute;
+  z-index: 60;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.more--dropdown .more__menu {
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 260px;
+}
+
+.more--sheet .more__menu {
+  position: fixed;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-2));
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+}
+
+.more__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  text-decoration: none;
+  transition: background var(--transition);
+}
+
+.more__item:hover,
+.more__item.is-active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.more__item.is-active .more__label {
+  color: var(--accent);
+}
+
+.more__icon {
+  font-size: 1.2rem;
+  width: 28px;
+  text-align: center;
+}
+
+.more__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.more__label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.more__blurb {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ---------- Keyboard shortcuts dialog ---------- */
+.shortcuts {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.shortcuts__title {
+  font-size: 0.95rem;
+  margin: 0 0 var(--space-2);
+}
+
+.shortcuts__list {
+  margin: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.shortcuts__row {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.shortcuts__row dt {
+  white-space: nowrap;
+}
+
+.shortcuts__row dd {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 480px) {
+  .shortcuts__row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
 }

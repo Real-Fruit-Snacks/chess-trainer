@@ -14,7 +14,7 @@
  *
  * Options:
  *   --source <path|url>   CSV (.zst or plain) — default: the Lichess download URL
- *   --per-bucket <n>      puzzles to keep per rating bucket           (default 500)
+ *   --per-bucket <n>      puzzles to keep per rating bucket           (default 1000)
  *   --min-plays <n>       minimum number of plays on Lichess          (default 500)
  *   --min-popularity <n>  minimum popularity score, -100..100         (default 70)
  *   --max-rd <n>          maximum rating deviation                    (default 90)
@@ -55,7 +55,7 @@ export const BUCKETS = [
 function parseArgs(argv) {
   const opts = {
     source: DEFAULT_SOURCE,
-    perBucket: 500,
+    perBucket: 1000,
     minPlays: 500,
     minPopularity: 70,
     maxRd: 90,

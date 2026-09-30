@@ -2,6 +2,7 @@ import { Chess, type Square } from 'chess.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DrawShape } from '@/components/board/Board';
 import { checkedKingSquare, legalDests, parseUci, toUci } from '@/chess/helpers';
+import { playMoveSound, playSound } from '@/lib/sound';
 import type { Fen, LongColor, PromotionPiece } from '@/chess/types';
 import { type Puzzle, puzzleMeta } from './puzzleService';
 
@@ -28,7 +29,11 @@ export interface TrainerSnapshot {
 export interface PuzzleOutcomeEvent {
   outcome: 'solved' | 'failed';
   hintUsed: boolean;
+  /** Most revealing hint used: 0 none, 1 the piece, 2 the whole move. */
+  hintLevel: 0 | 1 | 2;
   durationMs: number;
+  /** Moves the solver had to find. */
+  solverMoves: number;
 }
 
 export interface UsePuzzleTrainer {
@@ -100,7 +105,7 @@ export function usePuzzleTrainer(
   const stepRef = useRef(0); // index into moves[] of the next expected move
   const movesRef = useRef<string[]>([]);
   const reportedRef = useRef(false);
-  const hintUsedRef = useRef(false);
+  const hintUsedRef = useRef<0 | 1 | 2>(0);
   const startedAtRef = useRef<number | null>(null);
   const timersRef = useRef<number[]>([]);
   const onOutcomeRef = useRef(onOutcome);
@@ -136,7 +141,16 @@ export function usePuzzleTrainer(
       reportedRef.current = true;
       const durationMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
       setElapsedMs(durationMs);
-      onOutcomeRef.current({ outcome, hintUsed: hintUsedRef.current, durationMs }, puzzle);
+      onOutcomeRef.current(
+        {
+          outcome,
+          hintUsed: hintUsedRef.current > 0,
+          hintLevel: hintUsedRef.current,
+          durationMs,
+          solverMoves: totalRef.current,
+        },
+        puzzle,
+      );
     },
     [puzzle],
   );
@@ -151,6 +165,7 @@ export function usePuzzleTrainer(
       const uci = movesRef.current[index];
       if (!uci) return;
       const move = chessRef.current.move(parseUci(uci));
+      playMoveSound(move, chessRef.current);
       stepRef.current = index + 1;
       commit([move.from, move.to]);
       setPhase(nextPhase);
@@ -167,7 +182,7 @@ export function usePuzzleTrainer(
       totalRef.current = Math.ceil((moves.length - 1) / 2);
       stepRef.current = 0;
       reportedRef.current = false;
-      hintUsedRef.current = false;
+      hintUsedRef.current = 0;
       startedAtRef.current = null;
       setPuzzle(next);
       setHintLevel(0);
@@ -204,6 +219,7 @@ export function usePuzzleTrainer(
       const correct = played === expected || (isLastSolverMove && chess.isCheckmate());
 
       if (!correct) {
+        playSound('failed');
         setWrongMove([from, to]);
         setPhase('failed');
         if (!practiceAfterFail) report('failed');
@@ -221,10 +237,12 @@ export function usePuzzleTrainer(
       commit([move.from, move.to]);
 
       if (stepRef.current >= movesRef.current.length) {
+        playSound('solved');
         setPhase('solved');
         if (!practiceAfterFail) report('solved');
         return;
       }
+      playMoveSound(move, chess);
       setPhase('replying');
       later(() => playOpponentMove(stepRef.current, 'solving'), REPLY_DELAY);
     },
@@ -261,9 +279,10 @@ export function usePuzzleTrainer(
 
   const hint = useCallback(() => {
     if (phase !== 'solving') return;
-    hintUsedRef.current = true;
-    setHintLevel((level) => (level >= 2 ? 2 : ((level + 1) as 1 | 2)));
-  }, [phase]);
+    const next: 1 | 2 = hintLevel >= 1 ? 2 : 1;
+    hintUsedRef.current = next;
+    setHintLevel(next);
+  }, [phase, hintLevel]);
 
   const retry = useCallback(() => {
     if (phase !== 'failed') return;
@@ -294,6 +313,7 @@ export function usePuzzleTrainer(
         return;
       }
       const move = chess.move(parseUci(uci));
+      playMoveSound(move, chess);
       stepRef.current += 1;
       commit([move.from, move.to]);
       later(playNext, 650);

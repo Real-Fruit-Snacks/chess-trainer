@@ -1,0 +1,82 @@
+.editor {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (min-width: 900px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    align-items: start;
+  }
+}
+
+.editor__layout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  max-width: 560px;
+}
+
+.editor__palette {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.editor__tool {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  transition: background var(--transition);
+}
+
+.editor__tool:hover {
+  background: var(--surface-2);
+}
+
+.editor__tool--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.editor__tool piece {
+  position: static;
+  display: block;
+  width: 80%;
+  height: 80%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  pointer-events: none;
+}
+
+.editor__board {
+  width: 100%;
+}
+
+.editor__castling {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1) var(--space-3);
+}
+
+.editor__castling legend {
+  padding: 0 4px;
+}
+
+.editor__fen {
+  display: block;
+  word-break: break-all;
+  background: var(--surface-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+}

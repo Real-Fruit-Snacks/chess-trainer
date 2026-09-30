@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { summarizeProgress, useProgress } from './progress';
+import { summarizeProgress, useProgress, withRatingDefaults } from './progress';
+import { localDateKey } from '@/lib/dates';
+import { DEFAULT_VOLATILITY, INITIAL_RD } from '@/lib/glicko';
+import { REPEAT_WEIGHT } from '@/lib/puzzleScore';
+import { CALIBRATION_PUZZLES, CALIBRATION_START_RATING, SELF_ASSESSED_RD } from '@/lib/rating';
+import { useRepertoire } from './repertoire';
 
 const attempt = (
   id: string,
@@ -87,15 +92,83 @@ describe('progress store', () => {
     expect(useProgress.getState().lessons.forks?.completedAt).not.toBeNull();
   });
 
-  it('exports and imports state', () => {
+  it('exports and imports state, including the opening repertoire', () => {
     useProgress.getState().completeOnboarding(1500);
     attempt('x', 'solved');
+    useProgress
+      .getState()
+      .recordRush({ mode: 'timed', score: 7, peakRating: 1300, durationMs: 180_000 });
+    useProgress.getState().recordDrill('coordinates', 22, '22 squares');
+    useRepertoire.getState().review('italian', 'e2e4', 5, 1_700_000_000_000);
     const json = useProgress.getState().exportState();
     useProgress.getState().resetAll();
     expect(useProgress.getState().puzzleRating).toBe(1000);
+    expect(useProgress.getState().rushRuns).toEqual([]);
+    expect(useRepertoire.getState().cards).toEqual({});
     expect(useProgress.getState().importState(JSON.parse(json))).toBe(true);
     expect(useProgress.getState().attempts[0]?.id).toBe('x');
+    expect(useProgress.getState().rushRuns[0]?.score).toBe(7);
+    expect(useProgress.getState().drills.coordinates?.best).toBe(22);
+    expect(useProgress.getState().themeStats.fork?.solved).toBe(1);
+    expect(useRepertoire.getState().cards['italian|e2e4']?.reps).toBe(1);
     expect(useProgress.getState().importState({ nonsense: true })).toBe(false);
+  });
+
+  it('queues missed puzzles for review and reschedules solves', () => {
+    attempt('miss', 'failed');
+    const card = useProgress.getState().puzzleReviews.miss;
+    expect(card?.step).toBe(0);
+    expect(card?.due).toBeGreaterThan(Date.now());
+    // Solving it in the review queue moves it to the next step; a plain solve elsewhere does not.
+    useProgress.getState().recordPuzzle({
+      id: 'miss',
+      puzzleRating: 1200,
+      outcome: 'solved',
+      hintUsed: false,
+      themes: 'fork',
+      durationMs: 1000,
+      rated: false,
+      review: true,
+    });
+    expect(useProgress.getState().puzzleReviews.miss?.step).toBe(1);
+    attempt('other', 'solved');
+    expect(useProgress.getState().puzzleReviews.other).toBeUndefined();
+    useProgress.getState().dismissReview('miss');
+    expect(useProgress.getState().puzzleReviews.miss).toBeUndefined();
+    // Rush misses are queued too.
+    useProgress.getState().recordUnratedOutcome('rush1', 'pin', 'failed', 1500);
+    expect(useProgress.getState().puzzleReviews.rush1?.rating).toBe(1500);
+  });
+
+  it('records training days from any activity', () => {
+    expect(useProgress.getState().trainingDays).toEqual([]);
+    attempt('t1', 'solved');
+    const today = localDateKey();
+    expect(useProgress.getState().trainingDays).toEqual([today]);
+    useProgress.getState().recordDrill('coordinates', 5);
+    useProgress.getState().touchTraining();
+    expect(useProgress.getState().trainingDays).toEqual([today]);
+  });
+
+  it('keeps the best drill result and counts attempts', () => {
+    const { recordDrill } = useProgress.getState();
+    recordDrill('mate-kq', 80, 'Done in 20 moves');
+    recordDrill('mate-kq', 60, 'Done in 40 moves');
+    recordDrill('mate-kq', 90, 'Done in 10 moves');
+    expect(useProgress.getState().drills['mate-kq']).toMatchObject({
+      best: 90,
+      attempts: 3,
+      detail: 'Done in 10 moves',
+    });
+  });
+
+  it('records the best guess-the-move score per game', () => {
+    const { recordGuessGame } = useProgress.getState();
+    recordGuessGame('opera-game', 12, 30);
+    recordGuessGame('opera-game', 9, 30);
+    expect(useProgress.getState().guessGames['opera-game']?.score).toBe(12);
+    recordGuessGame('opera-game', 21, 30);
+    expect(useProgress.getState().guessGames['opera-game']?.score).toBe(21);
   });
 
   it('summarises statistics', () => {
@@ -113,5 +186,228 @@ describe('progress store', () => {
     const summary = summarizeProgress(useProgress.getState());
     expect(summary).toMatchObject({ solved: 1, failed: 1, wins: 1, losses: 0, draws: 0 });
     expect(summary.avgSolveMs).toBe(5000);
+  });
+});
+
+describe('own puzzles, bookmarks, recall and studies', () => {
+  const own = (id: string, createdAt = 1) => ({
+    id: `own-${id}`,
+    fen: 'fen',
+    moves: 'e2e4 e7e5',
+    rating: 1200,
+    rd: 0,
+    popularity: 0,
+    plays: 0,
+    themes: 'ownGame blunder',
+    url: '',
+    source: { title: 't', ply: 2, played: 'e5', judgement: 'blunder' as const, loss: 0.5 },
+    createdAt,
+  });
+
+  it('stores own puzzles once and queues them for review right away', () => {
+    useProgress.getState().resetAll();
+    expect(useProgress.getState().addOwnPuzzles([own('a'), own('b')])).toBe(2);
+    expect(useProgress.getState().addOwnPuzzles([own('a')])).toBe(0);
+    const state = useProgress.getState();
+    expect(Object.keys(state.ownPuzzles).sort()).toEqual(['own-a', 'own-b']);
+    expect(state.puzzleReviews['own-a']?.due).toBeLessThanOrEqual(Date.now());
+    state.removeOwnPuzzle('own-a');
+    expect(useProgress.getState().ownPuzzles['own-a']).toBeUndefined();
+    expect(useProgress.getState().puzzleReviews['own-a']).toBeUndefined();
+  });
+
+  it('drops the oldest own puzzles beyond the cap', () => {
+    useProgress.getState().resetAll();
+    const many = Array.from({ length: 305 }, (_, i) => own(`p${i}`, i));
+    useProgress.getState().addOwnPuzzles(many);
+    const ids = Object.keys(useProgress.getState().ownPuzzles);
+    expect(ids.length).toBe(300);
+    expect(ids).not.toContain('own-p0');
+    expect(ids).toContain('own-p304');
+    expect(useProgress.getState().puzzleReviews['own-p0']).toBeUndefined();
+  });
+
+  it('bookmarks a puzzle into the queue without duplicating an existing card', () => {
+    useProgress.getState().resetAll();
+    useProgress.getState().bookmarkPuzzle({ id: 'x', rating: 1300, themes: 'fork' });
+    const card = useProgress.getState().puzzleReviews.x;
+    expect(card?.step).toBe(0);
+    expect(card?.due).toBeLessThanOrEqual(Date.now());
+    useProgress.getState().bookmarkPuzzle({ id: 'x', rating: 1300, themes: 'fork' });
+    expect(useProgress.getState().puzzleReviews.x).toBe(card);
+  });
+
+  it('schedules and grades lesson recall cards', () => {
+    useProgress.getState().resetAll();
+    useProgress.getState().scheduleLessonRecall([{ id: 'forks:1', lessonId: 'forks' }], 1000);
+    // First recall three days after the lesson (step 1 of the 1-3-7-14-30 schedule).
+    expect(useProgress.getState().lessonRecall['forks:1']).toMatchObject({
+      step: 1,
+      due: 1000 + 3 * 86_400_000,
+    });
+    useProgress.getState().recordLessonRecall('forks:1', 'solved');
+    expect(useProgress.getState().lessonRecall['forks:1']?.step).toBe(2);
+    useProgress.getState().recordLessonRecall('forks:1', 'failed');
+    expect(useProgress.getState().lessonRecall['forks:1']?.step).toBe(0);
+    expect(useProgress.getState().lessonRecall['forks:1']?.lapses).toBe(1);
+    expect(useProgress.getState().trainingDays.length).toBe(1);
+  });
+
+  it('schedules recall for the task steps when a lesson completes', () => {
+    useProgress.getState().resetAll();
+    useProgress.getState().markLessonStep('forks', 0, 2, [1]);
+    expect(useProgress.getState().lessonRecall).toEqual({});
+    useProgress.getState().markLessonStep('forks', 1, 2, [1]);
+    expect(Object.keys(useProgress.getState().lessonRecall)).toEqual(['forks:1']);
+    // Completing again (or revisiting) does not reset an existing card.
+    useProgress.getState().recordLessonRecall('forks:1', 'solved');
+    useProgress.getState().markLessonStep('forks', 1, 2, [1]);
+    expect(useProgress.getState().lessonRecall['forks:1']?.step).toBe(2);
+    useProgress.getState().dismissLessonRecall('forks:1');
+    expect(useProgress.getState().lessonRecall['forks:1']).toBeUndefined();
+  });
+
+  it('records study results', () => {
+    useProgress.getState().resetAll();
+    useProgress.getState().recordStudy('reti', 'failed', false);
+    expect(useProgress.getState().studies.reti).toMatchObject({ solvedAt: null, attempts: 1 });
+    useProgress.getState().recordStudy('reti', 'solved', true);
+    expect(useProgress.getState().studies.reti?.solvedAt).not.toBeNull();
+    expect(useProgress.getState().studies.reti?.clean).toBe(true);
+  });
+
+  it('round-trips the new state through export and import', () => {
+    useProgress.getState().resetAll();
+    useProgress.getState().addOwnPuzzles([own('z')]);
+    useProgress.getState().recordStudy('reti', 'solved', true);
+    const exported = useProgress.getState().exportState();
+    useProgress.getState().resetAll();
+    expect(useProgress.getState().importState(JSON.parse(exported))).toBe(true);
+    expect(useProgress.getState().ownPuzzles['own-z']).toBeDefined();
+    expect(useProgress.getState().studies.reti?.clean).toBe(true);
+  });
+});
+
+describe('Glicko-2 puzzle rating', () => {
+  beforeEach(() => {
+    useProgress.getState().resetAll();
+    vi.useRealTimers();
+  });
+
+  it('self-assessment starts moderately uncertain, calibration very uncertain', () => {
+    useProgress.getState().completeOnboarding(1200);
+    expect(useProgress.getState().puzzleRd).toBe(SELF_ASSESSED_RD);
+    expect(useProgress.getState().calibration).toBeNull();
+    useProgress.getState().completeOnboarding(0, 'calibrate');
+    const state = useProgress.getState();
+    expect(state.puzzleRating).toBe(CALIBRATION_START_RATING);
+    expect(state.puzzleRd).toBe(INITIAL_RD);
+    expect(state.calibration).toMatchObject({ total: CALIBRATION_PUZZLES, done: 0 });
+  });
+
+  it('a calibration run counts rated puzzles and finishes after the last one', () => {
+    useProgress.getState().completeOnboarding(0, 'calibrate');
+    let done = false;
+    for (let i = 0; i < CALIBRATION_PUZZLES; i++) {
+      expect(done).toBe(false);
+      const result = attempt(`c${i}`, i % 3 === 0 ? 'failed' : 'solved', {
+        puzzleRating: 1100 + i * 40,
+      });
+      done = result.calibrationDone;
+      if (i < CALIBRATION_PUZZLES - 1) {
+        expect(useProgress.getState().calibration?.done).toBe(i + 1);
+      }
+    }
+    expect(done).toBe(true);
+    const state = useProgress.getState();
+    expect(state.calibration).toBeNull();
+    expect(state.puzzleRd).toBeLessThan(INITIAL_RD / 2);
+    expect(state.ratedAttempts).toBe(CALIBRATION_PUZZLES);
+    // Unrated attempts never count towards calibration.
+    useProgress.getState().completeOnboarding(0, 'calibrate');
+    attempt('u', 'solved', { rated: false });
+    expect(useProgress.getState().calibration?.done).toBe(0);
+  });
+
+  it('moves a lot while uncertain and a little once settled, and stores the score', () => {
+    useProgress.getState().completeOnboarding(0, 'calibrate');
+    const first = attempt('f1', 'solved', { puzzleRating: 1100, puzzleRd: 80, solverMoves: 2 });
+    expect(first.after - first.before).toBeGreaterThan(80);
+    expect(useProgress.getState().attempts[0]?.score).toBe(1);
+    useProgress.setState({ puzzleRd: 60 });
+    const settled = attempt('f2', 'solved', { puzzleRating: useProgress.getState().puzzleRating });
+    expect(settled.after - settled.before).toBeGreaterThan(5);
+    expect(settled.after - settled.before).toBeLessThan(15);
+  });
+
+  it('gives less credit for hints, slow solves and repeats', () => {
+    useProgress.getState().completeOnboarding(1200);
+    useProgress.setState({ puzzleRd: 80 });
+    const base = { puzzleRating: 1200, puzzleRd: 80, solverMoves: 2 };
+    const clean = attempt('h0', 'solved', base).after - 1200;
+    useProgress.setState({ puzzleRating: 1200, puzzleRd: 80 });
+    const piece = attempt('h1', 'solved', { ...base, hintLevel: 1 }).after - 1200;
+    useProgress.setState({ puzzleRating: 1200, puzzleRd: 80 });
+    const move = attempt('h2', 'solved', { ...base, hintLevel: 2 }).after - 1200;
+    expect(clean).toBeGreaterThan(piece);
+    expect(piece).toBeGreaterThan(move);
+    expect(move).toBeLessThan(0); // the whole move was given away: worse than the expected 0.5
+    expect(useProgress.getState().attempts.find((a) => a.id === 'h1')?.hintUsed).toBe(true);
+
+    useProgress.setState({ puzzleRating: 1200, puzzleRd: 80 });
+    const slow = attempt('s1', 'solved', { ...base, durationMs: 5 * 60_000 }).after - 1200;
+    expect(slow).toBeLessThan(clean);
+    expect(slow).toBeGreaterThan(0);
+
+    useProgress.setState({ puzzleRating: 1200, puzzleRd: 80 });
+    const repeat = attempt('h0', 'solved', base).after - 1200; // h0 was seen above
+    expect(repeat).toBeCloseTo(clean * REPEAT_WEIGHT, 0);
+  });
+
+  it('lets the deviation grow during a long break', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T12:00:00'));
+    useProgress.getState().completeOnboarding(1500);
+    useProgress.setState({ puzzleRd: 60, lastRatedAt: Date.now() });
+    vi.setSystemTime(new Date('2027-01-01T12:00:00'));
+    const result = attempt('back', 'solved', { puzzleRating: 1500, puzzleRd: 80 });
+    // A year away: the first solve moves the rating far more than the usual ±10.
+    expect(result.after - result.before).toBeGreaterThan(20);
+    expect(useProgress.getState().lastRatedAt).toBe(Date.now());
+  });
+
+  it('fills in the Glicko fields for saves made by older versions', () => {
+    const old = {
+      onboarded: true,
+      puzzleRating: 1420,
+      ratedAttempts: 45,
+      ratingHistory: [
+        { at: 1_700_000_000_000, rating: 1200 },
+        { at: 1_700_500_000_000, rating: 1420 },
+      ],
+    };
+    const migrated = withRatingDefaults(old);
+    expect(migrated.puzzleRd).toBe(80);
+    expect(migrated.puzzleVolatility).toBe(DEFAULT_VOLATILITY);
+    expect(migrated.lastRatedAt).toBe(1_700_500_000_000);
+    expect(migrated.calibration).toBeNull();
+    expect(
+      withRatingDefaults({ onboarded: true, puzzleRating: 1000, ratedAttempts: 12 }).puzzleRd,
+    ).toBe(130);
+    expect(
+      withRatingDefaults({ onboarded: true, puzzleRating: 1000, ratedAttempts: 3 }).puzzleRd,
+    ).toBe(200);
+    expect(
+      withRatingDefaults({ onboarded: true, puzzleRating: 1000, ratedAttempts: 0 }).puzzleRd,
+    ).toBe(SELF_ASSESSED_RD);
+    expect(withRatingDefaults({ onboarded: false }).puzzleRd).toBe(INITIAL_RD);
+    // Present values are kept as they are.
+    expect(withRatingDefaults({ ...old, puzzleRd: 55, lastRatedAt: 5 })).toMatchObject({
+      puzzleRd: 55,
+      lastRatedAt: 5,
+    });
+    // An old export goes through the same defaults.
+    expect(useProgress.getState().importState({ progress: old })).toBe(true);
+    expect(useProgress.getState().puzzleRd).toBe(80);
   });
 });

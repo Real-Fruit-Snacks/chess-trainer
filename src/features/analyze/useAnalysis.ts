@@ -1,12 +1,24 @@
 import { Chess, type Move, type Square } from 'chess.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DrawShape } from '@/components/board/Board';
-import { legalDests, parseUci, START_FEN, toLongColor } from '@/chess/helpers';
+import type { MoveJudgement } from '@/components/chess/MoveList';
+import {
+  isPromotionMove,
+  legalDests,
+  parseUci,
+  START_FEN,
+  toLongColor,
+  tryMove,
+  tryNotation,
+} from '@/chess/helpers';
+import { GameTree, type TreeNode } from '@/chess/tree';
 import type { Fen, LongColor, PromotionPiece, Uci } from '@/chess/types';
-import { useChess } from '@/chess/useChess';
 import { useEngine } from '@/engine/useEngine';
 import type { SearchInfo } from '@/engine/uci';
-import { useSettings } from '@/store/settings';
+import { findOpening, loadOpenings, type Opening } from '@/lib/openings';
+import { playMoveSound } from '@/lib/sound';
+import { isTablebasePosition, lookupTablebase, type TablebaseResult } from '@/lib/tablebase';
+import { REVIEW_DEPTHS, useSettings } from '@/store/settings';
 import { type ReviewSummary, reviewGame } from './gameReview';
 
 export interface ViewedPosition {
@@ -17,18 +29,38 @@ export interface ViewedPosition {
   inCheck: boolean;
   /** Full move number for the side to move. */
   moveNumber: number;
+  gameOver: boolean;
+  result: '1-0' | '0-1' | '1/2-1/2' | null;
 }
 
+export interface PendingPromotion {
+  from: Square;
+  to: Square;
+  color: LongColor;
+}
+
+export type TablebaseState =
+  | { status: 'off' }
+  | { status: 'loading' }
+  | { status: 'ready'; result: TablebaseResult }
+  | { status: 'error'; message: string };
+
 export interface UseAnalysis {
-  game: ReturnType<typeof useChess>;
-  viewPly: number;
-  setViewPly: (ply: number) => void;
+  tree: GameTree;
+  /** Bumps on every tree change; handy as a memo key. */
+  version: number;
+  current: TreeNode;
+  path: TreeNode[];
   viewed: ViewedPosition;
-  moves: Move[];
+  pendingPromotion: PendingPromotion | null;
+  opening: Opening | null;
+  tablebase: TablebaseState;
   engineOn: boolean;
   setEngineOn: (on: boolean) => void;
   engineStatus: ReturnType<typeof useEngine>['status'];
   engineError: Error | null;
+  /** Status-line label: build and thread count once the engine is running. */
+  engineName: string;
   lines: Map<number, SearchInfo>;
   thinking: boolean;
   depthReached: number;
@@ -36,32 +68,54 @@ export interface UseAnalysis {
   bestMoveShape: DrawShape[];
   playMove: (from: Square, to: Square, promotion?: PromotionPiece) => void;
   playUci: (uci: Uci) => void;
+  /** Plays a typed move (SAN or UCI). Returns false when illegal. */
+  playNotation: (notation: string) => boolean;
   resolvePromotion: (piece: PromotionPiece | null) => void;
+  goTo: (node: TreeNode) => void;
+  back: () => void;
+  forward: () => void;
+  goStart: () => void;
+  goEnd: () => void;
+  promoteVariation: (node?: TreeNode) => void;
+  makeMainLine: (node?: TreeNode) => void;
+  deleteVariation: (node?: TreeNode) => void;
+  deleteFromHere: () => void;
+  setComment: (text: string, node?: TreeNode) => void;
+  setGlyph: (nag: number | null, node?: TreeNode) => void;
   loadFen: (fen: Fen) => boolean;
-  loadPgn: (pgn: string) => boolean;
+  /** Loads a PGN, opened at its last move or at `atPly` (1-based main-line ply). */
+  loadPgn: (pgn: string, atPly?: number) => boolean;
   reset: () => void;
+  pgn: () => string;
   review: ReviewSummary | null;
   reviewProgress: number | null;
+  /** Estimated milliseconds until the running review finishes. */
+  reviewEtaMs: number | null;
+  /** Jumps to a main-line ply (0 = start). */
+  goToPly: (ply: number) => void;
+  /** Judgements keyed by node id (main line only). */
+  judgements: Map<number, MoveJudgement>;
   startReview: () => void;
   cancelReview: () => void;
   retryEngine: () => Promise<void>;
 }
 
-function viewedPosition(startFen: Fen, moves: Move[], ply: number): ViewedPosition {
-  const chess = new Chess(startFen);
-  let last: Move | null = null;
-  for (let i = 0; i < ply && i < moves.length; i++) {
-    const m = moves[i];
-    if (!m) break;
-    last = chess.move(m.san);
+function viewedPosition(node: TreeNode): ViewedPosition {
+  const chess = new Chess(node.fen);
+  const over = chess.isGameOver();
+  let result: ViewedPosition['result'] = null;
+  if (over) {
+    result = chess.isCheckmate() ? (chess.turn() === 'w' ? '0-1' : '1-0') : '1/2-1/2';
   }
   return {
-    fen: chess.fen(),
+    fen: node.fen,
     turn: toLongColor(chess.turn()),
     dests: legalDests(chess),
-    lastMove: last ? [last.from, last.to] : null,
+    lastMove: node.uci ? [parseUci(node.uci).from, parseUci(node.uci).to] : null,
     inCheck: chess.inCheck(),
     moveNumber: chess.moveNumber(),
+    gameOver: over,
+    result,
   };
 }
 
@@ -69,8 +123,15 @@ export function useAnalysis(): UseAnalysis {
   const autoQueen = useSettings((s) => s.autoQueen);
   const analysisDepth = useSettings((s) => s.analysisDepth);
   const analysisLines = useSettings((s) => s.analysisLines);
+  const tablebaseEnabled = useSettings((s) => s.tablebase);
+  const reviewDepth = useSettings((s) => REVIEW_DEPTHS[s.reviewDepth]);
 
-  const game = useChess(START_FEN, { autoQueen });
+  const treeRef = useRef<GameTree | null>(null);
+  treeRef.current ??= new GameTree(START_FEN);
+  const tree = treeRef.current;
+  const [version, setVersion] = useState(0);
+  const bump = useCallback(() => setVersion((v) => v + 1), []);
+
   const {
     engine,
     status: engineStatus,
@@ -78,35 +139,65 @@ export function useAnalysis(): UseAnalysis {
     start: startEngine,
   } = useEngine({ hashMb: 32 });
 
-  const moves = game.position.history;
-  const [viewPly, setViewPlyState] = useState(0);
+  const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
   const [engineOn, setEngineOn] = useState(true);
   const [lines, setLines] = useState<Map<number, SearchInfo>>(new Map());
   const [thinking, setThinking] = useState(false);
   const [review, setReview] = useState<ReviewSummary | null>(null);
   const [reviewProgress, setReviewProgress] = useState<number | null>(null);
+  const [reviewEtaMs, setReviewEtaMs] = useState<number | null>(null);
+  const [opening, setOpening] = useState<Opening | null>(null);
+  const [tablebase, setTablebase] = useState<TablebaseState>({ status: 'off' });
   const reviewAbort = useRef<AbortController | null>(null);
-  const followLatest = useRef(true);
 
-  // Keep the view on the latest move when new moves are played.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `version` is the change signal for the mutable tree.
+  const current = useMemo(() => tree.current, [tree, version]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const path = useMemo(() => tree.pathTo(current), [tree, current, version]);
+  const viewed = useMemo(() => viewedPosition(current), [current]);
+
+  // Opening name for the current line.
   useEffect(() => {
-    if (followLatest.current) setViewPlyState(moves.length);
-    else setViewPlyState((p) => Math.min(p, moves.length));
-  }, [moves.length]);
+    let cancelled = false;
+    const fens = [tree.startFen, ...path.map((n) => n.fen)];
+    loadOpenings()
+      .then((table) => {
+        if (!cancelled) setOpening(findOpening(table, fens));
+      })
+      .catch(() => {
+        if (!cancelled) setOpening(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tree, path]);
 
-  const setViewPly = useCallback(
-    (ply: number) => {
-      const clamped = Math.max(0, Math.min(moves.length, ply));
-      followLatest.current = clamped === moves.length;
-      setViewPlyState(clamped);
-    },
-    [moves.length],
-  );
-
-  const viewed = useMemo(
-    () => viewedPosition(game.position.startFen, moves, viewPly),
-    [game.position.startFen, moves, viewPly],
-  );
+  // Optional tablebase lookup.
+  useEffect(() => {
+    if (!tablebaseEnabled || !isTablebasePosition(viewed.fen) || viewed.gameOver) {
+      setTablebase({ status: 'off' });
+      return;
+    }
+    const controller = new AbortController();
+    setTablebase({ status: 'loading' });
+    const timer = window.setTimeout(() => {
+      lookupTablebase(viewed.fen, controller.signal)
+        .then((result) => {
+          if (!controller.signal.aborted) setTablebase({ status: 'ready', result });
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted) return;
+          setTablebase({
+            status: 'error',
+            message: err instanceof Error ? err.message : 'Tablebase unavailable',
+          });
+        });
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [tablebaseEnabled, viewed.fen, viewed.gameOver]);
 
   // Continuous evaluation of the viewed position.
   useEffect(() => {
@@ -114,8 +205,7 @@ export function useAnalysis(): UseAnalysis {
       setThinking(false);
       return;
     }
-    const chess = new Chess(viewed.fen);
-    if (chess.isGameOver()) {
+    if (viewed.gameOver) {
       setLines(new Map());
       setThinking(false);
       return;
@@ -148,7 +238,16 @@ export function useAnalysis(): UseAnalysis {
       handle.stop();
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [engineOn, engineStatus, viewed.fen, analysisDepth, analysisLines, engine, reviewProgress]);
+  }, [
+    engineOn,
+    engineStatus,
+    viewed.fen,
+    viewed.gameOver,
+    analysisDepth,
+    analysisLines,
+    engine,
+    reviewProgress,
+  ]);
 
   const depthReached = useMemo(() => lines.get(1)?.depth ?? 0, [lines]);
   const nps = useMemo(() => lines.get(1)?.nps, [lines]);
@@ -160,32 +259,35 @@ export function useAnalysis(): UseAnalysis {
     return [{ orig: from, dest: to, brush: 'paleBlue' }];
   }, [lines, engineOn]);
 
-  /** Truncates the game to the viewed ply so a new move can be played from there. */
-  const truncateToView = useCallback(() => {
-    let count = moves.length - viewPly;
-    while (count-- > 0) game.undo();
-  }, [moves.length, viewPly, game]);
+  const commit = useCallback(
+    (move: Move | null) => {
+      if (!move) return false;
+      const node = tree.addMove({
+        from: move.from,
+        to: move.to,
+        promotion: move.promotion as PromotionPiece | undefined,
+      });
+      if (!node) return false;
+      playMoveSound(move, new Chess(node.fen));
+      bump();
+      return true;
+    },
+    [tree, bump],
+  );
 
   const playMove = useCallback(
     (from: Square, to: Square, promotion?: PromotionPiece) => {
-      if (viewPly < moves.length) {
-        // Same move as the existing continuation? Just step forward.
-        const nextMove = moves[viewPly];
-        if (
-          nextMove?.from === from &&
-          nextMove.to === to &&
-          (!promotion || nextMove.promotion === promotion)
-        ) {
-          setViewPly(viewPly + 1);
+      const chess = new Chess(tree.current.fen);
+      if (!promotion && isPromotionMove(chess, from, to)) {
+        if (autoQueen) promotion = 'q';
+        else {
+          setPendingPromotion({ from, to, color: toLongColor(chess.turn()) });
           return;
         }
-        truncateToView();
       }
-      followLatest.current = true;
-      setReview(null);
-      game.playMove(from, to, promotion);
+      commit(tryMove(chess, { from, to, promotion }));
     },
-    [viewPly, moves, truncateToView, game, setViewPly],
+    [tree, autoQueen, commit],
   );
 
   const playUci = useCallback(
@@ -196,6 +298,109 @@ export function useAnalysis(): UseAnalysis {
     [playMove],
   );
 
+  const playNotation = useCallback(
+    (notation: string): boolean => {
+      const chess = new Chess(tree.current.fen);
+      return commit(tryNotation(chess, notation));
+    },
+    [tree, commit],
+  );
+
+  const resolvePromotion = useCallback(
+    (piece: PromotionPiece | null) => {
+      const pending = pendingPromotion;
+      setPendingPromotion(null);
+      if (!pending || !piece) return;
+      const chess = new Chess(tree.current.fen);
+      commit(tryMove(chess, { from: pending.from, to: pending.to, promotion: piece }));
+    },
+    [pendingPromotion, tree, commit],
+  );
+
+  const goTo = useCallback(
+    (node: TreeNode) => {
+      tree.goTo(node);
+      bump();
+    },
+    [tree, bump],
+  );
+  const back = useCallback(() => {
+    if (tree.back()) bump();
+  }, [tree, bump]);
+  const forward = useCallback(() => {
+    if (tree.forward()) bump();
+  }, [tree, bump]);
+  const goStart = useCallback(() => {
+    tree.goStart();
+    bump();
+  }, [tree, bump]);
+  const goEnd = useCallback(() => {
+    tree.goEnd();
+    bump();
+  }, [tree, bump]);
+  const goToPly = useCallback(
+    (ply: number) => {
+      const line = tree.mainLine();
+      tree.goTo(ply <= 0 ? tree.root : (line[Math.min(ply, line.length) - 1] ?? tree.root));
+      bump();
+    },
+    [tree, bump],
+  );
+
+  const promoteVariation = useCallback(
+    (node: TreeNode = tree.current) => {
+      tree.promote(node);
+      bump();
+    },
+    [tree, bump],
+  );
+  const makeMainLine = useCallback(
+    (node: TreeNode = tree.current) => {
+      tree.promoteToMain(node);
+      setReview(null);
+      bump();
+    },
+    [tree, bump],
+  );
+  const deleteVariation = useCallback(
+    (node: TreeNode = tree.current) => {
+      if (!node.parent) return;
+      tree.deleteNode(node);
+      setReview(null);
+      bump();
+    },
+    [tree, bump],
+  );
+  const deleteFromHere = useCallback(() => {
+    tree.truncateAfterCurrent();
+    setReview(null);
+    bump();
+  }, [tree, bump]);
+  const setComment = useCallback(
+    (text: string, node: TreeNode = tree.current) => {
+      tree.setComment(node, text);
+      bump();
+    },
+    [tree, bump],
+  );
+  const setGlyph = useCallback(
+    (nag: number | null, node: TreeNode = tree.current) => {
+      tree.setGlyph(node, nag);
+      bump();
+    },
+    [tree, bump],
+  );
+
+  const replaceTree = useCallback(
+    (next: GameTree) => {
+      treeRef.current = next;
+      setPendingPromotion(null);
+      setReview(null);
+      bump();
+    },
+    [bump],
+  );
+
   const loadFen = useCallback(
     (fen: Fen) => {
       try {
@@ -203,28 +408,35 @@ export function useAnalysis(): UseAnalysis {
       } catch {
         return false;
       }
-      followLatest.current = true;
-      setReview(null);
-      game.reset(fen);
+      replaceTree(new GameTree(fen));
       return true;
     },
-    [game],
+    [replaceTree],
   );
 
   const loadPgn = useCallback(
-    (pgn: string) => {
-      followLatest.current = true;
-      setReview(null);
-      return game.loadPgn(pgn);
+    (pgn: string, atPly?: number) => {
+      try {
+        const next = GameTree.fromPgn(pgn);
+        next.goEnd();
+        if (atPly !== undefined && atPly >= 0) {
+          const line = next.mainLine();
+          next.goTo(
+            atPly === 0 ? next.root : (line[Math.min(atPly, line.length) - 1] ?? next.root),
+          );
+        }
+        replaceTree(next);
+        return true;
+      } catch {
+        return false;
+      }
     },
-    [game],
+    [replaceTree],
   );
 
-  const reset = useCallback(() => {
-    followLatest.current = true;
-    setReview(null);
-    game.reset(START_FEN);
-  }, [game]);
+  const reset = useCallback(() => replaceTree(new GameTree(START_FEN)), [replaceTree]);
+
+  const pgn = useCallback(() => treeRef.current?.toPgn() ?? '', []);
 
   const cancelReview = useCallback(() => {
     reviewAbort.current?.abort();
@@ -233,15 +445,32 @@ export function useAnalysis(): UseAnalysis {
   }, []);
 
   const startReview = useCallback(() => {
-    if (engineStatus !== 'ready' || moves.length === 0) return;
+    const line = tree.mainLine();
+    if (engineStatus !== 'ready' || line.length === 0) return;
     cancelReview();
     const controller = new AbortController();
     reviewAbort.current = controller;
     setReviewProgress(0);
-    reviewGame(engine(), game.position.startFen, moves, {
-      depth: 12,
+    // The reviewer only needs SAN, but takes chess.js moves; replay the main line to get them.
+    const chess = new Chess(tree.startFen);
+    const moves: Move[] = [];
+    for (const node of line) {
+      const move = tryMove(chess, node.san);
+      if (!move) break;
+      moves.push(move);
+    }
+    const startedAt = Date.now();
+    setReviewEtaMs(null);
+    reviewGame(engine(), tree.startFen, moves, {
+      depth: reviewDepth,
       signal: controller.signal,
-      onProgress: (done, total) => setReviewProgress(done / total),
+      onProgress: (done, total) => {
+        setReviewProgress(done / total);
+        if (done >= 3) {
+          const perPosition = (Date.now() - startedAt) / done;
+          setReviewEtaMs(Math.round(perPosition * (total - done)));
+        }
+      },
     })
       .then((summary) => {
         if (!controller.signal.aborted) setReview(summary);
@@ -253,22 +482,39 @@ export function useAnalysis(): UseAnalysis {
         if (reviewAbort.current === controller) {
           reviewAbort.current = null;
           setReviewProgress(null);
+          setReviewEtaMs(null);
         }
       });
-  }, [engineStatus, moves, engine, game.position.startFen, cancelReview]);
+  }, [engineStatus, tree, engine, cancelReview, reviewDepth]);
 
   useEffect(() => () => reviewAbort.current?.abort(), []);
 
+  const judgements = useMemo(() => {
+    const map = new Map<number, MoveJudgement>();
+    if (!review) return map;
+    const line = tree.mainLine();
+    review.moves.forEach((m, i) => {
+      const node = line[i];
+      if (node?.san === m.san) map.set(node.id, m.judgement);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [review, tree, version]);
+
   return {
-    game,
-    viewPly,
-    setViewPly,
+    tree,
+    version,
+    current,
+    path,
     viewed,
-    moves,
+    pendingPromotion,
+    opening,
+    tablebase,
     engineOn,
     setEngineOn,
     engineStatus,
     engineError,
+    engineName: engineStatus === 'ready' ? engine().name : 'Stockfish 19',
     lines,
     thinking,
     depthReached,
@@ -276,12 +522,28 @@ export function useAnalysis(): UseAnalysis {
     bestMoveShape,
     playMove,
     playUci,
-    resolvePromotion: game.resolvePromotion,
+    playNotation,
+    resolvePromotion,
+    goTo,
+    back,
+    forward,
+    goStart,
+    goEnd,
+    promoteVariation,
+    makeMainLine,
+    deleteVariation,
+    deleteFromHere,
+    setComment,
+    setGlyph,
     loadFen,
     loadPgn,
     reset,
+    pgn,
     review,
     reviewProgress,
+    reviewEtaMs,
+    goToPly,
+    judgements,
     startReview,
     cancelReview,
     retryEngine: startEngine,

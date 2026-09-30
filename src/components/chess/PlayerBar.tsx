@@ -9,12 +9,15 @@ export function PlayerBar({
   fen,
   thinking = false,
   extra,
+  showMaterial = true,
 }: {
   name: ReactNode;
   color: LongColor;
   fen: Fen;
   thinking?: boolean;
   extra?: ReactNode;
+  /** Captured-material display only makes sense for games from the start position. */
+  showMaterial?: boolean;
 }) {
   return (
     <div className="playerbar">
@@ -29,7 +32,7 @@ export function PlayerBar({
       </span>
       <span className="row">
         {extra}
-        <Material fen={fen} color={color} />
+        {showMaterial ? <Material fen={fen} color={color} /> : null}
       </span>
     </div>
   );

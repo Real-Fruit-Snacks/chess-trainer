@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 /**
- * Downloads the pinned Stockfish WASM build into public/engine/.
+ * Downloads the pinned Stockfish WASM builds into public/engine/.
  *
  * The engine is GPL-3.0 software maintained in a separate project
- * (https://github.com/nmrugg/stockfish.js). Rather than vendoring ~2 MB of
+ * (https://github.com/nmrugg/stockfish.js). Rather than vendoring ~4 MB of
  * binaries in git — or pulling the 200 MB `stockfish` npm package into every
- * install — we fetch exactly the two files we ship, verify their SHA-256 and
+ * install — we fetch exactly the files we ship, verify their SHA-256 and
  * cache them locally. The script is idempotent: if the files are present and
  * their checksums match, it exits immediately.
+ *
+ * Two builds are installed:
+ *  - lite-single: one thread, precached by the service worker, used by default.
+ *  - lite (pthreads): the experimental multi-threaded engine, loaded only when
+ *    the learner opts in and the page is cross-origin isolated.
  *
  * Usage:  node scripts/setup-engine.mjs [--force]
  */
@@ -28,10 +33,22 @@ export const ENGINE = {
     {
       name: 'stockfish-19-lite-single.js',
       sha256: 'd3344124ab067fb0b90ee77873bb8e9fbf5fc01bc525fe714b0f942581e889e6',
+      build: 'single',
     },
     {
       name: 'stockfish-19-lite-single.wasm',
       sha256: '57ac2d72312aba346760e3f173f687a8c211208e97a87268436f7f0e10bb5387',
+      build: 'single',
+    },
+    {
+      name: 'stockfish-19-lite.js',
+      sha256: '2f98d35d20bf435c16925f8955fe4b0c2062e66962799a407667218ff9ea709d',
+      build: 'multi',
+    },
+    {
+      name: 'stockfish-19-lite.wasm',
+      sha256: '18727c9ade11a8ca04391ab5a298232bc6fffebe2002e7cfffac82e7ad453447',
+      build: 'multi',
     },
   ],
 };
@@ -94,7 +111,9 @@ async function main() {
     return;
   }
 
-  console.log(`Installing Stockfish ${ENGINE.version} (lite, single-threaded) into public/engine/`);
+  console.log(
+    `Installing Stockfish ${ENGINE.version} (lite: single- and multi-threaded) into public/engine/`,
+  );
   for (const file of missing) {
     await rm(join(OUT_DIR, file.name), { force: true });
     await download(file);
@@ -107,7 +126,7 @@ async function main() {
       {
         name: 'Stockfish.js',
         version: ENGINE.version,
-        variant: 'lite-single',
+        variants: ['lite-single', 'lite (pthreads)'],
         license: 'GPL-3.0-only',
         source: 'https://github.com/nmrugg/stockfish.js',
         files: ENGINE.files,

@@ -1,37 +1,82 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { EngineLines, EngineStatus } from '@/components/chess/EngineLines';
 import { EvalBar } from '@/components/chess/EvalBar';
-import { type MoveJudgement, MoveList, MoveNavigation } from '@/components/chess/MoveList';
-import { Alert, Button, Card, Field, ProgressBar, Switch } from '@/components/ui';
+import { EvalGraph } from '@/components/chess/EvalGraph';
+import { MoveInput } from '@/components/chess/MoveInput';
+import { TreeMoveList, TreeNavigation } from '@/components/chess/TreeMoveList';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  LinkButton,
+  ProgressBar,
+  Segmented,
+  Switch,
+} from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
-import { isValidFen } from '@/chess/helpers';
 import type { LongColor } from '@/chess/types';
+import { buildShareFragment, parseShareFragment } from '@/lib/shareLink';
+import { describeCategory, type TablebaseCategory } from '@/lib/tablebase';
 import { siteConfig } from '@/site.config';
-import { useSettings } from '@/store/settings';
+import { type ReviewDepth, useSettings } from '@/store/settings';
 import { HANDOFF_PGN_KEY } from '@/features/play/PlayPage';
+import {
+  gameTitle,
+  type MainLine,
+  ownPuzzleFromMoment,
+  type OwnPuzzleMeta,
+  ownPuzzlesFromReview,
+} from '@/features/puzzles/ownPuzzles';
+import { useProgress } from '@/store/progress';
+import { BoardEditor } from './BoardEditor';
+import { ImportPanel } from './ImportPanel';
+import { keyMoments, type ReviewSummary } from './gameReview';
 import { useAnalysis } from './useAnalysis';
 import './analyze.css';
 
+const GLYPH_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: '–' },
+  { value: 1, label: '!' },
+  { value: 2, label: '?' },
+  { value: 3, label: '!!' },
+  { value: 4, label: '??' },
+  { value: 5, label: '!?' },
+  { value: 6, label: '?!' },
+];
+
+function categoryClass(category: TablebaseCategory): string {
+  if (category === 'win' || category === 'cursed-win' || category === 'maybe-win') return 'win';
+  if (category === 'loss' || category === 'blessed-loss' || category === 'maybe-loss') {
+    return 'loss';
+  }
+  return 'draw';
+}
+
 export default function AnalyzePage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const analysis = useAnalysis();
   const settings = useSettings();
+  const ownPuzzleRating = useProgress((s) => Math.round(s.puzzleRating));
   const [orientation, setOrientation] = useState<LongColor>('white');
-  const [importText, setImportText] = useState('');
-  const [importError, setImportError] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [commentDraft, setCommentDraft] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = `Analyze · ${siteConfig.name}`;
   }, []);
 
-  // Handoffs: ?fen=… from puzzles/lessons, ?from=game after playing the engine.
+  // Handoffs: ?fen=… from puzzles/lessons, ?from=game after playing the engine, ?pgn=… from elsewhere.
   useEffect(() => {
     const fen = searchParams.get('fen');
     const from = searchParams.get('from');
+    const pgnParam = searchParams.get('pgn');
     if (fen) {
       if (!analysis.loadFen(fen)) toast('That FEN could not be loaded.', { tone: 'warning' });
       else setOrientation(fen.split(' ')[1] === 'b' ? 'black' : 'white');
@@ -41,6 +86,8 @@ export default function AnalyzePage() {
         const playedBlack = pgn.includes('[Black "You"]');
         setOrientation(playedBlack ? 'black' : 'white');
       }
+    } else if (pgnParam) {
+      if (!analysis.loadPgn(pgnParam)) toast('That PGN could not be loaded.', { tone: 'warning' });
     } else {
       return;
     }
@@ -48,34 +95,83 @@ export default function AnalyzePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { viewed, moves, viewPly } = analysis;
+  // Shared links carry the game in the fragment: #z=<deflated PGN>&ply=N, #pgn=… or #fen=….
+  useEffect(() => {
+    const fragment = location.hash;
+    if (!fragment || fragment.length < 3) return;
+    let cancelled = false;
+    void parseShareFragment(fragment).then((shared) => {
+      if (cancelled) return;
+      if (!shared) {
+        toast('That link does not contain a game.', { tone: 'warning' });
+        return;
+      }
+      if (shared.pgn) {
+        if (!analysis.loadPgn(shared.pgn, shared.ply)) {
+          toast('The game in that link could not be loaded.', { tone: 'warning' });
+          return;
+        }
+      } else if (shared.fen) {
+        if (!analysis.loadFen(shared.fen)) {
+          toast('The position in that link could not be loaded.', { tone: 'warning' });
+          return;
+        }
+        setOrientation(shared.fen.split(' ')[1] === 'b' ? 'black' : 'white');
+      }
+      // Leave the fragment in place so the link stays reloadable and copyable.
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per link
+  }, [location.hash]);
+
+  // Keyboard navigation.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      ) {
+        return;
+      }
+      if (editorOpen) return;
+      switch (event.key) {
+        case 'ArrowLeft':
+          analysis.back();
+          break;
+        case 'ArrowRight':
+          analysis.forward();
+          break;
+        case 'Home':
+          analysis.goStart();
+          break;
+        case 'End':
+          analysis.goEnd();
+          break;
+        case 'f':
+          setOrientation((o) => (o === 'white' ? 'black' : 'white'));
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [analysis, editorOpen]);
+
+  const { viewed, current, tree } = analysis;
   const score = analysis.lines.get(1)?.score ?? null;
-  const result = useMemo(() => {
-    const status = analysis.game.position.status;
-    return viewPly === moves.length && status.over && status.result !== '*' ? status.result : null;
-  }, [analysis.game.position.status, viewPly, moves.length]);
-
-  const judgements = useMemo<(MoveJudgement | undefined)[] | undefined>(
-    () => analysis.review?.moves.map((m) => m.judgement),
-    [analysis.review],
-  );
-  const reviewedCurrent = analysis.review?.moves[viewPly - 1];
-
-  const doImport = () => {
-    const text = importText.trim();
-    if (!text) return;
-    setImportError(null);
-    if (isValidFen(text)) {
-      analysis.loadFen(text);
-      setShowImport(false);
-      return;
-    }
-    if (analysis.loadPgn(text)) {
-      setShowImport(false);
-      return;
-    }
-    setImportError('Could not read that as a FEN or a PGN. Check the text and try again.');
-  };
+  const mainLine = useMemo(() => tree.mainLine(), [tree, analysis.version]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasMoves = mainLine.length > 0;
+  const isMain = useMemo(() => tree.isMainLine(current), [tree, current]);
+  const reviewedCurrent =
+    isMain && current.ply > 0 ? analysis.review?.moves[current.ply - 1] : undefined;
+  const currentGlyph = current.nags.find((n) => n >= 1 && n <= 6) ?? 0;
+  const siblings = current.parent?.children ?? [];
+  const siblingIndex = siblings.indexOf(current);
 
   const copy = async (text: string, what: string) => {
     try {
@@ -86,6 +182,24 @@ export default function AnalyzePage() {
     }
   };
 
+  const copyLink = async () => {
+    const fragment = await buildShareFragment(
+      hasMoves ? { pgn: analysis.pgn(), ply: isMain ? current.ply : 0 } : { fen: viewed.fen },
+    );
+    const url = `${window.location.origin}${window.location.pathname}#${fragment}`;
+    await copy(url, 'Link');
+  };
+
+  const downloadPgn = () => {
+    const blob = new Blob([analysis.pgn()], { type: 'application/x-chess-pgn' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'analysis.pgn';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const moveLabel = `${viewed.moveNumber}${viewed.turn === 'black' ? '…' : '.'}`;
 
   return (
@@ -93,12 +207,16 @@ export default function AnalyzePage() {
       <div className="page-header row row--between">
         <div>
           <h1>Analysis board</h1>
-          <p>Set up any position, paste a game, and let Stockfish show you the best lines.</p>
+          <p>
+            Set up any position, paste a game, explore variations, and let Stockfish show you the
+            best lines.
+          </p>
         </div>
         <div className="row">
           <Button onClick={() => setShowImport((v) => !v)}>
             {showImport ? 'Close import' : 'Import FEN / PGN'}
           </Button>
+          <Button onClick={() => setEditorOpen(true)}>Board editor</Button>
           <Button variant="ghost" onClick={analysis.reset}>
             Reset board
           </Button>
@@ -107,32 +225,15 @@ export default function AnalyzePage() {
 
       {showImport ? (
         <Card className="analyze__import">
-          <Field
-            label="Paste a FEN or a PGN"
-            hint="Games from Chess Trainer, Lichess or chess.com all work."
-          >
-            {(id) => (
-              <textarea
-                id={id}
-                className="textarea"
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                placeholder={
-                  'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1\n\nor\n\n1. e4 e5 2. Nf3 Nc6 3. Bb5 …'
-                }
-                spellCheck={false}
-              />
-            )}
-          </Field>
-          {importError ? <Alert tone="danger">{importError}</Alert> : null}
-          <div className="row" style={{ marginTop: 12 }}>
-            <Button variant="primary" onClick={doImport}>
-              Load
-            </Button>
-            <Button variant="ghost" onClick={() => setImportText('')}>
-              Clear
-            </Button>
-          </div>
+          <ImportPanel
+            onLoadFen={(fen) => {
+              const ok = analysis.loadFen(fen);
+              if (ok) setOrientation(fen.split(' ')[1] === 'b' ? 'black' : 'white');
+              return ok;
+            }}
+            onLoadPgn={analysis.loadPgn}
+            onDone={() => setShowImport(false)}
+          />
         </Card>
       ) : null}
 
@@ -146,32 +247,46 @@ export default function AnalyzePage() {
       ) : null}
 
       <div className="trainer">
-        <div className="trainer__board" style={{ position: 'relative' }}>
-          <EvalBar
-            score={analysis.engineOn ? score : null}
-            turn={viewed.turn}
-            orientation={orientation}
-            result={result}
-          />
-          <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-            <Board
-              fen={viewed.fen}
+        <div className="analyze__boardcol">
+          <div className="trainer__board" style={{ position: 'relative' }}>
+            <EvalBar
+              score={analysis.engineOn ? score : null}
+              turn={viewed.turn}
               orientation={orientation}
-              turnColor={viewed.turn}
-              movableColor="both"
-              dests={viewed.dests}
-              lastMove={viewed.lastMove}
-              check={viewed.inCheck}
-              autoShapes={analysis.bestMoveShape}
-              onMove={(from, to) => analysis.playMove(from, to)}
-              ariaLabel={`Analysis board, ${viewed.turn} to move`}
+              result={viewed.result}
             />
-            {analysis.game.pendingPromotion ? (
-              <PromotionPicker
-                color={analysis.game.pendingPromotion.color}
-                onSelect={analysis.resolvePromotion}
+            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+              <Board
+                fen={viewed.fen}
+                orientation={orientation}
+                turnColor={viewed.turn}
+                movableColor="both"
+                dests={viewed.dests}
+                lastMove={viewed.lastMove}
+                check={viewed.inCheck}
+                autoShapes={analysis.bestMoveShape}
+                onMove={(from, to) => analysis.playMove(from, to)}
+                ariaLabel={`Analysis board, ${viewed.turn} to move`}
               />
-            ) : null}
+              {analysis.pendingPromotion ? (
+                <PromotionPicker
+                  color={analysis.pendingPromotion.color}
+                  onSelect={analysis.resolvePromotion}
+                />
+              ) : null}
+            </div>
+          </div>
+          <div className="analyze__under">
+            {analysis.opening ? (
+              <span className="analyze__opening" aria-live="polite">
+                <Badge tone="neutral">{analysis.opening.eco}</Badge> {analysis.opening.name}
+              </span>
+            ) : (
+              <span className="analyze__opening muted small">
+                {hasMoves ? 'Out of book' : 'Play moves or import a game to see the opening name.'}
+              </span>
+            )}
+            {settings.moveInput ? <MoveInput onMove={analysis.playNotation} /> : null}
           </div>
         </div>
 
@@ -223,7 +338,7 @@ export default function AnalyzePage() {
             />
             <div style={{ marginTop: 8 }}>
               <EngineStatus
-                name="Stockfish 19 lite"
+                name={analysis.engineName}
                 depth={analysis.depthReached}
                 nps={analysis.nps}
                 thinking={analysis.thinking}
@@ -231,20 +346,66 @@ export default function AnalyzePage() {
             </div>
           </Card>
 
+          {analysis.tablebase.status !== 'off' ? (
+            <Card>
+              <div className="row row--between">
+                <strong>Tablebase</strong>
+                <span className="small muted">Lichess · 7 pieces or fewer</span>
+              </div>
+              {analysis.tablebase.status === 'loading' ? (
+                <p className="small muted" style={{ margin: '6px 0 0' }}>
+                  Looking up…
+                </p>
+              ) : analysis.tablebase.status === 'error' ? (
+                <p className="small muted" style={{ margin: '6px 0 0' }}>
+                  Unavailable: {analysis.tablebase.message}
+                </p>
+              ) : (
+                <>
+                  <p style={{ margin: '6px 0 0' }}>
+                    <strong>{describeCategory(analysis.tablebase.result.category)}</strong> for{' '}
+                    {viewed.turn}
+                    {analysis.tablebase.result.dtm !== null
+                      ? ` · mate in ${Math.abs(analysis.tablebase.result.dtm)}`
+                      : analysis.tablebase.result.dtz !== null &&
+                          analysis.tablebase.result.category !== 'draw'
+                        ? ` · DTZ ${Math.abs(analysis.tablebase.result.dtz)}`
+                        : ''}
+                  </p>
+                  <div className="tablebase__moves">
+                    {analysis.tablebase.result.moves.slice(0, 12).map((m) => (
+                      <button
+                        type="button"
+                        key={m.uci}
+                        className={`tablebase__move tablebase__move--${categoryClass(m.outcome)}`}
+                        onClick={() => analysis.playUci(m.uci)}
+                        title={`${describeCategory(m.outcome)}${m.dtm !== null ? `, mate in ${Math.abs(m.dtm)}` : m.dtz !== null ? `, DTZ ${Math.abs(m.dtz)}` : ''}`}
+                      >
+                        {m.san}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </Card>
+          ) : null}
+
           <Card>
-            <MoveNavigation
-              currentPly={viewPly}
-              total={moves.length}
-              onSelectPly={analysis.setViewPly}
+            <TreeNavigation
+              canBack={current.parent !== null}
+              canForward={current.children.length > 0}
+              onStart={analysis.goStart}
+              onBack={analysis.back}
+              onForward={analysis.forward}
+              onEnd={analysis.goEnd}
             />
             <div style={{ marginTop: 8 }}>
-              <MoveList
-                moves={moves}
-                currentPly={viewPly}
-                onSelectPly={analysis.setViewPly}
-                judgements={judgements}
-                startMoveNumber={Number(analysis.game.position.startFen.split(' ')[5] ?? 1)}
-                startsWithBlack={analysis.game.position.startFen.split(' ')[1] === 'b'}
+              <TreeMoveList
+                tree={tree}
+                version={analysis.version}
+                current={current}
+                onSelect={analysis.goTo}
+                judgements={analysis.judgements}
               />
             </div>
             {reviewedCurrent &&
@@ -268,8 +429,87 @@ export default function AnalyzePage() {
                     Better was <strong>{reviewedCurrent.best}</strong>.
                   </>
                 ) : null}
+                {current.parent ? (
+                  <>
+                    {' '}
+                    <Link
+                      to={`/play?fen=${encodeURIComponent(current.parent.fen)}&color=${reviewedCurrent.mover}`}
+                    >
+                      Retry from here vs the engine
+                    </Link>
+                  </>
+                ) : null}
               </Alert>
             ) : null}
+
+            {current.parent ? (
+              <div className="analyze__nodetools">
+                <div className="row row--between">
+                  <span className="small muted">
+                    {isMain ? 'Main line' : 'Variation'} · move {current.san}
+                  </span>
+                  <Segmented
+                    ariaLabel="Annotate move"
+                    value={currentGlyph}
+                    options={GLYPH_OPTIONS}
+                    onChange={(nag) => analysis.setGlyph(nag === 0 ? null : nag)}
+                  />
+                </div>
+                <div className="row" style={{ marginTop: 8 }}>
+                  {!isMain ? (
+                    <Button size="sm" onClick={() => analysis.makeMainLine()}>
+                      Make main line
+                    </Button>
+                  ) : null}
+                  {siblingIndex > 0 ? (
+                    <Button size="sm" onClick={() => analysis.promoteVariation()}>
+                      Move up
+                    </Button>
+                  ) : null}
+                  <Button size="sm" onClick={() => setCommentDraft(current.comment ?? '')}>
+                    {current.comment ? 'Edit comment' : 'Add comment'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={analysis.deleteFromHere}
+                    disabled={current.children.length === 0}
+                  >
+                    Delete after
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => analysis.deleteVariation()}>
+                    {isMain && siblings.length === 1 ? 'Delete from here' : 'Delete variation'}
+                  </Button>
+                </div>
+                {commentDraft !== null ? (
+                  <div className="stack" style={{ marginTop: 8 }}>
+                    <textarea
+                      className="textarea"
+                      rows={2}
+                      value={commentDraft}
+                      onChange={(e) => setCommentDraft(e.target.value)}
+                      aria-label="Comment on this move"
+                      placeholder="Why this move? What is the plan?"
+                    />
+                    <div className="row">
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => {
+                          analysis.setComment(commentDraft);
+                          setCommentDraft(null);
+                        }}
+                      >
+                        Save comment
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setCommentDraft(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="row" style={{ marginTop: 12 }}>
               <Button
                 size="sm"
@@ -282,60 +522,267 @@ export default function AnalyzePage() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => void copy(analysis.game.pgn(), 'PGN')}
-                disabled={moves.length === 0}
+                onClick={() => void copy(analysis.pgn(), 'PGN')}
+                disabled={!hasMoves}
               >
                 Copy PGN
               </Button>
+              <Button size="sm" onClick={downloadPgn} disabled={!hasMoves}>
+                Download PGN
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => void copyLink()}
+                title="Copy a link that opens this game or position here"
+              >
+                Copy link
+              </Button>
+              <LinkButton
+                size="sm"
+                to={`/play?fen=${encodeURIComponent(viewed.fen)}&color=${viewed.turn}`}
+                title="Play this position against the engine"
+              >
+                Play from here
+              </LinkButton>
             </div>
           </Card>
 
           <Card>
             <div className="row row--between">
               <strong>Game review</strong>
-              {analysis.reviewProgress === null ? (
-                <Button
-                  size="sm"
-                  variant="primary"
-                  onClick={analysis.startReview}
-                  disabled={moves.length === 0 || analysis.engineStatus !== 'ready'}
-                >
-                  {analysis.review ? 'Review again' : 'Review game'}
-                </Button>
-              ) : (
-                <Button size="sm" variant="ghost" onClick={analysis.cancelReview}>
-                  Cancel
-                </Button>
-              )}
+              <div className="row">
+                {analysis.reviewProgress === null ? (
+                  <label className="small muted">
+                    Depth{' '}
+                    <select
+                      className="select analyze__mini"
+                      value={settings.reviewDepth}
+                      onChange={(e) =>
+                        settings.update({ reviewDepth: e.target.value as ReviewDepth })
+                      }
+                      aria-label="Review depth"
+                    >
+                      <option value="fast">fast</option>
+                      <option value="balanced">balanced</option>
+                      <option value="thorough">thorough</option>
+                    </select>
+                  </label>
+                ) : null}
+                {analysis.reviewProgress === null ? (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={analysis.startReview}
+                    disabled={!hasMoves || analysis.engineStatus !== 'ready'}
+                  >
+                    {analysis.review ? 'Review again' : 'Review game'}
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="ghost" onClick={analysis.cancelReview}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
             </div>
             {analysis.reviewProgress !== null ? (
               <div style={{ marginTop: 8 }}>
                 <ProgressBar value={analysis.reviewProgress} label="Review progress" />
                 <p className="small muted" style={{ margin: '6px 0 0' }}>
                   Evaluating every position… {Math.round(analysis.reviewProgress * 100)}%
+                  {analysis.reviewEtaMs !== null
+                    ? ` · about ${Math.max(1, Math.round(analysis.reviewEtaMs / 1000))} s left`
+                    : ''}
                 </p>
               </div>
             ) : null}
-            {analysis.review ? <ReviewSummaryView review={analysis.review} /> : null}
+            {analysis.review ? (
+              <>
+                <div style={{ marginTop: 8 }}>
+                  <EvalGraph
+                    wins={analysis.review.wins}
+                    judgements={analysis.review.moves.map((m) => m.judgement)}
+                    currentPly={isMain ? current.ply : 0}
+                    onSelect={analysis.goToPly}
+                    startMoveNumber={Number(tree.startFen.split(' ')[5] ?? 1)}
+                    startsWithBlack={tree.startFen.split(' ')[1] === 'b'}
+                  />
+                </div>
+                <ReviewSummaryView review={analysis.review} />
+                <KeyMoments
+                  review={analysis.review}
+                  currentPly={isMain ? current.ply : 0}
+                  onSelect={analysis.goToPly}
+                  startMoveNumber={Number(tree.startFen.split(' ')[5] ?? 1)}
+                  startsWithBlack={tree.startFen.split(' ')[1] === 'b'}
+                  line={mainLineOf(tree)}
+                  meta={{
+                    title: gameTitle(tree.headers),
+                    url: /^https?:\/\//.test(tree.headers.Site ?? '')
+                      ? tree.headers.Site
+                      : undefined,
+                    rating: ownPuzzleRating,
+                  }}
+                />
+              </>
+            ) : null}
             {!analysis.review && analysis.reviewProgress === null ? (
               <p className="small muted" style={{ margin: '8px 0 0' }}>
-                Finds inaccuracies, mistakes and blunders for both sides and shows the better move.
-                Play a game against the engine, then hit <Link to="/play">Analyze game</Link>, or
-                paste a PGN above.
+                Finds inaccuracies, mistakes and blunders along the main line and shows the better
+                move. Play a game against the engine, then hit <Link to="/play">Analyze game</Link>,
+                or paste a PGN above.
               </p>
             ) : null}
           </Card>
         </aside>
       </div>
+
+      <Dialog open={editorOpen} onClose={() => setEditorOpen(false)} title="Board editor" wide>
+        {editorOpen ? (
+          <BoardEditor
+            initialFen={viewed.fen}
+            onApply={(fen) => {
+              if (analysis.loadFen(fen)) {
+                setEditorOpen(false);
+                setOrientation(fen.split(' ')[1] === 'b' ? 'black' : 'white');
+              } else {
+                toast('That position could not be loaded.', { tone: 'warning' });
+              }
+            }}
+            onCancel={() => setEditorOpen(false)}
+          />
+        ) : null}
+      </Dialog>
     </div>
   );
 }
 
-function ReviewSummaryView({
+/** The main line as positions and moves, for turning mistakes into puzzles. */
+function mainLineOf(tree: {
+  startFen: string;
+  mainLine: () => { fen: string; san: string }[];
+}): MainLine {
+  const nodes = tree.mainLine();
+  return { fens: [tree.startFen, ...nodes.map((n) => n.fen)], sans: nodes.map((n) => n.san) };
+}
+
+function KeyMoments({
   review,
+  currentPly,
+  onSelect,
+  startMoveNumber,
+  startsWithBlack,
+  line,
+  meta,
 }: {
-  review: NonNullable<ReturnType<typeof useAnalysis>['review']>;
+  review: ReviewSummary;
+  currentPly: number;
+  onSelect: (ply: number) => void;
+  startMoveNumber: number;
+  startsWithBlack: boolean;
+  line: MainLine;
+  meta: OwnPuzzleMeta;
 }) {
+  const ownPuzzles = useProgress((s) => s.ownPuzzles);
+  const addOwnPuzzles = useProgress((s) => s.addOwnPuzzles);
+  const moments = keyMoments(review);
+  const candidates = useMemo(
+    () => ownPuzzlesFromReview(line, review, meta, { includeInaccuracies: true }),
+    // meta is rebuilt on every render by the caller; its fields are what matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [line, review, meta.title, meta.url, meta.rating],
+  );
+  const newCandidates = candidates.filter((p) => !ownPuzzles[p.id]);
+  if (moments.length === 0) {
+    return (
+      <p className="small muted" style={{ margin: '8px 0 0' }}>
+        No mistakes found along the main line — nicely played.
+      </p>
+    );
+  }
+  const label = (ply: number) => {
+    const index = ply - 1 + (startsWithBlack ? 1 : 0);
+    return `${startMoveNumber + Math.floor(index / 2)}${index % 2 === 0 ? '.' : '…'}`;
+  };
+  const addOne = (ply: number) => {
+    const moment = review.moves.find((m) => m.ply === ply);
+    const puzzle = moment ? ownPuzzleFromMoment(line, moment, meta) : null;
+    if (!puzzle) {
+      toast('That moment cannot become a puzzle (no better move to find).', { tone: 'warning' });
+      return;
+    }
+    const added = addOwnPuzzles([puzzle]);
+    toast(
+      added ? 'Added to My puzzles — find it under Puzzles → Mine.' : 'Already in My puzzles.',
+      { tone: added ? 'success' : 'info' },
+    );
+  };
+  const addAll = () => {
+    const added = addOwnPuzzles(newCandidates);
+    toast(
+      added
+        ? `Added ${added} puzzle${added === 1 ? '' : 's'} from this game — Puzzles → Mine.`
+        : 'Every mistake of this game is already in My puzzles.',
+      { tone: added ? 'success' : 'info' },
+    );
+  };
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div className="row row--between">
+        <p className="small muted" style={{ margin: 0 }}>
+          Key moments — click to jump there:
+        </p>
+        {candidates.length > 0 ? (
+          <Button size="sm" onClick={addAll} disabled={newCandidates.length === 0}>
+            {newCandidates.length === 0
+              ? 'All saved as puzzles'
+              : `Add ${newCandidates.length} as puzzle${newCandidates.length === 1 ? '' : 's'}`}
+          </Button>
+        ) : null}
+      </div>
+      <ol className="moments">
+        {moments.map((m) => {
+          const moment = review.moves.find((r) => r.ply === m.ply);
+          const puzzle = moment ? ownPuzzleFromMoment(line, moment, meta) : null;
+          const saved = puzzle ? !!ownPuzzles[puzzle.id] : false;
+          return (
+            <li key={m.ply} className="moments__row">
+              <button
+                type="button"
+                className="moments__item"
+                onClick={() => onSelect(m.ply)}
+                aria-current={currentPly === m.ply ? 'true' : undefined}
+              >
+                <span className={`moments__move moments__move--${m.judgement ?? 'good'}`}>
+                  {label(m.ply)} {m.san}
+                </span>
+                <span className="small">
+                  {m.judgement === 'inaccuracy' ? 'an inaccuracy' : `a ${m.judgement}`} by {m.mover}
+                  {m.best ? ` — better was ${m.best}` : ''}
+                </span>
+                <span className="small faint">−{Math.round(m.loss * 100)}%</span>
+              </button>
+              {puzzle ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon
+                  aria-label={saved ? 'Saved as a puzzle' : 'Add to my puzzles'}
+                  title={saved ? 'Saved as a puzzle' : 'Add to my puzzles'}
+                  disabled={saved}
+                  onClick={() => addOne(m.ply)}
+                >
+                  {saved ? '✓' : '+'}
+                </Button>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+function ReviewSummaryView({ review }: { review: ReviewSummary }) {
   const rows: { label: string; side: 'white' | 'black' }[] = [
     { label: 'White', side: 'white' },
     { label: 'Black', side: 'black' },

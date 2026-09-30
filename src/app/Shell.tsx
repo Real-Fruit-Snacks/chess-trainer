@@ -1,22 +1,70 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Spinner } from '@/components/ui';
 import { Toasts } from '@/components/ui/toast';
 import { siteConfig } from '@/site.config';
 import { useSettings } from '@/store/settings';
 import { InstallButton } from './InstallPrompt';
+import { ShortcutsDialog } from './ShortcutsDialog';
 import { UpdatePrompt } from './UpdatePrompt';
-import { useColorScheme } from './theme';
+import { useColorScheme, usePieceSet } from './theme';
+import { useShortcutsDialog } from './useShortcutsDialog';
 import './shell.css';
 
-const NAV = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: string;
+  end?: boolean;
+  /** Short explanation shown in the "More" menus. */
+  blurb?: string;
+}
+
+/** Desktop header links. */
+const DESKTOP_NAV: NavItem[] = [
+  { to: '/learn', label: 'Learn', icon: '📖' },
+  { to: '/puzzles', label: 'Puzzles', icon: '🧩' },
+  { to: '/drills', label: 'Drills', icon: '🎯' },
+  { to: '/openings', label: 'Openings', icon: '📚' },
+  { to: '/play', label: 'Play', icon: '♞' },
+  { to: '/analyze', label: 'Analyze', icon: '🔍' },
+  { to: '/progress', label: 'Progress', icon: '📈' },
+];
+
+/** Extra sections behind the desktop "More" menu. */
+const DESKTOP_MORE: NavItem[] = [
+  { to: '/games', label: 'My games', icon: '🗂', blurb: 'Your openings, deviations and mistakes' },
+  {
+    to: '/studies',
+    label: 'Endgame studies',
+    icon: '♔',
+    blurb: 'Composed positions with one solution',
+  },
+  { to: '/classics', label: 'Classic games', icon: '🏛', blurb: 'Guess the moves of famous games' },
+  { to: '/reference', label: 'Reference', icon: '📘', blurb: 'Rules, notation and glossary' },
+];
+
+/** Mobile bottom bar. */
+const MOBILE_NAV: NavItem[] = [
   { to: '/', label: 'Home', icon: '⌂', end: true },
   { to: '/learn', label: 'Learn', icon: '📖' },
   { to: '/puzzles', label: 'Puzzles', icon: '🧩' },
   { to: '/play', label: 'Play', icon: '♞' },
-  { to: '/analyze', label: 'Analyze', icon: '🔍' },
-  { to: '/progress', label: 'Progress', icon: '📈' },
-] as const;
+];
+
+/** Everything else, in the mobile "More" sheet. */
+const MOBILE_MORE: NavItem[] = [
+  { to: '/analyze', label: 'Analyze', icon: '🔍', blurb: 'Engine analysis board' },
+  { to: '/drills', label: 'Drills', icon: '🎯', blurb: 'Coordinates, vision and endgames' },
+  { to: '/openings', label: 'Openings', icon: '📚', blurb: 'Repertoire trainer' },
+  { to: '/games', label: 'My games', icon: '🗂', blurb: 'Openings and mistakes from your games' },
+  { to: '/studies', label: 'Endgame studies', icon: '♔', blurb: 'Find the only move' },
+  { to: '/classics', label: 'Classic games', icon: '🏛', blurb: 'Guess the move' },
+  { to: '/reference', label: 'Reference', icon: '📘', blurb: 'Rules, notation, glossary' },
+  { to: '/progress', label: 'Progress', icon: '📈', blurb: 'Stats, backups and settings' },
+];
+
+const MORE_PATHS = new Set([...DESKTOP_MORE, ...MOBILE_MORE].map((i) => i.to));
 
 function Logo() {
   return (
@@ -52,9 +100,101 @@ function ThemeToggle() {
   );
 }
 
+/** A "More" button with a dropdown (desktop) or bottom sheet (mobile) of extra sections. */
+function MoreMenu({
+  items,
+  variant,
+  active,
+}: {
+  items: NavItem[];
+  variant: 'dropdown' | 'sheet';
+  active: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+
+  // Close on navigation, outside click and Escape.
+  useEffect(() => setOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className={`more more--${variant}`} ref={ref}>
+      <button
+        type="button"
+        className={
+          variant === 'dropdown'
+            ? `shell__navlink${active ? ' is-active' : ''}`
+            : `shell__bottomlink${active ? ' is-active' : ''}`
+        }
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {variant === 'sheet' ? (
+          <span className="shell__bottomicon" aria-hidden="true">
+            ⋯
+          </span>
+        ) : null}
+        <span>More{variant === 'dropdown' ? ' ▾' : ''}</span>
+      </button>
+      {open ? (
+        <div className="more__menu" role="menu" aria-label="More sections">
+          {items.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              role="menuitem"
+              className={({ isActive }) => `more__item${isActive ? ' is-active' : ''}`}
+            >
+              <span className="more__icon" aria-hidden="true">
+                {item.icon}
+              </span>
+              <span className="more__text">
+                <span className="more__label">{item.label}</span>
+                {item.blurb ? <span className="more__blurb">{item.blurb}</span> : null}
+              </span>
+            </NavLink>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Shell() {
   useColorScheme();
+  usePieceSet();
   const location = useLocation();
+  const section = `/${location.pathname.split('/')[1] ?? ''}`;
+  const inMore = MORE_PATHS.has(section);
+  const shortcuts = useShortcutsDialog();
+  const mainRef = useRef<HTMLElement>(null);
+
+  // After in-app navigation, move keyboard focus (and the screen reader's
+  // reading position) to the new page rather than leaving it on the old link.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    mainRef.current?.focus({ preventScroll: true });
+  }, [location.pathname]);
 
   return (
     <div className="shell">
@@ -68,16 +208,21 @@ export function Shell() {
             <span>{siteConfig.name}</span>
           </NavLink>
           <nav className="shell__nav" aria-label="Primary">
-            {NAV.map((item) => (
+            {DESKTOP_NAV.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={'end' in item && item.end}
+                end={item.end}
                 className={({ isActive }) => `shell__navlink${isActive ? ' is-active' : ''}`}
               >
                 {item.label}
               </NavLink>
             ))}
+            <MoreMenu
+              items={DESKTOP_MORE}
+              variant="dropdown"
+              active={DESKTOP_MORE.some((i) => i.to === section)}
+            />
           </nav>
           <div className="shell__actions">
             <div className="shell__install">
@@ -88,7 +233,7 @@ export function Shell() {
         </div>
       </header>
 
-      <main id="main" className="shell__main container" tabIndex={-1}>
+      <main id="main" className="shell__main container" tabIndex={-1} ref={mainRef}>
         <Suspense
           fallback={
             <div className="shell__loading">
@@ -110,17 +255,21 @@ export function Shell() {
           </span>
           <span className="faint">
             Engine: Stockfish · Board: Chessground · Puzzles: Lichess (CC0) · Runs entirely in your
-            browser
+            browser ·{' '}
+            <button type="button" className="linklike" onClick={() => shortcuts.setOpen(true)}>
+              Keyboard shortcuts
+            </button>
           </span>
         </div>
       </footer>
+      <ShortcutsDialog open={shortcuts.open} onClose={() => shortcuts.setOpen(false)} />
 
       <nav className="shell__bottomnav" aria-label="Primary (mobile)">
-        {NAV.map((item) => (
+        {MOBILE_NAV.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
-            end={'end' in item && item.end}
+            end={item.end}
             className={({ isActive }) => `shell__bottomlink${isActive ? ' is-active' : ''}`}
           >
             <span className="shell__bottomicon" aria-hidden="true">
@@ -129,6 +278,7 @@ export function Shell() {
             <span>{item.label}</span>
           </NavLink>
         ))}
+        <MoreMenu items={MOBILE_MORE} variant="sheet" active={inMore} />
       </nav>
 
       <Toasts />

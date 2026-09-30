@@ -86,6 +86,15 @@ export function uciLineToSan(fen: Fen, line: Uci[]): San[] {
   return sans;
 }
 
+const UCI_RE = /^[a-h][1-8][a-h][1-8][qrbn]?$/i;
+
+/** Plays a move given either as SAN ("Nf3") or UCI ("g1f3"); null when illegal. */
+export function tryNotation(chess: Chess, notation: string): Move | null {
+  const trimmed = notation.trim();
+  if (UCI_RE.test(trimmed)) return tryMove(chess, parseUci(trimmed.toLowerCase()));
+  return tryMove(chess, trimmed);
+}
+
 export function sanToUci(fen: Fen, san: San): Uci | null {
   const chess = new Chess(fen);
   const move = tryMove(chess, san);

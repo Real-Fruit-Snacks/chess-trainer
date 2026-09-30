@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { renderInline } from './inline';
+import './lesson-text.css';
 
 /**
  * Renders the tiny markdown subset used in lesson content: paragraphs, "- "

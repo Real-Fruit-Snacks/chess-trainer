@@ -138,25 +138,6 @@
   color: var(--accent-contrast);
 }
 
-.lesson__text {
-  font-size: 1rem;
-  line-height: 1.6;
-}
-
-.lesson__text p {
-  margin-bottom: var(--space-3);
-}
-
-.lesson__text ul,
-.lesson__text ol {
-  margin: 0 0 var(--space-3);
-  padding-left: 1.3em;
-}
-
-.lesson__text li + li {
-  margin-top: 4px;
-}
-
 .lesson__task {
   border-left: 3px solid var(--accent);
   padding: var(--space-2) var(--space-3);
@@ -183,4 +164,124 @@
 
 .lesson__complete h2 {
   margin-bottom: var(--space-2);
+}
+
+/* ---------- Courses ---------- */
+.learn__courses {
+  margin-bottom: var(--space-6);
+}
+
+.learn__course {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.course__summary {
+  margin-bottom: var(--space-5);
+}
+
+.course__units {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.course__unit {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: var(--space-4);
+}
+
+.course__unit.is-locked {
+  opacity: 0.75;
+}
+
+.course__unit-header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.course__unit-header h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.course__unit-header p {
+  margin: 2px 0 0;
+}
+
+.course__unit-number {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.course__unit.is-done .course__unit-number {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: transparent;
+}
+
+.course__lock {
+  margin-left: auto;
+}
+
+.course__items {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.course__item {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+}
+
+.course__item:hover {
+  background: var(--surface-2);
+}
+
+.course__item.is-done .course__item-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.course__check {
+  flex: none;
+  width: 1.4em;
+  text-align: center;
+  color: var(--success);
+  font-weight: 700;
+}
+
+.course__item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.course__item-title {
+  font-weight: 600;
 }

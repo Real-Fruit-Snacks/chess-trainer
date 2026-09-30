@@ -1,0 +1,106 @@
+import { useEffect, useState } from 'react';
+import { Badge, Button } from '@/components/ui';
+import { detectThreadEnvironment } from '@/engine/build';
+import { EngineClient, isEngineSupported } from '@/engine/EngineClient';
+import { engineOptionsFromSettings } from '@/engine/useEngine';
+import { readIsolationFlag } from '@/sw/isolation';
+import { useSettings } from '@/store/settings';
+import {
+  type Benchmark,
+  benchmarkEngine,
+  describeBenchmark,
+  diagnosticRows,
+} from './engineDiagnostics';
+
+/**
+ * "Is the engine working, and how fast?" — the environment facts behind the
+ * threads setting, plus a one-click benchmark that boots a fresh engine,
+ * searches the initial position and reports nodes per second.
+ */
+export function EngineDiagnostics() {
+  const wantThreads = useSettings((s) => s.engineThreads);
+  const [flag, setFlag] = useState<boolean | null>(null);
+  const [tick, setTick] = useState(0);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<Benchmark | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readIsolationFlag().then((stored) => {
+      if (!cancelled) setFlag(stored);
+    });
+    const sw = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;
+    const onChange = () => setTick((t) => t + 1);
+    sw?.addEventListener('controllerchange', onChange);
+    return () => {
+      cancelled = true;
+      sw?.removeEventListener('controllerchange', onChange);
+    };
+  }, []);
+
+  const rows = diagnosticRows({
+    env: detectThreadEnvironment(),
+    wantThreads,
+    workers: typeof Worker !== 'undefined',
+    wasm: typeof WebAssembly === 'object',
+    serviceWorkerControlled:
+      typeof navigator !== 'undefined' && !!navigator.serviceWorker?.controller,
+    isolationFlag: flag,
+  });
+  void tick;
+
+  const runBenchmark = async () => {
+    setRunning(true);
+    setError(null);
+    setResult(null);
+    const engine = new EngineClient(engineOptionsFromSettings());
+    try {
+      setResult(await benchmarkEngine(engine));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      engine.terminate();
+      setRunning(false);
+    }
+  };
+
+  return (
+    <details className="settings__diagnostics" data-testid="engine-diagnostics">
+      <summary>Engine diagnostics</summary>
+      <dl className="diagnostics">
+        {rows.map((row) => (
+          <div className="diagnostics__row" key={row.label}>
+            <dt>{row.label}</dt>
+            <dd>
+              <Badge
+                tone={row.tone === 'good' ? 'success' : row.tone === 'warn' ? 'warning' : 'neutral'}
+              >
+                {row.value}
+              </Badge>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div className="row" style={{ marginTop: 8 }}>
+        <Button
+          size="sm"
+          onClick={() => void runBenchmark()}
+          loading={running}
+          disabled={running || !isEngineSupported()}
+        >
+          Test the engine
+        </Button>
+        <span className="small muted" role="status" data-testid="engine-benchmark">
+          {running
+            ? 'Searching the initial position…'
+            : error
+              ? `The engine failed: ${error}`
+              : result
+                ? describeBenchmark(result)
+                : 'Runs a short search and reports the speed.'}
+        </span>
+      </div>
+    </details>
+  );
+}

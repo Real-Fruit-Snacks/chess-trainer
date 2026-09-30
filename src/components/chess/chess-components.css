@@ -264,3 +264,308 @@
   align-items: center;
   gap: 6px;
 }
+
+/* ---------- Clock ---------- */
+.clock {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  min-width: 4.5em;
+  text-align: center;
+}
+
+.clock--running {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.clock--low {
+  color: var(--danger);
+}
+
+.clock--running.clock--low {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 25%, transparent);
+}
+
+/* ---------- Move input ---------- */
+.moveinput {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.moveinput .input {
+  font-family: var(--font-mono);
+  flex: 1;
+  min-width: 0;
+}
+
+.moveinput__error {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+/* ---------- Tree move list (variations) ---------- */
+.treemoves {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  line-height: 1.9;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+.treemoves__move {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 0 1px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  transition: background var(--transition);
+  white-space: nowrap;
+}
+
+.treemoves__move:hover {
+  background: var(--surface-2);
+}
+
+.treemoves__move--current,
+.treemoves__move[aria-current='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.treemoves__move--blunder {
+  color: var(--danger);
+}
+
+.treemoves__move--mistake {
+  color: var(--warning);
+}
+
+.treemoves__move--inaccuracy {
+  color: var(--info);
+}
+
+.treemoves__number {
+  color: var(--text-faint);
+  margin-right: 3px;
+  font-weight: 400;
+}
+
+.treemoves__glyph {
+  font-size: 0.8em;
+  margin-left: 1px;
+}
+
+.treemoves__comment {
+  font-family: var(--font-sans);
+  font-style: italic;
+  color: var(--text-muted);
+  margin: 0 4px;
+}
+
+.treemoves__variations {
+  display: block;
+  margin: 2px 0 2px calc(var(--depth, 1) * 10px);
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border);
+  font-size: 0.85em;
+  line-height: 1.8;
+}
+
+.treemoves__variation {
+  display: block;
+}
+
+.treemoves__variation .treemoves__move {
+  color: var(--text-muted);
+}
+
+.treemoves__variation .treemoves__move--current {
+  color: var(--accent-strong);
+}
+
+.treemoves__paren {
+  color: var(--text-faint);
+}
+
+.movenav__hint {
+  margin-left: var(--space-2);
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .movenav__hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+}
+
+/* ---------- Tablebase ---------- */
+.tablebase__moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.tablebase__move {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.tablebase__move:hover {
+  background: var(--surface-2);
+}
+
+.tablebase__move--win {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.tablebase__move--draw {
+  border-color: var(--border-strong);
+}
+
+.tablebase__move--loss {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---------- Evaluation graph ---------- */
+.evalgraph {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+}
+
+.evalgraph:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.evalgraph__bg {
+  fill: var(--eval-black);
+}
+
+.evalgraph__area {
+  fill: var(--eval-white);
+  opacity: 0.9;
+}
+
+.evalgraph__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.evalgraph__mid {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.evalgraph__cursor {
+  stroke: var(--info);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.evalgraph__marker {
+  stroke: #fff;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.evalgraph__marker--blunder {
+  fill: var(--danger);
+}
+
+.evalgraph__marker--mistake {
+  fill: var(--warning);
+}
+
+.evalgraph__marker--inaccuracy {
+  fill: var(--info);
+}
+
+/* ---------- Key moments ---------- */
+.moments {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.moments__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.moments__row .moments__item {
+  flex: 1;
+  min-width: 0;
+}
+
+.moments__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: var(--text);
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.moments__item:hover,
+.moments__item[aria-current='true'] {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.moments__move {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.moments__move--blunder {
+  color: var(--danger);
+}
+
+.moments__move--mistake {
+  color: var(--warning);
+}
+
+.moments__move--inaccuracy {
+  color: var(--info);
+}

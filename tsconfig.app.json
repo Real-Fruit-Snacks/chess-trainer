@@ -6,7 +6,6 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "types": ["vite/client", "vite-plugin-pwa/react", "vite-plugin-pwa/info"],
-
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -20,11 +19,11 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true,
-
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/sw.ts"]
 }

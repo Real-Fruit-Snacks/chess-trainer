@@ -4,6 +4,7 @@ playwright-report
 test-results
 public/engine
 public/puzzles/*.json
+public/openings/*.json
 dev-dist
 package-lock.json
 CHANGELOG.md

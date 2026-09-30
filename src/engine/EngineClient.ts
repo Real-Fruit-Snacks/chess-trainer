@@ -1,4 +1,5 @@
 import type { Fen, Uci } from '@/chess/types';
+import { describeEngine, ENGINE_BUILD_URLS, type EngineBuild } from './build';
 import { type BestMove, parseBestMove, parseInfo, type SearchInfo } from './uci';
 
 export interface SearchParams {
@@ -33,15 +34,22 @@ export interface SearchHandle {
 export type EngineStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface EngineOptions {
-  /** URL of the engine's worker script. Defaults to the bundled Stockfish build. */
+  /** URL of the engine's worker script. Defaults to the bundled Stockfish build for `build`. */
   workerUrl?: string;
+  /**
+   * Which Stockfish build to load. `multi` needs a cross-origin-isolated page;
+   * when it fails to start the client silently falls back to `single`.
+   */
+  build?: EngineBuild;
+  /** Search threads for the `multi` build (ignored for `single`). */
+  threads?: number;
   /** Milliseconds to wait for `uciok` before giving up. */
   initTimeoutMs?: number;
   /** Hash table size in MB. */
   hashMb?: number;
 }
 
-export const DEFAULT_ENGINE_URL = `${import.meta.env.BASE_URL}engine/stockfish-19-lite-single.js`;
+export const DEFAULT_ENGINE_URL = ENGINE_BUILD_URLS.single;
 
 export class EngineUnsupportedError extends Error {
   constructor(
@@ -63,10 +71,9 @@ export function isEngineSupported(): boolean {
  * stops the previous one first (its promise resolves with `stopped: true`).
  */
 export class EngineClient {
-  readonly name: string = 'Stockfish';
   private worker: Worker | null = null;
   private lineListeners = new Set<(line: string) => void>();
-  private readonly options: Required<EngineOptions>;
+  private readonly options: Required<Omit<EngineOptions, 'workerUrl'>> & { workerUrl?: string };
   private readyPromise: Promise<void> | null = null;
   private queue: Promise<unknown> = Promise.resolve();
   private current: { id: number; stop: () => void } | null = null;
@@ -76,13 +83,27 @@ export class EngineClient {
 
   status: EngineStatus = 'idle';
   error: Error | null = null;
+  /** The build that is actually running (may differ from the requested one after a fallback). */
+  build: EngineBuild;
+  /** Search threads in use. */
+  threads = 1;
+  /** True when the threaded build was requested but the single-threaded one had to be used. */
+  fellBack = false;
 
   constructor(options: EngineOptions = {}) {
     this.options = {
-      workerUrl: options.workerUrl ?? DEFAULT_ENGINE_URL,
+      workerUrl: options.workerUrl,
+      build: options.build ?? 'single',
+      threads: Math.max(1, Math.floor(options.threads ?? 1)),
       initTimeoutMs: options.initTimeoutMs ?? 30_000,
       hashMb: options.hashMb ?? 16,
     };
+    this.build = this.options.build;
+  }
+
+  /** Human-readable name for status lines, e.g. "Stockfish 19 · 4 threads". */
+  get name(): string {
+    return describeEngine(this.build, this.threads);
   }
 
   /** Boots the worker and completes the UCI handshake. Safe to call repeatedly. */
@@ -99,37 +120,74 @@ export class EngineClient {
       throw this.error;
     }
     this.status = 'loading';
+    const requested = this.options.build;
     try {
-      const worker = new Worker(this.options.workerUrl);
-      this.worker = worker;
-      worker.onmessage = (event: MessageEvent<unknown>) => {
-        const data = event.data;
-        if (typeof data !== 'string') return;
-        for (const listener of this.lineListeners) listener(data);
-      };
-      const failure = new Promise<never>((_, reject) => {
-        worker.onerror = (event) => {
-          reject(new Error(`Engine worker failed to load: ${event.message || 'unknown error'}`));
-        };
-      });
+      await this.bootBuild(requested);
+    } catch (err) {
+      if (requested !== 'multi' || this.terminated) this.fail(err);
+      // Threads are an optimisation: never let them stop the engine from starting.
+      console.warn(
+        'Threaded engine failed to start; falling back to the single-threaded build.',
+        err,
+      );
+      this.fellBack = true;
+      try {
+        await this.bootBuild('single');
+      } catch (fallbackErr) {
+        this.fail(fallbackErr);
+      }
+    }
+    this.status = 'ready';
+  }
 
+  private fail(err: unknown): never {
+    this.status = 'error';
+    this.error = err instanceof Error ? err : new Error(String(err));
+    this.worker?.terminate();
+    this.worker = null;
+    throw this.error;
+  }
+
+  /** Starts a worker for `build` and completes the UCI handshake. */
+  private async bootBuild(build: EngineBuild): Promise<void> {
+    this.worker?.terminate();
+    this.worker = null;
+    this.build = build;
+    this.threads = build === 'multi' ? this.options.threads : 1;
+    const url =
+      build === this.options.build && this.options.workerUrl
+        ? this.options.workerUrl
+        : ENGINE_BUILD_URLS[build];
+
+    const worker = new Worker(url);
+    this.worker = worker;
+    worker.onmessage = (event: MessageEvent<unknown>) => {
+      const data = event.data;
+      if (typeof data !== 'string') return;
+      for (const listener of this.lineListeners) listener(data);
+    };
+    const failure = new Promise<never>((_, reject) => {
+      worker.onerror = (event) => {
+        reject(new Error(`Engine worker failed to load: ${event.message || 'unknown error'}`));
+      };
+    });
+
+    try {
       await Promise.race([
         (async () => {
           this.send('uci');
           await this.waitFor((line) => line === 'uciok', this.options.initTimeoutMs);
+          if (build === 'multi') this.send(`setoption name Threads value ${this.threads}`);
           this.send(`setoption name Hash value ${this.options.hashMb}`);
           this.send('isready');
           await this.waitFor((line) => line === 'readyok', this.options.initTimeoutMs);
         })(),
         failure,
       ]);
-      this.status = 'ready';
     } catch (err) {
-      this.status = 'error';
-      this.error = err instanceof Error ? err : new Error(String(err));
-      this.worker?.terminate();
-      this.worker = null;
-      throw this.error;
+      worker.terminate();
+      if (this.worker === worker) this.worker = null;
+      throw err;
     }
   }
 

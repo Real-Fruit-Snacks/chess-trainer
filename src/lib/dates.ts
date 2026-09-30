@@ -25,3 +25,26 @@ export function formatDuration(ms: number): string {
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
+
+/**
+ * Current and best streak of consecutive training days. The current streak
+ * survives until the end of the day after the last training day, so a
+ * learner who trained yesterday still sees their streak this morning.
+ */
+export function trainingStreak(
+  days: readonly string[],
+  today: string = localDateKey(),
+): { current: number; best: number } {
+  const sorted = [...new Set(days)].sort();
+  let best = 0;
+  let run = 0;
+  let previous: string | null = null;
+  for (const day of sorted) {
+    run = previous && daysBetween(previous, day) === 1 ? run + 1 : 1;
+    best = Math.max(best, run);
+    previous = day;
+  }
+  const last = sorted[sorted.length - 1];
+  const alive = last !== undefined && daysBetween(last, today) <= 1;
+  return { current: alive ? run : 0, best };
+}

@@ -50,7 +50,11 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design of each part.
 The most valuable contributions. Lessons live in `src/features/learn/lessons/` as plain data; the
 [content guide](docs/CONTENT_GUIDE.md) explains the format, the positions rules and how to verify a
 position with the engine. Every lesson is validated by `lessons.test.ts` — run `npm test` and it will
-tell you if a FEN is illegal, a task move is impossible, or a "mate in one" is not actually mate.
+tell you if a FEN is illegal, a task move is impossible, or a "mate in one" is not actually mate. After
+adding a lesson run `npm run lessons:index` (the Home and Progress pages read a generated index) and
+`npm run lessons:verify` (Stockfish checks every task). Endgame studies (`src/features/studies/`),
+courses, drills, repertoires and classic games follow the same pattern; `npm run studies:verify` and
+`npm run drills:verify` are their engine checks.
 
 ### Puzzles
 

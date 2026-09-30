@@ -1,5 +1,6 @@
 import { Chess, type Move, type Square } from 'chess.js';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { playMoveSound } from '@/lib/sound';
 import {
   checkedKingSquare,
   gameStatus,
@@ -9,6 +10,7 @@ import {
   START_FEN,
   toLongColor,
   tryMove,
+  tryNotation,
 } from './helpers';
 import type { Fen, LongColor, MoveInput, PromotionPiece } from './types';
 
@@ -102,7 +104,10 @@ export function useChess(
       }
       const input: MoveInput = promotion ? { from, to, promotion } : { from, to };
       const move = tryMove(chess, input);
-      if (move) commit();
+      if (move) {
+        playMoveSound(move, chess);
+        commit();
+      }
       return move;
     },
     [autoQueen, commit, game],
@@ -119,6 +124,7 @@ export function useChess(
         return null;
       }
       const move = tryMove(game(), { ...pending, promotion: piece });
+      if (move) playMoveSound(move, game());
       commit();
       return move;
     },
@@ -128,17 +134,11 @@ export function useChess(
   const playNotation = useCallback(
     (notation: string): Move | null => {
       const chess = game();
-      const trimmed = notation.trim();
-      let move: Move | null;
-      if (/^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(trimmed)) {
-        const from = trimmed.slice(0, 2) as Square;
-        const to = trimmed.slice(2, 4) as Square;
-        const promo = trimmed[4]?.toLowerCase() as PromotionPiece | undefined;
-        move = tryMove(chess, promo ? { from, to, promotion: promo } : { from, to });
-      } else {
-        move = tryMove(chess, trimmed);
+      const move = tryNotation(chess, notation);
+      if (move) {
+        playMoveSound(move, chess);
+        commit();
       }
-      if (move) commit();
       return move;
     },
     [commit, game],

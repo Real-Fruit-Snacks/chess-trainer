@@ -195,7 +195,7 @@ export const advancedLessons: Lesson[] = [
         shapes: ['d3h7:red', 'c2h7:red'],
         task: {
           prompt: 'Black to move. Stop the mate.',
-          moves: ['Nf6', 'g6', 'Qh4'],
+          moves: ['Nf6', 'g6'],
           hint: 'Block the diagonal or add a defender to h7. Which move also develops?',
           success:
             'Safe. Nf6 is the most useful, defending h7 while bringing the knight to its best square.',

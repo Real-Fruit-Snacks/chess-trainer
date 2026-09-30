@@ -8,6 +8,7 @@ import { cpToWinProbability, type Score, scoreToWhiteCp } from '@/engine/uci';
 export interface ReviewedMove {
   ply: number;
   san: string;
+  mover: 'white' | 'black';
   /** Evaluation (White's win probability) before and after the move. */
   winBefore: number;
   winAfter: number;
@@ -25,6 +26,39 @@ export interface ReviewSummary {
   counts: Record<'white' | 'black', { inaccuracy: number; mistake: number; blunder: number }>;
   /** Average win-probability loss per move, as a percentage. */
   accuracy: Record<'white' | 'black', number>;
+  /** White's win probability after each ply (index 0 = the starting position). */
+  wins: number[];
+  /** Search depth the review was run at. */
+  depth: number;
+}
+
+export interface KeyMoment {
+  ply: number;
+  san: string;
+  mover: 'white' | 'black';
+  judgement: MoveJudgement;
+  /** Win probability swing against the mover, 0–1. */
+  loss: number;
+  best: string | null;
+}
+
+/** The biggest evaluation swings of a game, in move order. */
+export function keyMoments(summary: ReviewSummary, limit = 6): KeyMoment[] {
+  return summary.moves
+    .filter(
+      (m) => m.judgement === 'blunder' || m.judgement === 'mistake' || m.judgement === 'inaccuracy',
+    )
+    .sort((a, b) => b.loss - a.loss)
+    .slice(0, limit)
+    .sort((a, b) => a.ply - b.ply)
+    .map((m) => ({
+      ply: m.ply,
+      san: m.san,
+      mover: m.mover,
+      judgement: m.judgement,
+      loss: m.loss,
+      best: m.best,
+    }));
 }
 
 /** Thresholds on win-probability loss, close to what Lichess uses. */
@@ -115,6 +149,7 @@ export async function reviewGame(
     reviewed.push({
       ply: i + 1,
       san: move.san,
+      mover,
       winBefore: before.win,
       winAfter: after.win,
       loss,
@@ -131,7 +166,7 @@ export async function reviewGame(
     black: accuracyFrom(losses.black),
   };
 
-  return { moves: reviewed, counts, accuracy };
+  return { moves: reviewed, counts, accuracy, wins: evaluations.map((e) => e.win), depth };
 }
 
 /** Maps average win-probability loss to a 0–100 "accuracy" figure. */

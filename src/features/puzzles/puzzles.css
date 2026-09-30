@@ -1,40 +1,3 @@
-.trainer__overlay {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--bg) 60%, transparent);
-  border-radius: var(--radius-md);
-  z-index: 5;
-}
-
-.puzzle-status {
-  font-weight: 600;
-  margin: var(--space-2) 0;
-  min-height: 1.5em;
-}
-
-.puzzle-status--solved {
-  color: var(--success);
-}
-
-.puzzle-status--failed {
-  color: var(--danger);
-}
-
-.puzzle-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-
-.puzzle-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--space-3);
-}
-
 .puzzle-delta--up {
   color: var(--success);
 }
@@ -89,4 +52,89 @@
 
 .onboarding__option span:first-of-type {
   flex: 1;
+}
+
+/* Puzzle Rush */
+.rush__start {
+  max-width: 420px;
+  text-align: center;
+}
+
+.rush__start .row {
+  justify-content: center;
+}
+
+.rush__hud {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.rush__strikes {
+  display: inline-flex;
+  gap: 4px;
+  font-size: 1.4rem;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.rush__strike {
+  color: var(--border-strong);
+}
+
+.rush__strike--hit {
+  color: var(--danger);
+}
+
+.rush__results {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-top: var(--space-2);
+}
+
+.rush__result {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.rush__result--failed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.rush__history {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-3) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rush__history li {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: 0.9rem;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Level-finding run (calibration) */
+.calibration {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle, var(--bg-elevated));
+  display: grid;
+  gap: 8px;
 }

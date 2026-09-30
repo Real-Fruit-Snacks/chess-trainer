@@ -252,3 +252,58 @@ kbd {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- Shared trainer widgets (puzzles, drills, play) ---------- */
+.trainer__overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  border-radius: var(--radius-md);
+  z-index: 5;
+}
+
+.puzzle-status {
+  font-weight: 600;
+  margin: var(--space-2) 0;
+  min-height: 1.5em;
+}
+
+.puzzle-status--solved {
+  color: var(--success);
+}
+
+.puzzle-status--failed {
+  color: var(--danger);
+}
+
+.puzzle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.puzzle-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-3);
+}
+
+/* A button that reads as a link (for actions inside running text). */
+.linklike {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.linklike:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}

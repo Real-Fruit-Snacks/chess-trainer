@@ -14,6 +14,7 @@ export default tseslint.config(
       'test-results/**',
       'public/engine/**',
       'dev-dist/**',
+      'scripts/lib/*.d.mts',
     ],
   },
   js.configs.recommended,

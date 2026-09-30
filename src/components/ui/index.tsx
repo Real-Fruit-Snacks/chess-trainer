@@ -1,6 +1,7 @@
 import {
   type ButtonHTMLAttributes,
-  type InputHTMLAttributes,
+  type ComponentProps,
+  type HTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
   useEffect,
@@ -96,12 +97,17 @@ export function Card({
   children,
   className,
   as: Tag = 'div',
+  ...rest
 }: {
   children: ReactNode;
   className?: string;
   as?: 'div' | 'section' | 'article';
-}) {
-  return <Tag className={['card', className].filter(Boolean).join(' ')}>{children}</Tag>;
+} & Omit<HTMLAttributes<HTMLElement>, 'className' | 'children'>) {
+  return (
+    <Tag className={['card', className].filter(Boolean).join(' ')} {...rest}>
+      {children}
+    </Tag>
+  );
 }
 
 export function CardLink({
@@ -228,8 +234,8 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select className="select" {...props} />;
 }
 
-export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className="input" {...props} />;
+export function Input({ className, ...props }: ComponentProps<'input'>) {
+  return <input className={className ? `input ${className}` : 'input'} {...props} />;
 }
 
 export function Switch({
@@ -300,6 +306,7 @@ export function Dialog({
   children,
   actions,
   dismissible = true,
+  wide = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -308,6 +315,8 @@ export function Dialog({
   actions?: ReactNode;
   /** Allow closing with Escape / backdrop click. */
   dismissible?: boolean;
+  /** Use most of the viewport width (for editors and tables). */
+  wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -322,7 +331,7 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      className="dialog"
+      className={wide ? 'dialog dialog--wide' : 'dialog'}
       aria-labelledby={titleId}
       onClose={onClose}
       onCancel={(e) => {

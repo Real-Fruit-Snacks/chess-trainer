@@ -114,7 +114,7 @@ test.describe('analyze', () => {
     await page.goto('/analyze?fen=' + encodeURIComponent('6k1/5ppp/8/8/8/8/8/R3K3 w - - 0 1'));
     const board = await expectBoard(page);
     await playMove(board, 'a1', 'a8');
-    await expect(page.getByLabel('Move list')).toContainText('Ra8#');
+    await expect(page.locator('.treemoves')).toContainText('Ra8#');
   });
 });
 

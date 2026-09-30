@@ -47,6 +47,9 @@ jobs:
       - name: Validate puzzle data
         run: npm run puzzles:verify
 
+      - name: Verify endgame drill positions with the engine
+        run: npm run drills:verify -- --depth 24
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4

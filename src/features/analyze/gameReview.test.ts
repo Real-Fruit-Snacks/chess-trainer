@@ -2,7 +2,7 @@ import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
 import type { EngineClient, SearchHandle, SearchParams, SearchResult } from '@/engine/EngineClient';
 import type { SearchInfo } from '@/engine/uci';
-import { judge, reviewGame } from './gameReview';
+import { judge, keyMoments, reviewGame } from './gameReview';
 
 /** A fake engine that returns scripted evaluations keyed by FEN. */
 function fakeEngine(evaluations: Record<string, { cp: number; best: string }>): EngineClient {
@@ -73,6 +73,21 @@ describe('reviewGame', () => {
     expect(review.counts.black.blunder).toBe(1);
     expect(review.accuracy.white).toBe(100);
     expect(review.accuracy.black).toBeLessThan(50);
+    // Per-ply win probabilities for the evaluation graph: start, after e4, after f5.
+    expect(review.wins).toHaveLength(3);
+    expect(review.wins[2]).toBeGreaterThan(review.wins[1] ?? 0);
+    expect(review.depth).toBe(12);
+    expect(review.moves[1]?.mover).toBe('black');
+
+    const moments = keyMoments(review);
+    expect(moments).toHaveLength(1);
+    expect(moments[0]).toMatchObject({
+      ply: 2,
+      san: 'f5',
+      mover: 'black',
+      judgement: 'blunder',
+      best: 'e5',
+    });
   });
 
   it('can be cancelled', async () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { Badge, Button, Card, Kbd, LinkButton } from '@/components/ui';
@@ -44,9 +44,20 @@ function LessonView({ lesson }: { lesson: NonNullable<ReturnType<typeof getLesso
     return idx === -1 ? 0 : idx;
   }, [lesson.steps, progress?.stepsDone]);
 
-  const [index, setIndex] = useState(firstUnfinished);
+  // `?step=3` opens a specific step (1-based), e.g. from the recall page.
+  const [searchParams] = useSearchParams();
+  const requestedStep = Number(searchParams.get('step'));
+  const [index, setIndex] = useState(
+    requestedStep >= 1 && requestedStep <= lesson.steps.length
+      ? requestedStep - 1
+      : firstUnfinished,
+  );
   const [finished, setFinished] = useState(false);
   const total = lesson.steps.length;
+  const taskSteps = useMemo(
+    () => lesson.steps.flatMap((s, i) => (s.task ? [i] : [])),
+    [lesson.steps],
+  );
   const step = lesson.steps[Math.min(index, total - 1)] as (typeof lesson.steps)[number];
 
   useEffect(() => {
@@ -55,8 +66,8 @@ function LessonView({ lesson }: { lesson: NonNullable<ReturnType<typeof getLesso
   }, [lesson.id, lesson.title, visitLesson]);
 
   const onSolved = useCallback(
-    () => markStep(lesson.id, index, total),
-    [markStep, lesson.id, index, total],
+    () => markStep(lesson.id, index, total, taskSteps),
+    [markStep, lesson.id, index, total, taskSteps],
   );
   const state = useLessonStep(step, onSolved);
 
@@ -77,9 +88,9 @@ function LessonView({ lesson }: { lesson: NonNullable<ReturnType<typeof getLesso
   );
 
   const advance = useCallback(() => {
-    if (!step.task) markStep(lesson.id, index, total);
+    if (!step.task) markStep(lesson.id, index, total, taskSteps);
     goTo(index + 1);
-  }, [step.task, markStep, lesson.id, index, total, goTo]);
+  }, [step.task, markStep, lesson.id, index, total, taskSteps, goTo]);
 
   // Keyboard navigation.
   useEffect(() => {
@@ -265,6 +276,8 @@ function LessonView({ lesson }: { lesson: NonNullable<ReturnType<typeof getLesso
             </a>
             {' · '}
             <Link to={`/analyze?fen=${encodeURIComponent(state.fen)}`}>Analyze this position</Link>
+            {' · '}
+            <Link to={`/play?fen=${encodeURIComponent(state.fen)}`}>Play it vs the engine</Link>
           </p>
         </aside>
       </div>

@@ -5,6 +5,7 @@ node_modules/
 dist/
 dev-dist/
 coverage/
+*.tsbuildinfo
 
 # Engine binaries are downloaded by `npm run engine:setup` (see public/engine/README.md)
 public/engine/*

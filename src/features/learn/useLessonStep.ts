@@ -2,6 +2,7 @@ import { Chess, type Square } from 'chess.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DrawShape } from '@/components/board/Board';
 import { isPromotionMove, legalDests, tryMove } from '@/chess/helpers';
+import { playMoveSound, playSound } from '@/lib/sound';
 import type { Fen, LongColor, PromotionPiece } from '@/chess/types';
 import { type LessonStep, parseShapes } from './model';
 import { judgeTaskMove } from './taskCheck';
@@ -73,6 +74,7 @@ export function useLessonStep(step: LessonStep, onSolved: () => void): LessonSte
   }, []);
 
   const finishCorrect = useCallback((message: string | undefined) => {
+    playSound('solved');
     setPhase('correct');
     setFeedback(message ?? 'Correct!');
     onSolvedRef.current();
@@ -90,13 +92,17 @@ export function useLessonStep(step: LessonStep, onSolved: () => void): LessonSte
       }
       const verdict = judgeTaskMove(task, move, chess);
       if (verdict === 'correct') {
+        playMoveSound(move, chess);
         setHintLevel(0);
         sync([move.from, move.to]);
         if (task.reply) {
           setPhase('replying');
           later(() => {
             const reply = tryMove(chessRef.current, task.reply as string);
-            if (reply) sync([reply.from, reply.to]);
+            if (reply) {
+              playMoveSound(reply, chessRef.current);
+              sync([reply.from, reply.to]);
+            }
             finishCorrect(task.success);
           }, 450);
         } else {
@@ -104,6 +110,7 @@ export function useLessonStep(step: LessonStep, onSolved: () => void): LessonSte
         }
         return;
       }
+      playSound('failed');
       setPhase('wrong');
       setWrongSquare(move.to);
       setFeedback(task.failure ?? 'Not quite — try again.');

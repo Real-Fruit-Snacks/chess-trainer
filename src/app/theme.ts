@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { applyPieceSet } from '@/components/board/pieceSets';
 import { type ColorScheme, useSettings } from '@/store/settings';
 import { siteConfig } from '@/site.config';
 
@@ -24,4 +25,12 @@ export function useColorScheme(): void {
     media.addEventListener('change', onChange);
     return () => media.removeEventListener('change', onChange);
   }, [scheme]);
+}
+
+/** Keeps the piece set on <html> in step with the settings. */
+export function usePieceSet(): void {
+  const pieceSet = useSettings((s) => s.pieceSet);
+  useEffect(() => {
+    applyPieceSet(pieceSet);
+  }, [pieceSet]);
 }

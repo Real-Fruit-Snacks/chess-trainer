@@ -1,8 +1,9 @@
-import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { InstallButton } from '@/app/InstallPrompt';
 import { useInstall } from '@/app/pwa';
 import { BOARD_PALETTES } from '@/components/board/boardThemes';
+import { PIECE_SETS } from '@/components/board/pieceSets';
 import {
   Badge,
   Button,
@@ -15,15 +16,35 @@ import {
   Switch,
 } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
-import { lessons } from '@/features/learn/lessons';
+import { GameTree } from '@/chess/tree';
+import { CLASSIC_GAMES } from '@/features/classics/games';
+import { LESSON_META } from '@/features/learn/lessonMeta';
+import { repertoireStats } from '@/features/openings/model';
+import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
+import { dueReviews } from '@/lib/puzzleReview';
+import { useNow } from '@/lib/useNow';
+import { cardsFor, useRepertoire } from '@/store/repertoire';
 import { ENGINE_LEVELS } from '@/engine/levels';
 import { themeName } from '@/features/puzzles/themes';
-import { formatDate, formatDuration } from '@/lib/dates';
-import { formatRating, PROVISIONAL_GAMES, ratingBand, STARTING_RATINGS } from '@/lib/rating';
+import { formatDate, formatDuration, trainingStreak } from '@/lib/dates';
+import { isProvisional, PROVISIONAL_RD } from '@/lib/glicko';
+import { CALIBRATION_PUZZLES, formatRating, ratingBand, STARTING_RATINGS } from '@/lib/rating';
+import { approximateGameRatings, formatRange } from '@/lib/ratingScales';
+import { playSound } from '@/lib/sound';
 import { siteConfig } from '@/site.config';
 import { summarizeProgress, useProgress } from '@/store/progress';
-import { type BoardTheme, type ColorScheme, useSettings } from '@/store/settings';
+import {
+  type BoardTheme,
+  type ColorScheme,
+  type PieceSet,
+  type ReviewDepth,
+  useSettings,
+} from '@/store/settings';
+import { EngineDiagnostics } from './EngineDiagnostics';
+import { EngineThreadsSetting } from './EngineThreadsSetting';
 import { RatingChart } from './RatingChart';
+import { WeeklyCard } from './WeeklyCard';
+import { buildThemeReport, THEME_REPORT_MIN_ATTEMPTS } from './themeReport';
 import './progress.css';
 
 export default function ProgressPage() {
@@ -66,6 +87,42 @@ export default function ProgressPage() {
   };
 
   const recent = progress.attempts.slice(0, 15);
+  const repertoireCards = useRepertoire((s) => s.cards);
+  const customRepertoires = useRepertoire((s) => s.custom);
+  const now = useNow(60_000, progress.puzzleReviews);
+  const trainingStreakValue = useMemo(
+    () => trainingStreak(progress.trainingDays),
+    [progress.trainingDays],
+  );
+  const reviewDue = useMemo(
+    () => dueReviews(progress.puzzleReviews, now).length,
+    [progress.puzzleReviews, now],
+  );
+  const openingStats = useMemo(() => {
+    const all = [
+      ...BUILT_IN_REPERTOIRES,
+      ...customRepertoires.map((c) => ({ id: c.id, color: c.color, pgn: c.pgn })),
+    ];
+    return all.reduce(
+      (acc, rep) => {
+        try {
+          const stats = repertoireStats(
+            GameTree.fromPgn(rep.pgn),
+            rep.color,
+            cardsFor(repertoireCards, rep.id),
+            now,
+          );
+          return { due: acc.due + stats.due, learned: acc.learned + stats.learned };
+        } catch {
+          return acc;
+        }
+      },
+      { due: 0, learned: 0 },
+    );
+  }, [repertoireCards, customRepertoires, now]);
+  const themeReport = buildThemeReport(progress.themeStats);
+  const weakest = themeReport.slice(0, 5);
+  const strongest = [...themeReport].reverse().slice(0, 5);
 
   return (
     <div>
@@ -80,7 +137,12 @@ export default function ProgressPage() {
             <div className="progress__stats">
               <Stat
                 value={formatRating(progress.puzzleRating)}
-                label={`Puzzle rating · ${ratingBand(progress.puzzleRating)}`}
+                label={
+                  <span data-testid="progress-rating-label">
+                    Puzzle rating ± {Math.round(progress.puzzleRd)} ·{' '}
+                    {ratingBand(progress.puzzleRating)}
+                  </span>
+                }
               />
               <Stat
                 value={`${stats.solved}/${stats.solved + stats.failed}`}
@@ -99,19 +161,28 @@ export default function ProgressPage() {
                 label="Avg. solve time"
               />
               <Stat
-                value={`${progress.streak.current}`}
-                label={`Day streak · best ${progress.streak.best}`}
+                value={`${trainingStreakValue.current}`}
+                label={`Training streak · best ${trainingStreakValue.best}`}
               />
               <Stat
-                value={`${stats.lessonsCompleted}/${lessons.length}`}
+                value={`${stats.lessonsCompleted}/${LESSON_META.length}`}
                 label="Lessons completed"
               />
               <Stat value={`${stats.wins}–${stats.losses}–${stats.draws}`} label="Games W–L–D" />
             </div>
-            {progress.ratedAttempts < PROVISIONAL_GAMES && progress.onboarded ? (
-              <p className="small muted" style={{ margin: '12px 0 0' }}>
-                Your rating is provisional until you have solved {PROVISIONAL_GAMES} rated puzzles (
-                {progress.ratedAttempts} so far), so it moves quickly.
+            {progress.onboarded && isProvisional({ rd: progress.puzzleRd }) ? (
+              <p
+                className="small muted"
+                style={{ margin: '12px 0 0' }}
+                data-testid="provisional-note"
+              >
+                Your puzzle rating is <strong>provisional</strong>: the ±{' '}
+                {Math.round(progress.puzzleRd)} shows how uncertain it still is, so it moves
+                quickly. It settles below ± {PROVISIONAL_RD} after a couple of dozen rated puzzles
+                {progress.calibration
+                  ? ` (calibration: ${progress.calibration.done} of ${progress.calibration.total} done)`
+                  : ''}
+                .
               </p>
             ) : null}
           </Card>
@@ -119,6 +190,88 @@ export default function ProgressPage() {
           <Card>
             <h2 style={{ fontSize: '1.15rem' }}>Puzzle rating</h2>
             <RatingChart points={progress.ratingHistory} locale={siteConfig.locale} />
+          </Card>
+
+          <RatingScalesCard rating={progress.puzzleRating} rd={progress.puzzleRd} />
+
+          <Card>
+            <h2 style={{ fontSize: '1.15rem' }}>Training</h2>
+            <div className="progress__stats">
+              <Stat
+                value={Math.max(0, ...progress.rushRuns.map((r) => r.score)) || '–'}
+                label="Best Puzzle Rush"
+              />
+              <Stat
+                value={Object.values(progress.drills).filter((d) => d.best > 0).length}
+                label="Drills completed"
+              />
+              <Stat value={reviewDue} label="Puzzles to review" />
+              <Stat value={openingStats.due} label="Opening moves due" />
+              <Stat value={openingStats.learned} label="Opening moves learned" />
+              <Stat
+                value={`${Object.keys(progress.guessGames).length}/${CLASSIC_GAMES.length}`}
+                label="Classic games played"
+              />
+            </div>
+            <p className="small muted" style={{ margin: '12px 0 0' }}>
+              <Link to="/puzzles/review">Review queue</Link> ·{' '}
+              <Link to="/puzzles/rush">Puzzle Rush</Link> · <Link to="/drills">Drills</Link> ·{' '}
+              <Link to="/openings">Openings</Link> · <Link to="/classics">Classic games</Link>
+            </p>
+          </Card>
+
+          <WeeklyCard />
+
+          <Card>
+            <h2 style={{ fontSize: '1.15rem' }}>Strengths and weaknesses</h2>
+            {themeReport.length === 0 ? (
+              <p className="small muted">
+                Solve at least {THEME_REPORT_MIN_ATTEMPTS} puzzles of a theme (in any mode) and it
+                will be ranked here, with a link to practise it.
+              </p>
+            ) : (
+              <div className="themes-report">
+                <div>
+                  <h3 className="themes-report__heading">Work on these</h3>
+                  <ul className="themes-report__list">
+                    {weakest.map((row) => (
+                      <li key={row.tag}>
+                        <Link to={`/puzzles/themes?theme=${encodeURIComponent(row.tag)}`}>
+                          {themeName(row.tag)}
+                        </Link>
+                        <span className="themes-report__bar" aria-hidden="true">
+                          <span style={{ width: `${row.accuracy}%` }} />
+                        </span>
+                        <span className="num small">
+                          {row.accuracy}% <span className="faint">({row.attempts})</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="themes-report__heading">Going well</h3>
+                  <ul className="themes-report__list">
+                    {strongest.map((row) => (
+                      <li key={row.tag}>
+                        <Link to={`/puzzles/themes?theme=${encodeURIComponent(row.tag)}`}>
+                          {themeName(row.tag)}
+                        </Link>
+                        <span
+                          className="themes-report__bar themes-report__bar--good"
+                          aria-hidden="true"
+                        >
+                          <span style={{ width: `${row.accuracy}%` }} />
+                        </span>
+                        <span className="num small">
+                          {row.accuracy}% <span className="faint">({row.attempts})</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
           </Card>
 
           <Card>
@@ -265,6 +418,7 @@ export default function ProgressPage() {
                       className="swatch"
                       aria-label={BOARD_PALETTES[theme].label}
                       aria-pressed={settings.boardTheme === theme}
+                      title={BOARD_PALETTES[theme].hint ?? BOARD_PALETTES[theme].label}
                       style={
                         {
                           '--sw-light': BOARD_PALETTES[theme].light,
@@ -276,6 +430,27 @@ export default function ProgressPage() {
                   ))}
                 </div>
               </div>
+              <p className="small muted" style={{ margin: 0 }}>
+                {BOARD_PALETTES[settings.boardTheme].label}
+                {BOARD_PALETTES[settings.boardTheme].hint
+                  ? ` — ${BOARD_PALETTES[settings.boardTheme].hint}`
+                  : ''}
+              </p>
+              <div className="settings__row">
+                <span>Pieces</span>
+                <Segmented
+                  ariaLabel="Piece set"
+                  value={settings.pieceSet}
+                  onChange={(v) => settings.update({ pieceSet: v })}
+                  options={(Object.keys(PIECE_SETS) as PieceSet[]).map((set) => ({
+                    value: set,
+                    label: PIECE_SETS[set].label,
+                  }))}
+                />
+              </div>
+              <p className="small muted" style={{ margin: 0 }}>
+                {PIECE_SETS[settings.pieceSet].hint}
+              </p>
               <Switch
                 checked={settings.showCoordinates}
                 onChange={(v) => settings.update({ showCoordinates: v })}
@@ -291,6 +466,29 @@ export default function ProgressPage() {
                 onChange={(v) => settings.update({ animations: v })}
                 label="Animate pieces"
               />
+              <Switch
+                checked={settings.sounds}
+                onChange={(v) => settings.update({ sounds: v })}
+                label="Sound effects"
+                description="Short synthesized sounds for moves, captures, checks and results."
+              />
+              {settings.sounds ? (
+                <div className="settings__row">
+                  <span>Sound theme</span>
+                  <Segmented
+                    ariaLabel="Sound theme"
+                    value={settings.soundTheme}
+                    onChange={(v) => {
+                      settings.update({ soundTheme: v });
+                      playSound('move');
+                    }}
+                    options={[
+                      { value: 'standard', label: 'Standard' },
+                      { value: 'soft', label: 'Soft' },
+                    ]}
+                  />
+                </div>
+              ) : null}
             </div>
           </Card>
 
@@ -309,6 +507,18 @@ export default function ProgressPage() {
                 label="Auto-advance puzzles"
                 description="Load the next puzzle automatically after a solve."
               />
+              <Switch
+                checked={settings.moveInput}
+                onChange={(v) => settings.update({ moveInput: v })}
+                label="Keyboard move entry"
+                description="Show a box under the board to type moves such as Nf3 or e2e4."
+              />
+              <Switch
+                checked={settings.tablebase}
+                onChange={(v) => settings.update({ tablebase: v })}
+                label="Endgame tablebase lookups"
+                description="In analysis, ask the Lichess tablebase for exact results in positions with 7 pieces or fewer. Uses the network; off by default."
+              />
               <Field label="Default engine strength">
                 {(id) => (
                   <Select
@@ -321,6 +531,21 @@ export default function ProgressPage() {
                         Level {l.id} · {l.name} (~{l.approxElo})
                       </option>
                     ))}
+                  </Select>
+                )}
+              </Field>
+              <Field label="Game review depth" hint="Thorough is about twice as slow as fast.">
+                {(id) => (
+                  <Select
+                    id={id}
+                    value={settings.reviewDepth}
+                    onChange={(e) =>
+                      settings.update({ reviewDepth: e.target.value as ReviewDepth })
+                    }
+                  >
+                    <option value="fast">Fast (depth 10)</option>
+                    <option value="balanced">Balanced (depth 13)</option>
+                    <option value="thorough">Thorough (depth 16)</option>
                   </Select>
                 )}
               </Field>
@@ -339,13 +564,16 @@ export default function ProgressPage() {
                   </Select>
                 )}
               </Field>
+              <EngineThreadsSetting />
+              <EngineDiagnostics />
             </div>
           </Card>
 
           <Card>
             <h2 style={{ fontSize: '1.15rem' }}>Puzzle rating</h2>
             <p className="small muted">
-              Reset your rating to a level that matches you better. Your history is kept.
+              Reset your puzzle rating to a level that matches you better, or let a short run of
+              puzzles find it. Your history is kept.
             </p>
             <Field label="Start again from">
               {(id) => (
@@ -353,6 +581,14 @@ export default function ProgressPage() {
                   id={id}
                   defaultValue=""
                   onChange={(e) => {
+                    if (e.target.value === 'calibrate') {
+                      progress.completeOnboarding(0, 'calibrate');
+                      toast(
+                        `Calibration started — the next ${CALIBRATION_PUZZLES} rated puzzles find your level.`,
+                      );
+                      e.target.value = '';
+                      return;
+                    }
                     const option = STARTING_RATINGS.find((o) => o.id === e.target.value);
                     if (option) {
                       progress.completeOnboarding(option.rating);
@@ -363,6 +599,9 @@ export default function ProgressPage() {
                 >
                   <option value="" disabled>
                     Choose a level…
+                  </option>
+                  <option value="calibrate">
+                    Find my level with {CALIBRATION_PUZZLES} puzzles
                   </option>
                   {STARTING_RATINGS.map((o) => (
                     <option key={o.id} value={o.id}>
@@ -456,5 +695,42 @@ export default function ProgressPage() {
         </p>
       </Dialog>
     </div>
+  );
+}
+
+/** What the puzzle rating roughly corresponds to on the big sites and over the board. */
+function RatingScalesCard({ rating, rd }: { rating: number; rd: number }) {
+  const estimates = approximateGameRatings(rating);
+  const rows = [
+    { site: 'Lichess (blitz / rapid)', range: estimates.lichess },
+    { site: 'chess.com (rapid)', range: estimates.chesscom },
+    { site: 'FIDE (standard)', range: estimates.fide },
+  ];
+  return (
+    <Card>
+      <h2 style={{ fontSize: '1.15rem' }}>What the rating means</h2>
+      <p className="small muted">
+        A puzzle rating measures tactics and the speed of seeing them, not whole games, and every
+        site uses its own scale. As a rough guide, a puzzle rating of {formatRating(rating)}
+        {isProvisional({ rd }) ? ' (still provisional)' : ''} corresponds to about:
+      </p>
+      <table className="history" data-testid="rating-scales">
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.site}>
+              <td>{row.site}</td>
+              <td className="mono">
+                {row.range ? formatRange(row.range, siteConfig.locale) : 'below 1000'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="small faint" style={{ margin: '8px 0 0' }}>
+        Treat these as ±150 at best. The mapping follows the published comparisons between Lichess
+        puzzle and game ratings, Lichess and chess.com, and online and FIDE ratings for club
+        players.
+      </p>
+    </Card>
   );
 }

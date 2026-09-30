@@ -23,18 +23,18 @@
   --surface-3: #e5e1d6;
   --text: #1b1f1d;
   --text-muted: #5c655f;
-  --text-faint: #8a928d;
+  --text-faint: #5f6862;
   --border: #d9d4c8;
   --border-strong: #b9b3a5;
 
   /* Semantic */
-  --success: #2f8f5b;
+  --success: #24734a;
   --success-soft: #dff3e6;
-  --warning: #b9770e;
+  --warning: #8f5b08;
   --warning-soft: #fbeed7;
-  --danger: #c43d3d;
+  --danger: #b33636;
   --danger-soft: #f9dede;
-  --info: #2b6cb0;
+  --info: #27619e;
   --info-soft: #dce9f7;
 
   /* Eval bar */
@@ -83,7 +83,7 @@
   --surface-3: #263129;
   --text: #e8ece9;
   --text-muted: #a3ada7;
-  --text-faint: #6f7a74;
+  --text-faint: #8a958f;
   --border: #2a3630;
   --border-strong: #3c4a43;
 
@@ -122,7 +122,7 @@
     --surface-3: #263129;
     --text: #e8ece9;
     --text-muted: #a3ada7;
-    --text-faint: #6f7a74;
+    --text-faint: #8a958f;
     --border: #2a3630;
     --border-strong: #3c4a43;
 

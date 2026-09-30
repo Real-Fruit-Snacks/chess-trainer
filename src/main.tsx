@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom';
 import '@lichess-org/chessground/assets/chessground.base.css';
 import '@lichess-org/chessground/assets/chessground.brown.css';
 import '@lichess-org/chessground/assets/chessground.cburnett.css';
+import '@/components/board/pieces-letters.css';
 import '@/styles/global.css';
 import { setupInstallListeners } from '@/app/pwa';
 import { createAppRouter } from '@/app/routes';

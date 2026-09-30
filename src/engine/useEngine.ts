@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSettings } from '@/store/settings';
+import { chooseEngineBuild } from './build';
 import { EngineClient, type EngineOptions, type EngineStatus } from './EngineClient';
 
 export interface UseEngineOptions extends EngineOptions {
@@ -15,14 +17,21 @@ export interface UseEngine {
   start: () => Promise<void>;
 }
 
+/** Engine options implied by the learner's settings (build and thread count). */
+export function engineOptionsFromSettings(): Pick<EngineOptions, 'build' | 'threads'> {
+  const { build, threads } = chooseEngineBuild(useSettings.getState().engineThreads);
+  return { build, threads };
+}
+
 /**
  * Owns one engine instance for the lifetime of the calling component.
  * The worker is terminated on unmount so pages never leak background searches.
+ * The build (single- or multi-threaded) follows the settings at creation time.
  */
 export function useEngine(options: UseEngineOptions = {}): UseEngine {
   const { autoStart = true, ...engineOptions } = options;
   const ref = useRef<EngineClient | null>(null);
-  const optionsRef = useRef(engineOptions);
+  const optionsRef = useRef<EngineOptions>({ ...engineOptionsFromSettings(), ...engineOptions });
   const [status, setStatus] = useState<EngineStatus>('idle');
   const [error, setError] = useState<Error | null>(null);
 

@@ -1,4 +1,5 @@
 import type { Fen } from '@/chess/types';
+import { isOwnPuzzleId } from './ownPuzzles';
 import { hashString, pickRandom, seededRandom } from '@/lib/random';
 
 export interface Puzzle {
@@ -117,6 +118,32 @@ export async function selectPuzzle(options: SelectOptions): Promise<Puzzle | nul
   return null;
 }
 
+/**
+ * Picks a puzzle near `targetRating` that has not been used in the current
+ * run. Used by Puzzle Rush, where difficulty climbs with every solve.
+ */
+export async function selectRushPuzzle(
+  targetRating: number,
+  used: Set<string>,
+  random: () => number = Math.random,
+): Promise<Puzzle | null> {
+  const index = await loadPuzzleIndex();
+  for (const window of [100, 200, 350, 600, 4000]) {
+    const min = targetRating - window;
+    const max = targetRating + window;
+    const buckets = bucketsInRange(index, min, max);
+    if (buckets.length === 0) continue;
+    const pools = await Promise.all(buckets.map((b) => loadBucket(b)));
+    const candidates = pools
+      .flat()
+      .filter((p) => p.rating >= min && p.rating <= max && !used.has(p.id));
+    if (candidates.length >= 3 || (candidates.length > 0 && window >= 600)) {
+      return pickRandom(candidates, random) ?? null;
+    }
+  }
+  return null;
+}
+
 /** The same puzzle for everyone on a given day, chosen from the club-level bucket. */
 export async function dailyPuzzle(dateKey: string): Promise<Puzzle | null> {
   const index = await loadPuzzleIndex();
@@ -131,6 +158,10 @@ export async function dailyPuzzle(dateKey: string): Promise<Puzzle | null> {
 }
 
 export async function findPuzzleById(id: string): Promise<Puzzle | null> {
+  if (isOwnPuzzleId(id)) {
+    const { useProgress } = await import('@/store/progress');
+    return useProgress.getState().ownPuzzles[id] ?? null;
+  }
   const index = await loadPuzzleIndex();
   for (const bucket of index.buckets) {
     const puzzles = await loadBucket(bucket);

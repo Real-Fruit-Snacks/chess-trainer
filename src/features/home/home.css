@@ -100,3 +100,94 @@
 .home__how {
   margin-bottom: var(--space-6);
 }
+
+/* Welcome tour */
+.home__welcome {
+  margin-top: var(--space-4);
+}
+
+.home__steps {
+  margin: var(--space-3) 0;
+  padding-left: 1.3em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Today's plan */
+.home__today {
+  margin-top: var(--space-4);
+}
+
+.home__plan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+@media (min-width: 800px) {
+  .home__plan {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.home__plan-item {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  text-decoration: none;
+  background: var(--surface);
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.home__plan-item:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.home__plan-item.is-done {
+  opacity: 0.7;
+}
+
+.home__plan-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent-contrast);
+}
+
+.is-done .home__plan-check {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.home__plan-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.home__plan-title {
+  font-weight: 600;
+}
+
+.home__course {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--border);
+}

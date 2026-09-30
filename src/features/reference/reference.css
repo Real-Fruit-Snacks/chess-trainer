@@ -1,0 +1,71 @@
+.reference__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.reference__tabs .badge {
+  text-decoration: none;
+  padding: 6px 12px;
+}
+
+.reference__section {
+  margin-bottom: var(--space-7);
+  scroll-margin-top: calc(var(--header-height) + 12px);
+}
+
+.reference__section h3 {
+  font-size: 1.05rem;
+  margin: 0 0 var(--space-2);
+}
+
+.reference__grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (min-width: 900px) {
+  .reference__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.reference__search .input {
+  min-width: 220px;
+}
+
+.reference__glossary {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+@media (min-width: 900px) {
+  .reference__glossary {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.reference__entry {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.reference__entry dt {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.reference__entry dd {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.reference__faq summary {
+  cursor: pointer;
+  font-weight: 600;
+}

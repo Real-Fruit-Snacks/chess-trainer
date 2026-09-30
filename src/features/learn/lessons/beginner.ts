@@ -150,7 +150,7 @@ export const beginnerLessons: Lesson[] = [
         text:
           '**Pawns** move straight forward one square — or two squares on their very first move. They never move ' +
           'backwards.\n\nThis pawn has not moved yet. Advance it two squares.',
-        fen: '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1',
+        fen: '4k3/4p3/8/8/8/8/4P3/4K3 w - - 0 1',
         shapes: ['e2e4'],
         task: {
           prompt: 'Advance the pawn two squares.',
@@ -202,8 +202,11 @@ export const beginnerLessons: Lesson[] = [
         title: 'Castling queenside',
         text:
           'You can also castle toward the queen’s rook. The king still moves two squares, to c1, and the rook ' +
-          'lands on d1. It is written **O-O-O**.',
-        fen: fenAfter('1. d4 d5 2. Nc3 Nf6 3. Bg5 Nbd7 4. Qd2 e6'),
+          'lands on d1. It is written **O-O-O**. Here White has cleared the b1, c1 and d1 squares on purpose: ' +
+          'the king will sit on c1 while the kingside pawns march forward.',
+        fen: fenAfter(
+          '1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 g6 6. Be3 Bg7 7. f3 O-O 8. Qd2 Nc6',
+        ),
         shapes: ['e1c1', 'a1d1:blue'],
         task: {
           prompt: 'Castle queenside (O-O-O).',
@@ -284,13 +287,14 @@ export const beginnerLessons: Lesson[] = [
           '- **Block** the attack with another piece,\n' +
           '- **Capture** the checking piece.\n\n' +
           'Black is in check from the rook on e1. Block the check with the bishop.',
-        fen: '4k3/8/2b5/8/8/8/8/K3R3 b - - 0 1',
+        fen: '4k3/8/2b5/5p2/8/8/8/K3R3 b - - 0 1',
         orientation: 'black',
         shapes: ['e1e8:red', 'c6e4'],
         task: {
           prompt: 'Block the check with your bishop.',
           moves: ['Be4'],
-          success: 'Be4 puts the bishop between the rook and the king.',
+          success:
+            'Be4 puts the bishop between the rook and the king — and the f5-pawn protects it.',
           failure:
             'The king can step aside too, but the task is to block: put the bishop on the e-file.',
         },

@@ -35,8 +35,13 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
+        // A hand-written Workbox service worker (src/sw.ts): precaching plus the
+        // opt-in COOP/COEP headers for the multi-threaded engine.
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        filename: 'sw.ts',
         registerType: 'prompt',
-        injectRegister: false, // we register from src/app/pwa.ts to control the UX
+        injectRegister: false, // we register from src/app/UpdatePrompt.tsx to control the UX
         includeAssets: ['favicon.svg', 'icons/*.png', 'robots.txt'],
         manifest: {
           id: base,
@@ -84,17 +89,14 @@ export default defineConfig(({ mode }) => {
             },
           ],
         },
-        workbox: {
+        injectManifest: {
           // Everything the app needs offline is static, so precache all of it —
-          // including the engine WASM and the puzzle chunks.
+          // including the single-threaded engine WASM and the puzzle chunks.
           globPatterns: ['**/*.{js,css,html,ico,png,svg,wasm,json,webmanifest,woff2}'],
+          // The threaded engine build is optional and cached on first use instead.
+          globIgnores: ['**/engine/stockfish-19-lite.js', '**/engine/stockfish-19-lite.wasm'],
           // The Stockfish WASM binary is ~1.8 MB; Workbox's default cap is 2 MB.
           maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-          navigateFallback: `${base}index.html`,
-          navigateFallbackDenylist: [/^\/api\//],
-          cleanupOutdatedCaches: true,
-          clientsClaim: true,
-          skipWaiting: false,
         },
         devOptions: {
           enabled: false,

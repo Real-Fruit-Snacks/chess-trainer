@@ -49,6 +49,54 @@
   background: rgba(31, 111, 91, 0.35);
 }
 
+/*
+ * High-contrast theme: highlights drawn from the Okabe–Ito colour-blind-safe
+ * palette (blue for the last move, orange for the selection, vermilion for
+ * check and wrong, bluish green for right), all at higher opacity.
+ */
+.board--theme-contrast cg-board square.last-move {
+  background-color: rgba(0, 114, 178, 0.5);
+}
+
+.board--theme-contrast cg-board square.selected {
+  background-color: rgba(230, 159, 0, 0.75);
+}
+
+.board--theme-contrast cg-board square.move-dest {
+  background: radial-gradient(rgba(0, 114, 178, 0.85) 24%, transparent 26%);
+}
+
+.board--theme-contrast cg-board square.oc.move-dest {
+  background: radial-gradient(transparent 0%, transparent 76%, rgba(0, 114, 178, 0.7) 78%);
+}
+
+.board--theme-contrast cg-board square.move-dest:hover,
+.board--theme-contrast cg-board square.move-dest.hover {
+  background: rgba(0, 114, 178, 0.45);
+}
+
+.board--theme-contrast cg-board square.check {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(213, 94, 0, 1) 0%,
+    rgba(213, 94, 0, 0.9) 25%,
+    rgba(213, 94, 0, 0.2) 89%,
+    rgba(213, 94, 0, 0) 100%
+  );
+}
+
+.board--theme-contrast cg-board square.hint {
+  background-color: rgba(0, 114, 178, 0.55);
+}
+
+.board--theme-contrast cg-board square.wrong {
+  background-color: rgba(213, 94, 0, 0.75);
+}
+
+.board--theme-contrast cg-board square.right {
+  background-color: rgba(0, 158, 115, 0.7);
+}
+
 /* Custom square highlights used by lessons */
 .board cg-board square.hint {
   background-color: rgba(31, 111, 91, 0.45);
@@ -66,4 +114,48 @@
   .board piece.anim {
     transition: none;
   }
+}
+
+/* Blindfold training: the board stays interactive but the pieces are invisible. */
+.board--blindfold piece {
+  visibility: hidden;
+}
+
+/* Keyboard control: the focused board shows a square cursor. */
+.board__cg:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.board__cursor {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  box-sizing: border-box;
+  border: 3px solid var(--accent);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.board--theme-contrast .board__cursor {
+  border-color: #e69f00;
+}
+
+/* The "Describe position" button is for screen-reader and keyboard users. */
+.board__describe.sr-only--focusable:focus {
+  position: absolute !important;
+  left: 8px;
+  bottom: 8px;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 6px 10px;
+  clip: auto;
+  white-space: normal;
+  z-index: 4;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }

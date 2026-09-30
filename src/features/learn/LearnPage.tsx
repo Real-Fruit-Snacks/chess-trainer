@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Badge, ProgressBar } from '@/components/ui';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
+import { CoursesSection } from './CoursesSection';
 import { lessons, lessonsByLevel } from './lessons';
 import { LEVEL_LABELS, type Lesson, type LessonLevel } from './model';
 import './learn.css';
@@ -51,6 +52,8 @@ export default function LearnPage() {
           <ProgressBar value={completed} max={lessons.length} label="Curriculum progress" />
         </div>
       </div>
+
+      <CoursesSection />
 
       {LEVELS.map((level) => {
         const meta = LEVEL_LABELS[level];

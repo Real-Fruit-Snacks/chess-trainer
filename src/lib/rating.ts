@@ -1,46 +1,21 @@
 /**
- * Elo-style rating for the puzzle trainer.
+ * The puzzle rating: constants and presentation helpers. The maths is
+ * Glicko-2 (lib/glicko.ts) and the value of an attempt is lib/puzzleScore.ts.
  *
- * Puzzles carry a fixed rating (from the Lichess database). The player's
- * rating moves toward or away from each puzzle's rating depending on the
- * result, with a larger K-factor while the rating is still provisional so new
- * players converge on their level within a couple of dozen puzzles.
+ * Puzzles carry a fixed rating and deviation from the Lichess database. The
+ * player's rating moves toward or away from each puzzle's rating depending on
+ * the result, quickly while the deviation is large and slowly once it has
+ * settled; the deviation grows again during long breaks.
  */
-export const RATING_MIN = 100;
-export const RATING_MAX = 3500;
-export const PROVISIONAL_GAMES = 30;
+export { RATING_MAX, RATING_MIN } from './glicko';
 
-export function expectedScore(playerRating: number, opponentRating: number): number {
-  return 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
-}
-
-export function kFactor(gamesPlayed: number): number {
-  if (gamesPlayed < 10) return 60;
-  if (gamesPlayed < PROVISIONAL_GAMES) return 40;
-  return 20;
-}
-
-export interface RatingUpdate {
-  before: number;
-  after: number;
-  delta: number;
-}
-
-/**
- * @param score 1 for a solve, 0 for a fail; use 0.5 when a hint was used.
- */
-export function updateRating(
-  playerRating: number,
-  puzzleRating: number,
-  score: 0 | 0.5 | 1,
-  gamesPlayed: number,
-): RatingUpdate {
-  const expected = expectedScore(playerRating, puzzleRating);
-  const k = kFactor(gamesPlayed);
-  const raw = playerRating + k * (score - expected);
-  const after = Math.round(Math.max(RATING_MIN, Math.min(RATING_MAX, raw)));
-  return { before: playerRating, after, delta: after - playerRating };
-}
+/** Deviation given to a self-assessed starting rating: trusted, but only so far. */
+export const SELF_ASSESSED_RD = 250;
+/** Deviation assumed for a puzzle without one in the data. */
+export const DEFAULT_PUZZLE_RD = 90;
+/** The level-finding run: this many rated puzzles from a very uncertain start. */
+export const CALIBRATION_PUZZLES = 12;
+export const CALIBRATION_START_RATING = 1100;
 
 /** Self-assessment options shown to first-time users. */
 export const STARTING_RATINGS = [

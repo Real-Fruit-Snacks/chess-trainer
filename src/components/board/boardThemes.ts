@@ -4,6 +4,8 @@ export interface BoardPalette {
   light: string;
   dark: string;
   label: string;
+  /** Short explanation shown next to the swatch, if any. */
+  hint?: string;
 }
 
 export const BOARD_PALETTES: Record<BoardTheme, BoardPalette> = {
@@ -11,6 +13,12 @@ export const BOARD_PALETTES: Record<BoardTheme, BoardPalette> = {
   green: { light: '#eeeed2', dark: '#769656', label: 'Green' },
   blue: { light: '#dee3e6', dark: '#8ca2ad', label: 'Blue' },
   grey: { light: '#e9e9e9', dark: '#8b8b8b', label: 'Grey' },
+  contrast: {
+    light: '#f4f4f4',
+    dark: '#5f6b7a',
+    label: 'High contrast',
+    hint: 'Strong square contrast and colour-blind-safe highlights (blue, orange and vermilion).',
+  },
 };
 
 /**

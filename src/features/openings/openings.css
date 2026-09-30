@@ -1,0 +1,59 @@
+.openings__summary {
+  margin-bottom: var(--space-5);
+}
+
+.openings__section {
+  margin-bottom: var(--space-6);
+}
+
+.openings__section h2 {
+  margin-bottom: var(--space-3);
+}
+
+.repertoire-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.repertoire-card .card__title {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.repertoire-card .card__title:hover {
+  color: var(--accent);
+}
+
+.repertoire-card__progress {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.repertoire-card__progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+}
+
+.openings__line {
+  margin: var(--space-3) 0 0;
+  line-height: 1.8;
+  word-break: break-word;
+}
+
+.openings__line-played {
+  color: var(--text-muted);
+}
+
+.openings__line-current {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.openings__line-upcoming {
+  color: var(--text-faint);
+}

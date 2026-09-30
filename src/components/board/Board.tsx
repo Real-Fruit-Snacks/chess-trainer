@@ -4,10 +4,26 @@ import type { Config } from '@lichess-org/chessground/config';
 import type { DrawShape } from '@lichess-org/chessground/draw';
 import type { Key, MoveMetadata } from '@lichess-org/chessground/types';
 import type { Square } from 'chess.js';
-import { type CSSProperties, useEffect, useLayoutEffect, useRef } from 'react';
+import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { LongColor } from '@/chess/types';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useSettings } from '@/store/settings';
+import { describeMove } from './announce';
 import { boardBackground } from './boardThemes';
+import {
+  defaultCursor,
+  describePosition,
+  describeSquare,
+  moveCursor,
+  squareOffset,
+} from './keyboard';
 import './board.css';
 
 export type { DrawShape, Key };
@@ -43,6 +59,8 @@ export interface BoardProps {
   className?: string;
   /** Accessible description of the position, announced to screen readers. */
   ariaLabel?: string;
+  /** Announce each move (derived from `fen` and `lastMove`) to screen readers. Default true. */
+  announceMoves?: boolean;
 }
 
 /**
@@ -70,6 +88,7 @@ export function Board({
   onShapesChange,
   className,
   ariaLabel,
+  announceMoves = true,
 }: BoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<Api | null>(null);
@@ -80,9 +99,10 @@ export function Board({
   const settingsCoordinates = useSettings((s) => s.showCoordinates);
   const settingsAnimations = useSettings((s) => s.animations);
   const showLegalMoves = useSettings((s) => s.showLegalMoves);
+  const reducedMotion = useReducedMotion();
 
   const showCoordinates = coordinates ?? settingsCoordinates;
-  const animationsEnabled = animate ?? settingsAnimations;
+  const animationsEnabled = (animate ?? settingsAnimations) && !reducedMotion;
   const effectiveTurn = turnColor ?? (fen.split(' ')[1] === 'b' ? 'black' : 'white');
 
   const buildConfig = (): Config => ({
@@ -194,16 +214,118 @@ export function Board({
     apiRef.current?.setAutoShapes(autoShapes ?? []);
   }, [autoShapes]);
 
+  // Screen-reader announcement of the last move, derived from consecutive positions.
+  const previousFen = useRef<string | null>(null);
+  const [announcement, setAnnouncement] = useState('');
+  useEffect(() => {
+    const before = previousFen.current;
+    previousFen.current = fen;
+    if (!announceMoves || before === fen) return;
+    const text = describeMove(before, fen, lastMove);
+    if (text) setAnnouncement(text);
+  }, [fen, lastMove, announceMoves]);
+
+  // Keyboard control: a square cursor moved with the arrow keys; Enter selects
+  // a piece and then its destination through chessground, so the same rules,
+  // callbacks and highlights apply as for the mouse.
+  const [cursor, setCursor] = useState<Square | null>(null);
+  const [focused, setFocused] = useState(false);
+  const [cursorText, setCursorText] = useState('');
+  const pendingFile = useRef<string | null>(null);
+  const interactive = !viewOnly;
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!interactive || e.altKey || e.ctrlKey || e.metaKey) return;
+    const current = cursor ?? defaultCursor(orientation);
+    const moved = moveCursor(current, e.key, orientation);
+    if (moved) {
+      setCursor(moved);
+      setCursorText(describeSquare(fen, moved));
+      pendingFile.current = null;
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      if (!movableColor) return;
+      apiRef.current?.selectSquare(current);
+      setCursor(current);
+      const selected = apiRef.current?.state.selected;
+      setCursorText(
+        selected === current
+          ? `${describeSquare(fen, current)} selected. Move to a destination and press Enter.`
+          : describeSquare(fen, current),
+      );
+    } else if (e.key === 'Escape') {
+      if (!apiRef.current?.state.selected) return;
+      apiRef.current.selectSquare(null);
+      setCursorText('Selection cleared.');
+    } else if (/^[a-h]$/.test(e.key)) {
+      // Remember the file but let the key through: pages use letters as shortcuts too.
+      pendingFile.current = e.key;
+      return;
+    } else if (/^[1-8]$/.test(e.key) && pendingFile.current) {
+      const square = `${pendingFile.current}${e.key}` as Square;
+      pendingFile.current = null;
+      setCursor(square);
+      setCursorText(describeSquare(fen, square));
+    } else {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   const style = { '--board-bg': boardBackground(boardTheme) } as CSSProperties;
+  const cursorStyle: CSSProperties | undefined =
+    focused && cursor
+      ? {
+          left: `${squareOffset(cursor, orientation).x * 100}%`,
+          top: `${squareOffset(cursor, orientation).y * 100}%`,
+        }
+      : undefined;
 
   return (
-    <div className={['board', className].filter(Boolean).join(' ')} style={style}>
+    <div
+      className={['board', `board--theme-${boardTheme}`, className].filter(Boolean).join(' ')}
+      style={style}
+      data-animated={animationsEnabled}
+      data-orientation={orientation}
+    >
       <div
         ref={containerRef}
         className="board__cg"
-        role="img"
+        role={interactive ? 'application' : 'img'}
+        aria-roledescription={interactive ? 'chess board' : undefined}
         aria-label={ariaLabel ?? `Chess board, ${effectiveTurn} to move`}
+        tabIndex={interactive ? 0 : undefined}
+        onKeyDown={interactive ? onKeyDown : undefined}
+        onFocus={() => {
+          if (!interactive) return;
+          setFocused(true);
+          if (!cursor) setCursor(defaultCursor(orientation));
+        }}
+        onBlur={() => setFocused(false)}
       />
+      {cursorStyle ? (
+        <div
+          className="board__cursor"
+          style={cursorStyle}
+          aria-hidden="true"
+          data-testid="board-cursor"
+        />
+      ) : null}
+      {interactive ? (
+        <button
+          type="button"
+          className="sr-only sr-only--focusable board__describe"
+          onClick={() => setCursorText(describePosition(fen))}
+        >
+          Describe position
+        </button>
+      ) : null}
+      <div className="sr-only board__announce" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </div>
+      <div className="sr-only board__cursor-announce" aria-live="polite" aria-atomic="true">
+        {cursorText}
+      </div>
     </div>
   );
 }

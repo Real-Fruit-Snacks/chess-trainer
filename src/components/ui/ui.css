@@ -217,6 +217,8 @@ a.btn:focus {
   color: var(--text);
   padding: 0;
   width: min(92vw, 480px);
+  /* Tall content scrolls inside the dialog instead of pushing the title off screen. */
+  max-height: calc(100dvh - 2 * var(--space-5));
   box-shadow: var(--shadow-md);
 }
 
@@ -227,6 +229,9 @@ a.btn:focus {
 
 .dialog__body {
   padding: var(--space-5);
+  max-height: calc(100dvh - 2 * var(--space-5));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .dialog__title {
@@ -404,9 +409,13 @@ a.btn:focus {
   pointer-events: none;
 }
 
+/* On wide screens the board sits on the left, so toasts keep to the bottom-right corner. */
 @media (min-width: 900px) {
   .toasts {
+    left: auto;
+    right: var(--space-5);
     bottom: var(--space-5);
+    transform: none;
   }
 }
 
@@ -534,4 +543,55 @@ a.btn:focus {
 .empty__icon {
   font-size: 2.5rem;
   margin-bottom: var(--space-3);
+}
+
+.dialog--wide {
+  width: min(960px, calc(100vw - 32px));
+  max-width: none;
+}
+
+.segmented__count {
+  display: inline-block;
+  min-width: 1.4em;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--warning);
+  color: #fff;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  text-align: center;
+  vertical-align: 1px;
+}
+
+/* ---------- Data tables ---------- */
+.history {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.history th,
+.history td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.history th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.history td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.history__scroll {
+  overflow-x: auto;
 }
