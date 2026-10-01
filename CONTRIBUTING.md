@@ -18,7 +18,7 @@ starts Vite with hot reload. Node 22 or newer is required (see `.nvmrc`).
 Before opening a pull request run:
 
 ```bash
-npm run check        # lint + format check + typecheck + unit tests + production build
+npm run check        # lint + dead code + format check + typecheck + unit tests + build + budgets
 npm run e2e          # optional, needs: npx playwright install --with-deps chromium
 ```
 
@@ -29,8 +29,9 @@ CI runs the same checks plus the puzzle data validator.
 | Command                    | Purpose                                                                                                                                          |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `npm run dev`              | Start Vite with hot reload on <http://localhost:5173> (downloads the engine on first run).                                                       |
-| `npm run check`            | Lint, format check, typecheck, unit tests and a production build — what CI runs.                                                                 |
-| `npm test`                 | Unit tests (Vitest); `npm run test:watch` for watch mode.                                                                                        |
+| `npm run check`            | Lint, dead-code check, format check, typecheck, unit tests, production build and bundle budget — what CI runs.                                   |
+| `npm run lint:dead`        | Unused files, exports and dependencies (knip); runs in `check` and CI.                                                                           |
+| `npm test`                 | Unit tests (Vitest); `npm run test:watch` for watch mode, `npm run test:coverage` for a coverage report.                                         |
 | `npm run e2e`              | Playwright end-to-end tests, including the axe-core accessibility sweep, against the production build (`npx playwright install chromium` first). |
 | `npm run build`            | Production build to `dist/` (adds `404.html` and `.nojekyll` for GitHub Pages).                                                                  |
 | `npm run bundle:check`     | Fail when a gzipped chunk or the service-worker precache outgrows its budget (runs in `check` and CI).                                           |
@@ -40,6 +41,7 @@ CI runs the same checks plus the puzzle data validator.
 | `npm run engine:setup`     | (Re)download the pinned Stockfish build into `public/engine/`.                                                                                   |
 | `npm run puzzles:import`   | Rebuild the puzzle set from the Lichess database.                                                                                                |
 | `npm run puzzles:verify`   | Validate the bundled puzzles; add `--engine 40` for an engine spot-check.                                                                        |
+| `npm run puzzles:reindex`  | Rebuild `public/puzzles/index.json` from the chunk files after editing them by hand.                                                             |
 | `npm run openings:import`  | Rebuild the ECO opening table and the opening lines from lichess-org/chess-openings.                                                             |
 | `npm run lessons:verify`   | Engine-verify every lesson task (slow; run after editing lessons).                                                                               |
 | `npm run lessons:index`    | Regenerate the lightweight lesson index used outside the Learn pages (also runs before build).                                                   |

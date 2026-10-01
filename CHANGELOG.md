@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-10-01
+
+### Changed
+
+- **Repository clean-up.** Dead code is gone: a duplicate move-navigation component, two unused
+  chess helpers, two test seams nothing used, a duplicated own-puzzle cap, a few unused constants,
+  and the unused Tabs and drill styles. The puzzle
+  reindex script is wired up as `npm run puzzles:reindex`, `chrome-launcher` (used by the
+  Lighthouse script) is declared instead of relied on transitively, `tsconfig.node.json` no longer
+  lists a file that does not exist, and the changelog is formatted like every other document.
+- **Dependencies.** The GitHub Actions used by the workflows are on their current majors (checkout
+  and setup-node 7, upload-artifact 7, download-artifact 8, configure-pages 6, upload-pages-artifact
+  and deploy-pages 5), which also settles the open Dependabot pull requests; `@types/node` is on 26;
+  Dependabot groups future Actions updates into one pull request. A transitive `basic-ftp` advisory
+  under Lighthouse's Puppeteer is closed with an override to the patched line, so `npm audit` is
+  clean again.
+- The Lighthouse script now says that nothing is serving the preview instead of auditing a page of
+  zeros.
+
+### Testing
+
+- `npm run lint:dead` (knip) fails on files nothing imports, exports nothing uses and dependencies
+  that are missing from or unused in `package.json`; it runs in `check` and in CI.
+
 ## [0.9.3] - 2026-10-01
 
 ### Fixed
@@ -329,7 +353,7 @@ by this version keeps opening.
 
 ### Changed
 
-- The puzzle rating is consistently called a *puzzle* rating; "provisional" now means the deviation is
+- The puzzle rating is consistently called a _puzzle_ rating; "provisional" now means the deviation is
   at least 110 rather than "fewer than 30 rated puzzles".
 - Progress store version 5 and export version 4: older saves and exports get a deviation derived from
   how many rated puzzles their Elo rating had seen, and the last rated time from the rating history.

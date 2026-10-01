@@ -115,7 +115,3 @@ export function parseShapes(shapes: string[] | undefined): DrawShape[] {
     return [];
   });
 }
-
-export function lessonHasTasks(lesson: Lesson): boolean {
-  return lesson.steps.some((s) => s.task);
-}

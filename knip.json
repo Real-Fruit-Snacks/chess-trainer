@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/features/learn/lessonMetaFormat.ts"],
+  "ignore": ["scripts/lib/node-engine.d.mts"],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "types": "off"
+  }
+}

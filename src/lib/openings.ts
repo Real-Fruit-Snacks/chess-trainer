@@ -42,8 +42,3 @@ export function findOpening(table: OpeningTable, fens: readonly Fen[]): Opening 
   }
   return null;
 }
-
-/** Test seam: preload a table without fetching. */
-export function setOpeningsTable(table: OpeningTable): void {
-  tablePromise = Promise.resolve(table);
-}

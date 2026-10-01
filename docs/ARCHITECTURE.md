@@ -369,6 +369,9 @@ caught, recorded in `useStorageHealth` and reported once, so the stores never th
 - **Visual snapshots.** `e2e/visual.spec.ts` compares the static pages pixel by pixel on desktop and
   phone (baselines in `e2e/visual.spec.ts-snapshots/`, regenerated with `--update-snapshots` after a
   deliberate design change); the CI job blocks a merge.
+- **Dead code.** `npm run lint:dead` (knip, configured in `knip.json`) fails on files nothing imports,
+  exports nothing uses and dependencies that are missing from or unused in `package.json`. A
+  module that is loaded by path at build time (the lesson index generator) is listed as an entry.
 - **Stylesheet scope.** Pages are code-split and so are their stylesheets, so a class defined in
   one page's CSS does not exist until that page has loaded. `src/styles/cssScope.test.ts` follows
   each lazily loaded page's static imports and fails if a component uses a class defined only in a

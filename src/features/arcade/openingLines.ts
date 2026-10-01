@@ -23,8 +23,3 @@ export function loadOpeningLines(): Promise<OpeningLine[]> {
     });
   return linesPromise;
 }
-
-/** Test seam: preload lines without fetching. */
-export function setOpeningLines(lines: OpeningLine[]): void {
-  linesPromise = Promise.resolve(lines);
-}

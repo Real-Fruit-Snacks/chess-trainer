@@ -106,7 +106,8 @@ npm install     # Node 22 or newer
 npm run dev     # downloads the engine on first run, then serves http://localhost:5173
 ```
 
-`npm run check` runs what CI runs: lint, format check, typecheck, unit tests and a production build.
+`npm run check` runs what CI runs: lint, dead-code and dependency check, format check, typecheck, unit
+tests, a production build and the bundle budget.
 The other scripts are listed in [CONTRIBUTING.md](CONTRIBUTING.md#scripts).
 
 ### Host your own

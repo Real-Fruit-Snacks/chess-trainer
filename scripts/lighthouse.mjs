@@ -27,6 +27,15 @@ const BINARY_AUDITS = ['label-content-name-mismatch', 'color-contrast', 'errors-
 const jsonIndex = process.argv.indexOf('--json');
 const jsonPath = jsonIndex > -1 ? process.argv[jsonIndex + 1] : null;
 
+// An unreachable server audits as a page of zeros; say what is wrong instead.
+try {
+  const probe = await fetch(BASE);
+  if (!probe.ok) throw new Error(`HTTP ${probe.status}`);
+} catch (error) {
+  console.error(`Nothing is serving ${BASE} (${error.message}). Run \`npm run preview\` first.`);
+  process.exit(2);
+}
+
 const chrome = await launch({
   chromePath: process.env.CHROME_PATH,
   chromeFlags: ['--headless=new', '--no-sandbox', '--disable-gpu'],

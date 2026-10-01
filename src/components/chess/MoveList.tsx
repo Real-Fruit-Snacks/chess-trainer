@@ -1,6 +1,5 @@
 import type { Move } from 'chess.js';
 import { useEffect, useRef } from 'react';
-import { Button, Kbd, Icon } from '@/components/ui';
 import './chess-components.css';
 import { scrollIntoContainer } from '@/lib/scroll';
 
@@ -97,78 +96,6 @@ export function MoveList({
           {renderMove(row.black)}
         </div>
       ))}
-    </div>
-  );
-}
-
-export function MoveNavigation({
-  currentPly,
-  total,
-  onSelectPly,
-  disabled,
-}: {
-  currentPly: number;
-  total: number;
-  onSelectPly: (ply: number) => void;
-  disabled?: boolean;
-}) {
-  useEffect(() => {
-    if (disabled) return;
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-      if (e.key === 'ArrowLeft') onSelectPly(Math.max(0, currentPly - 1));
-      else if (e.key === 'ArrowRight') onSelectPly(Math.min(total, currentPly + 1));
-      else if (e.key === 'Home') onSelectPly(0);
-      else if (e.key === 'End') onSelectPly(total);
-      else return;
-      e.preventDefault();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [currentPly, total, onSelectPly, disabled]);
-
-  return (
-    <div className="movenav" role="group" aria-label="Move navigation">
-      <Button
-        size="sm"
-        icon
-        aria-label="First move"
-        onClick={() => onSelectPly(0)}
-        disabled={(disabled ?? false) || currentPly === 0}
-      >
-        <Icon name="skip-back" size={16} />
-      </Button>
-      <Button
-        size="sm"
-        icon
-        aria-label="Previous move"
-        onClick={() => onSelectPly(currentPly - 1)}
-        disabled={(disabled ?? false) || currentPly === 0}
-      >
-        <Icon name="chevron-left" size={16} />
-      </Button>
-      <Button
-        size="sm"
-        icon
-        aria-label="Next move"
-        onClick={() => onSelectPly(currentPly + 1)}
-        disabled={(disabled ?? false) || currentPly >= total}
-      >
-        <Icon name="chevron-right" size={16} />
-      </Button>
-      <Button
-        size="sm"
-        icon
-        aria-label="Last move"
-        onClick={() => onSelectPly(total)}
-        disabled={(disabled ?? false) || currentPly >= total}
-      >
-        <Icon name="skip-forward" size={16} />
-      </Button>
-      <span className="small faint" style={{ alignSelf: 'center', marginLeft: 8 }}>
-        <Kbd>←</Kbd> <Kbd>→</Kbd>
-      </span>
     </div>
   );
 }

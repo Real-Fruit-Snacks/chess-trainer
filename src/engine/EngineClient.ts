@@ -49,8 +49,6 @@ export interface EngineOptions {
   hashMb?: number;
 }
 
-export const DEFAULT_ENGINE_URL = ENGINE_BUILD_URLS.single;
-
 export class EngineUnsupportedError extends Error {
   constructor(
     message = 'This browser cannot run the chess engine (WebAssembly or Web Workers are unavailable).',

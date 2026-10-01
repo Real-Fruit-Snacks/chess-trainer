@@ -26,7 +26,6 @@ export interface OwnPuzzle extends Puzzle {
 }
 
 export const OWN_PUZZLE_PREFIX = 'own-';
-export const MAX_OWN_PUZZLES = 300;
 
 export function isOwnPuzzleId(id: string): boolean {
   return id.startsWith(OWN_PUZZLE_PREFIX);

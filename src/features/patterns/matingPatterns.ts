@@ -259,10 +259,6 @@ export const MATING_PATTERNS: readonly MatingPattern[] = [
   },
 ];
 
-export function getPattern(id: string): MatingPattern | undefined {
-  return MATING_PATTERNS.find((p) => p.id === id);
-}
-
 /** The diagram: the position after the setup move (White to move and mate). */
 export function patternDiagram(pattern: MatingPattern): Fen {
   const chess = new Chess(pattern.before);

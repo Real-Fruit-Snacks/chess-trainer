@@ -71,12 +71,6 @@
   font-size: 0.95rem;
 }
 
-.drill__found {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
 /* Recall drill: the move sequence to follow in your head. */
 .drill__moves {
   margin: 8px 0;

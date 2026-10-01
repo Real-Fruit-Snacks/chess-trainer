@@ -7,10 +7,6 @@ export function toLongColor(color: ShortColor): LongColor {
   return color === 'w' ? 'white' : 'black';
 }
 
-export function toShortColor(color: LongColor): ShortColor {
-  return color === 'white' ? 'w' : 'b';
-}
-
 export function opposite(color: LongColor): LongColor {
   return color === 'white' ? 'black' : 'white';
 }
@@ -164,16 +160,4 @@ export function moveLabel(plyIndex: number, startFen: Fen = START_FEN): string {
   const ply = plyIndex + (startsWithBlack ? 1 : 0);
   const moveNumber = startMove + Math.floor(ply / 2);
   return ply % 2 === 0 ? `${moveNumber}.` : `${moveNumber}...`;
-}
-
-export function pieceName(symbol: string): string {
-  const names: Record<string, string> = {
-    p: 'pawn',
-    n: 'knight',
-    b: 'bishop',
-    r: 'rook',
-    q: 'queen',
-    k: 'king',
-  };
-  return names[symbol.toLowerCase()] ?? symbol;
 }
