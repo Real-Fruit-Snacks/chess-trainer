@@ -1,6 +1,6 @@
 {
   "name": "chess-trainer",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Learn, practice and solve chess puzzles at any level — a fully static, installable web app built for GitHub Pages.",
   "license": "MIT",
@@ -25,7 +25,7 @@
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
-    "check": "npm run lint && npm run format:check && npm run typecheck && npm run test && npm run build",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm run test && npm run build && npm run bundle:check",
     "engine:setup": "node scripts/setup-engine.mjs",
     "puzzles:import": "node scripts/import-lichess-puzzles.mjs",
     "openings:import": "node scripts/import-openings.mjs",
@@ -34,7 +34,11 @@
     "lessons:index": "node scripts/build-lesson-index.mjs",
     "drills:verify": "node scripts/verify-drills.mjs",
     "icons:generate": "node scripts/generate-icons.mjs",
-    "studies:verify": "node scripts/verify-studies.mjs"
+    "studies:verify": "node scripts/verify-studies.mjs",
+    "arcade:positions": "node scripts/build-arcade-positions.mjs",
+    "bundle:check": "node scripts/check-bundle-size.mjs",
+    "lighthouse": "node scripts/lighthouse.mjs",
+    "e2e:visual": "VISUAL=1 playwright test visual"
   },
   "dependencies": {
     "@lichess-org/chessground": "^10.4.0",
@@ -45,6 +49,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.58.0",
     "@testing-library/jest-dom": "^7.0.1",
@@ -59,6 +64,7 @@
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.12.0",
     "jsdom": "^30.1.1",
+    "lighthouse": "^13.5.0",
     "prettier": "^3.9.9",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.71.0",

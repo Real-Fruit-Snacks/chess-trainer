@@ -78,12 +78,7 @@ export function InstallBanner() {
       </div>
       <div className="row">
         <InstallButton variant="primary" size="sm" />
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={state.dismiss}
-          aria-label="Dismiss install banner"
-        >
+        <Button size="sm" variant="ghost" onClick={state.dismiss}>
           Not now
         </Button>
       </div>

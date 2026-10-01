@@ -22,8 +22,9 @@ const seedProgress = (page: Page, state: Record<string, unknown>) =>
 const seedSettings = (page: Page, state: Record<string, unknown>) =>
   seed(page, SETTINGS_KEY, state);
 
+// Ends with a queen given away for nothing, so the review always has a key moment to list.
 const SHORT_GAME =
-  '1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Ng5 d5 5. exd5 Nxd5 6. Nxf7 Kxf7 7. Qf3+ Ke6 8. Nc3 Nb4 9. a3 Nxc2+ 10. Kd1 Nxa1 *';
+  '1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Ng5 d5 5. exd5 Nxd5 6. Nxf7 Kxf7 7. Qf3+ Ke6 8. Nc3 Nb4 9. a3 Nxc2+ 10. Kd1 Nxa1 11. Qf7+ Kxf7 *';
 
 test.describe('game review', () => {
   test('draws the evaluation graph and lists key moments that jump to the move', async ({

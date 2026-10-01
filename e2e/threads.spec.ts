@@ -15,7 +15,7 @@ test.describe('multi-threaded engine', () => {
   });
 
   test('switches cross-origin isolation on and off across reloads', async ({ page }) => {
-    await page.goto('/progress');
+    await page.goto('/settings');
     const status = page.getByTestId('engine-threads-status');
     await expect(status).toContainText(/Off/);
     expect(await page.evaluate(() => crossOriginIsolated)).toBe(false);
@@ -37,7 +37,7 @@ test.describe('multi-threaded engine', () => {
     await expect(page.locator('.engine-status')).toContainText(/depth \d+/, { timeout: 30_000 });
 
     // Switching it off restores a plain document on the next load.
-    await page.goto('/progress');
+    await page.goto('/settings');
     await page.getByText('Multi-threaded engine (experimental)').click();
     await page.getByRole('button', { name: 'Reload now' }).click();
     await page.waitForLoadState('load');
@@ -46,7 +46,7 @@ test.describe('multi-threaded engine', () => {
   });
 
   test('cross-origin API calls still work while isolated', async ({ page }) => {
-    await page.goto('/progress');
+    await page.goto('/settings');
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
     await page.getByText('Multi-threaded engine (experimental)').click();
     await page.getByRole('button', { name: 'Reload now' }).click();

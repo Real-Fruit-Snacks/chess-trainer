@@ -1,5 +1,5 @@
 import { lazy } from 'react';
-import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom';
+import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Shell } from './Shell';
 
@@ -11,6 +11,8 @@ const PuzzlesPage = lazy(() => import('@/features/puzzles/PuzzlesPage'));
 const PlayPage = lazy(() => import('@/features/play/PlayPage'));
 const AnalyzePage = lazy(() => import('@/features/analyze/AnalyzePage'));
 const ProgressPage = lazy(() => import('@/features/progress/ProgressPage'));
+const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
+const LabPage = lazy(() => import('@/features/lab/LabPage'));
 const DrillsPage = lazy(() => import('@/features/drills/DrillsPage'));
 const CoordinatesDrill = lazy(() => import('@/features/drills/CoordinatesDrill'));
 const VisionDrill = lazy(() => import('@/features/drills/VisionDrill'));
@@ -27,6 +29,15 @@ const ClassicGamePage = lazy(() => import('@/features/classics/ClassicGamePage')
 const ReferencePage = lazy(() => import('@/features/reference/ReferencePage'));
 const PlacementPage = lazy(() => import('@/features/placement/PlacementPage'));
 const PatternsPage = lazy(() => import('@/features/patterns/PatternsPage'));
+const ArcadePage = lazy(() => import('@/features/arcade/ArcadePage'));
+const HandAndBrainPage = lazy(() => import('@/features/arcade/HandAndBrainPage'));
+const DailyOpeningPage = lazy(() => import('@/features/arcade/DailyOpeningPage'));
+const WhoStandsBetterPage = lazy(() => import('@/features/arcade/WhoStandsBetterPage'));
+const OddsLadderPage = lazy(() => import('@/features/arcade/OddsLadderPage'));
+const ArmyDraftPage = lazy(() => import('@/features/arcade/ArmyDraftPage'));
+const FortressPage = lazy(() => import('@/features/arcade/FortressPage'));
+const EngineSaysPage = lazy(() => import('@/features/arcade/EngineSaysPage'));
+const BlindfoldPage = lazy(() => import('@/features/arcade/BlindfoldPage'));
 const NotFoundPage = lazy(() => import('@/features/home/NotFoundPage'));
 
 export const routes: RouteObject[] = [
@@ -53,6 +64,15 @@ export const routes: RouteObject[] = [
       { path: 'drills/vision', element: <VisionDrill /> },
       { path: 'drills/endgame/:drillId', element: <EndgameDrillPage /> },
       { path: 'patterns', element: <PatternsPage /> },
+      { path: 'arcade', element: <ArcadePage /> },
+      { path: 'arcade/hand-and-brain', element: <HandAndBrainPage /> },
+      { path: 'arcade/daily-opening', element: <DailyOpeningPage /> },
+      { path: 'arcade/who-stands-better', element: <WhoStandsBetterPage /> },
+      { path: 'arcade/odds-ladder', element: <OddsLadderPage /> },
+      { path: 'arcade/army-draft', element: <ArmyDraftPage /> },
+      { path: 'arcade/fortress', element: <FortressPage /> },
+      { path: 'arcade/engine-says', element: <EngineSaysPage /> },
+      { path: 'arcade/blindfold', element: <BlindfoldPage /> },
       { path: 'openings', element: <OpeningsPage /> },
       { path: 'openings/:repertoireId', element: <RepertoirePage /> },
       { path: 'games', element: <MyGamesPage /> },
@@ -62,7 +82,8 @@ export const routes: RouteObject[] = [
       { path: 'classics/:gameId', element: <ClassicGamePage /> },
       { path: 'reference', element: <ReferencePage /> },
       { path: 'progress', element: <ProgressPage /> },
-      { path: 'settings', element: <Navigate to="/progress#settings" replace /> },
+      { path: 'settings', element: <SettingsPage /> },
+      { path: 'settings/lab', element: <LabPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

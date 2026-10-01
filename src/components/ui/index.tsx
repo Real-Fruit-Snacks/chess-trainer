@@ -390,4 +390,4 @@ export function EmptyState({
   );
 }
 
-export { Icon, type IconName, type IconProps, Stars } from './Icon';
+export { Icon, ICON_NAMES, type IconName, type IconProps, Stars } from './Icon';

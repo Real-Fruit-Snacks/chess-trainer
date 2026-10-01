@@ -1,0 +1,267 @@
+/* ---------- Arcade hub ---------- */
+.arcade-card__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.arcade-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.arcade-card__meta {
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.arcade-card__tagline {
+  margin: 0;
+  font-weight: 600;
+}
+
+.arcade-card__footer {
+  margin-top: auto;
+  padding-top: var(--space-2);
+  gap: var(--space-2);
+}
+
+/* ---------- Shared game chrome ---------- */
+.arcade__eyebrow a {
+  font-weight: 600;
+}
+
+.arcade__status {
+  font-weight: 600;
+  margin: var(--space-2) 0;
+  min-height: 1.5em;
+}
+
+.arcade__summary {
+  max-width: 460px;
+  text-align: center;
+}
+
+.arcade__summary .row {
+  justify-content: center;
+}
+
+.arcade__summary h2 {
+  margin-top: 0;
+}
+
+.arcade__scoreline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: center;
+  margin: var(--space-3) 0;
+}
+
+/* Piece-type calls (Hand & Brain) */
+.arcade__pieces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.arcade__piece {
+  min-width: 64px;
+  flex: 1 1 64px;
+}
+
+/* Health bar (Fortress) */
+.arcade__health {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+  margin: var(--space-2) 0;
+}
+
+.arcade__health > span {
+  display: block;
+  height: 100%;
+  background: var(--success);
+  transition:
+    width 400ms ease,
+    background 400ms ease;
+}
+
+.arcade__health--low > span {
+  background: var(--danger);
+}
+
+.arcade__health--mid > span {
+  background: var(--warning);
+}
+
+/* Evaluation slider (Who Stands Better?) */
+.arcade__slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.arcade__slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.arcade__verdict {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: var(--space-2) 0;
+}
+
+/* Guess grid (Daily Opening) */
+.arcade__guesses {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.arcade__guess {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.arcade__guess-name {
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.arcade__tile {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+.arcade__tile--hit {
+  background: var(--success);
+  color: #fff;
+}
+
+.arcade__tile--near {
+  background: var(--warning);
+  color: #fff;
+}
+
+.arcade__tile--extra {
+  opacity: 0.6;
+}
+
+.arcade__results {
+  position: relative;
+}
+
+.arcade__options {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.arcade__option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.arcade__option:hover,
+.arcade__option:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+/* Army shop (Army Draft) */
+.arcade__shop {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-2);
+}
+
+/* The − count + stepper stays on one line whatever the card width. */
+.arcade__shop-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.arcade__shop-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.arcade__shop-count {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  min-width: 1.5em;
+  text-align: center;
+}
+
+.arcade__budget {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* Sequence display (Engine Says) */
+.arcade__sequence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+}
+
+.arcade__sequence-move {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.arcade__sequence-move--done {
+  background: var(--success);
+  color: #fff;
+}
+
+.arcade__sequence-move--current {
+  outline: 2px solid var(--accent);
+}

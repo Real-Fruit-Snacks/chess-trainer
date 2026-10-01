@@ -20,17 +20,24 @@ const seedSettings = (page: Page, state: Record<string, unknown>) =>
 const SCHOLAR =
   '[White "alice"]\n[Black "bob"]\n[Date "2026.09.29"]\n\n1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7# 1-0';
 
+/**
+ * One blunder with one right answer: after the forced 1...Kg8, 2.Qg7# is the only
+ * mate in one, so the review's best move (and the puzzle's solution) never varies.
+ */
+const MISSED_MATE =
+  '[White "alice"]\n[Black "bob"]\n[Date "2026.09.29"]\n[SetUp "1"]\n[FEN "7k/8/6KQ/8/8/8/8/8 b - - 0 1"]\n\n1... Kg8 2. Qh8+ Kxh8 1/2-1/2';
+
 test.describe('own-game puzzles', () => {
   test('a reviewed blunder becomes a puzzle that can be solved in Mine mode', async ({ page }) => {
     await seedProgress(page, { onboarded: true, puzzleRating: 1200 });
     await page.goto('/analyze');
     await page.getByRole('button', { name: 'Import FEN / PGN' }).click();
-    await page.locator('textarea').fill(SCHOLAR);
+    await page.locator('textarea').fill(MISSED_MATE);
     await page.getByRole('button', { name: 'Load', exact: true }).click();
     await page.getByRole('combobox', { name: 'Review depth' }).selectOption('fast');
     await page.getByRole('button', { name: 'Review game' }).click();
     await expect(page.locator('.evalgraph')).toBeVisible({ timeout: 120_000 });
-    await expect(page.locator('.moments__item').first()).toContainText('Nf6');
+    await expect(page.locator('.moments__item').first()).toContainText('Qh8+');
 
     await page.getByRole('button', { name: /Add \d+ as puzzle/ }).click();
     await expect(page.getByRole('button', { name: 'All saved as puzzles' })).toBeDisabled();
@@ -41,9 +48,8 @@ test.describe('own-game puzzles', () => {
     const board = await expectBoard(page);
     await expect(page.locator('.puzzle-status')).toContainText(/Your move/i, { timeout: 20_000 });
     await expect(page.getByText('Blunder in your game')).toBeVisible();
-    await expect(page.getByText(/you played/)).toContainText('Nf6');
-    // The engine's answer to 3.Qh5 is ...g6.
-    await playMove(board, 'g7', 'g6', 'black');
+    await expect(page.getByText(/you played/)).toContainText('Qh8+');
+    await playMove(board, 'h6', 'g7', 'white');
     await expect(page.locator('.puzzle-status')).toContainText(/solved/i, { timeout: 20_000 });
 
     // Solving in Mine mode is unrated and the puzzle stays available.
@@ -138,7 +144,7 @@ test.describe('my games', () => {
     await expect(page.getByTestId('deviations')).toContainText('Caro-Kann');
 
     // Batch review at the fast depth, then save the learner's mistakes as puzzles.
-    await page.goto('/progress');
+    await page.goto('/settings');
     await page.getByRole('combobox', { name: 'Game review depth' }).selectOption('fast');
     await page.goto('/games');
     await page.getByRole('button', { name: /Review all \(3\)/ }).click();
@@ -566,7 +572,7 @@ test.describe('shareable analysis links', () => {
 
 test.describe('settings: piece set, sound theme and engine diagnostics', () => {
   test('the Letters piece set applies everywhere and persists', async ({ page }) => {
-    await page.goto('/progress');
+    await page.goto('/settings');
     await page
       .getByRole('group', { name: 'Piece set' })
       .getByRole('button', { name: 'Letters' })
@@ -596,7 +602,7 @@ test.describe('settings: piece set, sound theme and engine diagnostics', () => {
   test('the diagnostics panel reports the environment and benchmarks the engine', async ({
     page,
   }) => {
-    await page.goto('/progress');
+    await page.goto('/settings');
     const panel = page.getByTestId('engine-diagnostics');
     await panel.locator('summary').click();
     await expect(panel).toContainText('Engine build in use');

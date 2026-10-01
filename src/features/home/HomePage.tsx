@@ -71,6 +71,13 @@ const FEATURES = [
     cta: 'Learn a repertoire',
   },
   {
+    to: '/arcade',
+    icon: 'gamepad' as IconName,
+    title: 'Arcade',
+    text: 'Hand & Brain with Stockfish as your partner, the Daily Opening, Who Stands Better?, the Odds Ladder, Army Draft, Fortress, Engine Says and blindfold games.',
+    cta: 'Pick a game',
+  },
+  {
     to: '/classics',
     icon: 'classics' as IconName,
     title: 'Classic games',
@@ -114,6 +121,7 @@ export default function HomePage() {
       progress.puzzleReviews,
       progress.lessons,
       progress.drills,
+      progress.dailyOpening,
       repertoireCards,
       customRepertoires,
       now,

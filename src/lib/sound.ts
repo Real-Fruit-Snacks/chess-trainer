@@ -19,6 +19,20 @@ export type SoundName =
   | 'lowTime'
   | 'notify';
 
+/** Every cue, in the order the test lab lists them. */
+export const SOUND_NAMES: readonly SoundName[] = [
+  'move',
+  'capture',
+  'check',
+  'castle',
+  'promote',
+  'solved',
+  'failed',
+  'gameEnd',
+  'lowTime',
+  'notify',
+];
+
 let context: AudioContext | null = null;
 
 function getContext(): AudioContext | null {

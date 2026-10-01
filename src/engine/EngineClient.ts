@@ -321,7 +321,6 @@ export class EngineClient {
         this.send(`position fen ${params.fen}${moves}`);
 
         const go: string[] = ['go'];
-        if (params.searchmoves?.length) go.push('searchmoves', ...params.searchmoves);
         if (params.infinite) go.push('infinite');
         else {
           if (params.depth !== undefined) go.push('depth', String(params.depth));
@@ -329,6 +328,8 @@ export class EngineClient {
           if (params.nodes !== undefined) go.push('nodes', String(params.nodes));
           if (go.length === 1) go.push('depth', '12');
         }
+        // Stockfish reads every token after `searchmoves` as a move, so it must come last.
+        if (params.searchmoves?.length) go.push('searchmoves', ...params.searchmoves);
         this.send(go.join(' '));
       } catch (err) {
         settled = true;

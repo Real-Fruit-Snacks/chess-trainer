@@ -154,9 +154,9 @@ function LessonView({ lesson }: { lesson: NonNullable<ReturnType<typeof getLesso
             >
               Restart lesson
             </Button>
-            <Link className="btn btn--ghost btn--sm" to="/learn">
+            <LinkButton variant="ghost" size="sm" to="/learn">
               All lessons
-            </Link>
+            </LinkButton>
           </div>
         </Card>
       </div>

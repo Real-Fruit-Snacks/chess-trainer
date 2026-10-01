@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { safeLocalStorage } from '@/lib/persistStorage';
 
 export type ColorScheme = 'system' | 'light' | 'dark';
 export type BoardTheme = 'brown' | 'green' | 'blue' | 'grey' | 'contrast';
@@ -118,7 +119,7 @@ export const useSettings = create<SettingsState>()(
     {
       name: SETTINGS_STORAGE_KEY,
       version: 3,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => safeLocalStorage),
       migrate: (persisted) => ({ ...DEFAULT_SETTINGS, ...(persisted as Partial<SettingsState>) }),
       partialize: (state) => {
         const { update: _u, reset: _r, ...rest } = state;

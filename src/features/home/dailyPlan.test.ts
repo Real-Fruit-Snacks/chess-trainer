@@ -21,10 +21,51 @@ function progress(overrides: Partial<Parameters<typeof buildDailyPlan>[0]> = {})
 describe('buildDailyPlan', () => {
   it('lists the daily puzzle, rated puzzles, a lesson and a drill for a new user', () => {
     const plan = buildDailyPlan(progress(), { cards: {}, custom: [] }, now);
-    expect(plan.items.map((i) => i.id)).toEqual(['daily', 'rated', 'lesson', 'drill']);
+    expect(plan.items.map((i) => i.id)).toEqual([
+      'daily',
+      'dailyOpening',
+      'rated',
+      'lesson',
+      'drill',
+    ]);
     expect(plan.done).toBe(0);
-    expect(plan.items[2]?.title).toContain('Lesson:');
-    expect(plan.items[3]?.to).toBe('/drills/endgame/mate-kq');
+    expect(plan.items[3]?.title).toContain('Lesson:');
+    expect(plan.items[4]?.to).toBe('/drills/endgame/mate-kq');
+  });
+
+  it('marks the daily opening done once today’s has been solved or missed', () => {
+    const solved = buildDailyPlan(
+      progress({
+        dailyOpening: {
+          date: today,
+          guesses: ['Italian Game', 'Scotch Game'],
+          result: 'solved',
+          streak: 1,
+          bestStreak: 1,
+          history: { [today]: 2 },
+        },
+      }),
+      { cards: {}, custom: [] },
+      now,
+    );
+    const item = solved.items.find((i) => i.id === 'dailyOpening');
+    expect(item?.done).toBe(true);
+    expect(item?.detail).toContain('solved in 2');
+    const stale = buildDailyPlan(
+      progress({
+        dailyOpening: {
+          date: '2000-01-01',
+          guesses: [],
+          result: 'failed',
+          streak: 0,
+          bestStreak: 1,
+          history: {},
+        },
+      }),
+      { cards: {}, custom: [] },
+      now,
+    );
+    expect(stale.items.find((i) => i.id === 'dailyOpening')?.done).toBe(false);
   });
 
   it('marks items done from today’s activity and adds review items when relevant', () => {

@@ -222,7 +222,7 @@ export default function AnalyzePage() {
 
   return (
     <div>
-      <div className="page-header row row--between">
+      <div className="page-header page-header--lean row row--between">
         <div>
           <h1>Analysis board</h1>
           <p>

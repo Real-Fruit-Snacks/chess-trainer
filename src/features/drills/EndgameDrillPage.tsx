@@ -4,7 +4,7 @@ import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { PlayerBar } from '@/components/chess/PlayerBar';
 import { MoveList } from '@/components/chess/MoveList';
-import { Alert, Button, Card, Spinner, Stat } from '@/components/ui';
+import { Alert, Button, Card, Spinner, Stat, LinkButton } from '@/components/ui';
 import type { LongColor } from '@/chess/types';
 import { getLessonMeta } from '@/features/learn/lessonMeta';
 import { siteConfig } from '@/site.config';
@@ -158,17 +158,14 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
                     </Button>
                     <Button onClick={game.restart}>Same position</Button>
                     {game.result.outcome === 'won' && nextRung ? (
-                      <Link
-                        className="btn"
+                      <LinkButton
                         to={`/drills/endgame/${nextRung.drill.id}`}
                         data-testid="drill-next-rung"
                       >
                         Next rung: {nextRung.drill.title}
-                      </Link>
+                      </LinkButton>
                     ) : (
-                      <Link className="btn" to="/drills">
-                        All drills
-                      </Link>
+                      <LinkButton to="/drills">All drills</LinkButton>
                     )}
                   </div>
                 </Card>
@@ -202,12 +199,9 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
                 Give up
               </Button>
               {game.startFen ? (
-                <Link
-                  className="btn btn--ghost"
-                  to={`/analyze?fen=${encodeURIComponent(position.fen)}`}
-                >
+                <LinkButton variant="ghost" to={`/analyze?fen=${encodeURIComponent(position.fen)}`}>
                   Analyze
-                </Link>
+                </LinkButton>
               ) : null}
             </div>
           </Card>

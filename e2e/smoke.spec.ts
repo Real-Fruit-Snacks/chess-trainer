@@ -120,7 +120,7 @@ test.describe('analyze', () => {
 
 test.describe('progress', () => {
   test('settings persist across reloads', async ({ page }) => {
-    await page.goto('/progress');
+    await page.goto('/settings');
     await page
       .getByRole('group', { name: 'Colour scheme' })
       .getByRole('button', { name: 'Dark' })

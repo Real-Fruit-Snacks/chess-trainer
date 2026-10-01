@@ -91,7 +91,7 @@ export default function PuzzlesPage() {
 
   return (
     <div>
-      <div className="page-header row row--between">
+      <div className="page-header page-header--lean row row--between">
         <div>
           <h1>Puzzles</h1>
           <p>Engine-verified tactics from real games, picked to match your level.</p>

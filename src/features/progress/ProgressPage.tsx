@@ -1,21 +1,6 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { InstallButton } from '@/app/InstallPrompt';
-import { useInstall } from '@/app/pwa';
-import { BOARD_PALETTES } from '@/components/board/boardThemes';
-import { PIECE_SETS } from '@/components/board/pieceSets';
-import {
-  Badge,
-  Button,
-  Card,
-  Dialog,
-  Field,
-  Segmented,
-  Select,
-  Stat,
-  Switch,
-} from '@/components/ui';
-import { toast } from '@/components/ui/toastStore';
+import { useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { Badge, Card, Icon, LinkButton, Stat } from '@/components/ui';
 import { GameTree } from '@/chess/tree';
 import { CLASSIC_GAMES } from '@/features/classics/games';
 import { LESSON_META } from '@/features/learn/lessonMeta';
@@ -28,28 +13,14 @@ import { ENGINE_LEVELS } from '@/engine/levels';
 import { themeName } from '@/features/puzzles/themes';
 import { formatDate, formatDuration, trainingStreak } from '@/lib/dates';
 import { isProvisional, PROVISIONAL_RD } from '@/lib/glicko';
-import { CALIBRATION_PUZZLES, formatRating, ratingBand, STARTING_RATINGS } from '@/lib/rating';
+import { formatRating, ratingBand } from '@/lib/rating';
 import { approximateGameRatings, formatRange } from '@/lib/ratingScales';
-import { hapticsSupported } from '@/lib/haptics';
-import { playSound } from '@/lib/sound';
-import { badgingSupported } from '@/app/useAppBadge';
 import { siteConfig } from '@/site.config';
 import { summarizeProgress, useProgress } from '@/store/progress';
-import {
-  type BoardTheme,
-  type ColorScheme,
-  type PieceSet,
-  type ReviewDepth,
-  useSettings,
-} from '@/store/settings';
+import { ArcadeCard } from './ArcadeCard';
 import { BackupNudge } from './BackupNudge';
-import { ProfilesCard } from './ProfilesCard';
 import { buildEngineLadder } from '@/features/play/ladder';
 import { LevelResults } from './LevelResults';
-import { useBackupActions } from './useBackupActions';
-import { EngineDiagnostics } from './EngineDiagnostics';
-import { OfflinePuzzles } from './OfflinePuzzles';
-import { EngineThreadsSetting } from './EngineThreadsSetting';
 import { RatingChart } from './RatingChart';
 import { WeeklyCard } from './WeeklyCard';
 import { buildThemeReport, THEME_REPORT_MIN_ATTEMPTS } from './themeReport';
@@ -57,35 +28,12 @@ import './progress.css';
 
 export default function ProgressPage() {
   const progress = useProgress();
-  const settings = useSettings();
-  const location = useLocation();
   const stats = summarizeProgress(progress);
   const engineLadder = buildEngineLadder(progress.games);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const install = useInstall();
 
   useEffect(() => {
-    document.title = `Progress & settings · ${siteConfig.name}`;
+    document.title = `Progress · ${siteConfig.name}`;
   }, []);
-
-  useEffect(() => {
-    if (location.hash === '#settings') {
-      document.getElementById('settings')?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [location.hash]);
-
-  const backup = useBackupActions();
-
-  const importData = async (file: File) => {
-    try {
-      const parsed: unknown = JSON.parse(await file.text());
-      if (progress.importState(parsed)) toast('Progress imported.', { tone: 'success' });
-      else toast('That file does not look like a Chess Trainer export.', { tone: 'warning' });
-    } catch {
-      toast('Could not read that file.', { tone: 'danger' });
-    }
-  };
 
   const recent = progress.attempts.slice(0, 15);
   const repertoireCards = useRepertoire((s) => s.cards);
@@ -127,9 +75,17 @@ export default function ProgressPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <h1>Progress</h1>
-        <p>Everything is stored on this device only. Export a backup before switching browsers.</p>
+      <div className="page-header row row--between">
+        <div>
+          <h1>Progress</h1>
+          <p>
+            Everything is stored on this device only. Export a backup before switching browsers.
+          </p>
+        </div>
+        <LinkButton to="/settings">
+          <Icon name="settings" size={16} />
+          <span>Settings</span>
+        </LinkButton>
       </div>
       <BackupNudge />
 
@@ -194,87 +150,7 @@ export default function ProgressPage() {
             <RatingChart points={progress.ratingHistory} locale={siteConfig.locale} />
           </Card>
 
-          <RatingScalesCard rating={progress.puzzleRating} rd={progress.puzzleRd} />
-
-          <Card>
-            <h2 style={{ fontSize: '1.15rem' }}>Training</h2>
-            <div className="progress__stats">
-              <Stat
-                value={Math.max(0, ...progress.rushRuns.map((r) => r.score)) || '–'}
-                label="Best Puzzle Rush"
-              />
-              <Stat
-                value={Object.values(progress.drills).filter((d) => d.best > 0).length}
-                label="Drills completed"
-              />
-              <Stat value={reviewDue} label="Puzzles to review" />
-              <Stat value={openingStats.due} label="Opening moves due" />
-              <Stat value={openingStats.learned} label="Opening moves learned" />
-              <Stat
-                value={`${Object.keys(progress.guessGames).length}/${CLASSIC_GAMES.length}`}
-                label="Classic games played"
-              />
-            </div>
-            <p className="small muted" style={{ margin: '12px 0 0' }}>
-              <Link to="/puzzles/review">Review queue</Link> ·{' '}
-              <Link to="/puzzles/rush">Puzzle Rush</Link> · <Link to="/drills">Drills</Link> ·{' '}
-              <Link to="/openings">Openings</Link> · <Link to="/classics">Classic games</Link>
-            </p>
-          </Card>
-
           <WeeklyCard />
-
-          <Card>
-            <h2 style={{ fontSize: '1.15rem' }}>Strengths and weaknesses</h2>
-            {themeReport.length === 0 ? (
-              <p className="small muted">
-                Solve at least {THEME_REPORT_MIN_ATTEMPTS} puzzles of a theme (in any mode) and it
-                will be ranked here, with a link to practise it.
-              </p>
-            ) : (
-              <div className="themes-report">
-                <div>
-                  <h3 className="themes-report__heading">Work on these</h3>
-                  <ul className="themes-report__list">
-                    {weakest.map((row) => (
-                      <li key={row.tag}>
-                        <Link to={`/puzzles/themes?theme=${encodeURIComponent(row.tag)}`}>
-                          {themeName(row.tag)}
-                        </Link>
-                        <span className="themes-report__bar" aria-hidden="true">
-                          <span style={{ width: `${row.accuracy}%` }} />
-                        </span>
-                        <span className="num small">
-                          {row.accuracy}% <span className="faint">({row.attempts})</span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <h3 className="themes-report__heading">Going well</h3>
-                  <ul className="themes-report__list">
-                    {strongest.map((row) => (
-                      <li key={row.tag}>
-                        <Link to={`/puzzles/themes?theme=${encodeURIComponent(row.tag)}`}>
-                          {themeName(row.tag)}
-                        </Link>
-                        <span
-                          className="themes-report__bar themes-report__bar--good"
-                          aria-hidden="true"
-                        >
-                          <span style={{ width: `${row.accuracy}%` }} />
-                        </span>
-                        <span className="num small">
-                          {row.accuracy}% <span className="faint">({row.attempts})</span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-          </Card>
 
           <Card>
             <h2 style={{ fontSize: '1.15rem' }}>Recent puzzles</h2>
@@ -400,360 +276,90 @@ export default function ProgressPage() {
             </Card>
           ) : null}
         </div>
+        <div className="stack">
+          <RatingScalesCard rating={progress.puzzleRating} rd={progress.puzzleRd} />
 
-        <div className="stack" id="settings">
-          <ProfilesCard />
           <Card>
-            <h2 style={{ fontSize: '1.15rem' }}>Appearance</h2>
-            <div className="settings__group">
-              <div className="settings__row">
-                <span>Colour scheme</span>
-                <Segmented<ColorScheme>
-                  ariaLabel="Colour scheme"
-                  value={settings.colorScheme}
-                  onChange={(v) => settings.update({ colorScheme: v })}
-                  options={[
-                    { value: 'system', label: 'System' },
-                    { value: 'light', label: 'Light' },
-                    { value: 'dark', label: 'Dark' },
-                  ]}
-                />
-              </div>
-              <div className="settings__row">
-                <span>Board colours</span>
-                <div className="swatches" role="group" aria-label="Board colours">
-                  {(Object.keys(BOARD_PALETTES) as BoardTheme[]).map((theme) => (
-                    <button
-                      key={theme}
-                      type="button"
-                      className="swatch"
-                      aria-label={BOARD_PALETTES[theme].label}
-                      aria-pressed={settings.boardTheme === theme}
-                      title={BOARD_PALETTES[theme].hint ?? BOARD_PALETTES[theme].label}
-                      style={
-                        {
-                          '--sw-light': BOARD_PALETTES[theme].light,
-                          '--sw-dark': BOARD_PALETTES[theme].dark,
-                        } as CSSProperties
-                      }
-                      onClick={() => settings.update({ boardTheme: theme })}
-                    />
-                  ))}
-                </div>
-              </div>
-              <p className="small muted" style={{ margin: 0 }}>
-                {BOARD_PALETTES[settings.boardTheme].label}
-                {BOARD_PALETTES[settings.boardTheme].hint
-                  ? ` — ${BOARD_PALETTES[settings.boardTheme].hint}`
-                  : ''}
-              </p>
-              <div className="settings__row">
-                <span>Pieces</span>
-                <Segmented
-                  ariaLabel="Piece set"
-                  value={settings.pieceSet}
-                  onChange={(v) => settings.update({ pieceSet: v })}
-                  options={(Object.keys(PIECE_SETS) as PieceSet[]).map((set) => ({
-                    value: set,
-                    label: PIECE_SETS[set].label,
-                  }))}
-                />
-              </div>
-              <p className="small muted" style={{ margin: 0 }}>
-                {PIECE_SETS[settings.pieceSet].hint}
-              </p>
-              <Switch
-                checked={settings.showCoordinates}
-                onChange={(v) => settings.update({ showCoordinates: v })}
-                label="Show coordinates"
+            <h2 style={{ fontSize: '1.15rem' }}>Training</h2>
+            <div className="progress__stats">
+              <Stat
+                value={Math.max(0, ...progress.rushRuns.map((r) => r.score)) || '–'}
+                label="Best Puzzle Rush"
               />
-              <Switch
-                checked={settings.showLegalMoves}
-                onChange={(v) => settings.update({ showLegalMoves: v })}
-                label="Show legal move dots"
+              <Stat
+                value={Object.values(progress.drills).filter((d) => d.best > 0).length}
+                label="Drills completed"
               />
-              <Switch
-                checked={settings.animations}
-                onChange={(v) => settings.update({ animations: v })}
-                label="Animate pieces"
+              <Stat value={reviewDue} label="Puzzles to review" />
+              <Stat value={openingStats.due} label="Opening moves due" />
+              <Stat value={openingStats.learned} label="Opening moves learned" />
+              <Stat
+                value={`${Object.keys(progress.guessGames).length}/${CLASSIC_GAMES.length}`}
+                label="Classic games played"
               />
-              <Switch
-                checked={settings.sounds}
-                onChange={(v) => settings.update({ sounds: v })}
-                label="Sound effects"
-                description="Short synthesized sounds for moves, captures, checks and results."
-              />
-              {settings.sounds ? (
-                <div className="settings__row">
-                  <span>Sound theme</span>
-                  <Segmented
-                    ariaLabel="Sound theme"
-                    value={settings.soundTheme}
-                    onChange={(v) => {
-                      settings.update({ soundTheme: v });
-                      playSound('move');
-                    }}
-                    options={[
-                      { value: 'standard', label: 'Standard' },
-                      { value: 'soft', label: 'Soft' },
-                    ]}
-                  />
-                </div>
-              ) : null}
             </div>
-          </Card>
-
-          <Card>
-            <h2 style={{ fontSize: '1.15rem' }}>Play & analysis</h2>
-            <div className="settings__group">
-              <Switch
-                checked={settings.autoQueen}
-                onChange={(v) => settings.update({ autoQueen: v })}
-                label="Always promote to a queen"
-                description="Skips the promotion menu."
-              />
-              <Switch
-                checked={settings.puzzleAutoNext}
-                onChange={(v) => settings.update({ puzzleAutoNext: v })}
-                label="Auto-advance puzzles"
-                description="Load the next puzzle automatically after a solve."
-              />
-              <Switch
-                checked={settings.moveInput}
-                onChange={(v) => settings.update({ moveInput: v })}
-                label="Keyboard move entry"
-                description="Show a box under the board to type moves such as Nf3 or e2e4."
-              />
-              <Switch
-                checked={settings.tablebase}
-                onChange={(v) => settings.update({ tablebase: v })}
-                label="Endgame tablebase lookups"
-                description="In analysis, ask the Lichess tablebase for exact results in positions with 7 pieces or fewer. Uses the network; off by default."
-              />
-              <Switch
-                checked={settings.haptics}
-                onChange={(v) => settings.update({ haptics: v })}
-                label="Vibration"
-                description={
-                  hapticsSupported()
-                    ? 'A short buzz on moves, solves and mistakes.'
-                    : 'A short buzz on moves, solves and mistakes — this device does not support it.'
-                }
-              />
-              <Switch
-                checked={settings.appBadge}
-                onChange={(v) => settings.update({ appBadge: v })}
-                label="Badge on the app icon"
-                description={
-                  badgingSupported()
-                    ? 'Show how many reviews are due on the installed app’s icon.'
-                    : 'Show how many reviews are due on the installed app’s icon (needs the installed app).'
-                }
-              />
-              <Switch
-                checked={settings.explorer}
-                onChange={(v) => settings.update({ explorer: v })}
-                label="Opening explorer lookups"
-                description="In Analyze and Openings, show what masters and Lichess players play in the position and how it goes. Uses the network; off by default."
-              />
-              <Switch
-                checked={settings.playCoach}
-                onChange={(v) => settings.update({ playCoach: v })}
-                label="Coach mode by default"
-                description="New untimed games against the engine start with the coach on: mistakes pause the game with an explanation and a take-back."
-              />
-              <Field label="Default engine strength">
-                {(id) => (
-                  <Select
-                    id={id}
-                    value={settings.playLevel}
-                    onChange={(e) => settings.update({ playLevel: Number(e.target.value) })}
-                  >
-                    {ENGINE_LEVELS.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        Level {l.id} · {l.name} (~{l.approxElo})
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
-              <Field label="Game review depth" hint="Thorough is about twice as slow as fast.">
-                {(id) => (
-                  <Select
-                    id={id}
-                    value={settings.reviewDepth}
-                    onChange={(e) =>
-                      settings.update({ reviewDepth: e.target.value as ReviewDepth })
-                    }
-                  >
-                    <option value="fast">Fast (depth 10)</option>
-                    <option value="balanced">Balanced (depth 13)</option>
-                    <option value="thorough">Thorough (depth 16)</option>
-                  </Select>
-                )}
-              </Field>
-              <Field label="Analysis depth" hint="Higher is stronger but slower on phones.">
-                {(id) => (
-                  <Select
-                    id={id}
-                    value={settings.analysisDepth}
-                    onChange={(e) => settings.update({ analysisDepth: Number(e.target.value) })}
-                  >
-                    {[12, 15, 18, 20, 22, 24].map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
-              <EngineThreadsSetting />
-              <EngineDiagnostics />
-            </div>
-          </Card>
-
-          <Card>
-            <h2 style={{ fontSize: '1.15rem' }}>Puzzle rating</h2>
-            <p className="small muted">
-              Reset your puzzle rating to a level that matches you better, or let a short run of
-              puzzles find it. Your history is kept.
+            <p className="small muted" style={{ margin: '12px 0 0' }}>
+              <Link to="/puzzles/review">Review queue</Link> ·{' '}
+              <Link to="/puzzles/rush">Puzzle Rush</Link> · <Link to="/drills">Drills</Link> ·{' '}
+              <Link to="/openings">Openings</Link> · <Link to="/classics">Classic games</Link>
             </p>
-            <Field label="Start again from">
-              {(id) => (
-                <Select
-                  id={id}
-                  defaultValue=""
-                  onChange={(e) => {
-                    if (e.target.value === 'calibrate') {
-                      progress.completeOnboarding(0, 'calibrate');
-                      toast(
-                        `Calibration started — the next ${CALIBRATION_PUZZLES} rated puzzles find your level.`,
-                      );
-                      e.target.value = '';
-                      return;
-                    }
-                    const option = STARTING_RATINGS.find((o) => o.id === e.target.value);
-                    if (option) {
-                      progress.completeOnboarding(option.rating);
-                      toast(`Puzzle rating set to ${option.rating}.`);
-                      e.target.value = '';
-                    }
-                  }}
-                >
-                  <option value="" disabled>
-                    Choose a level…
-                  </option>
-                  <option value="calibrate">
-                    Find my level with {CALIBRATION_PUZZLES} puzzles
-                  </option>
-                  {STARTING_RATINGS.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label} (~{o.rating})
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
           </Card>
 
           <Card>
-            <h2 style={{ fontSize: '1.15rem' }}>App</h2>
-            <div className="settings__group">
-              {install.isStandalone ? (
-                <p className="small muted" style={{ margin: 0 }}>
-                  Installed as an app — works offline.
-                </p>
-              ) : (
-                <div className="settings__row">
-                  <span className="small">Install for offline use and a home-screen icon.</span>
-                  <InstallButton size="sm" />
-                </div>
-              )}
-              <OfflinePuzzles />
-              <div className="settings__row">
-                <span className="small">
-                  Backup or move your progress
-                  {backup.canShare ? ' — share it straight to another device' : ''}.
-                  {settings.lastBackupAt
-                    ? ` Last backup ${formatDate(settings.lastBackupAt, siteConfig.locale)}.`
-                    : ''}
-                </span>
-                <div className="row">
-                  {backup.canShare ? (
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      onClick={() => void backup.share()}
-                      disabled={backup.busy}
-                    >
-                      Share
-                    </Button>
-                  ) : null}
-                  <Button size="sm" onClick={backup.download}>
-                    Export
-                  </Button>
-                  <Button size="sm" onClick={() => fileInput.current?.click()}>
-                    Import
-                  </Button>
-                  <input
-                    ref={fileInput}
-                    type="file"
-                    accept="application/json"
-                    hidden
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) void importData(file);
-                      e.target.value = '';
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="settings__row">
-                <span className="small">Delete all progress and settings on this device.</span>
-                <Button size="sm" variant="danger" onClick={() => setConfirmReset(true)}>
-                  Reset everything
-                </Button>
-              </div>
-              <p className="small faint" style={{ margin: 0 }}>
-                {siteConfig.name} v{__APP_VERSION__} · built{' '}
-                {formatDate(__BUILD_DATE__, siteConfig.locale)} ·{' '}
-                <a href={siteConfig.repositoryUrl} target="_blank" rel="noreferrer">
-                  Source code
-                </a>
+            <h2 style={{ fontSize: '1.15rem' }}>Strengths and weaknesses</h2>
+            {themeReport.length === 0 ? (
+              <p className="small muted">
+                Solve at least {THEME_REPORT_MIN_ATTEMPTS} puzzles of a theme (in any mode) and it
+                will be ranked here, with a link to practise it.
               </p>
-            </div>
+            ) : (
+              <div className="themes-report">
+                <div>
+                  <h3 className="themes-report__heading">Work on these</h3>
+                  <ul className="themes-report__list">
+                    {weakest.map((row) => (
+                      <li key={row.tag}>
+                        <Link to={`/puzzles/themes?theme=${encodeURIComponent(row.tag)}`}>
+                          {themeName(row.tag)}
+                        </Link>
+                        <span className="themes-report__bar" aria-hidden="true">
+                          <span style={{ width: `${row.accuracy}%` }} />
+                        </span>
+                        <span className="num small">
+                          {row.accuracy}% <span className="faint">({row.attempts})</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="themes-report__heading">Going well</h3>
+                  <ul className="themes-report__list">
+                    {strongest.map((row) => (
+                      <li key={row.tag}>
+                        <Link to={`/puzzles/themes?theme=${encodeURIComponent(row.tag)}`}>
+                          {themeName(row.tag)}
+                        </Link>
+                        <span
+                          className="themes-report__bar themes-report__bar--good"
+                          aria-hidden="true"
+                        >
+                          <span style={{ width: `${row.accuracy}%` }} />
+                        </span>
+                        <span className="num small">
+                          {row.accuracy}% <span className="faint">({row.attempts})</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
           </Card>
+
+          <ArcadeCard />
         </div>
       </div>
-
-      <Dialog
-        open={confirmReset}
-        onClose={() => setConfirmReset(false)}
-        title="Reset everything?"
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmReset(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                progress.resetAll();
-                settings.reset();
-                setConfirmReset(false);
-                toast('All local data was cleared.');
-              }}
-            >
-              Yes, reset
-            </Button>
-          </>
-        }
-      >
-        <p className="muted">
-          This deletes your puzzle rating, lesson progress, game history and settings from this
-          device. Export a backup first if you want to keep them.
-        </p>
-      </Dialog>
     </div>
   );
 }

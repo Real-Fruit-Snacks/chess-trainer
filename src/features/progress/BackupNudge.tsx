@@ -2,7 +2,7 @@ import { Alert, Button } from '@/components/ui';
 import { backupStatus } from '@/lib/backup';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
-import { useBackupActions } from './useBackupActions';
+import { useBackupActions } from '@/features/settings/useBackupActions';
 
 /**
  * A reminder to back up after a stretch of training without one. Progress

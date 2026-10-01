@@ -134,10 +134,14 @@
   outline: none;
 }
 
+/* Taller than the screen, so the footer stays below the fold while a page
+   chunk loads instead of showing at the bottom and then jumping away. */
 .shell__loading {
   display: grid;
   place-items: center;
-  min-height: 40vh;
+  align-content: start;
+  padding-top: 30vh;
+  min-height: 100dvh;
 }
 
 /* ---------- Footer ---------- */
@@ -263,23 +267,53 @@
   padding: var(--space-2);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2);
 }
 
+/* Desktop: one column per group. */
 .more--dropdown .more__menu {
   top: calc(100% + 6px);
   right: 0;
-  min-width: 260px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(230px, 1fr);
+  gap: var(--space-3);
 }
 
+.more--dropdown .more__label {
+  white-space: nowrap;
+}
+
+/* Phones: a bottom sheet; each group is a two-column grid under its title. */
 .more--sheet .more__menu {
   position: fixed;
   left: var(--space-3);
   right: var(--space-3);
   bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-2));
+  max-height: calc(100dvh - var(--header-height) - var(--bottom-nav-height) - var(--space-5));
+  overflow-y: auto;
+}
+
+.more__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.more--sheet .more__group {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-1);
+}
+
+.more__heading {
+  grid-column: 1 / -1;
+  padding: var(--space-1) var(--space-3) 2px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 .more__item {

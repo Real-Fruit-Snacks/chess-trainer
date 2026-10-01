@@ -1,0 +1,183 @@
+{
+  "app": "chess-trainer",
+  "version": 5,
+  "exportedAt": "2026-09-30T23:00:00.000Z",
+  "progress": {
+    "onboarded": true,
+    "puzzleRating": 1212,
+    "ratedAttempts": 3,
+    "ratingHistory": [
+      {
+        "at": 1726999000000,
+        "rating": 1200
+      },
+      {
+        "at": 1727000000000,
+        "rating": 1214
+      },
+      {
+        "at": 1727000100000,
+        "rating": 1201
+      },
+      {
+        "at": 1727000200000,
+        "rating": 1212
+      }
+    ],
+    "attempts": [
+      {
+        "id": "abc12",
+        "puzzleRating": 1180,
+        "outcome": "solved",
+        "hintUsed": false,
+        "ratingBefore": 1200,
+        "ratingAfter": 1214,
+        "themes": "fork short",
+        "at": 1727000000000,
+        "durationMs": 12000
+      },
+      {
+        "id": "def34",
+        "puzzleRating": 1250,
+        "outcome": "failed",
+        "hintUsed": true,
+        "ratingBefore": 1214,
+        "ratingAfter": 1201,
+        "themes": "pin middlegame long",
+        "at": 1727000100000,
+        "durationMs": 40000
+      },
+      {
+        "id": "ghi56",
+        "puzzleRating": 1150,
+        "outcome": "solved",
+        "hintUsed": false,
+        "ratingBefore": 1201,
+        "ratingAfter": 1212,
+        "themes": "fork mateIn2 short",
+        "at": 1727000200000,
+        "durationMs": 9000
+      }
+    ],
+    "seen": {
+      "abc12": "solved",
+      "def34": "failed",
+      "ghi56": "solved"
+    },
+    "streak": {
+      "current": 2,
+      "best": 4,
+      "lastDate": "2026-09-22"
+    },
+    "daily": null,
+    "lessons": {
+      "the-board": {
+        "stepsDone": [0, 1, 2],
+        "completedAt": 1726990000000,
+        "lastVisitedAt": 1726990000000
+      },
+      "forks": {
+        "stepsDone": [0, 1],
+        "completedAt": null,
+        "lastVisitedAt": 1726995000000
+      }
+    },
+    "games": [
+      {
+        "at": 1726998000000,
+        "level": 2,
+        "color": "white",
+        "result": "1-0",
+        "reason": "checkmate",
+        "plies": 41,
+        "pgn": "1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7# 1-0"
+      }
+    ],
+    "rushRuns": [
+      {
+        "at": 1726997000000,
+        "mode": "timed",
+        "score": 9,
+        "peakRating": 1300,
+        "durationMs": 180000
+      }
+    ],
+    "drills": {
+      "coordinates": {
+        "best": 18,
+        "attempts": 2,
+        "lastAt": 1726996500000
+      }
+    },
+    "puzzleRd": 92.5,
+    "puzzleVolatility": 0.06,
+    "lastRatedAt": 1727000200000,
+    "calibration": null,
+    "themeStats": {
+      "fork": {
+        "solved": 2,
+        "failed": 0
+      },
+      "pin": {
+        "solved": 0,
+        "failed": 1
+      },
+      "mateIn2": {
+        "solved": 1,
+        "failed": 0
+      }
+    },
+    "puzzleReviews": {
+      "def34": {
+        "id": "def34",
+        "rating": 1250,
+        "themes": "pin middlegame long",
+        "step": 0,
+        "due": 1727260100000,
+        "lapses": 1,
+        "addedAt": 1727000100000
+      }
+    },
+    "trainingDays": ["2026-09-21", "2026-09-22"],
+    "guessGames": {
+      "opera-game": {
+        "score": 14,
+        "maxScore": 18,
+        "completedAt": 1726996000000
+      }
+    },
+    "placement": {
+      "courseId": "intermediate",
+      "rating": 1200,
+      "at": 1726980000000
+    },
+    "woodpecker": null,
+    "ownPuzzles": {},
+    "lessonRecall": {
+      "forks:1": {
+        "id": "forks:1",
+        "rating": 0,
+        "themes": "",
+        "step": 1,
+        "due": 1727400000000,
+        "lapses": 0,
+        "addedAt": 1727000000000
+      }
+    },
+    "studies": {
+      "reti-1921": {
+        "solvedAt": 1726999500000,
+        "attempts": 2,
+        "clean": false
+      }
+    }
+  },
+  "repertoire": {
+    "cards": {},
+    "custom": [],
+    "sessions": []
+  },
+  "analyses": {
+    "items": {}
+  }
+}

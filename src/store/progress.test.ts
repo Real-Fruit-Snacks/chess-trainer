@@ -171,6 +171,45 @@ describe('progress store', () => {
     expect(useProgress.getState().guessGames['opera-game']?.score).toBe(21);
   });
 
+  it('keeps the best arcade score with its detail and counts plays', () => {
+    const { recordArcade } = useProgress.getState();
+    recordArcade('fortress', 3, 'held 3 positions');
+    recordArcade('fortress', 2, 'held 2 positions');
+    let result = useProgress.getState().arcade.fortress;
+    expect(result?.best).toBe(3);
+    expect(result?.plays).toBe(2);
+    expect(result?.detail).toBe('held 3 positions');
+    recordArcade('fortress', 5, 'held 5 positions');
+    result = useProgress.getState().arcade.fortress;
+    expect(result?.best).toBe(5);
+    expect(result?.detail).toBe('held 5 positions');
+    expect(useProgress.getState().trainingDays).toHaveLength(1);
+  });
+
+  it('stores the daily opening and odds ladder state and exports them', () => {
+    const { setDailyOpening, setOddsLadder, exportState } = useProgress.getState();
+    setDailyOpening({
+      date: '2026-10-01',
+      guesses: ['Italian Game'],
+      result: null,
+      streak: 2,
+      bestStreak: 4,
+      history: { '2026-09-30': 3 },
+    });
+    setOddsLadder({ rung: 2, best: 3, results: { 0: { wins: 1, losses: 0 } } });
+    const exported = JSON.parse(exportState()) as {
+      version: number;
+      progress: { dailyOpening: { streak: number }; oddsLadder: { rung: number } };
+    };
+    expect(exported.version).toBe(6);
+    expect(exported.progress.dailyOpening.streak).toBe(2);
+    expect(exported.progress.oddsLadder.rung).toBe(2);
+    // A save from before the arcade existed gets the defaults.
+    expect(useProgress.getState().importState({ onboarded: true, puzzleRating: 1400 })).toBe(true);
+    expect(useProgress.getState().oddsLadder).toEqual({ rung: 0, best: 0, results: {} });
+    expect(useProgress.getState().dailyOpening).toBeNull();
+  });
+
   it('summarises statistics', () => {
     useProgress.getState().completeOnboarding(1200);
     attempt('s1', 'solved');

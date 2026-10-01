@@ -44,7 +44,7 @@ test.describe('accessibility', () => {
   });
 
   test('the high-contrast board theme applies colour-blind-safe highlights', async ({ page }) => {
-    await page.goto('/progress');
+    await page.goto('/settings');
     await page.getByRole('button', { name: 'High contrast' }).click();
     await expect(page.getByText(/colour-blind-safe highlights/)).toBeVisible();
     await page.goto('/learn/how-pieces-move');

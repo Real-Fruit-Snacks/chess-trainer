@@ -4,6 +4,7 @@ import type { GameTree, TreeNode } from '@/chess/tree';
 import { Button, Kbd, Icon } from '@/components/ui';
 import type { MoveJudgement } from './MoveList';
 import './chess-components.css';
+import { scrollIntoContainer } from '@/lib/scroll';
 
 const JUDGEMENT_GLYPH: Record<NonNullable<MoveJudgement>, string> = {
   blunder: '??',
@@ -40,8 +41,9 @@ export function TreeMoveList({ tree, version, current, onSelect, judgements }: T
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const el = listRef.current?.querySelector<HTMLElement>('[aria-current="true"]');
-    el?.scrollIntoView({ block: 'nearest' });
+    const list = listRef.current;
+    const el = list?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (list && el) scrollIntoContainer(list, el);
   }, [current]);
 
   const renderMove = (node: TreeNode, forceNumber: boolean): ReactNode => {
@@ -125,7 +127,7 @@ export function TreeMoveList({ tree, version, current, onSelect, judgements }: T
   const empty = tree.root.children.length === 0;
 
   return (
-    <div className="treemoves" ref={listRef} role="list" aria-label="Moves" data-version={version}>
+    <div className="treemoves" ref={listRef} role="group" aria-label="Moves" data-version={version}>
       {tree.root.comment ? <span className="treemoves__comment">{tree.root.comment}</span> : null}
       {empty ? (
         <span className="muted small">No moves yet — play on the board or import a game.</span>

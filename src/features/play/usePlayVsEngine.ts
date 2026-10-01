@@ -4,7 +4,7 @@ import type { DrawShape } from '@/components/board/Board';
 import { isValidFen, parseUci, START_FEN, toUci } from '@/chess/helpers';
 import type { Fen, LongColor, PromotionPiece, Uci } from '@/chess/types';
 import { useChess } from '@/chess/useChess';
-import { ENGINE_LEVELS, type EngineLevel, getLevel, pickWeighted } from '@/engine/levels';
+import { ENGINE_LEVELS, type EngineLevel, getLevel } from '@/engine/levels';
 import { useEngine } from '@/engine/useEngine';
 import {
   type ClockState,
@@ -17,10 +17,10 @@ import {
   startClock,
   type TimeControl,
 } from '@/lib/clock';
-import { pickRandom } from '@/lib/random';
 import { playSound } from '@/lib/sound';
 import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
+import { chooseLevelMove, ensureSkill, type SkillCache } from './engineMove';
 import { useSettings } from '@/store/settings';
 import {
   type BookDeviation,
@@ -167,7 +167,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
 
   const level = useMemo(() => getLevel(levelId), [levelId]);
   const timeControl = useMemo(() => getTimeControl(timeControlId), [timeControlId]);
-  const appliedSkillRef = useRef<number | null>(null);
+  const skillCache = useRef<SkillCache>({ skill: null });
   const searchIdRef = useRef(0);
   const recordedRef = useRef(false);
   const gameRef = useRef(game);
@@ -381,22 +381,6 @@ export function usePlayVsEngine(): UsePlayVsEngine {
 
   const chooseEngineMove = useCallback(
     async (fen: string, movesUci: Uci[]): Promise<Uci | null> => {
-      const client = engine();
-      if (appliedSkillRef.current !== level.skill) {
-        await client.setOption('Skill Level', level.skill);
-        appliedSkillRef.current = level.skill;
-      }
-      const legal = gameRef.current.position.dests;
-      if (level.randomMoveChance > 0 && Math.random() < level.randomMoveChance) {
-        const origins = [...legal.keys()];
-        const from = pickRandom(origins);
-        const to = from ? pickRandom(legal.get(from) ?? []) : undefined;
-        if (from && to) {
-          const piece = gameRef.current.chess().get(from);
-          const promo = piece?.type === 'p' && (to[1] === '8' || to[1] === '1') ? 'q' : '';
-          return `${from}${to}${promo}`;
-        }
-      }
       // Never let the engine think longer than a slice of its own remaining time.
       let depth = level.depth;
       let movetime = level.movetime;
@@ -410,23 +394,15 @@ export function usePlayVsEngine(): UsePlayVsEngine {
           movetime = Math.min(budget, 300);
         }
       }
-      const handle = client.search({
+      return chooseLevelMove(engine(), skillCache.current, {
+        level,
         fen,
         moves: movesUci,
+        legal: gameRef.current.position.dests,
+        pieceAt: (square) => gameRef.current.chess().get(square),
         depth,
         movetime,
-        multipv: level.multipv,
       });
-      const result = await handle.result;
-      if (result.stopped) return null;
-      if (level.multipv > 1 && result.lines.size > 1) {
-        const ranked = [...result.lines.entries()]
-          .sort(([a], [b]) => a - b)
-          .map(([, info]) => info.pv[0])
-          .filter((m): m is Uci => !!m);
-        return pickWeighted(ranked) ?? result.bestmove.move;
-      }
-      return result.bestmove.move;
     },
     [engine, level, hasClock, engineColor],
   );
@@ -711,10 +687,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const askEngine = useCallback(
     async (fen: string, moves: Uci[]): Promise<Uci | null> => {
       const client = engine();
-      if (appliedSkillRef.current !== 20) {
-        await client.setOption('Skill Level', 20);
-        appliedSkillRef.current = 20;
-      }
+      await ensureSkill(client, skillCache.current, 20);
       const handle = client.search({ fen, moves, depth: 14, multipv: 1 });
       const result = await handle.result;
       return result.bestmove.move;

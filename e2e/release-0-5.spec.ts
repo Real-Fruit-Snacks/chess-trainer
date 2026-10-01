@@ -85,7 +85,9 @@ test.describe('Glicko-2 puzzle rating', () => {
     await expect(scales).toContainText('Lichess');
     await expect(scales).toContainText(/1,0[05]0–1,3[05]0/); // ≈ 1,200 ± 150
     await expect(scales).toContainText('below 1000'); // FIDE
+    await page.goto('/settings');
     await page.getByLabel('Start again from').selectOption('calibrate');
+    await page.goto('/progress');
     await expect(page.getByTestId('provisional-note')).toContainText('calibration: 0 of 12');
     const state = await readProgress(page);
     expect(state?.puzzleRd).toBe(350);

@@ -2,7 +2,7 @@ import type { Square } from 'chess.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ClickBoard, type ClickBoardPiece } from '@/components/board/ClickBoard';
-import { Button, Card, Segmented, Stat, Switch } from '@/components/ui';
+import { Button, Card, Segmented, Stat, Switch, LinkButton } from '@/components/ui';
 import type { LongColor } from '@/chess/types';
 import { playSound } from '@/lib/sound';
 import { siteConfig } from '@/site.config';
@@ -174,9 +174,7 @@ export default function CoordinatesDrill() {
                   <Button variant="primary" onClick={start}>
                     Again
                   </Button>
-                  <Link className="btn" to="/drills">
-                    All drills
-                  </Link>
+                  <LinkButton to="/drills">All drills</LinkButton>
                 </div>
               </Card>
             </div>

@@ -5,6 +5,7 @@ test-results
 public/engine
 public/puzzles/*.json
 public/openings/*.json
+src/features/arcade/positions.json
 dev-dist
 package-lock.json
 CHANGELOG.md

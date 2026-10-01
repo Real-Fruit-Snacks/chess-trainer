@@ -2,6 +2,7 @@ import type { Move } from 'chess.js';
 import { useEffect, useRef } from 'react';
 import { Button, Kbd, Icon } from '@/components/ui';
 import './chess-components.css';
+import { scrollIntoContainer } from '@/lib/scroll';
 
 export type MoveJudgement = 'blunder' | 'mistake' | 'inaccuracy' | 'best' | 'good' | null;
 
@@ -37,8 +38,9 @@ export function MoveList({
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const el = listRef.current?.querySelector<HTMLElement>('[aria-current="true"]');
-    el?.scrollIntoView({ block: 'nearest' });
+    const list = listRef.current;
+    const el = list?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (list && el) scrollIntoContainer(list, el);
   }, [currentPly]);
 
   const rows: {
@@ -86,7 +88,7 @@ export function MoveList({
   };
 
   return (
-    <div className="movelist" ref={listRef} aria-label="Move list">
+    <div className="movelist" ref={listRef} role="group" aria-label="Move list">
       {rows.length === 0 ? <div className="movelist__empty">No moves yet.</div> : null}
       {rows.map((row) => (
         <div key={row.number} style={{ display: 'contents' }}>

@@ -187,7 +187,7 @@ export default function PlayPage() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header page-header--lean">
         <h1>Play</h1>
         <p>
           Eight engine levels, from “just learned the rules” to master, with or without a clock — or

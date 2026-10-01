@@ -5,7 +5,7 @@ import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { ExplorerPanel } from '@/components/chess/ExplorerPanel';
 import { TreeMoveList } from '@/components/chess/TreeMoveList';
-import { Alert, Button, Card, Kbd, Stat, Switch } from '@/components/ui';
+import { Alert, Button, Card, Kbd, Stat, Switch, LinkButton } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import { isPromotionMove, legalDests, parseUci, toUci, tryMove } from '@/chess/helpers';
 import { GameTree, type TreeNode } from '@/chess/tree';
@@ -318,12 +318,9 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
                   <Button size="lg" onClick={() => setExplore(true)}>
                     {isCustom ? 'Edit lines' : 'Explore lines'}
                   </Button>
-                  <Link
-                    className="btn btn--lg"
-                    to={`/play?book=${encodeURIComponent(repertoire.id)}`}
-                  >
+                  <LinkButton size="lg" to={`/play?book=${encodeURIComponent(repertoire.id)}`}>
                     Practise vs engine
-                  </Link>
+                  </LinkButton>
                   <Button size="lg" variant="ghost" onClick={() => void shareRepertoire()}>
                     Share
                   </Button>

@@ -48,9 +48,9 @@ export default function LearnPage() {
             </div>
           </div>
           {continueLesson ? (
-            <Link className="btn btn--primary" to={`/learn/${continueLesson.id}`}>
+            <LinkButton variant="primary" to={`/learn/${continueLesson.id}`}>
               {progress[continueLesson.id]?.stepsDone.length ? 'Continue' : 'Start'} lesson
-            </Link>
+            </LinkButton>
           ) : null}
         </div>
         <div style={{ marginTop: 12 }}>

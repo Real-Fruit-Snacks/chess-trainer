@@ -6,6 +6,111 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-01
+
+The release candidate for 1.0: everything below is what 1.0 will ship, and the compatibility promise
+starts here — a backup made by this version imports into every later version, and a share link made
+by this version keeps opening.
+
+### Added
+
+- **A test lab** (_Settings → Open the test lab_, `/settings/lab`) for checking a device by hand:
+  every platform capability (installed app, service worker, WebAssembly, shared memory, audio,
+  vibration, badge, sharing, compression, CSS features, viewport, storage estimate), the storage
+  meter with a fill-to-the-limit test, a button for every sound and every haptic cue, every icon at
+  four sizes on light and dark, every control, badge, alert, toast and the dialog, the board colours,
+  piece sets, highlights, arrows and the promotion menu, the type scale and colour tokens, the engine
+  diagnostics, and a deliberate crash to see the error page.
+- **Storage that survives a full disk.** Browsers cap local storage at about 5 MB; when a write no
+  longer fits, the app now keeps running, warns once ("Storage is full…") and shows the failure in
+  Settings instead of silently dropping the change. Settings shows how much local data the app keeps.
+- **A crash page that reports itself:** the version, build date, route, browser and the stack, with
+  "Copy details", "Go home" and a bug-report link whose form is already filled in.
+- **A privacy and data note** in Settings and the FAQ: what stays on the device (everything), what
+  leaves it and when (only the imports and lookups you trigger), what a backup is and how much the app
+  can store.
+- **Three more browsers in CI.** Firefox and WebKit run the shell, engine, arcade, settings, lab,
+  small-phone and accessibility tests alongside desktop and mobile Chromium, each in its own job.
+- **Budgets in CI:** `npm run bundle:check` fails the build when a gzipped chunk or the precache
+  outgrows its limit; `npm run lighthouse` audits five pages and fails on an accessibility,
+  best-practices or SEO regression, a layout shift above 0.1 or a serious performance drop.
+- **Visual snapshots** (`npm run e2e:visual`) of the static pages on desktop and phone, compared in
+  CI as an informative job until the baselines are confirmed on the runner.
+- **Compatibility fixtures:** real backups from the 0.3, 0.5 and 0.7 export formats and share links
+  from 0.4 and 0.6 are imported and decoded in the unit suite on every run.
+
+- **Arcade.** Eight games that are not puzzles, each with a score to beat, under _More → Arcade_:
+  - **Hand & Brain** — full-strength Stockfish as your partner. As the Brain you call a piece type and
+    the partner plays its best move with that piece; as the Hand the partner names the piece of its best
+    move and you find the move. Every call is graded against the engine's real best (best, good,
+    inaccuracy, mistake, blunder) and the game ends with an accuracy figure. Opponent at any level.
+  - **Daily Opening** — one line a day from the 3,800-line opening book, six guesses, Wordle-style
+    feedback per move (right place, elsewhere in the line, not in it), the known prefix shown on the
+    board, hints that unlock with wrong guesses, a streak, a shareable text result, and a practice mode.
+  - **Who Stands Better?** — ten quiet positions from the classic games, judged on a ±5-pawn slider
+    against the engine's evaluation (515 positions evaluated at depth 16); points for closeness, nothing
+    for calling the wrong side, a streak bonus and the engine's move revealed each time.
+  - **Odds Ladder** — full-strength Stockfish gives queen odds; a win climbs to rook, knight, bishop and
+    pawn odds and finally a level game. Results per rung, no take-backs, no hints.
+  - **Army Draft** — both sides buy an army from a points budget (20, 30 or 39) and fight from the
+    first two ranks; presets, a live preview, and the engine's own random draft (or a mirror of yours).
+  - **Fortress** — hold a clearly worse position for twenty moves against a chosen level; the
+    evaluation (graded at full strength after every move) is the health bar, three lives, positions
+    tiered from "a pawn or so down" to "on the brink".
+  - **Engine Says** — a Simon game: the engine plays the first moves of a real opening line, the board
+    resets, you replay them; every round adds a move, and finishing a line carries on with a new one.
+  - **Blindfold** — a full game against the engine with the pieces hidden and three two-second peeks;
+    a win with peeks to spare is the top score.
+- The arcade hub shows every game's best result; the Progress page lists them; the daily plan includes
+  the Daily Opening.
+- `public/openings/lines.json`: every opening line's moves (from the same lichess-org/chess-openings
+  import), for the games that quiz them.
+- `npm run arcade:positions` evaluates the classic games' middlegame positions with the engine for
+  Who Stands Better? and Fortress (`src/features/arcade/positions.json`).
+- Backups (export version 6) include arcade results, the Daily Opening streak and the odds ladder.
+
+### Changed
+
+- **Settings has its own page.** Appearance, play, engine and analysis, the puzzle rating, profiles,
+  backups and the app itself moved from the bottom of the Progress page to _More → Settings_
+  (`/settings`), each in its own card; the Progress page is statistics only, in two columns, with a
+  button to Settings. The profile badge opens Settings.
+- **The More menu is grouped** — Train, Games and App/Tools — as three columns on a desktop and a
+  titled bottom sheet on a phone (which never grows past the screen).
+- **Phones held upright keep the whole board on screen.** Pages with a board get a compact title,
+  and the ones that explain themselves further down (Play, Puzzles, Analyze, the arcade games) drop
+  the description, so on a 375 × 667 screen the board, both player bars and the first controls all
+  fit between the app header and the bottom bar without scrolling.
+- **Finger-sized controls on touch screens:** small buttons, segmented controls, the board-colour
+  swatches and the breadcrumb links grow to at least 40 px when the pointer is a finger; the Army
+  Draft shop keeps its − count + stepper on one line.
+- Every link that looks like a button now is one (`LinkButton`): the "All games", "All drills",
+  "Analyze" and similar links on the drill and arcade result cards used to render as plain text.
+- The framework (React, React DOM, React Router) is built as its own chunk, so an app update
+  re-downloads about 33 KB (gzipped) of app code instead of 128 KB.
+- The README is a project overview with screenshots; the full feature reference moved to
+  `docs/FEATURES.md`, the scripts table to `CONTRIBUTING.md` and the branding notes to
+  `docs/DEPLOYMENT.md`.
+- While a page chunk loads, the loading screen is taller than the window, so the footer no longer
+  appears at the bottom and jumps away (Lighthouse's layout shift went from 0.12 to 0).
+- The install banner's "Not now" button no longer carries a label that contradicts its text.
+
+### Testing
+
+- An automated accessibility sweep (`e2e/axe.spec.ts`, axe-core WCAG 2.1 A/AA) over every top-level
+  page in both colour schemes; it found and fixed four things — `aria-label` on plain containers
+  (the repertoire progress bars and captured-material rows), the move lists' list role, and a
+  stray contrast check on a fading toast.
+- The engine-dependent end-to-end tests use positions with one right answer (a missed mate in one, a
+  queen given away), so a transposition-table mood can no longer change their outcome.
+
+### Fixed
+
+- On a phone, every move scrolled the page down to the move list and the board slid off the screen
+  (most visibly when playing on from a puzzle). Move lists now scroll only themselves.
+- The engine client put `searchmoves` before the search limits in the `go` command; Stockfish reads
+  every token after `searchmoves` as a move, so such searches never ended.
+
 ## [0.7.0] - 2026-09-30
 
 ### Added

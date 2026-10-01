@@ -64,44 +64,6 @@
   gap: var(--space-4);
 }
 
-.settings__group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.settings__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.settings__row:last-child {
-  border-bottom: 0;
-}
-
-.swatches {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.swatch {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  border: 2px solid transparent;
-  background: linear-gradient(135deg, var(--sw-light) 50%, var(--sw-dark) 50%);
-}
-
-.swatch[aria-pressed='true'] {
-  border-color: var(--accent);
-  box-shadow: var(--focus-ring);
-}
-
 /* Theme strengths / weaknesses */
 .themes-report {
   display: grid;
@@ -157,40 +119,6 @@
   background: var(--success);
 }
 
-/* Engine diagnostics (under the threads setting) */
-.settings__diagnostics {
-  margin-top: var(--space-2);
-}
-
-.settings__diagnostics > summary {
-  cursor: pointer;
-  font-size: 0.9rem;
-  color: var(--text-muted);
-}
-
-.diagnostics {
-  margin: var(--space-2) 0 0;
-  display: grid;
-  gap: 6px;
-}
-
-.diagnostics__row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-3);
-  font-size: 0.9rem;
-}
-
-.diagnostics__row dt {
-  color: var(--text-muted);
-}
-
-.diagnostics__row dd {
-  margin: 0;
-  text-align: right;
-}
-
 /* ---------- Results by engine level ---------- */
 .levels {
   display: flex;
@@ -233,33 +161,24 @@
   text-align: right;
 }
 
-/* Profiles */
-.profiles__list {
+/* Arcade bests */
+.arcade-results {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
-.profiles__item {
+.arcade-results__row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
   gap: var(--space-2);
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
 }
 
-.profiles__name {
+.arcade-results__icon {
+  color: var(--accent);
   display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-weight: 600;
-}
-
-.profiles__actions {
-  gap: 2px;
+  margin-top: 2px;
 }

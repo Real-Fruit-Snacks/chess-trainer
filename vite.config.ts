@@ -127,6 +127,20 @@ export default defineConfig(({ mode }) => {
       target: 'es2022',
       sourcemap: false,
       chunkSizeWarningLimit: 700,
+      rolldownOptions: {
+        output: {
+          // The framework rarely changes between releases: keeping it in its own
+          // chunk means an app update only re-downloads the app, not React.
+          advancedChunks: {
+            groups: [
+              {
+                name: 'react',
+                test: /node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/,
+              },
+            ],
+          },
+        },
+      },
     },
     server: {
       port: 5173,

@@ -104,6 +104,30 @@ a.btn:focus {
   width: 32px;
 }
 
+/* Touch screens: small controls still get a finger-sized target. */
+@media (pointer: coarse) {
+  .btn--sm {
+    min-height: 40px;
+  }
+
+  .btn--icon.btn--sm {
+    width: 40px;
+  }
+
+  .segmented__option {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* Breadcrumb links ("Arcade / Fortress", "Drills / Coordinates") are the way back. */
+  .card__eyebrow a {
+    display: inline-block;
+    padding: 8px 0;
+    margin: -8px 0;
+  }
+}
+
 /* ---------- Card ---------- */
 .card {
   background: var(--surface);

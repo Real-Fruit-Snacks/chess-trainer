@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Badge, Stars } from '@/components/ui';
+import { Badge, Stars, LinkButton } from '@/components/ui';
 import { siteConfig } from '@/site.config';
 import { type DrillResult, useProgress } from '@/store/progress';
 import { DRILL_GROUPS } from './endgameDrills';
@@ -140,13 +140,13 @@ export default function DrillsPage() {
               <strong data-testid="ladder-progress">{describeLadder(ladder)}</strong>
             </div>
             {ladder.next ? (
-              <Link
-                className="btn btn--primary"
+              <LinkButton
+                variant="primary"
                 to={`/drills/endgame/${ladder.next.drill.id}`}
                 data-testid="ladder-next"
               >
                 Rung {ladder.next.rung}: {ladder.next.drill.title}
-              </Link>
+              </LinkButton>
             ) : (
               <Badge tone="success">Complete</Badge>
             )}

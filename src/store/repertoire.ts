@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { safeLocalStorage } from '@/lib/persistStorage';
 import type { LongColor } from '@/chess/types';
 import { newCard, type Quality, reviewCard, type SrsCard } from '@/lib/srs';
 import { storageKeyFor } from './profiles';
@@ -132,7 +133,7 @@ export const useRepertoire = create<RepertoireState>()(
     {
       name: storageKeyFor(REPERTOIRE_STORAGE_KEY),
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => safeLocalStorage),
       partialize: ({ cards, custom, sessions }) => ({ cards, custom, sessions }),
     },
   ),

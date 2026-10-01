@@ -80,7 +80,7 @@ export function buildDailyPlan(
     ProgressState,
     'daily' | 'attempts' | 'puzzleReviews' | 'lessons' | 'drills' | 'onboarded' | 'games'
   > &
-    Partial<Pick<ProgressState, 'themeStats' | 'lessonRecall'>>,
+    Partial<Pick<ProgressState, 'themeStats' | 'lessonRecall' | 'dailyOpening'>>,
   repertoire: { cards: Record<string, SrsCard>; custom: CustomRepertoire[] },
   now: number,
   /** From the game insights: the mistake or phase to work on (see features/games/insights). */
@@ -102,6 +102,24 @@ export function buildDailyPlan(
       : 'One puzzle, same for everyone today',
     to: '/puzzles/daily',
     done: dailyDone,
+    minutes: 2,
+  });
+
+  // 1b. Daily opening: two minutes of naming the opening of the day.
+  const openingDone =
+    progress.dailyOpening?.date === today && progress.dailyOpening.result !== null;
+  items.push({
+    id: 'dailyOpening',
+    title: 'Daily opening',
+    detail: openingDone
+      ? `Done — ${
+          progress.dailyOpening?.result === 'solved'
+            ? `solved in ${progress.dailyOpening.guesses.length}`
+            : 'missed, a new one tomorrow'
+        }`
+      : 'Guess the opening of the day in six tries',
+    to: '/arcade/daily-opening',
+    done: openingDone,
     minutes: 2,
   });
 

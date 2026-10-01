@@ -39,3 +39,6 @@ pnpm-debug.log*
 
 # Puzzle import scratch files
 scripts/.cache/
+
+# Lighthouse report written by `npm run lighthouse -- --json`
+lighthouse.json

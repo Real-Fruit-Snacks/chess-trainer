@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Board, type DrawShape } from '@/components/board/Board';
 import { ClickBoard, type ClickBoardPiece, type PieceRole } from '@/components/board/ClickBoard';
-import { Alert, Button, Card, Segmented, Stat, Switch } from '@/components/ui';
+import { Alert, Button, Card, Segmented, Stat, Switch, LinkButton } from '@/components/ui';
 import { Chess } from 'chess.js';
 import { playSound } from '@/lib/sound';
 import { pickRandom } from '@/lib/random';
@@ -374,9 +374,7 @@ export default function VisionDrill() {
                   <Button variant="primary" onClick={start}>
                     Again
                   </Button>
-                  <Link className="btn" to="/drills">
-                    All drills
-                  </Link>
+                  <LinkButton to="/drills">All drills</LinkButton>
                 </div>
               </Card>
             </div>

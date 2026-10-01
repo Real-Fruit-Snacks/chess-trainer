@@ -236,6 +236,13 @@ compare the final position with the source). The Classic games page groups games
 (`eras.ts`: Romantic to 1880, Classical to 1945, Modern to 1990, Contemporary after) and filters by
 `difficulty`, so both fields matter for where a game shows up.
 
+Two arcade games draw on the classic games: Who Stands Better? uses their quiet middlegame positions
+and Fortress the ones where the side to move is clearly worse. After adding or changing games, run
+`npm run arcade:positions` (slow: one engine search per position) to regenerate
+`src/features/arcade/positions.json`; `fortress.test.ts` checks that both pools stay large enough.
+The Daily Opening and Engine Says games read `public/openings/lines.json`, which
+`npm run openings:import` writes next to the ECO table.
+
 ## Sourcing positions
 
 - Constructed positions are fine for basic patterns and are easiest to keep clean — but probe them with

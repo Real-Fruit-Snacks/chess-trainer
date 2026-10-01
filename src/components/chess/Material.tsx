@@ -47,7 +47,7 @@ export function Material({ fen, color }: { fen: Fen; color: LongColor }) {
   }, [fen, color, opponent]);
 
   return (
-    <div className="material cg-wrap" aria-label={`Material captured by ${color}`}>
+    <div className="material cg-wrap" role="group" aria-label={`Material captured by ${color}`}>
       {ORDER.map((role) => {
         const n = captured.filter((r) => r === role).length;
         if (n === 0) return null;

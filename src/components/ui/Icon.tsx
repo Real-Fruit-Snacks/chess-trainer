@@ -41,7 +41,17 @@ export type IconName =
   | 'knight'
   | 'arrow-right'
   | 'arrow-left'
-  | 'download';
+  | 'download'
+  | 'gamepad'
+  | 'brain'
+  | 'calendar'
+  | 'scale'
+  | 'ladder'
+  | 'shield'
+  | 'army'
+  | 'repeat'
+  | 'eye-off'
+  | 'settings';
 
 /** Path data per icon; `fill` marks icons drawn as filled shapes. */
 const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
@@ -109,7 +119,36 @@ const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
   'arrow-right': { d: 'M4 12h16M13 5l7 7-7 7' },
   'arrow-left': { d: 'M20 12H4M11 5l-7 7 7 7' },
   download: { d: 'M12 4v11M7 10l5 5 5-5M4 19h16' },
+  gamepad: {
+    d: 'M7 6h10a4 4 0 0 1 4 4v3a4 4 0 0 1-4 4h-1.5l-2-2h-3l-2 2H7a4 4 0 0 1-4-4v-3a4 4 0 0 1 4-4zM6.5 11.5h4M8.5 9.5v4M15 10.5h.01M17.5 12.5h.01',
+  },
+  brain: {
+    d: 'M12 5v14M12 5a3 3 0 0 0-5.5 1.5A3 3 0 0 0 5 12a3 3 0 0 0 1 5.5A2.5 2.5 0 0 0 12 19M12 5a3 3 0 0 1 5.5 1.5A3 3 0 0 1 19 12a3 3 0 0 1-1 5.5A2.5 2.5 0 0 1 12 19M6.5 6.5a3 3 0 0 0 2 2.5M17.5 6.5a3 3 0 0 1-2 2.5M5.5 12.5c1.5 0 2.5-.5 3-1.5M18.5 12.5c-1.5 0-2.5-.5-3-1.5',
+  },
+  calendar: { d: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4' },
+  scale: {
+    d: 'M12 4v17M7 21h10M12 6L5 8M12 6l7 2M2 14l3-6 3 6a3 3 0 0 1-6 0zM16 14l3-6 3 6a3 3 0 0 1-6 0z',
+  },
+  ladder: { d: 'M7 3v18M17 3v18M7 7.5h10M7 12h10M7 16.5h10' },
+  shield: { d: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z' },
+  // A pawn with a plus: build your own army.
+  army: {
+    d: 'M9.5 4.5a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4zM7.3 9.6h4.4M8.1 9.6c.2 2.8-.6 5-2 6.6h6.8c-1.4-1.6-2.2-3.8-2-6.6M6.1 16.2l-1.1 2.3h9l-1.1-2.3M18 4v6M15 7h6',
+  },
+  repeat: {
+    d: 'M17 2l4 4-4 4M3 11V8a2 2 0 0 1 2-2h16M7 22l-4-4 4-4M21 13v3a2 2 0 0 1-2 2H3',
+  },
+  settings: {
+    d: 'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z',
+  },
+  'eye-off': {
+    d: 'M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.2A10 10 0 0 1 12 5c5 0 8.5 3.5 10 7a12 12 0 0 1-2.6 3.6M6.5 6.5A12 12 0 0 0 2 12c1.5 3.5 5 7 10 7a9.6 9.6 0 0 0 4-.9',
+  },
 };
+
+/** Every icon name, for the test lab and the tests. */
+// eslint-disable-next-line react-refresh/only-export-components -- a constant next to its icons
+export const ICON_NAMES = Object.keys(ICONS) as IconName[];
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   name: IconName;

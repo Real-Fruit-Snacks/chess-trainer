@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
-import { Badge, Button, Card } from '@/components/ui';
+import { Badge, Button, Card, LinkButton } from '@/components/ui';
 import { type PuzzleOutcomeEvent, usePuzzleTrainer } from '@/features/puzzles/usePuzzleTrainer';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
@@ -102,9 +101,7 @@ export function PatternDrill({
           <Button variant="primary" onClick={onExit}>
             Back to the gallery
           </Button>
-          <Link className="btn" to="/puzzles/themes?theme=mate">
-            Mate puzzles
-          </Link>
+          <LinkButton to="/puzzles/themes?theme=mate">Mate puzzles</LinkButton>
         </div>
       </Card>
     );

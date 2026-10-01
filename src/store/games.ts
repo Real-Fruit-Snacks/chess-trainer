@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { safeLocalStorage } from '@/lib/persistStorage';
 import type { ImportedGame } from '@/lib/gameImport';
 import { hashString } from '@/lib/random';
 import type { ReviewDigest } from '@/features/games/insights';
@@ -88,7 +89,7 @@ export const useGames = create<GamesState>()(
     {
       name: storageKeyFor(GAMES_STORAGE_KEY),
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => safeLocalStorage),
       partialize: (state) => ({ games: state.games, player: state.player }),
     },
   ),

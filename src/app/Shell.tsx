@@ -33,38 +33,60 @@ const DESKTOP_NAV: NavItem[] = [
   { to: '/progress', label: 'Progress', icon: 'progress' },
 ];
 
-/** Extra sections behind the desktop "More" menu. */
-const DESKTOP_MORE: NavItem[] = [
-  {
-    to: '/games',
-    label: 'My games',
-    icon: 'games',
-    blurb: 'Your openings, deviations and mistakes',
-  },
-  {
-    to: '/studies',
-    label: 'Endgame studies',
-    icon: 'studies',
-    blurb: 'Composed positions with one solution',
-  },
-  {
-    to: '/classics',
-    label: 'Classic games',
-    icon: 'classics',
-    blurb: 'Guess the moves of famous games',
-  },
-  {
-    to: '/patterns',
-    label: 'Mating patterns',
-    icon: 'patterns',
-    blurb: 'The named mates: gallery and drill',
-  },
-  {
-    to: '/reference',
-    label: 'Reference',
-    icon: 'reference',
-    blurb: 'Rules, notation and glossary',
-  },
+/** A titled group of links in a "More" menu. */
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+const ARCADE: NavItem = {
+  to: '/arcade',
+  label: 'Arcade',
+  icon: 'gamepad',
+  blurb: 'Eight games, not puzzles',
+};
+const MY_GAMES: NavItem = {
+  to: '/games',
+  label: 'My games',
+  icon: 'games',
+  blurb: 'Your games, reviewed',
+};
+const CLASSICS: NavItem = {
+  to: '/classics',
+  label: 'Classic games',
+  icon: 'classics',
+  blurb: 'Guess the move',
+};
+const STUDIES: NavItem = {
+  to: '/studies',
+  label: 'Endgame studies',
+  icon: 'studies',
+  blurb: 'Find the only move',
+};
+const PATTERNS: NavItem = {
+  to: '/patterns',
+  label: 'Mating patterns',
+  icon: 'patterns',
+  blurb: 'The named mates',
+};
+const REFERENCE: NavItem = {
+  to: '/reference',
+  label: 'Reference',
+  icon: 'reference',
+  blurb: 'Rules and glossary',
+};
+const SETTINGS: NavItem = {
+  to: '/settings',
+  label: 'Settings',
+  icon: 'settings',
+  blurb: 'Appearance, engine, backups',
+};
+
+/** Extra sections behind the desktop "More" menu, one column per group. */
+const DESKTOP_MORE: NavGroup[] = [
+  { title: 'Games', items: [ARCADE, MY_GAMES, CLASSICS] },
+  { title: 'Train', items: [STUDIES, PATTERNS] },
+  { title: 'App', items: [REFERENCE, SETTINGS] },
 ];
 
 /** Mobile bottom bar. */
@@ -76,24 +98,31 @@ const MOBILE_NAV: NavItem[] = [
 ];
 
 /** Everything else, in the mobile "More" sheet. */
-const MOBILE_MORE: NavItem[] = [
-  { to: '/analyze', label: 'Analyze', icon: 'analyze', blurb: 'Engine analysis board' },
-  { to: '/drills', label: 'Drills', icon: 'drills', blurb: 'Coordinates, vision and endgames' },
-  { to: '/openings', label: 'Openings', icon: 'openings', blurb: 'Repertoire trainer' },
+const MOBILE_MORE: NavGroup[] = [
   {
-    to: '/games',
-    label: 'My games',
-    icon: 'games',
-    blurb: 'Openings and mistakes from your games',
+    title: 'Train',
+    items: [
+      { to: '/drills', label: 'Drills', icon: 'drills', blurb: 'Vision and endgames' },
+      { to: '/openings', label: 'Openings', icon: 'openings', blurb: 'Repertoire trainer' },
+      STUDIES,
+      PATTERNS,
+    ],
   },
-  { to: '/studies', label: 'Endgame studies', icon: 'studies', blurb: 'Find the only move' },
-  { to: '/classics', label: 'Classic games', icon: 'classics', blurb: 'Guess the move' },
-  { to: '/patterns', label: 'Mating patterns', icon: 'patterns', blurb: 'The named mates' },
-  { to: '/reference', label: 'Reference', icon: 'reference', blurb: 'Rules, notation, glossary' },
-  { to: '/progress', label: 'Progress', icon: 'progress', blurb: 'Stats, backups and settings' },
+  { title: 'Games', items: [ARCADE, MY_GAMES, CLASSICS] },
+  {
+    title: 'Tools',
+    items: [
+      { to: '/analyze', label: 'Analyze', icon: 'analyze', blurb: 'Engine analysis board' },
+      { to: '/progress', label: 'Progress', icon: 'progress', blurb: 'Stats and records' },
+      REFERENCE,
+      SETTINGS,
+    ],
+  },
 ];
 
-const MORE_PATHS = new Set([...DESKTOP_MORE, ...MOBILE_MORE].map((i) => i.to));
+const MORE_PATHS = new Set(
+  [...DESKTOP_MORE, ...MOBILE_MORE].flatMap((group) => group.items.map((i) => i.to)),
+);
 
 function Logo() {
   return (
@@ -117,7 +146,7 @@ function ProfileBadge() {
   const current = activeProfile({ profiles, activeId });
   return (
     <Link
-      to="/progress#profiles"
+      to="/settings#profiles"
       className="shell__profile"
       title="Switch profile"
       data-testid="profile-badge"
@@ -149,11 +178,11 @@ function ThemeToggle() {
 
 /** A "More" button with a dropdown (desktop) or bottom sheet (mobile) of extra sections. */
 function MoreMenu({
-  items,
+  groups,
   variant,
   active,
 }: {
-  items: NavItem[];
+  groups: NavGroup[];
   variant: 'dropdown' | 'sheet';
   active: boolean;
 }) {
@@ -202,21 +231,28 @@ function MoreMenu({
       </button>
       {open ? (
         <div className="more__menu" role="menu" aria-label="More sections">
-          {items.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              role="menuitem"
-              className={({ isActive }) => `more__item${isActive ? ' is-active' : ''}`}
-            >
-              <span className="more__icon" aria-hidden="true">
-                <Icon name={item.icon} size={20} />
+          {groups.map((group) => (
+            <div key={group.title} className="more__group" role="group" aria-label={group.title}>
+              <span className="more__heading" aria-hidden="true">
+                {group.title}
               </span>
-              <span className="more__text">
-                <span className="more__label">{item.label}</span>
-                {item.blurb ? <span className="more__blurb">{item.blurb}</span> : null}
-              </span>
-            </NavLink>
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  role="menuitem"
+                  className={({ isActive }) => `more__item${isActive ? ' is-active' : ''}`}
+                >
+                  <span className="more__icon" aria-hidden="true">
+                    <Icon name={item.icon} size={20} />
+                  </span>
+                  <span className="more__text">
+                    <span className="more__label">{item.label}</span>
+                    {item.blurb ? <span className="more__blurb">{item.blurb}</span> : null}
+                  </span>
+                </NavLink>
+              ))}
+            </div>
           ))}
         </div>
       ) : null}
@@ -268,9 +304,9 @@ export function Shell() {
               </NavLink>
             ))}
             <MoreMenu
-              items={DESKTOP_MORE}
+              groups={DESKTOP_MORE}
               variant="dropdown"
-              active={DESKTOP_MORE.some((i) => i.to === section)}
+              active={DESKTOP_MORE.some((g) => g.items.some((i) => i.to === section))}
             />
           </nav>
           <div className="shell__actions">
@@ -328,7 +364,7 @@ export function Shell() {
             <span>{item.label}</span>
           </NavLink>
         ))}
-        <MoreMenu items={MOBILE_MORE} variant="sheet" active={inMore} />
+        <MoreMenu groups={MOBILE_MORE} variant="sheet" active={inMore} />
       </nav>
 
       <Toasts />

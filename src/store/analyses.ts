@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { safeLocalStorage } from '@/lib/persistStorage';
 import { START_FEN } from '@/chess/helpers';
 import type { Fen } from '@/chess/types';
 import type { ImportedGame } from '@/lib/gameImport';
@@ -136,7 +137,7 @@ export const useAnalyses = create<AnalysesState>()(
     {
       name: storageKeyFor(ANALYSES_STORAGE_KEY),
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => safeLocalStorage),
       partialize: (state) => ({ items: state.items }),
     },
   ),

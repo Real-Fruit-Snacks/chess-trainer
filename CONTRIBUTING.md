@@ -22,7 +22,31 @@ npm run check        # lint + format check + typecheck + unit tests + production
 npm run e2e          # optional, needs: npx playwright install --with-deps chromium
 ```
 
-CI runs the same checks plus a formatting check (`npm run format:check`) and the puzzle data validator.
+CI runs the same checks plus the puzzle data validator.
+
+### Scripts
+
+| Command                    | Purpose                                                                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run dev`              | Start Vite with hot reload on <http://localhost:5173> (downloads the engine on first run).                                                       |
+| `npm run check`            | Lint, format check, typecheck, unit tests and a production build — what CI runs.                                                                 |
+| `npm test`                 | Unit tests (Vitest); `npm run test:watch` for watch mode.                                                                                        |
+| `npm run e2e`              | Playwright end-to-end tests, including the axe-core accessibility sweep, against the production build (`npx playwright install chromium` first). |
+| `npm run build`            | Production build to `dist/` (adds `404.html` and `.nojekyll` for GitHub Pages).                                                                  |
+| `npm run bundle:check`     | Fail when a gzipped chunk or the service-worker precache outgrows its budget (runs in `check` and CI).                                           |
+| `npm run lighthouse`       | Lighthouse audit of five pages against a running preview (`npm run preview` first); fails on regressions.                                        |
+| `npm run e2e:visual`       | Pixel snapshots of the static pages; add `--update-snapshots` after a deliberate design change.                                                  |
+| `npm run preview`          | Serve the production build locally.                                                                                                              |
+| `npm run engine:setup`     | (Re)download the pinned Stockfish build into `public/engine/`.                                                                                   |
+| `npm run puzzles:import`   | Rebuild the puzzle set from the Lichess database.                                                                                                |
+| `npm run puzzles:verify`   | Validate the bundled puzzles; add `--engine 40` for an engine spot-check.                                                                        |
+| `npm run openings:import`  | Rebuild the ECO opening table and the opening lines from lichess-org/chess-openings.                                                             |
+| `npm run lessons:verify`   | Engine-verify every lesson task (slow; run after editing lessons).                                                                               |
+| `npm run lessons:index`    | Regenerate the lightweight lesson index used outside the Learn pages (also runs before build).                                                   |
+| `npm run drills:verify`    | Engine-verify the endgame drill positions.                                                                                                       |
+| `npm run studies:verify`   | Engine-verify every endgame study (accepted moves keep the goal, alternatives do not).                                                           |
+| `npm run arcade:positions` | Re-evaluate the classic-game positions used by Who Stands Better? and Fortress (slow).                                                           |
+| `npm run icons:generate`   | Re-render the PWA icons from `scripts/icons/logo.svg`.                                                                                           |
 
 ## Project layout
 
@@ -32,13 +56,13 @@ src/
   chess/        chess.js helpers and the useChess hook (pure logic, well tested)
   engine/       UCI worker client, strength levels
   components/   board wrapper, chess widgets, generic UI primitives
-  features/     one folder per page: home, learn, puzzles, play, analyze, progress
+  features/     one folder per page: home, learn, puzzles, play, analyze, arcade, progress, settings
   store/        persisted settings and progress (zustand)
   lib/          rating maths, dates, PRNG
 scripts/        engine download, puzzle import/verification, icon rendering
 public/         static assets: engine (downloaded), puzzles (committed), icons
-e2e/            Playwright smoke tests against the production build
-docs/           architecture and content guides
+e2e/            Playwright end-to-end tests and the accessibility sweep
+docs/           feature reference, architecture, content and deployment guides
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design of each part.

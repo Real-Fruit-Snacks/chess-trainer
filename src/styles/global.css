@@ -262,6 +262,25 @@ kbd {
   max-width: 60ch;
 }
 
+/* Phones held upright: a page with a board keeps a compact title so the board,
+   its player bars and the first controls fit between the app header and the
+   bottom navigation. `page-header--lean` also drops the description, on pages
+   that explain themselves further down (Play, Puzzles, Analyze, the arcade). */
+@media (max-width: 599px) and (orientation: portrait) {
+  main:has(.trainer) .page-header {
+    padding: var(--space-3) 0 var(--space-2);
+  }
+
+  main:has(.trainer) .page-header h1 {
+    font-size: 1.35rem;
+    margin: 0 0 2px;
+  }
+
+  main:has(.trainer) .page-header--lean p:not(.card__eyebrow) {
+    display: none;
+  }
+}
+
 /* Phones held sideways: put the board and its panel side by side and keep the
    whole board on screen, since the height is the scarce dimension. */
 @media (orientation: landscape) and (max-height: 520px) and (max-width: 899px) {

@@ -315,11 +315,21 @@ export const FAQ: { question: string; answer: string }[] = [
   {
     question: 'Does Chess Trainer need an internet connection?',
     answer:
-      'Only for the first visit. Everything — the engine, the puzzles, the lessons — is stored on your device so it works offline afterwards, and it can be installed like an app from your browser’s menu. The optional endgame tablebase lookups are the one feature that uses the network.',
+      'Only for the first visit. Everything — the engine, the puzzles, the lessons — is stored on your device so it works offline afterwards, and it can be installed like an app from your browser’s menu. Three optional features use the network when you ask: importing your games from Lichess or chess.com, the opening explorer and the endgame tablebase lookups; the last two are off by default.',
+  },
+  {
+    question: 'What does Chess Trainer know about me?',
+    answer:
+      'Nothing. There is no account, no server and no tracking: the site is static files, and everything you do — your rating, progress, games and settings — stays in this browser on this device. The only requests that leave your device are the ones you trigger yourself (importing your games, the explorer and tablebase lookups), and they go straight to Lichess or chess.com. Sharing a link puts the game inside the link itself.',
   },
   {
     question: 'Is my progress backed up anywhere?',
     answer:
-      'Progress is stored only in this browser. Use Export on the Progress page to save a backup file and Import to restore it on another device or browser.',
+      'Progress is stored only in this browser, so clearing site data or switching browsers loses it. Use Export on the Settings page to save a backup file (or share it straight to another device) and Import to restore it. A backup made by any version imports into every later version.',
+  },
+  {
+    question: 'How much can the app store?',
+    answer:
+      'Browsers allow a site roughly 5 MB of local storage. The Settings page shows how much is in use; imported games and the analysis library take the most room. If storage ever fills up, the app says so and keeps running — export a backup, then remove old analyses or games.',
   },
 ];

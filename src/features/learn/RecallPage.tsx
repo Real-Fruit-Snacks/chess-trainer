@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { Badge, Button, Card, Kbd, LinkButton } from '@/components/ui';
@@ -76,7 +75,7 @@ export default function RecallPage() {
 
   return (
     <div>
-      <div className="page-header row row--between">
+      <div className="page-header page-header--lean row row--between">
         <div>
           <h1>Recall</h1>
           <p>
@@ -219,9 +218,9 @@ function RecallCard({
                 Next <Kbd>N</Kbd>
               </Button>
             )}
-            <Link className="btn btn--ghost" to={`/learn/${lessonId}?step=${stepIndex + 1}`}>
+            <LinkButton variant="ghost" to={`/learn/${lessonId}?step=${stepIndex + 1}`}>
               Reread the lesson
-            </Link>
+            </LinkButton>
           </div>
         </Card>
       </aside>

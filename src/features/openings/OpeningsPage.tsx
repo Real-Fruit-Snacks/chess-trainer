@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Alert, Badge, Button, Card, Dialog, Field, Input, Select, Stat } from '@/components/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  Field,
+  Input,
+  Select,
+  Stat,
+  LinkButton,
+} from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import { GameTree } from '@/chess/tree';
 import type { LongColor } from '@/chess/types';
@@ -172,7 +183,14 @@ export default function OpeningsPage() {
                     <p className="small muted" style={{ margin: 0 }}>
                       {rep.description}
                     </p>
-                    <div className="repertoire-card__progress" aria-label="Moves learned">
+                    <div
+                      className="repertoire-card__progress"
+                      role="progressbar"
+                      aria-label="Moves learned"
+                      aria-valuemin={0}
+                      aria-valuemax={s.total}
+                      aria-valuenow={s.learned}
+                    >
                       <span style={{ width: `${s.total ? (s.learned / s.total) * 100 : 0}%` }} />
                     </div>
                     <div className="row row--between">
@@ -189,16 +207,16 @@ export default function OpeningsPage() {
                             Delete
                           </Button>
                         ) : null}
-                        <Link
-                          className="btn btn--sm"
+                        <LinkButton
+                          size="sm"
                           to={`/play?book=${encodeURIComponent(rep.id)}`}
                           title="Play a game in which the opponent follows this repertoire"
                         >
                           Play
-                        </Link>
-                        <Link className="btn btn--primary btn--sm" to={`/openings/${rep.id}`}>
+                        </LinkButton>
+                        <LinkButton variant="primary" size="sm" to={`/openings/${rep.id}`}>
                           {s.learned === 0 ? 'Learn' : s.due > 0 ? 'Review' : 'Practise'}
-                        </Link>
+                        </LinkButton>
                       </span>
                     </div>
                   </div>

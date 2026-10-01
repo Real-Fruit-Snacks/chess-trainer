@@ -3,7 +3,17 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { MoveList } from '@/components/chess/MoveList';
-import { Alert, Badge, Button, Card, Kbd, Segmented, Stat, Stars } from '@/components/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Kbd,
+  Segmented,
+  Stat,
+  Stars,
+  LinkButton,
+} from '@/components/ui';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { type ClassicsFilter, DEFAULT_FILTER, type Era, ERAS, eraOf, filterGames } from './eras';
@@ -249,12 +259,12 @@ function GuessTrainer({ game }: { game: ClassicGame }) {
                   <Button variant="primary" onClick={guess.restart}>
                     Play again
                   </Button>
-                  <Link className="btn" to={`/analyze?pgn=${encodeURIComponent(gamePgn(game))}`}>
+                  <LinkButton to={`/analyze?pgn=${encodeURIComponent(gamePgn(game))}`}>
                     Analyze game
-                  </Link>
-                  <Link className="btn btn--ghost" to="/classics">
+                  </LinkButton>
+                  <LinkButton variant="ghost" to="/classics">
                     All games
-                  </Link>
+                  </LinkButton>
                 </div>
               </Card>
             </div>

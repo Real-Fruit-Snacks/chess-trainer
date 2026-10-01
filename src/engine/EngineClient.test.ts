@@ -29,6 +29,10 @@ class FakeWorker {
       queueMicrotask(() => this.onmessage?.({ data: line } as MessageEvent<string>));
     if (command === 'uci') reply('uciok');
     if (command === 'isready') reply('readyok');
+    if (command.startsWith('go ')) {
+      reply('info depth 1 multipv 1 score cp 10 pv e2e4');
+      reply('bestmove e2e4');
+    }
   }
 
   terminate() {
@@ -101,5 +105,37 @@ describe('EngineClient builds', () => {
     const client = new EngineClient({ initTimeoutMs: 2000 });
     await expect(client.init()).rejects.toThrow(/failed to load/);
     expect(client.status).toBe('error');
+  });
+});
+
+describe('EngineClient searches', () => {
+  beforeEach(() => {
+    FakeWorker.instances = [];
+    FakeWorker.failingUrl = null;
+    vi.stubGlobal('Worker', FakeWorker);
+    vi.stubGlobal('WebAssembly', {});
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('puts searchmoves after the limits, since the engine reads every later token as a move', async () => {
+    const client = new EngineClient();
+    const result = await client.search({
+      fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      depth: 12,
+      searchmoves: ['g1f3', 'b1c3'],
+    }).result;
+    expect(result.bestmove.move).toBe('e2e4');
+    const go = FakeWorker.instances[0]?.sent.find((c) => c.startsWith('go '));
+    expect(go).toBe('go depth 12 searchmoves g1f3 b1c3');
+  });
+
+  it('defaults to depth 12 and passes the moves played since the position', async () => {
+    const client = new EngineClient();
+    await client.search({ fen: 'startpos-fen', moves: ['e2e4', 'e7e5'] }).result;
+    const sent = FakeWorker.instances[0]?.sent ?? [];
+    expect(sent).toContain('position fen startpos-fen moves e2e4 e7e5');
+    expect(sent).toContain('go depth 12');
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Board } from '@/components/board/Board';
-import { Badge, Button, Card, Stars } from '@/components/ui';
+import { Badge, Button, Card, Stars, LinkButton } from '@/components/ui';
 import { loadPuzzleIndex, type PuzzleIndex } from '@/features/puzzles/puzzleService';
 import { shuffle } from '@/lib/random';
 import { siteConfig } from '@/site.config';
@@ -163,9 +163,9 @@ export default function PatternsPage() {
                       <Button size="sm" onClick={() => startDrill([pattern], false)}>
                         Solve it
                       </Button>
-                      <Link className="btn btn--sm" to={`/puzzles/themes?theme=${pattern.id}`}>
+                      <LinkButton size="sm" to={`/puzzles/themes?theme=${pattern.id}`}>
                         {count ? `${count} puzzles` : 'Puzzles'}
-                      </Link>
+                      </LinkButton>
                     </div>
                   </div>
                 </Card>

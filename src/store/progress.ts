@@ -5,6 +5,7 @@ import {
   type WoodpeckerSet,
 } from '@/features/puzzles/woodpecker';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { safeLocalStorage } from '@/lib/persistStorage';
 import type { OwnPuzzle } from '@/features/puzzles/ownPuzzles';
 import { daysBetween, localDateKey } from '@/lib/dates';
 import {
@@ -133,6 +134,39 @@ export interface StudyResult {
   clean: boolean;
 }
 
+/** Best result in one of the arcade games (Hand & Brain, Fortress, Engine Says, …). */
+export interface ArcadeResult {
+  /** Best score, in the game's own units. */
+  best: number;
+  plays: number;
+  lastAt: number;
+  /** What the best score was, in words, e.g. "Brain · 94% · beat Level 4". */
+  detail?: string;
+}
+
+/** The Daily Opening game: today's guesses and the streak of solved days. */
+export interface DailyOpeningState {
+  /** The day (YYYY-MM-DD) these guesses belong to. */
+  date: string;
+  /** Opening names guessed so far that day. */
+  guesses: string[];
+  /** Solved, given up, or still in play. */
+  result: 'solved' | 'failed' | null;
+  streak: number;
+  bestStreak: number;
+  /** Days played and how many guesses the solve took (0 for a miss). */
+  history: Record<string, number>;
+}
+
+/** The Odds Ladder: which handicap the engine currently gives and how each rung has gone. */
+export interface OddsLadderState {
+  /** Index of the current rung; 0 is the biggest handicap. */
+  rung: number;
+  /** Highest rung reached. */
+  best: number;
+  results: Record<number, { wins: number; losses: number }>;
+}
+
 export interface Placement {
   at: number;
   /** Suggested starting puzzle rating. */
@@ -178,6 +212,10 @@ export interface ProgressState {
   lessonRecall: Record<string, PuzzleReviewCard>;
   /** Endgame studies solved, by study id. */
   studies: Record<string, StudyResult>;
+  /** Best results in the arcade games, by game id. */
+  arcade: Record<string, ArcadeResult>;
+  dailyOpening: DailyOpeningState | null;
+  oddsLadder: OddsLadderState;
 
   /**
    * Sets the starting rating. `'self'` trusts the learner's own assessment
@@ -246,6 +284,10 @@ export interface ProgressState {
   ) => void;
   recordDrill: (drillId: string, score: number, detail?: string) => void;
   recordGuessGame: (gameId: string, score: number, maxScore: number) => void;
+  /** Counts a play of an arcade game and keeps its best score (with the detail of that best). */
+  recordArcade: (gameId: string, score: number, detail?: string) => void;
+  setDailyOpening: (state: DailyOpeningState) => void;
+  setOddsLadder: (state: OddsLadderState) => void;
   importState: (state: unknown) => boolean;
   exportState: () => string;
   resetAll: () => void;
@@ -288,6 +330,9 @@ const initialState = {
   ownPuzzles: {} as Record<string, OwnPuzzle>,
   lessonRecall: {} as Record<string, PuzzleReviewCard>,
   studies: {} as Record<string, StudyResult>,
+  arcade: {} as Record<string, ArcadeResult>,
+  dailyOpening: null as DailyOpeningState | null,
+  oddsLadder: { rung: 0, best: 0, results: {} },
 };
 
 export type PersistedProgress = typeof initialState;
@@ -728,11 +773,36 @@ export const useProgress = create<ProgressState>()(
         });
       },
 
+      recordArcade: (gameId, score, detail) => {
+        const current = get().arcade[gameId];
+        const best = current ? Math.max(current.best, score) : score;
+        set({
+          arcade: {
+            ...get().arcade,
+            [gameId]: {
+              best,
+              plays: (current?.plays ?? 0) + 1,
+              lastAt: Date.now(),
+              detail: !current || score >= current.best ? detail : current.detail,
+            },
+          },
+          trainingDays: withToday(get().trainingDays),
+        });
+      },
+
+      setDailyOpening: (dailyOpening) => {
+        set({ dailyOpening, trainingDays: withToday(get().trainingDays) });
+      },
+
+      setOddsLadder: (oddsLadder) => {
+        set({ oddsLadder, trainingDays: withToday(get().trainingDays) });
+      },
+
       exportState: () => {
         return JSON.stringify(
           {
             app: 'chess-trainer',
-            version: 5,
+            version: 6,
             exportedAt: new Date().toISOString(),
             progress: persisted(get()),
             repertoire: (({ cards, custom, sessions }) => ({ cards, custom, sessions }))(
@@ -774,8 +844,8 @@ export const useProgress = create<ProgressState>()(
     }),
     {
       name: storageKeyFor(PROGRESS_STORAGE_KEY),
-      version: 5,
-      storage: createJSONStorage(() => localStorage),
+      version: 6,
+      storage: createJSONStorage(() => safeLocalStorage),
       partialize: (state) => persisted(state),
       migrate: (stored, version) => {
         const state = withRatingDefaults(stored as Partial<PersistedProgress>);

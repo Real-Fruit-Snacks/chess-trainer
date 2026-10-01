@@ -30,8 +30,15 @@ the new version at the visitor's next in-app navigation.
 
 ### Releases
 
-Pushing a version tag (`git tag v0.7.0 && git push --tags`) runs the **Release** workflow, which
+Pushing a version tag (`git tag v0.9.0 && git push origin v0.9.0`) runs the **Release** workflow, which
 publishes a GitHub release for the tag with that version's `CHANGELOG.md` section as the notes.
+
+### Renaming and branding
+
+Everything user-visible lives in [`src/site.config.ts`](../src/site.config.ts): the name, tagline,
+repository URL and theme colours. Replace `scripts/icons/logo.svg` and run `npm run icons:generate`
+for new icons, then update the badge URLs at the top of `README.md` and the links in
+`.github/ISSUE_TEMPLATE/config.yml`.
 
 ## Other static hosts
 
