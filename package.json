@@ -1,6 +1,6 @@
 {
   "name": "chess-trainer",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "private": true,
   "description": "Learn, practice and solve chess puzzles at any level — a fully static, installable web app built for GitHub Pages.",
   "license": "MIT",

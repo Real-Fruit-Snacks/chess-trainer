@@ -154,7 +154,9 @@ export default defineConfig(({ mode }) => {
       globals: false,
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.test.{ts,tsx}'],
-      css: false,
+      // Stylesheets are stubbed out of component tests; only their text is
+      // served (`?raw`), for the stylesheet-scope test in src/styles.
+      css: { include: [/\.css\?raw$/] },
       coverage: {
         provider: 'v8',
         reporter: ['text', 'html', 'lcov'],

@@ -368,8 +368,12 @@ caught, recorded in `useStorageHealth` and reported once, so the stores never th
   best practices and SEO, a layout-shift ceiling and a performance floor.
 - **Visual snapshots.** `e2e/visual.spec.ts` compares the static pages pixel by pixel on desktop and
   phone (baselines in `e2e/visual.spec.ts-snapshots/`, regenerated with `--update-snapshots` after a
-  deliberate design change); the CI job is informative until the baselines are confirmed on the
-  runner.
+  deliberate design change); the CI job blocks a merge.
+- **Stylesheet scope.** Pages are code-split and so are their stylesheets, so a class defined in
+  one page's CSS does not exist until that page has loaded. `src/styles/cssScope.test.ts` follows
+  each lazily loaded page's static imports and fails if a component uses a class defined only in a
+  stylesheet that page does not load. Styles shared by several pages belong in `ui.css` or
+  `global.css`; a component that has its own rules imports its stylesheet itself.
 - **The test lab** (`src/features/lab/`) is for the checks no automation covers: sounds, haptics,
   installs and the feel of a real device.
 - **Engine verification:** `npm run lessons:verify` checks every lesson task against Stockfish (the

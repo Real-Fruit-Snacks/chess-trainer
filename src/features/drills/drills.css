@@ -63,15 +63,6 @@
   background: var(--danger);
 }
 
-.drill__summary {
-  max-width: 420px;
-  text-align: center;
-}
-
-.drill__summary .row {
-  justify-content: center;
-}
-
 .drill__tip {
   border-left: 3px solid var(--accent);
   padding: var(--space-2) var(--space-3);

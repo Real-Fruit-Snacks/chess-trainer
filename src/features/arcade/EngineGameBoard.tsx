@@ -6,6 +6,7 @@ import { PlayerBar } from '@/components/chess/PlayerBar';
 import { Button, Card } from '@/components/ui';
 import type { LongColor } from '@/chess/types';
 import type { UsePlayVsEngine } from '@/features/play/usePlayVsEngine';
+import '@/features/play/play.css';
 
 /**
  * The board column of an arcade game played through `usePlayVsEngine`: player

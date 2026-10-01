@@ -11,6 +11,7 @@ import {
   describeBenchmark,
   diagnosticRows,
 } from './engineDiagnostics';
+import './settings.css';
 
 /**
  * "Is the engine working, and how fast?" — the environment facts behind the

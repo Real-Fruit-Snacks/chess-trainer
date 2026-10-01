@@ -92,7 +92,7 @@ export default function ProgressPage() {
       <div className="progress__grid">
         <div className="stack">
           <Card>
-            <div className="progress__stats">
+            <div className="stats">
               <Stat
                 value={formatRating(progress.puzzleRating)}
                 label={
@@ -281,7 +281,7 @@ export default function ProgressPage() {
 
           <Card>
             <h2 style={{ fontSize: '1.15rem' }}>Training</h2>
-            <div className="progress__stats">
+            <div className="stats">
               <Stat
                 value={Math.max(0, ...progress.rushRuns.map((r) => r.score)) || '–'}
                 label="Best Puzzle Rush"

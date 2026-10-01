@@ -293,7 +293,7 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
           ) : null}
           {!explore && (phase === 'idle' || phase === 'sessionDone') ? (
             <div className="trainer__overlay">
-              <Card className="drill__summary">
+              <Card className="summary">
                 {phase === 'sessionDone' ? (
                   <>
                     <p className="card__eyebrow">Session complete</p>

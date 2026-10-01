@@ -318,7 +318,7 @@ test.describe('endgame ladder', () => {
     }
     await playMove(board, 'a7', 'a8');
     await page.getByRole('button', { name: 'Queen' }).click();
-    await expect(page.locator('.drill__summary')).toContainText('Promoted to a queen', {
+    await expect(page.locator('.summary')).toContainText('Promoted to a queen', {
       timeout: 15_000,
     });
     await expect(page.getByTestId('drill-next-rung')).toHaveText('Next rung: Two rooks vs king');
@@ -447,7 +447,7 @@ test.describe('classic games', () => {
     await playMove(board, 'c3', 'd5');
     await expect(page.locator('.puzzle-status')).toContainText('Yes! Nd5#');
     await page.getByRole('button', { name: /Continue/ }).click();
-    await expect(page.locator('.drill__summary')).toContainText('9/9 points', { timeout: 10_000 });
+    await expect(page.locator('.summary')).toContainText('9/9 points', { timeout: 10_000 });
     await page.goto('/classics');
     await page.getByRole('button', { name: 'Played', exact: true }).click();
     await expect(page.getByTestId('classics-count')).toHaveText(/^1 of 46 games/);

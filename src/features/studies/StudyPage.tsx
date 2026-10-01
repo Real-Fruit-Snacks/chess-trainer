@@ -8,6 +8,7 @@ import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
 import { getStudy, STUDIES, type Study } from './studies';
 import { useStudy } from './useStudy';
+import '@/features/learn/learn.css';
 import './studies.css';
 
 export default function StudyPage() {
@@ -15,7 +16,7 @@ export default function StudyPage() {
   const study = getStudy(studyId);
   if (!study) {
     return (
-      <Card className="onboarding">
+      <Card className="narrow">
         <h2>Study not found</h2>
         <LinkButton to="/studies">All studies</LinkButton>
       </Card>

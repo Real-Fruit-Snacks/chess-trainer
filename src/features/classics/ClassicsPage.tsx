@@ -245,7 +245,7 @@ function GuessTrainer({ game }: { game: ClassicGame }) {
           ) : null}
           {phase === 'done' ? (
             <div className="trainer__overlay">
-              <Card className="drill__summary">
+              <Card className="summary">
                 <p className="card__eyebrow">Game over · {game.result}</p>
                 <h2 style={{ margin: '4px 0' }}>
                   {guess.score}/{guess.maxScore} points

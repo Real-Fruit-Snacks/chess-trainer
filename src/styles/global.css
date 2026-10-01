@@ -130,6 +130,22 @@ kbd {
   justify-content: space-between;
 }
 
+/* A single narrow column, centred: onboarding, empty states, a course intro. */
+.narrow {
+  max-width: 620px;
+  margin: var(--space-6) auto;
+}
+
+/* A narrow results card with centred text and buttons (drills, classics, training). */
+.summary {
+  max-width: 420px;
+  text-align: center;
+}
+
+.summary .row {
+  justify-content: center;
+}
+
 /* Card headers: the title wraps, the badge stays on the first line. */
 .card > .row--between:first-child {
   flex-wrap: nowrap;

@@ -51,7 +51,7 @@ export default function RecallPage() {
           <h1>Recall</h1>
           <p>Lesson positions come back a few days after you learn them, then further apart.</p>
         </div>
-        <Card className="onboarding" data-testid="recall-empty">
+        <Card className="narrow" data-testid="recall-empty">
           <p className="card__eyebrow">Lesson recall</p>
           <h2>Nothing to recall right now</h2>
           <p className="muted">

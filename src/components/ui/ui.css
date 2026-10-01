@@ -233,6 +233,51 @@ a.btn:focus {
   color: var(--text-muted);
 }
 
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-4);
+}
+
+/* ---------- Choice list ---------- */
+/* Stacked radio or checkbox options, each a full-width tappable row. */
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.choice:hover {
+  border-color: var(--accent);
+}
+
+.choice.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.choice input {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.choice span:first-of-type {
+  flex: 1;
+}
+
 /* ---------- Dialog ---------- */
 .dialog {
   border: 1px solid var(--border);

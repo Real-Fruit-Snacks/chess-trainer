@@ -109,14 +109,11 @@ export default function PlacementPage() {
           <div>
             <h2 style={{ marginTop: 0 }}>Which of these do you know well?</h2>
             <p className="muted">Tick everything you could explain to a friend. Leave the rest.</p>
-            <div className="onboarding__options" role="group" aria-label="Rules you know">
+            <div className="choices" role="group" aria-label="Rules you know">
               {RULE_OPTIONS.map((rule) => {
                 const checked = rules.includes(rule.id);
                 return (
-                  <label
-                    key={rule.id}
-                    className={`onboarding__option${checked ? ' is-selected' : ''}`}
-                  >
+                  <label key={rule.id} className={`choice${checked ? ' is-selected' : ''}`}>
                     <input
                       type="checkbox"
                       checked={checked}
@@ -215,17 +212,9 @@ function Choice<T extends string>({
   return (
     <div>
       <h2 style={{ marginTop: 0 }}>{title}</h2>
-      <div
-        className="onboarding__options"
-        role="radiogroup"
-        aria-label={title}
-        data-testid={testId}
-      >
+      <div className="choices" role="radiogroup" aria-label={title} data-testid={testId}>
         {options.map((option) => (
-          <label
-            key={option.id}
-            className={`onboarding__option${option.id === value ? ' is-selected' : ''}`}
-          >
+          <label key={option.id} className={`choice${option.id === value ? ' is-selected' : ''}`}>
             <input
               type="radio"
               name={testId}
@@ -273,16 +262,13 @@ function TacticStep({
         </p>
         <h2 style={{ marginTop: 0 }}>{question.prompt}</h2>
         <div
-          className="onboarding__options"
+          className="choices"
           role="radiogroup"
           aria-label="Your move"
           data-testid="placement-tactic"
         >
           {options.map((option) => (
-            <label
-              key={option}
-              className={`onboarding__option${option === value ? ' is-selected' : ''}`}
-            >
+            <label key={option} className={`choice${option === value ? ' is-selected' : ''}`}>
               <input
                 type="radio"
                 name={`tactic-${index}`}

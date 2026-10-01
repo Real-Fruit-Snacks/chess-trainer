@@ -17,6 +17,7 @@ import {
   streakBonus,
   summarizeRound,
 } from './whoStandsBetter';
+import '@/features/play/play.css';
 import './arcade.css';
 
 type Phase = 'intro' | 'guess' | 'reveal' | 'done';

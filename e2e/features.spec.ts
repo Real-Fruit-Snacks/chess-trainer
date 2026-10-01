@@ -113,7 +113,7 @@ test.describe('drills', () => {
     await expect(board).toBeVisible();
     await expect(page.getByRole('button', { name: 'Give up' })).toBeEnabled();
     await page.getByRole('button', { name: 'Give up' }).click();
-    await expect(page.locator('.drill__summary')).toContainText(/Given up/);
+    await expect(page.locator('.summary')).toContainText(/Given up/);
   });
 });
 

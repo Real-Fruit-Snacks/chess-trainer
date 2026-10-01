@@ -12,48 +12,6 @@
   gap: var(--space-2);
 }
 
-/* Onboarding */
-.onboarding {
-  max-width: 620px;
-  margin: var(--space-6) auto;
-}
-
-.onboarding__options {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.onboarding__option {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition:
-    border-color var(--transition),
-    background var(--transition);
-}
-
-.onboarding__option:hover {
-  border-color: var(--accent);
-}
-
-.onboarding__option.is-selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.onboarding__option input {
-  accent-color: var(--accent);
-}
-
-.onboarding__option span:first-of-type {
-  flex: 1;
-}
-
 /* Puzzle Rush */
 .rush__start {
   max-width: 420px;

@@ -116,7 +116,7 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
             ) : null}
             {game.phase === 'idle' ? (
               <div className="trainer__overlay">
-                <Card className="drill__summary">
+                <Card className="summary">
                   <h2 style={{ marginTop: 0 }}>{drill.title}</h2>
                   <p className="muted">
                     You play {userColor}.{' '}
@@ -143,7 +143,7 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
             ) : null}
             {game.result ? (
               <div className="trainer__overlay">
-                <Card className="drill__summary">
+                <Card className="summary">
                   <p className="card__eyebrow">
                     {game.result.outcome === 'won' ? 'Well done' : 'Not this time'}
                   </p>

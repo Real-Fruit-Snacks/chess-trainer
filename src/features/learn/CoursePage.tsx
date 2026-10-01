@@ -25,7 +25,7 @@ export default function CoursePage() {
 
   if (!course || !status) {
     return (
-      <Card className="onboarding">
+      <Card className="narrow">
         <h2>Course not found</h2>
         <LinkButton to="/learn">Back to Learn</LinkButton>
       </Card>

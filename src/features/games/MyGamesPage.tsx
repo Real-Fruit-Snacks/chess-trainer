@@ -328,7 +328,7 @@ function OverviewCard({ list, player }: { list: StoredGame[]; player: string }) 
   return (
     <Card>
       <h2 style={{ fontSize: '1.15rem' }}>Overview</h2>
-      <div className="progress__stats" data-testid="games-overview">
+      <div className="stats" data-testid="games-overview">
         <Stat value={list.length} label="Games imported" />
         <Stat
           value={`${summary.wins} / ${summary.draws} / ${summary.losses}`}

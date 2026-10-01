@@ -151,7 +151,7 @@ export default function PuzzlesPage() {
 /* ------------------------------------------------------------------ */
 function MineEmpty() {
   return (
-    <Card className="onboarding">
+    <Card className="narrow">
       <p className="card__eyebrow">My puzzles</p>
       <h2>No puzzles from your games yet</h2>
       <p className="muted">
@@ -178,7 +178,7 @@ function ReviewEmpty() {
   const upcoming = nextReview(queue);
   const total = Object.keys(queue).length;
   return (
-    <Card className="onboarding">
+    <Card className="narrow">
       <p className="card__eyebrow">Review queue</p>
       <h2>Nothing to review right now</h2>
       <p className="muted">
@@ -212,7 +212,7 @@ function Onboarding() {
   const selected = STARTING_RATINGS.find((o) => o.id === choice);
 
   return (
-    <div className="onboarding">
+    <div className="narrow">
       <Card>
         <p className="card__eyebrow">Before you start</p>
         <h2>Where should your puzzle rating start?</h2>
@@ -222,9 +222,9 @@ function Onboarding() {
           sure? The <Link to="/placement">placement quiz</Link> suggests a starting point and a
           course in two minutes.
         </p>
-        <div className="onboarding__options" role="radiogroup" aria-label="Starting level">
+        <div className="choices" role="radiogroup" aria-label="Starting level">
           <label
-            className={`onboarding__option${choice === 'calibrate' ? ' is-selected' : ''}`}
+            className={`choice${choice === 'calibrate' ? ' is-selected' : ''}`}
             data-testid="onboarding-calibrate"
           >
             <input
@@ -240,7 +240,7 @@ function Onboarding() {
           {STARTING_RATINGS.map((option) => (
             <label
               key={option.id}
-              className={`onboarding__option${option.id === choice ? ' is-selected' : ''}`}
+              className={`choice${option.id === choice ? ' is-selected' : ''}`}
             >
               <input
                 type="radio"

@@ -157,7 +157,7 @@ export default function CoordinatesDrill() {
           ) : null}
           {finished ? (
             <div className="trainer__overlay">
-              <Card className="drill__summary">
+              <Card className="summary">
                 <p className="card__eyebrow">Time!</p>
                 <h2 style={{ margin: '4px 0' }}>
                   {finished.score} square{finished.score === 1 ? '' : 's'}

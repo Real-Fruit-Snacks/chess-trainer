@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-10-01
+
+### Fixed
+
+- **The placement quiz's options rendered as a run of inline checkboxes** when the quiz was the
+  first page opened. Its option styles lived in the Puzzles page's stylesheet, which only loads with
+  that page. The same leak affected the narrow onboarding column on the course, recall and study
+  pages, the results card in Classics and repertoire training, the games overview, the board column
+  of Who Stands Better?, the feedback and action rows of studies, and the engine diagnostics panel
+  in the test lab. The shared pieces are now part of the always-loaded stylesheets (a choice list,
+  a stat grid, a narrow column and a summary card), and the rest load the stylesheet they need.
+
+### Testing
+
+- A stylesheet-scope test follows every code-split page's static imports and fails if a component
+  uses a class defined only in a stylesheet that page does not load, so this cannot come back.
+
 ## [0.9.2] - 2026-10-01
 
 ### Added
