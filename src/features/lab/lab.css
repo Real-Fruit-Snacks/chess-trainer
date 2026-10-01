@@ -178,3 +178,8 @@
 .lab__type-h4 {
   font-size: 1rem;
 }
+
+.lab__slider {
+  max-width: 420px;
+  margin: var(--space-3) 0;
+}

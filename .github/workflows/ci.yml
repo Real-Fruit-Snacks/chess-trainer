@@ -141,9 +141,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: build
-    # Informative until the baselines have been confirmed on the CI runner's fonts;
-    # the diff report is uploaded on failure.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

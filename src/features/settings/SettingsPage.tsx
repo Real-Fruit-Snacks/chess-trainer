@@ -19,7 +19,6 @@ import { ENGINE_LEVELS } from '@/engine/levels';
 import { formatDate } from '@/lib/dates';
 import { CALIBRATION_PUZZLES, STARTING_RATINGS } from '@/lib/rating';
 import { hapticsSupported } from '@/lib/haptics';
-import { playSound } from '@/lib/sound';
 import { badgingSupported } from '@/app/useAppBadge';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
@@ -35,6 +34,7 @@ import { useBackupActions } from './useBackupActions';
 import { EngineDiagnostics } from './EngineDiagnostics';
 import { OfflinePuzzles } from './OfflinePuzzles';
 import { EngineThreadsSetting } from './EngineThreadsSetting';
+import { SoundThemePicker, VolumeSlider } from './SoundControls';
 import { StorageUsage } from './StorageUsage';
 import './settings.css';
 
@@ -160,21 +160,15 @@ export default function SettingsPage() {
                 description="Short synthesized sounds for moves, captures, checks and results."
               />
               {settings.sounds ? (
-                <div className="settings__row">
-                  <span>Sound theme</span>
-                  <Segmented
-                    ariaLabel="Sound theme"
-                    value={settings.soundTheme}
-                    onChange={(v) => {
-                      settings.update({ soundTheme: v });
-                      playSound('move');
-                    }}
-                    options={[
-                      { value: 'standard', label: 'Standard' },
-                      { value: 'soft', label: 'Soft' },
-                    ]}
-                  />
-                </div>
+                <>
+                  <div className="settings__row">
+                    <span>Sound theme</span>
+                    <SoundThemePicker />
+                  </div>
+                  <div className="settings__row">
+                    <VolumeSlider className="settings__slider" />
+                  </div>
+                </>
               ) : null}
             </div>
           </Card>

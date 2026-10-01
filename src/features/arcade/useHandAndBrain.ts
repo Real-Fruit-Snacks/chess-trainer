@@ -7,7 +7,7 @@ import { getLevel } from '@/engine/levels';
 import { useEngine } from '@/engine/useEngine';
 import { chooseLevelMove, ensureSkill, type SkillCache } from '@/features/play/engineMove';
 import type { GameOver } from '@/features/play/usePlayVsEngine';
-import { playSound } from '@/lib/sound';
+import { gameEndSound, playSound } from '@/lib/sound';
 import { useSettings } from '@/store/settings';
 import {
   type CallRecord,
@@ -99,11 +99,12 @@ export function useHandAndBrain() {
   useEffect(() => {
     if (!started || gameOver || !position.status.over) return;
     const { result, reason, winner } = position.status;
-    playSound('gameEnd');
+    const verdict = winner ? (winner === playerColor ? 'win' : 'loss') : 'draw';
+    playSound(gameEndSound(verdict));
     setGameOver({
       result: result === '*' ? '1/2-1/2' : result,
       reason: reason ?? 'game over',
-      verdict: winner ? (winner === playerColor ? 'win' : 'loss') : 'draw',
+      verdict,
     });
   }, [position.status, started, gameOver, playerColor]);
 
@@ -301,6 +302,7 @@ export function useHandAndBrain() {
     engine().stop();
     runRef.current++;
     setBusy(null);
+    playSound('gameLost');
     setGameOver({
       result: playerColor === 'white' ? '0-1' : '1-0',
       reason: 'resignation',

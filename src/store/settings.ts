@@ -7,7 +7,7 @@ export type BoardTheme = 'brown' | 'green' | 'blue' | 'grey' | 'contrast';
 export type PlayColor = 'white' | 'black' | 'random';
 export type ReviewDepth = 'fast' | 'balanced' | 'thorough';
 export type PieceSet = 'classic' | 'letters';
-export type SoundTheme = 'standard' | 'soft';
+export type SoundTheme = 'standard' | 'soft' | 'retro';
 
 /** Search depth per review setting. */
 export const REVIEW_DEPTHS: Record<ReviewDepth, number> = { fast: 10, balanced: 13, thorough: 16 };
@@ -21,8 +21,13 @@ export interface SettingsState {
   showLegalMoves: boolean;
   animations: boolean;
   sounds: boolean;
-  /** 'soft' plays the same cues quieter and rounder. */
+  /**
+   * Which set of cues plays: the standard set, the same cues quieter and
+   * rounder ('soft'), or the 8-bit set ('retro').
+   */
   soundTheme: SoundTheme;
+  /** Master volume for the sound effects, 0–1. */
+  soundVolume: number;
   /** Short vibrations on moves, solves and mistakes (phones with a vibration motor). */
   haptics: boolean;
   /** Show the number of due reviews on the installed app's icon (Badging API). */
@@ -82,6 +87,7 @@ export const DEFAULT_SETTINGS = {
   animations: true,
   sounds: true,
   soundTheme: 'standard' as SoundTheme,
+  soundVolume: 1,
   haptics: true,
   appBadge: true,
   lastBackupAt: null as number | null,

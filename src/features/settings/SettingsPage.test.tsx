@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as SoundModule from '@/lib/sound';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
 
@@ -16,6 +17,12 @@ vi.hoisted(() => {
     this.removeAttribute('open');
   };
   Element.prototype.scrollIntoView = vi.fn();
+});
+
+const played = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/sound', async (importOriginal) => {
+  const actual = await importOriginal<typeof SoundModule>();
+  return { ...actual, playSound: played };
 });
 
 import SettingsPage from './SettingsPage';
@@ -58,6 +65,42 @@ describe('SettingsPage', () => {
     fireEvent.click(dots);
     expect(useSettings.getState().showLegalMoves).toBe(false);
     expect(dots).not.toBeChecked();
+  });
+
+  it('offers three sound themes and a volume slider, each previewed with a move', () => {
+    vi.useFakeTimers();
+    try {
+      renderAt('/settings');
+      const themes = screen.getByRole('group', { name: 'Sound theme' });
+      expect(
+        within(themes)
+          .getAllByRole('button')
+          .map((b) => b.textContent),
+      ).toEqual(['Standard', 'Soft', 'Retro']);
+      fireEvent.click(within(themes).getByRole('button', { name: 'Retro' }));
+      expect(useSettings.getState().soundTheme).toBe('retro');
+      expect(within(themes).getByRole('button', { name: 'Retro' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(played).toHaveBeenCalledTimes(1);
+
+      const slider = screen.getByRole('slider', { name: 'Volume' });
+      expect(slider).toHaveValue('100');
+      fireEvent.change(slider, { target: { value: '25' } });
+      expect(useSettings.getState().soundVolume).toBeCloseTo(0.25, 5);
+      expect(slider).toHaveAttribute('aria-valuetext', '25%');
+      vi.advanceTimersByTime(200);
+      expect(played).toHaveBeenCalledTimes(2);
+      expect(played).toHaveBeenLastCalledWith('move');
+
+      // Both controls belong to the sounds switch.
+      fireEvent.click(screen.getByRole('switch', { name: /^Sound effects/ }));
+      expect(screen.queryByRole('slider', { name: 'Volume' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Sound theme' })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('scrolls to the card a hash link points at', () => {

@@ -125,3 +125,8 @@
 .profiles__actions {
   gap: 2px;
 }
+
+.settings__slider {
+  flex: 1;
+  max-width: 420px;
+}

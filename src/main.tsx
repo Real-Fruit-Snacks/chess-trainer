@@ -7,12 +7,14 @@ import '@lichess-org/chessground/assets/chessground.cburnett.css';
 import '@/components/board/pieces-letters.css';
 import '@/styles/global.css';
 import { setupInstallListeners } from '@/app/pwa';
+import { warmUpAudio } from '@/lib/sound';
 import { createAppRouter } from '@/app/routes';
 import { applyColorScheme } from '@/app/theme';
 import { useSettings } from '@/store/settings';
 
 // Capture the browser's install prompt before React mounts.
 setupInstallListeners();
+warmUpAudio();
 // Avoid a flash of the wrong theme.
 applyColorScheme(useSettings.getState().colorScheme);
 

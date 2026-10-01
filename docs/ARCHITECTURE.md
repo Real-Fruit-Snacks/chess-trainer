@@ -160,7 +160,10 @@ the whole position out through a live region. Piece sets are chosen with a `data
 
 ### Sounds and clocks (`src/lib/`)
 
-- `sound.ts` synthesises every sound effect with the Web Audio API (no audio files to license or cache).
+- `sound.ts` synthesises every sound effect with the Web Audio API (no audio files to license or cache):
+  each cue is a table of oscillator and filtered-noise layers played through a compressor and soft
+  clipper, with one table for the standard set and one for the 8-bit retro set (the soft theme softens
+  the standard table as it plays); the volume setting scales the output on a squared curve.
 - `clock.ts` is a pure clock model (timestamps, increments, flagging) that Play drives with a 100 ms tick.
 - `srs.ts` is an SM-2 scheduler used for opening moves; `puzzleReview.ts` is the simpler fixed-step
   (1-3-7-14-30 days) scheduler behind the puzzle review queue; `openings.ts` looks up ECO names by EPD;
@@ -200,8 +203,8 @@ the whole position out through a live region. Piece sets are chosen with a `data
 Five zustand stores persisted to `localStorage` with versioned keys (and `migrate` functions), plus the
 profile list:
 
-- `settings` — appearance, board theme (including the high-contrast palette), piece set, sound theme,
-  engine defaults, review depth, the multi-threaded engine opt-in, puzzle preferences, time control,
+- `settings` — appearance, board theme (including the high-contrast palette), piece set, sound theme
+  and volume, engine defaults, review depth, the multi-threaded engine opt-in, puzzle preferences, time control,
   keyboard move entry, blindfold play, tablebase opt-in, remembered import usernames and the first-run
   tour flag.
 - `progress` — onboarding flag, puzzle rating and history, attempts, seen puzzle IDs, streaks, daily
@@ -300,7 +303,7 @@ install button; iOS gets manual instructions because Safari has no install API.
   backup opened from a file manager imports itself. `backupStatus` decides when the reminder shows (40
   rated puzzles or 14 days since the last backup, never before 20 rated puzzles).
 - **Haptics.** `playSound` also calls `vibrate` (Vibration API, `src/lib/haptics.ts`) with a pattern
-  per cue, gated by the `haptics` setting.
+  per cue and sound theme, gated by the `haptics` setting.
 - **Explorer.** `lib/explorer.ts` wraps the Lichess opening explorer (masters or community database),
   cached per position and database, debounced and abortable in `useExplorer`; `ExplorerPanel` is the
   shared card used by Analyze and the repertoire editor. Off by default because it uses the network.

@@ -6,6 +6,59 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-01
+
+### Added
+
+- **Retro sound theme.** A third theme next to Standard and Soft: an 8-bit console's sound chip,
+  with square waves for the melody, triangles underneath for body and the noise channel for the
+  explosion. A menu blip for a move and two blips for castling, an explosion for a capture, a siren
+  pair for check, a power-up run for a promotion, a coin and a rising flourish for a solve, four steps
+  down and a buzz for a miss, a four-note cadence for game over, a hurry-up tick for low time and a
+  two-note question for a notification. It is level-matched to the standard set, so switching themes
+  does not change how loud the app is, and it has its own shorter, buzzier vibration patterns.
+- **Volume.** A slider under the sound theme in Settings (and in the test lab) sets the master volume
+  in steps of 5 %. It is perceptual — half way sounds about half as loud — and a move plays at the new
+  level once the slider settles.
+- **A game-over cue for a loss.** Game over now tells a win from a loss: the standard theme plays
+  its impact under a major chord for a win or a draw and under a minor chord that sinks for a loss;
+  the retro cadence rises into the major chord or falls into the minor one. Engine games (checkmate,
+  the flag and resignation) and Hand & Brain use it; between two people at one device the neutral
+  cue plays.
+
+### Changed
+
+- The test lab's haptics card shows the patterns of the current sound theme, and its sounds card
+  carries the volume slider.
+
+### Testing
+
+- Unit tests cover the retro set (chip waves only, noise only in the explosion, level matching with
+  the capture on top), the major-versus-minor game-over pair, the volume curve, the per-theme
+  vibration patterns and the new controls; an end-to-end test switches to Retro, moves the slider
+  from the keyboard and checks that both persist and that the lab follows them, on all four browser
+  projects.
+
+## [0.9.1] - 2026-10-01
+
+### Changed
+
+- **Every sound rebuilt on a new synth.** The synth gained filtered-noise layers and a "punch" chain
+  (a compressor and a soft clipper that squeeze a cue's layers into one dense sound), and all ten
+  cues were redesigned on it as one family: a wooden thock for a move and a double thock for
+  castling; a **capture that lands like a hit** — kick-drum thump, sub, crack, crunch, debris and the
+  bright tick, the loudest sound in the set; an alarm with a crack on each note for check; a short
+  fanfare with sparkle for a promotion; a ringing chime for a solve; a heavy thud and a slide down for
+  a miss; an impact under a swelling chord for game over; a weighted tick for low time; a two-note
+  ping with air for a notification. Levels are matched so the capture stays on top and a move is the
+  quietest. The audio context now wakes on the first tap so even the first hit lands at full weight;
+  the soft theme keeps halved, dulled versions without the punch chain. The capture vibration is a
+  double tap followed by a longer buzz.
+
+### Testing
+
+- The visual-snapshot job is blocking now that its baselines have matched the CI runner.
+
 ## [0.9.0] - 2026-10-01
 
 The release candidate for 1.0: everything below is what 1.0 will ship, and the compatibility promise

@@ -138,7 +138,8 @@ _Settings → Open the test lab_ (`/settings/lab`) is a single page for checking
   reduced-motion preferences, pointer type, viewport, language and the browser's storage estimate.
 - **Storage:** the meter, the largest keys, and a button that fills local storage to the browser's
   limit to show the "storage is full" warning, with another to remove the filler.
-- **Sounds and haptics:** a button for every cue, with the sound theme and the switches to hand.
+- **Sounds and haptics:** a button for every cue, with the sound theme, the volume and the switches
+  to hand; the vibration patterns shown follow the theme.
 - **Icons:** every icon at 16, 20, 24 and 32 px, on light or dark.
 - **Controls and feedback:** every button, input, badge, stat, alert, toast and the dialog.
 - **Board:** the board colours, both piece sets, highlights, arrows, check and the promotion menu.
@@ -150,6 +151,24 @@ _Settings → Open the test lab_ (`/settings/lab`) is a single page for checking
 
 The rules of chess, notation (SAN, PGN, FEN, engine evaluations), a searchable glossary linked to the
 lessons, and an FAQ.
+
+## Sounds and haptics
+
+Eleven synthesized cues, built on a small Web Audio synth with no audio files, in three themes:
+
+- **Standard** — a wooden thock for a move and a double thock for castling, a capture that lands like
+  a hit (the loudest cue), an alarm for check, a fanfare for a promotion, a chime for a solve, a thud
+  for a miss, an impact under a chord for game over — major when you won or drew, minor and sinking
+  when you lost — a weighted tick for low time and a two-note ping for notifications.
+- **Soft** — the same cues halved and rounded off, for quiet rooms.
+- **Retro** — an 8-bit console's sound chip: a menu blip for a move, an explosion for a capture, a
+  siren pair for check, a power-up run for a promotion, a coin and a flourish for a solve, four steps
+  down and a buzz for a miss, a four-note cadence for game over (major for a win, minor for a loss),
+  a hurry-up tick and a two-note question.
+
+A **volume** slider sets how loud all of it is. Phones that support it get a matching vibration for
+each cue — the Retro set's are shorter and buzzier — and sounds, theme, volume and vibration are all
+in Settings; every cue can be tried in the test lab.
 
 ## Accessibility
 

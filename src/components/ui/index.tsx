@@ -296,6 +296,59 @@ export function Segmented<T extends string | number>({
   );
 }
 
+/**
+ * A labelled range input that shows its value. `format` turns the number into
+ * the text shown beside the label and read by screen readers.
+ */
+export function Slider({
+  label,
+  value,
+  min = 0,
+  max = 100,
+  step = 1,
+  onChange,
+  format = (v) => String(v),
+  disabled,
+  className,
+  ...rest
+}: {
+  label: ReactNode;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  onChange: (value: number) => void;
+  format?: (value: number) => string;
+} & Omit<ComponentProps<'input'>, 'type' | 'value' | 'min' | 'max' | 'step' | 'onChange'>) {
+  const id = useId();
+  return (
+    <div className={className ? `slider ${className}` : 'slider'}>
+      <div className="slider__head">
+        <label className="slider__label" htmlFor={id}>
+          {label}
+        </label>
+        {/* The value is read from the slider itself (aria-valuetext). */}
+        <output className="slider__value" htmlFor={id} aria-hidden="true">
+          {format(value)}
+        </output>
+      </div>
+      <input
+        id={id}
+        type="range"
+        className="slider__input"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        aria-valuetext={format(value)}
+        onChange={(e) => onChange(Number(e.target.value))}
+        {...rest}
+      />
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Dialog (native <dialog>)                                           */
 /* ------------------------------------------------------------------ */

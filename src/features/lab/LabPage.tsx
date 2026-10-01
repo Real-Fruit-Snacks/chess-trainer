@@ -28,7 +28,8 @@ import {
 } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import { EngineDiagnostics } from '@/features/settings/EngineDiagnostics';
-import { HAPTIC_PATTERNS, hapticsSupported, vibrate } from '@/lib/haptics';
+import { SoundThemePicker, VolumeSlider } from '@/features/settings/SoundControls';
+import { hapticPattern, hapticsSupported, vibrate } from '@/lib/haptics';
 import {
   formatBytes,
   STORAGE_LIMIT_BYTES,
@@ -67,6 +68,7 @@ const SOUND_LABEL: Record<SoundName, string> = {
   solved: 'Puzzle solved',
   failed: 'Puzzle failed',
   gameEnd: 'Game over',
+  gameLost: 'Game lost',
   lowTime: 'Low time',
   notify: 'Notification',
 };
@@ -261,16 +263,9 @@ export default function LabPage() {
               onChange={(v) => settings.update({ sounds: v })}
               label="Sound effects"
             />
-            <Segmented
-              ariaLabel="Sound theme"
-              value={settings.soundTheme}
-              onChange={(v) => settings.update({ soundTheme: v })}
-              options={[
-                { value: 'standard', label: 'Standard' },
-                { value: 'soft', label: 'Soft' },
-              ]}
-            />
+            <SoundThemePicker />
           </div>
+          <VolumeSlider className="lab__slider" />
           <div className="row lab__buttons">
             {SOUND_NAMES.map((name) => (
               <Button key={name} onClick={() => playSound(name)} data-testid={`sound-${name}`}>
@@ -296,11 +291,16 @@ export default function LabPage() {
               {hapticsSupported() ? 'Supported here' : 'Not supported here'}
             </Badge>
           </div>
+          <p className="small muted">
+            Patterns follow the sound theme: the Retro set is shorter and buzzier.
+          </p>
           <div className="row lab__buttons">
             {SOUND_NAMES.map((name) => (
               <Button key={name} onClick={() => vibrate(name)} data-testid={`haptic-${name}`}>
                 {SOUND_LABEL[name]}{' '}
-                <span className="small faint">{describePattern(HAPTIC_PATTERNS[name])}</span>
+                <span className="small faint">
+                  {describePattern(hapticPattern(name, settings.soundTheme))}
+                </span>
               </Button>
             ))}
           </div>

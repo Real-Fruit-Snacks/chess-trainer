@@ -17,7 +17,7 @@ import {
   startClock,
   type TimeControl,
 } from '@/lib/clock';
-import { playSound } from '@/lib/sound';
+import { gameEndSound, playSound } from '@/lib/sound';
 import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
 import { chooseLevelMove, ensureSkill, type SkillCache } from './engineMove';
@@ -249,11 +249,12 @@ export function usePlayVsEngine(): UsePlayVsEngine {
         searchIdRef.current++;
         setThinking(false);
         const winner: LongColor = lost === 'white' ? 'black' : 'white';
-        playSound('gameEnd');
+        const verdict: GameOver['verdict'] = winner === playerColor ? 'win' : 'loss';
+        playSound(gameEndSound(verdict, hotSeat));
         setGameOver({
           result: winner === 'white' ? '1-0' : '0-1',
           reason: 'time',
-          verdict: winner === playerColor ? 'win' : 'loss',
+          verdict,
         });
         return;
       }
@@ -316,13 +317,13 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       : 'draw';
     clockRef.current = pauseClock(clockRef.current, Date.now());
     syncClockView();
-    playSound('gameEnd');
+    playSound(gameEndSound(verdict, hotSeat));
     setGameOver({
       result: result === '*' ? '1/2-1/2' : result,
       reason: reason ?? 'game over',
       verdict,
     });
-  }, [position.status, started, gameOver, playerColor, syncClockView]);
+  }, [position.status, started, gameOver, playerColor, hotSeat, syncClockView]);
 
   // Persist finished engine games once and work out a level suggestion.
   useEffect(() => {
@@ -677,10 +678,12 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     syncClockView();
     // Between two people the side to move resigns.
     const resigning: LongColor = hotSeat ? position.turn : playerColor;
+    const verdict: GameOver['verdict'] = resigning === playerColor ? 'loss' : 'win';
+    playSound(gameEndSound(verdict, hotSeat));
     setGameOver({
       result: resigning === 'white' ? '0-1' : '1-0',
       reason: 'resignation',
-      verdict: resigning === playerColor ? 'loss' : 'win',
+      verdict,
     });
   }, [started, gameOver, engine, playerColor, syncClockView, hotSeat, position.turn]);
 

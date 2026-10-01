@@ -77,6 +77,42 @@ describe('LabPage', () => {
     expect(useToasts.getState().toasts.at(-1)?.message).toBe('A success toast.');
   });
 
+  it('switches the sound theme, previews it, and shows that theme’s haptic patterns', () => {
+    renderLab();
+    const sounds = screen.getByTestId('lab-sounds');
+    const themes = within(sounds).getByRole('group', { name: 'Sound theme' });
+    expect(
+      within(themes)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Standard', 'Soft', 'Retro']);
+    expect(screen.getByTestId('haptic-capture')).toHaveTextContent('10·20·45ms');
+    fireEvent.click(within(themes).getByRole('button', { name: 'Retro' }));
+    expect(useSettings.getState().soundTheme).toBe('retro');
+    expect(played).toHaveBeenCalledWith('move');
+    expect(screen.getByTestId('haptic-capture')).toHaveTextContent('8·12·8·12·8·12·30ms');
+    expect(screen.getByTestId('sound-gameLost')).toHaveTextContent('Game lost');
+  });
+
+  it('has the volume slider, which previews a move once the drag settles', () => {
+    vi.useFakeTimers();
+    try {
+      renderLab();
+      const slider = screen.getByTestId('volume-slider');
+      expect(slider).toHaveValue('100');
+      fireEvent.change(slider, { target: { value: '60' } });
+      fireEvent.change(slider, { target: { value: '40' } });
+      expect(useSettings.getState().soundVolume).toBeCloseTo(0.4, 5);
+      expect(played).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(200);
+      expect(played).toHaveBeenCalledTimes(1);
+      expect(played).toHaveBeenCalledWith('move');
+      expect(screen.getByTestId('lab-sounds')).toHaveTextContent('40%');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('opens and closes the sample dialog', () => {
     renderLab();
     fireEvent.click(screen.getByTestId('open-dialog'));
