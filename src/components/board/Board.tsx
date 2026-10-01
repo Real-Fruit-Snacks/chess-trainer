@@ -158,7 +158,17 @@ export function Board({
     });
     observer.observe(el);
 
+    // Chessground caches the board's bounding box and refreshes it only on scroll and
+    // resize. A layout shift above the board (a toast, a banner, a card changing height)
+    // or a scroll whose event has not been delivered yet would map the next click to the
+    // wrong square, so the cache is cleared before every interaction instead.
+    const refreshBounds = () => api.state.dom.bounds.clear();
+    el.addEventListener('mousedown', refreshBounds, { capture: true });
+    el.addEventListener('touchstart', refreshBounds, { capture: true, passive: true });
+
     return () => {
+      el.removeEventListener('mousedown', refreshBounds, { capture: true });
+      el.removeEventListener('touchstart', refreshBounds, { capture: true });
       observer.disconnect();
       api.destroy();
       apiRef.current = null;

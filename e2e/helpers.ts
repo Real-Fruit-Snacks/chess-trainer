@@ -26,6 +26,13 @@ export async function revealBoard(board: Locator) {
   });
   // Let the scroll event reach chessground, which recomputes its cached bounds on it.
   if (Math.abs(adjusted) > 1) await board.page().waitForTimeout(150);
+  // Any scroll above is delivered as an event on the next frame; wait for it either way.
+  await board.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
   const box = await board.boundingBox();
   if (!box) throw new Error('Board is not visible');
   return box;
@@ -94,4 +101,15 @@ export async function expectBoard(page: Page): Promise<Locator> {
   const board = page.locator('cg-board').first();
   await expect(board).toBeVisible();
   return board;
+}
+
+/**
+ * Clicks a lesson's Continue button and waits for the next step to render, so the
+ * caller never reads the previous step's buttons by mistake.
+ */
+export async function continueLesson(page: Page) {
+  const current = page.locator('.lesson__stepdot[aria-current="step"]');
+  const before = await current.getAttribute('aria-label');
+  await page.getByRole('button', { name: /Continue/ }).click();
+  await expect(current).not.toHaveAttribute('aria-label', before ?? '');
 }

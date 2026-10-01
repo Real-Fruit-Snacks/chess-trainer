@@ -23,8 +23,15 @@ Because the base path becomes `/`, nothing else changes.
 
 ### Updating
 
-Every push to `main` redeploys. Returning visitors keep using the cached version until they reload;
-the app shows a "New version available — Reload" toast as soon as the new service worker is ready.
+Every push to `main` redeploys. Returning visitors keep the cached version for the moment: the app
+looks for a newer build on load, every hour, and whenever it is brought back into view, and once one
+is ready it shows a "A new version is ready" toast with a **Reload now** button and otherwise loads
+the new version at the visitor's next in-app navigation.
+
+### Releases
+
+Pushing a version tag (`git tag v0.7.0 && git push --tags`) runs the **Release** workflow, which
+publishes a GitHub release for the tag with that version's `CHANGELOG.md` section as the notes.
 
 ## Other static hosts
 

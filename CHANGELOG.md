@@ -63,6 +63,14 @@ All notable changes to this project are documented here. The format follows
   per-group progress; each drill page links to the theory lesson and the next rung.
 - The nine mating-pattern themes that had no name are now named and described in the puzzle catalogue.
 - Backups (export version 5) include the analysis library.
+- Updates reach returning visitors sooner: the app checks for a new build whenever it comes back
+  into view and loads a ready update at the next in-app navigation, not only on a reload.
+- Pushing a version tag publishes a GitHub release with the changelog notes.
+
+### Fixed
+
+- Clicks on the board are mapped against its current position: after a scroll or a layout shift
+  above the board a click could land on the wrong square.
 
 ## [0.6.0] - 2026-09-30
 

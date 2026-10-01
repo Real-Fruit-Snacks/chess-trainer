@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { completeOnboarding, expectBoard, playMove } from './helpers';
+import { completeOnboarding, continueLesson, expectBoard, playMove } from './helpers';
 
 const PROGRESS_KEY = 'chess-trainer:progress';
 
@@ -345,7 +345,7 @@ test.describe('lesson recall', () => {
         await finish.click();
         break;
       }
-      await page.getByRole('button', { name: /Continue/ }).click();
+      await continueLesson(page);
     }
     await expect(page.getByText('Lesson complete')).toBeVisible();
     const scheduled = await page.evaluate((key) => {

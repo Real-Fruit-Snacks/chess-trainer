@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { expectBoard, playMove } from './helpers';
+import { continueLesson, expectBoard, playMove } from './helpers';
 
 const PROGRESS_KEY = 'chess-trainer:progress';
 
@@ -464,6 +464,8 @@ test.describe('new lessons', () => {
     for (let i = 0; i < 25; i++) {
       const prompt = page.getByText('White to move: break through.');
       if (await prompt.isVisible().catch(() => false)) {
+        // Wait until the step accepts moves before clicking the board.
+        await expect(page.getByText('Make your move on the board.')).toBeVisible();
         const board = await expectBoard(page);
         await playMove(board, 'b5', 'b6');
         await expect(page.getByText(/b6! axb6/)).toBeVisible();
@@ -481,7 +483,7 @@ test.describe('new lessons', () => {
         await finish.click();
         break;
       }
-      await page.getByRole('button', { name: /Continue/ }).click();
+      await continueLesson(page);
     }
     await expect(page.getByText('Lesson complete')).toBeVisible();
     await page.goto('/learn');
