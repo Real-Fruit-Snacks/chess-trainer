@@ -6,6 +6,18 @@
   padding-top: env(safe-area-inset-top, 0px);
 }
 
+/* Focus mode (a game on, the setting enabled): just the page, no chrome. */
+.shell--focus {
+  --header-height: 0px;
+  --bottom-nav-height: 0px;
+}
+
+.shell--focus .shell__header,
+.shell--focus .shell__bottomnav,
+.shell--focus .shell__footer {
+  display: none;
+}
+
 /* ---------- Header ---------- */
 .shell__header {
   position: sticky;

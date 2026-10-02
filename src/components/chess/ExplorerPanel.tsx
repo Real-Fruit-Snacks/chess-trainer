@@ -4,6 +4,7 @@ import { type ExplorerDatabase, formatPercent } from '@/lib/explorer';
 import { useExplorer } from '@/lib/useExplorer';
 import { useSettings } from '@/store/settings';
 import './explorer.css';
+import { San } from '@/chess/San';
 
 /**
  * Opening explorer card: what people play in the position and how it goes.
@@ -93,10 +94,10 @@ export function ExplorerPanel({
                           onClick={() => onPlay(m.uci)}
                           title={`${m.san}: ${formatPercent(m.score)} for the side to move`}
                         >
-                          {m.san}
+                          <San san={m.san} />
                         </button>
                       ) : (
-                        <span className="mono">{m.san}</span>
+                        <San san={m.san} className="mono" />
                       )}
                     </td>
                     <td className="explorer__games">

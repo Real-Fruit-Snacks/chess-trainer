@@ -210,3 +210,42 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
+
+/* ---------- Drag feel ---------- */
+/* The dragged piece grows under the finger. Chessground positions the piece with
+   an inline translate, which a scale on the piece itself would also scale, so the
+   bigger picture is a pseudo-element that overflows the piece's own box. */
+.board--magnify cg-board piece.dragging {
+  background-size: 0 0;
+  overflow: visible;
+}
+
+.board--magnify cg-board piece.dragging::before {
+  content: '';
+  position: absolute;
+  inset: -30%;
+  background-image: inherit;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* The mark on the square a dragged piece is over (see Board.tsx). */
+.board__dragtarget {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  pointer-events: none;
+  z-index: 3;
+  box-sizing: border-box;
+}
+
+.board__dragtarget--circle {
+  border-radius: 50%;
+  border: 0.35cqw solid rgba(20, 30, 20, 0.45);
+  transform: scale(0.82);
+}
+
+.board__dragtarget--square {
+  background: rgba(20, 85, 30, 0.28);
+}

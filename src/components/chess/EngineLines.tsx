@@ -4,6 +4,7 @@ import type { Fen, LongColor, Uci } from '@/chess/types';
 import { formatScore, type SearchInfo } from '@/engine/uci';
 import { Spinner } from '@/components/ui';
 import './chess-components.css';
+import { San } from '@/chess/San';
 
 export interface EngineLinesProps {
   fen: Fen;
@@ -76,7 +77,7 @@ export function EngineLines({
                   disabled={i !== 0 || !onPlayMove}
                   style={i !== 0 ? { cursor: 'default' } : undefined}
                 >
-                  {san}
+                  <San san={san} />
                 </button>
               ))}
             </span>

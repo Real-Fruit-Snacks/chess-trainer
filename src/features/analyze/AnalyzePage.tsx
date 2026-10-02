@@ -24,7 +24,7 @@ import { buildShareFragment, parseShareFragment } from '@/lib/shareLink';
 import { describeCategory, type TablebaseCategory } from '@/lib/tablebase';
 import { siteConfig } from '@/site.config';
 import { type ReviewDepth, useSettings } from '@/store/settings';
-import { HANDOFF_PGN_KEY } from '@/features/play/PlayPage';
+import { HANDOFF_PGN_KEY } from '@/lib/handoff';
 import {
   gameTitle,
   type MainLine,
@@ -49,6 +49,7 @@ import { keyMoments, type ReviewSummary } from './gameReview';
 import { useAnalysis } from './useAnalysis';
 import './analyze.css';
 import { Icon } from '@/components/ui';
+import { Notated, San } from '@/chess/San';
 
 const GLYPH_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: '–' },
@@ -409,7 +410,7 @@ export default function AnalyzePage() {
                         onClick={() => analysis.playUci(m.uci)}
                         title={`${describeCategory(m.outcome)}${m.dtm !== null ? `, mate in ${Math.abs(m.dtm)}` : m.dtz !== null ? `, DTZ ${Math.abs(m.dtz)}` : ''}`}
                       >
-                        {m.san}
+                        <San san={m.san} />
                       </button>
                     ))}
                   </div>
@@ -452,13 +453,19 @@ export default function AnalyzePage() {
                       : 'info'
                 }
               >
-                <strong>{reviewedCurrent.san}</strong> was{' '}
-                {reviewedCurrent.judgement === 'inaccuracy' ? 'an' : 'a'}{' '}
+                <strong>
+                  <San san={reviewedCurrent.san} />
+                </strong>{' '}
+                was {reviewedCurrent.judgement === 'inaccuracy' ? 'an' : 'a'}{' '}
                 {reviewedCurrent.judgement}.
                 {reviewedCurrent.best ? (
                   <>
                     {' '}
-                    Better was <strong>{reviewedCurrent.best}</strong>.
+                    Better was{' '}
+                    <strong>
+                      <San san={reviewedCurrent.best} />
+                    </strong>
+                    .
                   </>
                 ) : null}
                 <MoveExplanation move={reviewedCurrent} />
@@ -479,7 +486,7 @@ export default function AnalyzePage() {
               <div className="analyze__nodetools">
                 <div className="row row--between">
                   <span className="small muted">
-                    {isMain ? 'Main line' : 'Variation'} · move {current.san}
+                    {isMain ? 'Main line' : 'Variation'} · move <San san={current.san} />
                   </span>
                   <Segmented
                     ariaLabel="Annotate move"
@@ -820,16 +827,21 @@ function KeyMoments({
                 aria-current={currentPly === m.ply ? 'true' : undefined}
               >
                 <span className={`moments__move moments__move--${m.judgement ?? 'good'}`}>
-                  {label(m.ply)} {m.san}
+                  {label(m.ply)} <San san={m.san} />
                 </span>
                 <span className="small">
                   {m.judgement === 'inaccuracy' ? 'an inaccuracy' : `a ${m.judgement}`} by {m.mover}
-                  {m.best ? ` — better was ${m.best}` : ''}
+                  {m.best ? (
+                    <>
+                      {' — better was '}
+                      <San san={m.best} />
+                    </>
+                  ) : null}
                 </span>
                 <span className="small faint">−{Math.round(m.loss * 100)}%</span>
                 {moment ? (
                   <span className="small moments__why" data-testid="moment-why">
-                    {explainReviewedMove(moment)?.text ?? ''}
+                    <Notated text={explainReviewedMove(moment)?.text ?? ''} />
                   </span>
                 ) : null}
               </button>
@@ -903,7 +915,7 @@ function MoveExplanation({ move }: { move: ReviewSummary['moves'][number] }) {
   return (
     <span data-testid="move-explanation">
       {' '}
-      {explanation.text}
+      <Notated text={explanation.text} />
       {lesson ? (
         <>
           {' '}

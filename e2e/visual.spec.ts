@@ -31,16 +31,17 @@ async function seed(page: Page) {
 }
 
 test.describe('visual snapshots', () => {
+  // No service worker: its "ready to work offline" toast arrives whenever the
+  // precache finishes, which must not decide what a snapshot shows.
+  test.use({ serviceWorkers: 'block' });
+
   for (const { path, name, mask } of PAGES) {
     test(`${name} looks as it did`, async ({ page }) => {
       await seed(page);
       await page.goto(path);
       await expect(page.locator('main h1').first()).toBeVisible();
-      // Let the service worker's "ready" toast come and go, and fonts settle.
-      await page.waitForTimeout(1500);
-      for (const button of await page.locator('.toast button[aria-label="Dismiss"]').all()) {
-        await button.click().catch(() => undefined);
-      }
+      // Let fonts and lazy content settle.
+      await page.waitForTimeout(1000);
       // The first screen only, at CSS pixels: enough to catch a layout change,
       // small enough to keep in the repository.
       await expect(page).toHaveScreenshot(`${name}.png`, {

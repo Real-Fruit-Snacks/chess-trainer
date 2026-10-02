@@ -642,8 +642,8 @@ export function gameEndSound(verdict: 'win' | 'loss' | 'draw', hotSeat = false):
   return verdict === 'loss' && !hotSeat ? 'gameLost' : 'gameEnd';
 }
 
-/** Picks the right sound for a move that has just been played on `chess`. */
-export function soundForMove(move: Move, chess: Chess): SoundName {
+/** Picks the right sound for a move that has just been played on `chess` (only check matters). */
+export function soundForMove(move: Move, chess: Pick<Chess, 'inCheck'>): SoundName {
   if (chess.inCheck()) return 'check';
   if (move.promotion) return 'promote';
   if (move.captured) return 'capture';

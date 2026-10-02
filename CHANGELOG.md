@@ -6,6 +6,94 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-02
+
+A simul: several engines at once, each on its own board.
+
+### Added
+
+- **Simul**, the ninth arcade game: two to eight games against Stockfish at once, each on its own
+  board, the way a simul giver walks the room. Choose the strength (or let it rise a level per
+  board), your colour (White, Black or alternating) and the clocks.
+- **A clock per board.** With clocks on, every board has its own clock for each side, as in a clock
+  simul. Yours runs on every board where it is your move — even while you are playing another one —
+  so each board you add makes your time go faster; the setup shows roughly how many seconds a move
+  you will have. The engine's clock runs only while it is thinking, never while it waits its turn,
+  and its thinking time is cut to fit what it has left. Untimed simuls stay an option.
+- Small boards show every game, its state and your clock on it. Tap one to play it, or press **N**
+  for the next board waiting for you; after each move the next waiting board comes up by itself
+  (a switch turns that off). One engine answers the boards in the order they started waiting, and
+  replies on a board you are not looking at are announced to screen readers.
+- Every finished board is saved to My games. The summary lists each board's result with an Analyze
+  button, and the score to beat counts each win by its board's level (1 to 8) and a draw by half.
+
+### Fixed
+
+- **A flag against a bare king is a draw.** In Play, running out of time when the opponent could not
+  checkmate by any series of legal moves — a lone king, say — is now a draw rather than a loss, as
+  the rules say.
+- After the engine failed to start, **Retry** starts a fresh engine instead of showing the same
+  error again.
+- Analyze and My games no longer load the Play page's code just to hand a game to the analysis
+  board.
+
+### Testing
+
+- Unit tests for the simul model (clocks that start at once, increments, the engine's clock only
+  while it searches, flags and the bare-king draw, the engine's time budget, the order boards come
+  up in, scoring, PGN headers), for the runner (the engine queue, replies and announcements, saving,
+  clocks under fake timers, a failed engine coming back, promotions), for the flag rule and for the
+  engine Retry. An end-to-end spec plays a two-board simul through moving on, **N**, resigning, the
+  summary, the hand-off to Analyze and the hub score; checks that every board keeps its own clocks;
+  sets up alternating colours with rising strength; and lets every flag fall — on all four browser
+  projects. The accessibility sweep covers the simul page.
+
+## [0.10.0] - 2026-10-01
+
+Board and display preferences, after a look at what the Lichess app offers.
+
+### Added
+
+- **Move notation.** Moves are written with figurines by default — the piece drawn from whichever
+  piece set is active, so ♘f3 looks like the knight on your board — in every move list, engine line,
+  explorer and tablebase table, coach and review explanation, lesson and feedback text. _Settings →
+  Appearance → Move notation_ switches to letters. The letter stays in the page for screen readers,
+  searches and copying, and stored games, PGN and share links always use letters.
+- **Black colour scheme.** The dark scheme on a pure black background, for OLED screens; the header
+  toggle cycles through system, light, dark and black, and the browser chrome follows.
+- **Two more piece sets**, both original: **Modern** (flat silhouettes with a single outline weight)
+  and **Pixel** (an 8-bit set with crisp edges, a match for the Retro sounds). Sets are picked from
+  strips showing every set on the current board colours.
+- **Four more board colours:** purple, olive, ice and walnut.
+- **Drag feel:** the dragged piece is magnified under the finger, a circle or square marks the square
+  it is over, and pieces can be moved by tap, by drag, or either. Keyboard control works in every
+  mode.
+- **Board highlights** (last move and check) can be turned off.
+- **Captured material** beside the player bars shows the difference only (an exchange of knights
+  shows nothing), every capture, or nothing.
+- **Focus mode** hides the header and navigation while a game against the engine is on; the setting
+  is in _Play_, and a Focus button on the Play page toggles it mid-game. The chrome comes back when
+  the game ends or the page is left.
+- A **Board** card in Settings gathers the board colours, piece sets and board behaviour; Appearance
+  keeps the colour scheme, notation and sounds.
+
+### Changed
+
+- The classic cburnett set is now served from the app's own stylesheet (generated from the
+  Chessground package by `scripts/generate-pieces.mjs`, with the same selectors as every other set)
+  so the picker can show it next to the rest.
+- The bundle budget now limits the start-up code as a sum — the entry chunk plus what it imports
+  statically — instead of the entry file alone, since the bundler moves code between those chunks
+  from release to release (this release's start-up code is 51 KB gzipped, up 0.4 KB).
+
+### Testing
+
+- Unit tests for the notation parser and the figurine components, the material modes, the board
+  settings (highlights, magnifier, drag target, move method, keyboard in drag-only mode), the colour
+  schemes and the focus store; an end-to-end spec switches notation, scheme, piece set and palette
+  and checks persistence, turns highlights off, drags with the magnifier and target, moves by tap
+  only, and runs a game in focus mode — on all four browser projects.
+
 ## [0.9.4] - 2026-10-01
 
 ### Changed

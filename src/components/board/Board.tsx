@@ -99,11 +99,17 @@ export function Board({
   const settingsCoordinates = useSettings((s) => s.showCoordinates);
   const settingsAnimations = useSettings((s) => s.animations);
   const showLegalMoves = useSettings((s) => s.showLegalMoves);
+  const boardHighlights = useSettings((s) => s.boardHighlights);
+  const magnifyDrag = useSettings((s) => s.magnifyDrag);
+  const dragTarget = useSettings((s) => s.dragTarget);
+  const moveMethod = useSettings((s) => s.moveMethod);
   const reducedMotion = useReducedMotion();
 
   const showCoordinates = coordinates ?? settingsCoordinates;
   const animationsEnabled = (animate ?? settingsAnimations) && !reducedMotion;
   const effectiveTurn = turnColor ?? (fen.split(' ')[1] === 'b' ? 'black' : 'white');
+  const canDrag = !viewOnly && moveMethod !== 'tap';
+  const canTap = !viewOnly && moveMethod !== 'drag';
 
   const buildConfig = (): Config => ({
     fen,
@@ -115,7 +121,7 @@ export function Board({
     viewOnly,
     disableContextMenu: true,
     addDimensionsCssVarsTo: containerRef.current ?? undefined,
-    highlight: { lastMove: true, check: true, custom: highlights },
+    highlight: { lastMove: boardHighlights, check: boardHighlights, custom: highlights },
     animation: { enabled: animationsEnabled, duration: 200 },
     movable: {
       free: !dests,
@@ -129,8 +135,8 @@ export function Board({
       },
     },
     premovable: { enabled: false },
-    draggable: { enabled: !viewOnly, showGhost: true, autoDistance: true },
-    selectable: { enabled: !viewOnly },
+    draggable: { enabled: canDrag, showGhost: true, autoDistance: true },
+    selectable: { enabled: canTap },
     drawable: {
       enabled: drawable && !viewOnly,
       visible: true,
@@ -186,7 +192,11 @@ export function Board({
       turnColor: effectiveTurn,
       check,
       lastMove: lastMove ? [...lastMove] : undefined,
-      highlight: { custom: highlights ?? new Map() },
+      highlight: {
+        lastMove: boardHighlights,
+        check: boardHighlights,
+        custom: highlights ?? new Map(),
+      },
       animation: { enabled: animationsEnabled },
       movable: {
         free: !dests,
@@ -194,8 +204,8 @@ export function Board({
         dests,
         showDests: showLegalMoves,
       },
-      draggable: { enabled: !viewOnly },
-      selectable: { enabled: !viewOnly },
+      draggable: { enabled: canDrag },
+      selectable: { enabled: canTap },
       drawable: { enabled: drawable && !viewOnly },
     });
   }, [
@@ -205,13 +215,54 @@ export function Board({
     check,
     lastMove,
     highlights,
+    boardHighlights,
     animationsEnabled,
     dests,
     movableColor,
     viewOnly,
+    canDrag,
+    canTap,
     showLegalMoves,
     drawable,
   ]);
+
+  // The drag target: a mark on the square the dragged piece is over, placed
+  // straight on the DOM from the pointer position so it never waits for a render.
+  const targetRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    const marker = targetRef.current;
+    if (!el || !marker || !canDrag || dragTarget === 'none') return;
+    const hide = () => {
+      marker.hidden = true;
+    };
+    const onMove = (e: PointerEvent) => {
+      const api = apiRef.current;
+      const drag = api?.state.draggable.current;
+      if (!api || !drag?.started) {
+        hide();
+        return;
+      }
+      const bounds = api.state.dom.bounds();
+      const x = Math.floor(((e.clientX - bounds.left) / bounds.width) * 8);
+      const y = Math.floor(((e.clientY - bounds.top) / bounds.height) * 8);
+      if (x < 0 || x > 7 || y < 0 || y > 7) {
+        hide();
+        return;
+      }
+      marker.style.left = `${x * 12.5}%`;
+      marker.style.top = `${y * 12.5}%`;
+      marker.hidden = false;
+    };
+    el.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', hide);
+    window.addEventListener('pointercancel', hide);
+    return () => {
+      el.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', hide);
+      window.removeEventListener('pointercancel', hide);
+    };
+  }, [canDrag, dragTarget]);
 
   // Shapes are managed separately so that redrawing arrows doesn't touch pieces.
   useEffect(() => {
@@ -252,7 +303,8 @@ export function Board({
       pendingFile.current = null;
     } else if (e.key === 'Enter' || e.key === ' ') {
       if (!movableColor) return;
-      apiRef.current?.selectSquare(current);
+      // Forced, so the keyboard still selects when tapping is switched off.
+      apiRef.current?.selectSquare(current, true);
       setCursor(current);
       const selected = apiRef.current?.state.selected;
       setCursorText(
@@ -295,6 +347,7 @@ export function Board({
         'board',
         `board--theme-${boardTheme}`,
         showCoordinates ? 'board--coords' : null,
+        magnifyDrag && canDrag ? 'board--magnify' : null,
         className,
       ]
         .filter(Boolean)
@@ -319,6 +372,15 @@ export function Board({
           }}
           onBlur={() => setFocused(false)}
         />
+        {canDrag && dragTarget !== 'none' ? (
+          <div
+            ref={targetRef}
+            className={`board__dragtarget board__dragtarget--${dragTarget}`}
+            hidden
+            aria-hidden="true"
+            data-testid="board-dragtarget"
+          />
+        ) : null}
         {cursorStyle ? (
           <div
             className="board__cursor"

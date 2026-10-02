@@ -44,7 +44,7 @@ up for. It runs entirely in your browser, installs as an app and keeps working o
   engine and review the game — every part links to the others.
 - **Yours, and only yours.** No account, no server, no ads, no tracking. Progress lives on your
   device, and a backup is a file you keep. Optional network features are off by default.
-- **Works everywhere.** Phones, tablets and desktops, light and dark, online and offline, with
+- **Works everywhere.** Phones, tablets and desktops, light, dark or black, online and offline, with
   screen readers and the keyboard.
 - **Honest chess.** Every lesson position, drill, study and repertoire line is engine-verified, the
   puzzle rating is Glicko-2, and the coach explains mistakes with rules, not guesswork.
@@ -70,8 +70,9 @@ links that carry the whole game.
 trained with spaced repetition (or import your own), eight endgame studies and 46 classic games to
 guess move by move.
 
-**Arcade** — eight games that are not puzzles: Hand & Brain with Stockfish as your partner, a daily
-opening Wordle, Who Stands Better?, the Odds Ladder, Army Draft, Fortress, Engine Says and Blindfold.
+**Arcade** — nine games that are not puzzles: a simul against up to eight engines at once, each
+board with its own clocks, Hand & Brain with Stockfish as your partner, a daily opening Wordle, Who
+Stands Better?, the Odds Ladder, Army Draft, Fortress, Engine Says and Blindfold.
 
 <table>
   <tr>

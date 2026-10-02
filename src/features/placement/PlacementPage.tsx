@@ -25,6 +25,7 @@ import {
   TACTIC_QUESTIONS,
 } from './placement';
 import './placement.css';
+import { Notated } from '@/chess/San';
 
 type Step =
   | { kind: 'experience' }
@@ -348,7 +349,7 @@ function Result({ result, answers }: { result: PlacementResult; answers: Placeme
               return (
                 <li key={q.id}>
                   <strong>{chosen === q.answer ? 'Solved' : `You played ${chosen}`}.</strong>{' '}
-                  {q.explanation}{' '}
+                  <Notated text={q.explanation} />{' '}
                   <a href={q.source} target="_blank" rel="noreferrer">
                     source
                   </a>

@@ -14,6 +14,7 @@ import {
 } from './matingPatterns';
 import { PatternDrill } from './PatternDrill';
 import './patterns.css';
+import { Notated } from '@/chess/San';
 
 /**
  * The gallery of named mating patterns: a diagram and explanation for each,
@@ -155,7 +156,9 @@ export default function PatternsPage() {
                       {pattern.pieces} · White to play and mate
                       {pattern.line.length > 1 ? ` in ${Math.ceil(pattern.line.length / 2)}` : ''}
                     </p>
-                    <p className="pattern-card__text">{pattern.explanation}</p>
+                    <p className="pattern-card__text">
+                      <Notated text={pattern.explanation} />
+                    </p>
                     <p className="pattern-card__text">
                       <strong>Spot it:</strong> {pattern.spot}
                     </p>

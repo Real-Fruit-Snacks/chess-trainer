@@ -56,6 +56,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Simul',
+    shortcuts: [{ keys: ['N'], action: 'Next board waiting for your move' }],
+  },
+  {
     title: 'Moving pieces',
     shortcuts: [
       { keys: ['Click', 'Click'], action: 'Select a piece, then its destination' },

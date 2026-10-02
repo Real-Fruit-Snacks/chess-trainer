@@ -12,6 +12,7 @@ import { UpdatePrompt } from './UpdatePrompt';
 import { useColorScheme, usePieceSet } from './theme';
 import { useShortcutsDialog } from './useShortcutsDialog';
 import './shell.css';
+import { useFocus } from './focus';
 
 interface NavItem {
   to: string;
@@ -43,7 +44,7 @@ const ARCADE: NavItem = {
   to: '/arcade',
   label: 'Arcade',
   icon: 'gamepad',
-  blurb: 'Eight games, not puzzles',
+  blurb: 'Nine games, not puzzles',
 };
 const MY_GAMES: NavItem = {
   to: '/games',
@@ -159,9 +160,15 @@ function ProfileBadge() {
 function ThemeToggle() {
   const scheme = useSettings((s) => s.colorScheme);
   const update = useSettings((s) => s.update);
-  const next = scheme === 'system' ? 'light' : scheme === 'light' ? 'dark' : 'system';
-  const label =
-    scheme === 'system' ? 'Theme: system' : scheme === 'light' ? 'Theme: light' : 'Theme: dark';
+  const next =
+    scheme === 'system'
+      ? 'light'
+      : scheme === 'light'
+        ? 'dark'
+        : scheme === 'dark'
+          ? 'black'
+          : 'system';
+  const label = `Theme: ${scheme}`;
   const icon: IconName = scheme === 'system' ? 'auto' : scheme === 'light' ? 'sun' : 'moon';
   return (
     <button
@@ -280,8 +287,10 @@ export function Shell() {
     mainRef.current?.focus({ preventScroll: true });
   }, [location.pathname]);
 
+  const focus = useFocus((s) => s.active);
+
   return (
-    <div className="shell">
+    <div className={focus ? 'shell shell--focus' : 'shell'} data-focus={focus || undefined}>
       <PlatformHooks />
       <a className="skip-link" href="#main">
         Skip to content

@@ -4,6 +4,8 @@ import { InstallButton } from '@/app/InstallPrompt';
 import { useInstall } from '@/app/pwa';
 import { BOARD_PALETTES } from '@/components/board/boardThemes';
 import { PIECE_SETS } from '@/components/board/pieceSets';
+import { PieceSetPicker } from '@/components/board/PieceSetPicker';
+import { San } from '@/chess/San';
 import {
   Button,
   Card,
@@ -25,7 +27,10 @@ import { useProgress } from '@/store/progress';
 import {
   type BoardTheme,
   type ColorScheme,
-  type PieceSet,
+  type DragTarget,
+  type MaterialDisplay,
+  type MoveMethod,
+  type Notation,
   type ReviewDepth,
   useSettings,
 } from '@/store/settings';
@@ -92,9 +97,57 @@ export default function SettingsPage() {
                     { value: 'system', label: 'System' },
                     { value: 'light', label: 'Light' },
                     { value: 'dark', label: 'Dark' },
+                    { value: 'black', label: 'Black' },
                   ]}
                 />
               </div>
+              <p className="small muted" style={{ margin: 0 }}>
+                {settings.colorScheme === 'black'
+                  ? 'The dark scheme on a pure black background, for OLED screens.'
+                  : settings.colorScheme === 'system'
+                    ? 'Follows the device setting.'
+                    : ' '}
+              </p>
+              <div className="settings__row">
+                <span>Move notation</span>
+                <Segmented<Notation>
+                  ariaLabel="Move notation"
+                  value={settings.notation}
+                  onChange={(v) => settings.update({ notation: v })}
+                  options={[
+                    { value: 'figurine', label: 'Figurines' },
+                    { value: 'letters', label: 'Letters' },
+                  ]}
+                />
+              </div>
+              <p className="small muted" style={{ margin: 0 }} data-testid="notation-sample">
+                1. e4 e5 2. <San san="Nf3" /> <San san="Nc6" /> 3. <San san="Bb5" /> a6 4.{' '}
+                <San san="Bxc6" /> — moves everywhere are written this way; files, PGN and links
+                always use letters.
+              </p>
+              <Switch
+                checked={settings.sounds}
+                onChange={(v) => settings.update({ sounds: v })}
+                label="Sound effects"
+                description="Short synthesized sounds for moves, captures, checks and results."
+              />
+              {settings.sounds ? (
+                <>
+                  <div className="settings__row">
+                    <span>Sound theme</span>
+                    <SoundThemePicker />
+                  </div>
+                  <div className="settings__row">
+                    <VolumeSlider className="settings__slider" />
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </Card>
+
+          <Card id="board" data-testid="board-settings">
+            <h2 style={{ fontSize: '1.15rem' }}>Board</h2>
+            <div className="settings__group">
               <div className="settings__row">
                 <span>Board colours</span>
                 <div className="swatches" role="group" aria-label="Board colours">
@@ -123,16 +176,11 @@ export default function SettingsPage() {
                   ? ` — ${BOARD_PALETTES[settings.boardTheme].hint}`
                   : ''}
               </p>
-              <div className="settings__row">
+              <div className="settings__row settings__row--stack">
                 <span>Pieces</span>
-                <Segmented
-                  ariaLabel="Piece set"
+                <PieceSetPicker
                   value={settings.pieceSet}
-                  onChange={(v) => settings.update({ pieceSet: v })}
-                  options={(Object.keys(PIECE_SETS) as PieceSet[]).map((set) => ({
-                    value: set,
-                    label: PIECE_SETS[set].label,
-                  }))}
+                  onChange={(set) => settings.update({ pieceSet: set })}
                 />
               </div>
               <p className="small muted" style={{ margin: 0 }}>
@@ -149,27 +197,67 @@ export default function SettingsPage() {
                 label="Show legal move dots"
               />
               <Switch
+                checked={settings.boardHighlights}
+                onChange={(v) => settings.update({ boardHighlights: v })}
+                label="Highlight the last move and check"
+              />
+              <Switch
                 checked={settings.animations}
                 onChange={(v) => settings.update({ animations: v })}
                 label="Animate pieces"
               />
               <Switch
-                checked={settings.sounds}
-                onChange={(v) => settings.update({ sounds: v })}
-                label="Sound effects"
-                description="Short synthesized sounds for moves, captures, checks and results."
+                checked={settings.magnifyDrag}
+                onChange={(v) => settings.update({ magnifyDrag: v })}
+                label="Magnify the dragged piece"
+                description="The piece grows under your finger so you can see it while dragging."
               />
-              {settings.sounds ? (
-                <>
-                  <div className="settings__row">
-                    <span>Sound theme</span>
-                    <SoundThemePicker />
-                  </div>
-                  <div className="settings__row">
-                    <VolumeSlider className="settings__slider" />
-                  </div>
-                </>
-              ) : null}
+              <div className="settings__row">
+                <span>Drag target</span>
+                <Segmented<DragTarget>
+                  ariaLabel="Drag target"
+                  value={settings.dragTarget}
+                  onChange={(v) => settings.update({ dragTarget: v })}
+                  options={[
+                    { value: 'circle', label: 'Circle' },
+                    { value: 'square', label: 'Square' },
+                    { value: 'none', label: 'None' },
+                  ]}
+                />
+              </div>
+              <div className="settings__row">
+                <span>Move pieces by</span>
+                <Segmented<MoveMethod>
+                  ariaLabel="Move pieces by"
+                  value={settings.moveMethod}
+                  onChange={(v) => settings.update({ moveMethod: v })}
+                  options={[
+                    { value: 'either', label: 'Tap or drag' },
+                    { value: 'tap', label: 'Tap' },
+                    { value: 'drag', label: 'Drag' },
+                  ]}
+                />
+              </div>
+              <div className="settings__row">
+                <span>Captured material</span>
+                <Segmented<MaterialDisplay>
+                  ariaLabel="Captured material"
+                  value={settings.materialDisplay}
+                  onChange={(v) => settings.update({ materialDisplay: v })}
+                  options={[
+                    { value: 'difference', label: 'Difference' },
+                    { value: 'count', label: 'Every capture' },
+                    { value: 'off', label: 'Off' },
+                  ]}
+                />
+              </div>
+              <p className="small muted" style={{ margin: 0 }}>
+                {settings.materialDisplay === 'difference'
+                  ? 'Beside the player bars: only the pieces one side is up, with the balance in pawns.'
+                  : settings.materialDisplay === 'count'
+                    ? 'Beside the player bars: every piece each side has captured.'
+                    : 'Nothing beside the player bars.'}
+              </p>
             </div>
           </Card>
 
@@ -193,6 +281,12 @@ export default function SettingsPage() {
                 onChange={(v) => settings.update({ moveInput: v })}
                 label="Keyboard move entry"
                 description="Show a box under the board to type moves such as Nf3 or e2e4."
+              />
+              <Switch
+                checked={settings.playFocus}
+                onChange={(v) => settings.update({ playFocus: v })}
+                label="Focus mode"
+                description="Hide the header and navigation while a game against the engine is on."
               />
               <Switch
                 checked={settings.haptics}

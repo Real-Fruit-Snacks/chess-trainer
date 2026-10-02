@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
 import {
+  canStillMate,
   checkedKingSquare,
   gameStatus,
   isPromotionMove,
@@ -98,5 +99,33 @@ describe('chess helpers', () => {
     expect(isValidFen(START_FEN)).toBe(true);
     expect(isValidFen('not a fen')).toBe(false);
     expect(turnOf('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1')).toBe('black');
+  });
+});
+
+describe('canStillMate (flag fall)', () => {
+  const can = (fen: string, color: 'white' | 'black') => canStillMate(new Chess(fen), color);
+
+  it('a pawn, rook or queen can always mate', () => {
+    expect(can('4k3/8/8/8/8/8/4P3/4K3 w - - 0 1', 'white')).toBe(true);
+    expect(can('4k3/8/8/8/8/8/8/R3K3 w - - 0 1', 'white')).toBe(true);
+    expect(can('4k3/8/8/8/8/8/8/3QK3 w - - 0 1', 'white')).toBe(true);
+  });
+
+  it('a bare king or a lone minor against a bare king cannot', () => {
+    expect(can('4k3/8/8/8/8/8/4P3/4K3 w - - 0 1', 'black')).toBe(false);
+    expect(can('4k3/8/8/8/8/8/8/2B1K3 w - - 0 1', 'white')).toBe(false);
+    expect(can('4k3/8/8/8/8/8/8/1N2K3 w - - 0 1', 'white')).toBe(false);
+  });
+
+  it('a lone minor can mate when the defender has men to box its own king in', () => {
+    expect(can('k7/p7/8/8/8/8/8/2B1K3 w - - 0 1', 'white')).toBe(true);
+    expect(can('k7/8/8/8/8/8/8/1N2K2r w - - 0 1', 'white')).toBe(true);
+  });
+
+  it('two minors can mate a bare king unless they are bishops on one square colour', () => {
+    expect(can('4k3/8/8/8/8/8/8/1NN1K3 w - - 0 1', 'white')).toBe(true);
+    expect(can('4k3/8/8/8/8/8/8/2B1KB2 w - - 0 1', 'white')).toBe(true);
+    // c1 and e3 are both dark squares.
+    expect(can('4k3/8/8/8/8/4B3/8/2B1K3 w - - 0 1', 'white')).toBe(false);
   });
 });

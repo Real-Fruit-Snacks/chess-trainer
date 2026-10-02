@@ -20,6 +20,7 @@ import { type ClassicsFilter, DEFAULT_FILTER, type Era, ERAS, eraOf, filterGames
 import { CLASSIC_GAMES, type ClassicGame, getClassicGame } from './games';
 import { useGuessTheMove } from './useGuessTheMove';
 import './classics.css';
+import { Notated } from '@/chess/San';
 
 export default function ClassicsPage() {
   const results = useProgress((s) => s.guessGames);
@@ -283,10 +284,18 @@ function GuessTrainer({ game }: { game: ClassicGame }) {
               }`}
               role="status"
             >
-              {status}
+              <Notated text={status} />
             </p>
-            {guess.feedback?.note ? <Alert tone="info">{guess.feedback.note}</Alert> : null}
-            {phase === 'done' ? <Alert tone="info">{game.outro}</Alert> : null}
+            {guess.feedback?.note ? (
+              <Alert tone="info">
+                <Notated text={guess.feedback.note} />
+              </Alert>
+            ) : null}
+            {phase === 'done' ? (
+              <Alert tone="info">
+                <Notated text={game.outro} />
+              </Alert>
+            ) : null}
             {phase === 'intro' && guess.ply === 0 ? (
               <p className="small muted">{game.intro}</p>
             ) : null}

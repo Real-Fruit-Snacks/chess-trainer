@@ -2,6 +2,7 @@ import type { Move } from 'chess.js';
 import { useEffect, useRef } from 'react';
 import './chess-components.css';
 import { scrollIntoContainer } from '@/lib/scroll';
+import { San } from '@/chess/San';
 
 export type MoveJudgement = 'blunder' | 'mistake' | 'inaccuracy' | 'best' | 'good' | null;
 
@@ -78,7 +79,7 @@ export function MoveList({
         aria-current={entry.ply === currentPly ? 'true' : undefined}
         onClick={() => onSelectPly(entry.ply)}
       >
-        {entry.move.san}
+        <San san={entry.move.san} />
         {judgement && GLYPH[judgement] ? (
           <span className="movelist__glyph">{GLYPH[judgement]}</span>
         ) : null}

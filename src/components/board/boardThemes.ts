@@ -13,6 +13,10 @@ export const BOARD_PALETTES: Record<BoardTheme, BoardPalette> = {
   green: { light: '#eeeed2', dark: '#769656', label: 'Green' },
   blue: { light: '#dee3e6', dark: '#8ca2ad', label: 'Blue' },
   grey: { light: '#e9e9e9', dark: '#8b8b8b', label: 'Grey' },
+  purple: { light: '#ebe3f3', dark: '#8d6fb2', label: 'Purple' },
+  olive: { light: '#e9e6d2', dark: '#8f9a63', label: 'Olive' },
+  ice: { light: '#e8eef5', dark: '#7f9fbf', label: 'Ice' },
+  walnut: { light: '#ecd8bf', dark: '#9c6a44', label: 'Walnut' },
   contrast: {
     light: '#f4f4f4',
     dark: '#5f6b7a',

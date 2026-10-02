@@ -3,8 +3,11 @@
  * Fails the build when the production bundle outgrows its budget.
  *
  * The limits are gzipped sizes, which is what a visitor downloads. Content
- * chunks (lessons, the arcade positions) are allowed more than code chunks;
- * the entry chunk is kept small so an update re-downloads little.
+ * chunks (lessons, the arcade positions) are allowed more than code chunks,
+ * and the code that runs at start-up — the entry chunk plus whatever it
+ * imports statically, React aside — is kept small so an update re-downloads
+ * little. (How the bundler splits that start-up code between chunks changes
+ * from release to release, so the limit is on the sum, not on one file.)
  *
  *   node scripts/check-bundle-size.mjs           # after `vite build`
  *   node scripts/check-bundle-size.mjs --print   # just list the sizes
@@ -19,13 +22,15 @@ const ASSETS = join(DIST, 'assets');
 const KB = 1024;
 /** Gzipped limits per chunk family (matched by file name prefix). */
 const BUDGETS = [
-  { name: 'entry', match: /^index-/, limitBytes: 48 * KB },
+  { name: 'entry', match: /^index-/, limitBytes: 56 * KB },
   { name: 'react', match: /^react-/, limitBytes: 110 * KB },
   { name: 'lessons', match: /^lessons-/, limitBytes: 110 * KB },
   { name: 'arcade positions', match: /^positions-/, limitBytes: 40 * KB },
   { name: 'classic games', match: /^games-/, limitBytes: 40 * KB },
   { name: 'any other chunk', match: /./, limitBytes: 40 * KB },
 ];
+/** The code that runs before the first page: the entry and its static imports, React aside. */
+const STARTUP_LIMIT_BYTES = 56 * KB;
 /** The service worker precaches this much at install: keep first loads honest. */
 const PRECACHE_LIMIT_BYTES = 6.5 * KB * KB;
 
@@ -58,6 +63,17 @@ const rows = files
   })
   .sort((a, b) => b.gz - a.gz);
 
+/** The chunks the entry imports statically (Rolldown writes `from"./x.js"` and `import"./x.js"`). */
+function startupChunks() {
+  const entry = rows.find((r) => r.budget.name === 'entry');
+  if (!entry) return [];
+  const source = readFileSync(join(ASSETS, entry.file), 'utf8');
+  const imported = new Set(
+    [...source.matchAll(/(?:from|import)\s*"\.\/([^"]+\.js)"/g)].map((m) => m[1]),
+  );
+  return rows.filter((r) => r === entry || (imported.has(r.file) && r.budget.name !== 'react'));
+}
+
 const fmt = (n) => `${(n / KB).toFixed(1)} KB`;
 for (const row of rows.slice(0, print ? rows.length : 12)) {
   const flag = row.over ? '  OVER' : '';
@@ -65,12 +81,20 @@ for (const row of rows.slice(0, print ? rows.length : 12)) {
     `${fmt(row.gz).padStart(9)}  ${row.file.padEnd(40)} ${row.budget.name} ≤ ${fmt(row.budget.limitBytes)}${flag}`,
   );
 }
+const startup = startupChunks();
+const startupBytes = startup.reduce((sum, r) => sum + r.gz, 0);
+console.log(
+  `\nstart-up code: ${fmt(startupBytes)} gzipped in ${startup.length} chunk${startup.length === 1 ? '' : 's'} (limit ${fmt(STARTUP_LIMIT_BYTES)})`,
+);
 const precache = precacheBytes();
 console.log(
   `\nprecache: ${precache.count} entries, ${(precache.total / KB / KB).toFixed(2)} MB on disk (limit ${(PRECACHE_LIMIT_BYTES / KB / KB).toFixed(1)} MB)`,
 );
 
 const failures = rows.filter((r) => r.over).map((r) => `${r.file} is ${fmt(r.gz)} gzipped`);
+if (startupBytes > STARTUP_LIMIT_BYTES) {
+  failures.push(`the start-up code is ${fmt(startupBytes)} gzipped`);
+}
 if (precache.total > PRECACHE_LIMIT_BYTES) {
   failures.push(`the precache is ${(precache.total / KB / KB).toFixed(2)} MB`);
 }

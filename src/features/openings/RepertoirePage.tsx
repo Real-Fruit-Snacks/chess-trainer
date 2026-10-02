@@ -19,6 +19,7 @@ import { cardKey, isLearnerMove, repertoireStats } from './model';
 import { getBuiltInRepertoire, type Repertoire } from './repertoires';
 import { useRepertoireTrainer } from './useRepertoireTrainer';
 import './openings.css';
+import { Notated } from '@/chess/San';
 
 export default function RepertoirePage() {
   const { repertoireId = '' } = useParams<{ repertoireId: string }>();
@@ -354,7 +355,9 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
                 </p>
                 <TreeMoveList tree={tree} version={0} current={exploreNode} onSelect={selectNode} />
                 {noteDraft === null && exploreNode.comment ? (
-                  <Alert tone="info">{exploreNode.comment}</Alert>
+                  <Alert tone="info">
+                    <Notated text={exploreNode.comment} />
+                  </Alert>
                 ) : null}
                 {isCustom && exploreNode.parent ? (
                   <div className="stack" style={{ marginTop: 8 }}>
@@ -407,9 +410,13 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
                   className={`puzzle-status${phase === 'lineDone' ? ' puzzle-status--solved' : ''}`}
                   role="status"
                 >
-                  {status}
+                  <Notated text={status} />
                 </p>
-                {trainer.tip ? <Alert tone="info">{trainer.tip}</Alert> : null}
+                {trainer.tip ? (
+                  <Alert tone="info">
+                    <Notated text={trainer.tip} />
+                  </Alert>
+                ) : null}
                 <div className="puzzle-actions">
                   {learnerTurn ? (
                     <Button onClick={trainer.showMove} disabled={trainer.showing}>
@@ -440,11 +447,13 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
                               : 'openings__line-upcoming'
                         }
                       >
-                        {i < trainer.index || phase === 'lineDone'
-                          ? san
-                          : i === trainer.index && trainer.showing
-                            ? san
-                            : '·'}{' '}
+                        {i < trainer.index || phase === 'lineDone' ? (
+                          <Notated text={san} />
+                        ) : i === trainer.index && trainer.showing ? (
+                          <Notated text={san} />
+                        ) : (
+                          '·'
+                        )}{' '}
                       </span>
                     ))}
                   </p>

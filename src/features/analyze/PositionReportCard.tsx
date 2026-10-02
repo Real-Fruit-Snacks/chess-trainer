@@ -5,6 +5,7 @@ import { Button, Card } from '@/components/ui';
 import type { Fen } from '@/chess/types';
 import { getLessonMeta } from '@/features/learn/lessonMeta';
 import { type ReportItem, reportPosition } from './positionReport';
+import { Notated } from '@/chess/San';
 
 const TOPIC_LABEL: Record<ReportItem['topic'], string> = {
   material: 'Material',
@@ -107,7 +108,9 @@ function ReportLine({
       onFocus={() => onHover(item)}
       tabIndex={item.squares.length ? 0 : -1}
     >
-      <span>{item.text}</span>
+      <span>
+        <Notated text={item.text} />
+      </span>
       {lesson ? (
         <Link to={`/learn/${lesson.id}`} className="small report__lesson">
           {lesson.title}

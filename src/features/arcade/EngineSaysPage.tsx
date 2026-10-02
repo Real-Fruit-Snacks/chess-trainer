@@ -19,6 +19,7 @@ import {
 import { loadOpeningLines, type OpeningLine } from './openingLines';
 import '@/features/play/play.css';
 import './arcade.css';
+import { Notated } from '@/chess/San';
 
 type Phase = 'idle' | 'showing' | 'replay' | 'over';
 
@@ -216,7 +217,8 @@ export default function EngineSaysPage() {
                   )}
                   {phase === 'over' && line ? (
                     <p className="small muted">
-                      The line was <strong>{line.name}</strong>: {line.moves.join(' ')}
+                      The line was <strong>{line.name}</strong>:{' '}
+                      <Notated text={line.moves.join(' ')} />
                     </p>
                   ) : null}
                   <div className="row">

@@ -1,7 +1,7 @@
 import type { Square } from 'chess.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DrawShape } from '@/components/board/Board';
-import { isValidFen, parseUci, START_FEN, toUci } from '@/chess/helpers';
+import { canStillMate, isValidFen, parseUci, START_FEN, toUci } from '@/chess/helpers';
 import type { Fen, LongColor, PromotionPiece, Uci } from '@/chess/types';
 import { useChess } from '@/chess/useChess';
 import { ENGINE_LEVELS, type EngineLevel, getLevel } from '@/engine/levels';
@@ -249,11 +249,17 @@ export function usePlayVsEngine(): UsePlayVsEngine {
         searchIdRef.current++;
         setThinking(false);
         const winner: LongColor = lost === 'white' ? 'black' : 'white';
-        const verdict: GameOver['verdict'] = winner === playerColor ? 'win' : 'loss';
+        // A flag against a side that cannot mate any more is a draw (FIDE 6.9).
+        const decisive = canStillMate(gameRef.current.chess(), winner);
+        const verdict: GameOver['verdict'] = !decisive
+          ? 'draw'
+          : winner === playerColor
+            ? 'win'
+            : 'loss';
         playSound(gameEndSound(verdict, hotSeat));
         setGameOver({
-          result: winner === 'white' ? '1-0' : '0-1',
-          reason: 'time',
+          result: !decisive ? '1/2-1/2' : winner === 'white' ? '1-0' : '0-1',
+          reason: decisive ? 'time' : 'time, with no mating material left',
           verdict,
         });
         return;

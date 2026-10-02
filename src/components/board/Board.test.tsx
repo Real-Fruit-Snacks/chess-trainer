@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useSettings } from '@/store/settings';
 import { Board } from './Board';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -92,5 +93,81 @@ describe('Board coordinates', () => {
     const { container } = render(<Board fen={START} viewOnly coordinates={false} />);
     expect(container.querySelector('.board')).not.toHaveClass('board--coords');
     expect(container.querySelector('.board__coords')).toBeNull();
+  });
+});
+
+describe('Board feel settings', () => {
+  beforeEach(() => {
+    useSettings.getState().reset();
+  });
+
+  it('marks the last move and check unless highlights are off', async () => {
+    // Chessground keeps square elements around and hides the unused ones.
+    const marked = (root: HTMLElement) =>
+      Array.from(root.querySelectorAll<HTMLElement>('cg-board square.last-move')).filter(
+        (el) => el.style.display !== 'none',
+      ).length;
+    const { container, rerender } = render(
+      <Board fen={START} viewOnly lastMove={['e2', 'e4']} animate={false} />,
+    );
+    expect(marked(container)).toBe(2);
+    act(() => useSettings.getState().update({ boardHighlights: false }));
+    rerender(<Board fen={START} viewOnly lastMove={['e2', 'e4']} animate={false} />);
+    // The redraw lands on the next animation frame.
+    await vi.waitFor(() => expect(marked(container)).toBe(0));
+  });
+
+  it('magnifies the dragged piece and shows a drag target by default, and not when turned off', () => {
+    const { container, rerender } = render(<Board fen={START} movableColor="white" />);
+    expect(container.querySelector('.board')).toHaveClass('board--magnify');
+    const target = screen.getByTestId('board-dragtarget');
+    expect(target).toHaveClass('board__dragtarget--circle');
+    expect(target).toHaveAttribute('hidden');
+    act(() => useSettings.getState().update({ magnifyDrag: false, dragTarget: 'square' }));
+    rerender(<Board fen={START} movableColor="white" />);
+    expect(container.querySelector('.board')).not.toHaveClass('board--magnify');
+    expect(screen.getByTestId('board-dragtarget')).toHaveClass('board__dragtarget--square');
+    act(() => useSettings.getState().update({ dragTarget: 'none' }));
+    rerender(<Board fen={START} movableColor="white" />);
+    expect(screen.queryByTestId('board-dragtarget')).toBeNull();
+  });
+
+  it('never magnifies or targets a view-only board', () => {
+    const { container } = render(<Board fen={START} viewOnly />);
+    expect(container.querySelector('.board')).not.toHaveClass('board--magnify');
+    expect(screen.queryByTestId('board-dragtarget')).toBeNull();
+  });
+
+  it('keeps the keyboard working when moving by drag only', async () => {
+    useSettings.getState().update({ moveMethod: 'drag' });
+    const onMove = vi.fn();
+    const { container } = render(
+      <Board
+        fen={START}
+        movableColor="white"
+        dests={new Map([['e2', ['e3', 'e4']]])}
+        onMove={onMove}
+        animate={false}
+      />,
+    );
+    // Dragging stays on, so the magnifier does too.
+    expect(container.querySelector('.board')).toHaveClass('board--magnify');
+    const board = screen.getByRole('application', { name: /Chess board/ });
+    act(() => board.focus());
+    fireEvent.keyDown(board, { key: 'e' });
+    fireEvent.keyDown(board, { key: '2' });
+    fireEvent.keyDown(board, { key: 'Enter' });
+    expect(screen.getByText(/e2, white pawn selected/)).toBeInTheDocument();
+    fireEvent.keyDown(board, { key: 'e' });
+    fireEvent.keyDown(board, { key: '4' });
+    fireEvent.keyDown(board, { key: 'Enter' });
+    await vi.waitFor(() => expect(onMove).toHaveBeenCalledWith('e2', 'e4', expect.anything()));
+  });
+
+  it('turns the drag off when moving by tap only', () => {
+    useSettings.getState().update({ moveMethod: 'tap' });
+    const { container } = render(<Board fen={START} movableColor="white" />);
+    expect(container.querySelector('.board')).not.toHaveClass('board--magnify');
+    expect(screen.queryByTestId('board-dragtarget')).toBeNull();
   });
 });

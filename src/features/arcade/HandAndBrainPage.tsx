@@ -25,6 +25,7 @@ import { callAccuracy, describeCall, PIECE_LABEL, type Role, summarizeCalls } fr
 import { useHandAndBrain } from './useHandAndBrain';
 import '@/features/play/play.css';
 import './arcade.css';
+import { San } from '@/chess/San';
 
 export default function HandAndBrainPage() {
   const hb = useHandAndBrain();
@@ -331,8 +332,14 @@ export default function HandAndBrainPage() {
                   .reverse()
                   .map((call) => (
                     <li key={call.ply}>
-                      {PIECE_LABEL[call.type]} → {call.san} · {callAccuracy(call.lossCp)}%
-                      {call.grade !== 'best' ? ` (best ${call.bestSan})` : ''}
+                      {PIECE_LABEL[call.type]} → <San san={call.san} /> ·{' '}
+                      {callAccuracy(call.lossCp)}%
+                      {call.grade !== 'best' ? (
+                        <>
+                          {' (best '}
+                          <San san={call.bestSan} />)
+                        </>
+                      ) : null}
                     </li>
                   ))}
               </ol>

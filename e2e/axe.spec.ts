@@ -35,6 +35,7 @@ const PAGES = [
   '/arcade/fortress',
   '/arcade/engine-says',
   '/arcade/blindfold',
+  '/arcade/simul',
 ];
 
 async function seed(page: Page, scheme: 'light' | 'dark') {

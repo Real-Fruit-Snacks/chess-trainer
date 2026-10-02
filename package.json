@@ -1,6 +1,6 @@
 {
   "name": "chess-trainer",
-  "version": "0.9.4",
+  "version": "0.11.0",
   "private": true,
   "description": "Learn, practice and solve chess puzzles at any level — a fully static, installable web app built for GitHub Pages.",
   "license": "MIT",
@@ -36,6 +36,7 @@
     "lessons:index": "node scripts/build-lesson-index.mjs",
     "drills:verify": "node scripts/verify-drills.mjs",
     "icons:generate": "node scripts/generate-icons.mjs",
+    "pieces:generate": "node scripts/generate-pieces.mjs",
     "studies:verify": "node scripts/verify-studies.mjs",
     "arcade:positions": "node scripts/build-arcade-positions.mjs",
     "bundle:check": "node scripts/check-bundle-size.mjs",

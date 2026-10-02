@@ -2,12 +2,36 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { safeLocalStorage } from '@/lib/persistStorage';
 
-export type ColorScheme = 'system' | 'light' | 'dark';
-export type BoardTheme = 'brown' | 'green' | 'blue' | 'grey' | 'contrast';
+export type ColorScheme = 'system' | 'light' | 'dark' | 'black';
+export type BoardTheme =
+  'brown' | 'green' | 'blue' | 'grey' | 'purple' | 'olive' | 'ice' | 'walnut' | 'contrast';
 export type PlayColor = 'white' | 'black' | 'random';
 export type ReviewDepth = 'fast' | 'balanced' | 'thorough';
-export type PieceSet = 'classic' | 'letters';
+export type PieceSet = 'classic' | 'letters' | 'pixel' | 'modern';
 export type SoundTheme = 'standard' | 'soft' | 'retro';
+/** How moves are written: "Nf3" or with a piece figurine. */
+export type Notation = 'figurine' | 'letters';
+/** How a piece is moved on the board. */
+export type MoveMethod = 'either' | 'tap' | 'drag';
+/** The mark under a dragged piece. */
+export type DragTarget = 'circle' | 'square' | 'none';
+/** Captured material beside the player bars. */
+export type MaterialDisplay = 'difference' | 'count' | 'off';
+/** The player's colour across a simul: the same on every board, or alternating. */
+export type SimulColor = 'white' | 'black' | 'alternate';
+
+/** The last simul set up, offered again next time. */
+export interface SimulPrefs {
+  boards: number;
+  levelId: number;
+  /** Each board one level stronger than the one before. */
+  rising: boolean;
+  color: SimulColor;
+  /** A time control id from lib/clock.ts; 'none' plays without clocks. */
+  timeControlId: string;
+  /** After a move, bring up the next board waiting for one. */
+  autoAdvance: boolean;
+}
 
 /** Search depth per review setting. */
 export const REVIEW_DEPTHS: Record<ReviewDepth, number> = { fast: 10, balanced: 13, thorough: 16 };
@@ -15,11 +39,26 @@ export const REVIEW_DEPTHS: Record<ReviewDepth, number> = { fast: 10, balanced: 
 export interface SettingsState {
   colorScheme: ColorScheme;
   boardTheme: BoardTheme;
-  /** Piece graphics: the classic figurines or the "Letters" tiles. */
+  /** Piece graphics: the classic figurines, the "Letters" tiles, the 8-bit set or the flat set. */
   pieceSet: PieceSet;
   showCoordinates: boolean;
   showLegalMoves: boolean;
+  /** Mark the last move and a king in check on the board. */
+  boardHighlights: boolean;
   animations: boolean;
+  /** Moves written with piece figurines ("♘f3") or letters ("Nf3"). */
+  notation: Notation;
+  /** Enlarge the piece under the finger or pointer while it is dragged. */
+  magnifyDrag: boolean;
+  /** The mark on the square a dragged piece would land on. */
+  dragTarget: DragTarget;
+  /** Move by tapping two squares, by dragging, or either. */
+  moveMethod: MoveMethod;
+  /** Captured pieces beside the player bars: the imbalance, every capture, or nothing. */
+  materialDisplay: MaterialDisplay;
+  /** Hide the header and navigation while a game against the engine is on. */
+  playFocus: boolean;
+  simul: SimulPrefs;
   sounds: boolean;
   /**
    * Which set of cues plays: the standard set, the same cues quieter and
@@ -84,7 +123,22 @@ export const DEFAULT_SETTINGS = {
   pieceSet: 'classic' as PieceSet,
   showCoordinates: true,
   showLegalMoves: true,
+  boardHighlights: true,
   animations: true,
+  notation: 'figurine' as Notation,
+  magnifyDrag: true,
+  dragTarget: 'circle' as DragTarget,
+  moveMethod: 'either' as MoveMethod,
+  materialDisplay: 'difference' as MaterialDisplay,
+  playFocus: false,
+  simul: {
+    boards: 3,
+    levelId: 2,
+    rising: false,
+    color: 'white',
+    timeControlId: '15+10',
+    autoAdvance: true,
+  } as SimulPrefs,
   sounds: true,
   soundTheme: 'standard' as SoundTheme,
   soundVolume: 1,

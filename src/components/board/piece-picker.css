@@ -1,0 +1,65 @@
+/* The piece-set picker: one strip of six pieces per set (see PieceSetPicker.tsx). */
+.piecepick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.piecepick__option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  text-align: left;
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+.piecepick__option:hover {
+  border-color: var(--border-strong);
+}
+
+.piecepick__option[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.piecepick__strip {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  /* Chessground's .cg-wrap is a block with its own box sizing; this is just a strip. */
+  position: static;
+  box-sizing: border-box;
+}
+
+.piecepick__square {
+  aspect-ratio: 1 / 1;
+  background: var(--pp-light);
+}
+
+.piecepick__square.is-dark {
+  background: var(--pp-dark);
+}
+
+.piecepick__square piece {
+  position: static;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  will-change: auto;
+}
+
+.piecepick__label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}

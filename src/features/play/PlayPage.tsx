@@ -22,11 +22,12 @@ import { LadderCard } from './LadderCard';
 import { describeDeviation } from './openingBook';
 import { type Opponent, usePlayVsEngine } from './usePlayVsEngine';
 import './play.css';
+import { Notated, San } from '@/chess/San';
+import { useFocus } from '@/app/focus';
+import { handOffToAnalysis } from '@/lib/handoff';
 
 /** How long a blindfold "peek" shows the pieces. */
 const PEEK_MS = 2000;
-
-export const HANDOFF_PGN_KEY = 'chess-trainer:handoff-pgn';
 
 const CATEGORY_LABEL: Record<string, string> = {
   none: 'Untimed',
@@ -42,6 +43,13 @@ export default function PlayPage() {
   const settings = useSettings();
   const play = usePlayVsEngine();
   const [setupOpen, setSetupOpen] = useState(true);
+  // Focus mode: the shell drops its header and navigation while a game is on.
+  const setFocus = useFocus((s) => s.set);
+  const focusOn = settings.playFocus && play.started && !play.gameOver;
+  useEffect(() => {
+    setFocus(focusOn);
+    return () => setFocus(false);
+  }, [focusOn, setFocus]);
   // A hand-off from analysis, puzzles, lessons or drills: play out this position.
   const [startFrom, setStartFrom] = useState<Fen | null>(() => {
     const fen = searchParams.get('fen');
@@ -160,8 +168,7 @@ export default function PlayPage() {
   };
 
   const analyze = () => {
-    sessionStorage.setItem(HANDOFF_PGN_KEY, play.pgn());
-    void navigate('/analyze?from=game');
+    void navigate(handOffToAnalysis(play.pgn()));
   };
 
   const copyPgn = async () => {
@@ -327,6 +334,14 @@ export default function PlayPage() {
               </Button>
               <Button onClick={play.flip}>Flip</Button>
               <Button
+                onClick={() => settings.update({ playFocus: !settings.playFocus })}
+                aria-pressed={settings.playFocus}
+                title="Hide the header and navigation while a game is on"
+                data-testid="focus-toggle"
+              >
+                Focus
+              </Button>
+              <Button
                 variant="danger"
                 onClick={() => setConfirmResign(true)}
                 disabled={!play.started || !!play.gameOver}
@@ -355,12 +370,12 @@ export default function PlayPage() {
           {play.coachAlert ? (
             <Alert tone={play.coachAlert.verdict.judgement === 'blunder' ? 'danger' : 'warning'}>
               <div data-testid="coach-alert">
-                <strong>Coach:</strong> {play.coachAlert.san} was{' '}
+                <strong>Coach:</strong> <San san={play.coachAlert.san} /> was{' '}
                 {play.coachAlert.verdict.judgement === 'blunder' ? 'a blunder' : 'a mistake'}.
                 {play.coachAlert.verdict.explanation ? (
                   <>
                     {' '}
-                    {play.coachAlert.verdict.explanation.text}
+                    <Notated text={play.coachAlert.verdict.explanation.text} />
                     {(() => {
                       const help = MOTIF_HELP[play.coachAlert.verdict.explanation.motif];
                       const lesson = getLessonMeta(help.lesson);

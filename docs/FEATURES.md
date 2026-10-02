@@ -64,7 +64,8 @@ the engine rates yours as good. Filter by era, difficulty and what you have play
 ## Play
 
 - **Stockfish 19** in the browser at **eight strength levels**, from a beatable "Newcomer" (about 400)
-  to full strength, with optional clocks from bullet to classical.
+  to full strength, with optional clocks from bullet to classical. A flag that falls when the other
+  side could never checkmate is a draw, as in the rules.
 - Take-backs, hints, "show threat", keyboard move entry, PGN export and a hand-off to analysis.
 - A **coach mode** that pauses after a mistake, explains it in words, links the lesson and offers a
   take-back.
@@ -75,7 +76,7 @@ the engine rates yours as good. Filter by era, difficulty and what you have play
 
 ## Arcade
 
-Eight games that are not puzzles, each with a score to beat:
+Nine games that are not puzzles, each with a score to beat:
 
 - **Hand & Brain** — full-strength Stockfish as your partner: you call the piece and it finds the
   move, or the reverse, and every call is graded against the engine's best.
@@ -88,6 +89,11 @@ Eight games that are not puzzles, each with a score to beat:
 - **Fortress** — hold a clearly worse position, with the evaluation as a health bar.
 - **Engine Says** — a Simon game played with the moves of real opening lines.
 - **Blindfold** — a full game with the pieces hidden and three peeks.
+- **Simul** — two to eight games against Stockfish at once, each on its own board, at one strength
+  or rising a level per board, as White, Black or both. With clocks, every board has a clock for each
+  side, as in a clock simul: yours runs on every board where it is your move, even while you play
+  another, and the engine's only while it thinks. Small boards show every game; tap one or press
+  `N` for the next board waiting for you. Each win scores its board's level, a draw half of it.
 
 ## Analyze
 
@@ -121,9 +127,16 @@ of lessons and themes.
 
 ## Settings
 
-Appearance (colour scheme, board colours, piece sets, coordinates, sounds), play defaults, engine and
-analysis options (strength, review and analysis depth, the multi-threaded engine, coach mode), the
-puzzle rating reset or calibration, **profiles** for several learners on one device, an engine
+**Appearance:** the colour scheme (system, light, dark, or black for OLED screens), **move
+notation** — figurines drawn from the piece set (♘f3) or letters (Nf3), everywhere a move is
+written — and the sounds. **Board:** nine board colours, four piece sets (the classic cburnett
+figurines, a flat Modern set, an 8-bit Pixel set and the high-legibility Letters tiles) shown as
+strips to pick from, coordinates, legal-move dots, last-move and check highlights, animation, a
+**magnified dragged piece** with a circle or square **drag target**, moving by tap, drag or either,
+and captured material beside the player bars as the difference, every capture, or nothing.
+**Play:** defaults plus **focus mode**, which hides the header and navigation while a game against
+the engine is on. Engine and analysis options (strength, review and analysis depth, the
+multi-threaded engine, coach mode), the puzzle rating reset or calibration, **profiles** for several learners on one device, an engine
 diagnostics panel with a speed test, offline puzzle download, install, a **storage meter**, and
 backups — export or import as JSON, **share a backup** straight to another device, or open a backup
 file with the installed app to import it.
@@ -142,7 +155,7 @@ _Settings → Open the test lab_ (`/settings/lab`) is a single page for checking
   to hand; the vibration patterns shown follow the theme.
 - **Icons:** every icon at 16, 20, 24 and 32 px, on light or dark.
 - **Controls and feedback:** every button, input, badge, stat, alert, toast and the dialog.
-- **Board:** the board colours, both piece sets, highlights, arrows, check and the promotion menu.
+- **Board:** the board colours, the piece sets, highlights, arrows, check and the promotion menu.
 - **Type and colour:** the colour tokens and the type scale.
 - **Engine:** the diagnostics panel and speed test.
 - **Errors:** a deliberate crash, to see the error page and its report link.

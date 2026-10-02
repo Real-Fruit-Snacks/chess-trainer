@@ -5,6 +5,7 @@ import { Button, Kbd, Icon } from '@/components/ui';
 import type { MoveJudgement } from './MoveList';
 import './chess-components.css';
 import { scrollIntoContainer } from '@/lib/scroll';
+import { San } from '@/chess/San';
 
 const JUDGEMENT_GLYPH: Record<NonNullable<MoveJudgement>, string> = {
   blunder: '??',
@@ -70,7 +71,7 @@ export function TreeMoveList({ tree, version, current, onSelect, judgements }: T
         aria-label={`${number} ${node.san}${glyphs || judgementGlyph}`}
       >
         {number ? <span className="treemoves__number">{number}</span> : null}
-        {node.san}
+        <San san={node.san} />
         {glyphs || judgementGlyph ? (
           <span className="treemoves__glyph">{glyphs || judgementGlyph}</span>
         ) : null}

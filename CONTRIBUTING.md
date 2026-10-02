@@ -49,6 +49,7 @@ CI runs the same checks plus the puzzle data validator.
 | `npm run studies:verify`   | Engine-verify every endgame study (accepted moves keep the goal, alternatives do not).                                                           |
 | `npm run arcade:positions` | Re-evaluate the classic-game positions used by Who Stands Better? and Fortress (slow).                                                           |
 | `npm run icons:generate`   | Re-render the PWA icons from `scripts/icons/logo.svg`.                                                                                           |
+| `npm run pieces:generate`  | Rebuild the piece-set stylesheets (`src/components/board/pieces-*.css`) from the drawings in the script.                                         |
 
 ## Project layout
 

@@ -46,6 +46,7 @@ describe('SettingsPage', () => {
     renderAt('/settings');
     for (const heading of [
       'Appearance',
+      'Board',
       'Play',
       'Profiles',
       'Puzzle rating',
@@ -101,6 +102,76 @@ describe('SettingsPage', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('offers the board and display preferences and keeps them', () => {
+    renderAt('/settings');
+    // Colour scheme has a black option; notation shows a sample in the chosen style.
+    const schemes = screen.getByRole('group', { name: 'Colour scheme' });
+    expect(
+      within(schemes)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['System', 'Light', 'Dark', 'Black']);
+    fireEvent.click(within(schemes).getByRole('button', { name: 'Black' }));
+    expect(useSettings.getState().colorScheme).toBe('black');
+    expect(screen.getByText(/pure black background/)).toBeInTheDocument();
+
+    const sample = screen.getByTestId('notation-sample');
+    expect(sample.querySelectorAll('piece')).toHaveLength(4);
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Move notation' })).getByRole('button', {
+        name: 'Letters',
+      }),
+    );
+    expect(useSettings.getState().notation).toBe('letters');
+    expect(sample.querySelectorAll('piece')).toHaveLength(0);
+    expect(sample).toHaveTextContent('2. Nf3 Nc6 3. Bb5');
+
+    // The piece-set picker shows every set and selects one.
+    const pieces = screen.getByRole('group', { name: 'Piece set' });
+    expect(within(pieces).getAllByRole('button')).toHaveLength(4);
+    expect(within(pieces).getByRole('button', { name: 'Classic' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    fireEvent.click(within(pieces).getByRole('button', { name: 'Pixel' }));
+    expect(useSettings.getState().pieceSet).toBe('pixel');
+    expect(screen.getByText(/8-bit set/)).toBeInTheDocument();
+
+    // Nine board palettes.
+    expect(
+      within(screen.getByRole('group', { name: 'Board colours' })).getAllByRole('button'),
+    ).toHaveLength(9);
+
+    // The board switches and segmented controls.
+    fireEvent.click(screen.getByRole('switch', { name: 'Highlight the last move and check' }));
+    expect(useSettings.getState().boardHighlights).toBe(false);
+    fireEvent.click(screen.getByRole('switch', { name: /^Magnify the dragged piece/ }));
+    expect(useSettings.getState().magnifyDrag).toBe(false);
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Drag target' })).getByRole('button', {
+        name: 'None',
+      }),
+    );
+    expect(useSettings.getState().dragTarget).toBe('none');
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Move pieces by' })).getByRole('button', {
+        name: 'Tap',
+      }),
+    );
+    expect(useSettings.getState().moveMethod).toBe('tap');
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Captured material' })).getByRole('button', {
+        name: 'Off',
+      }),
+    );
+    expect(useSettings.getState().materialDisplay).toBe('off');
+    expect(screen.getByText('Nothing beside the player bars.')).toBeInTheDocument();
+
+    // Focus mode lives with the other play settings.
+    fireEvent.click(screen.getByRole('switch', { name: /^Focus mode/ }));
+    expect(useSettings.getState().playFocus).toBe(true);
   });
 
   it('scrolls to the card a hash link points at', () => {

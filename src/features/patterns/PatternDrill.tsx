@@ -6,6 +6,7 @@ import { type PuzzleOutcomeEvent, usePuzzleTrainer } from '@/features/puzzles/us
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
 import { type MatingPattern, patternDrillId, patternPuzzle } from './matingPatterns';
+import { Notated } from '@/chess/San';
 
 export const PATTERN_DRILL_ID = 'mating-patterns';
 
@@ -158,7 +159,7 @@ export function PatternDrill({
           </p>
           {over ? (
             <p className="small muted" style={{ margin: '0 0 8px' }}>
-              {current.explanation}
+              <Notated text={current.explanation} />
             </p>
           ) : null}
           <div className="puzzle-actions">

@@ -38,6 +38,7 @@ const ArmyDraftPage = lazy(() => import('@/features/arcade/ArmyDraftPage'));
 const FortressPage = lazy(() => import('@/features/arcade/FortressPage'));
 const EngineSaysPage = lazy(() => import('@/features/arcade/EngineSaysPage'));
 const BlindfoldPage = lazy(() => import('@/features/arcade/BlindfoldPage'));
+const SimulPage = lazy(() => import('@/features/arcade/SimulPage'));
 const NotFoundPage = lazy(() => import('@/features/home/NotFoundPage'));
 
 export const routes: RouteObject[] = [
@@ -73,6 +74,7 @@ export const routes: RouteObject[] = [
       { path: 'arcade/fortress', element: <FortressPage /> },
       { path: 'arcade/engine-says', element: <EngineSaysPage /> },
       { path: 'arcade/blindfold', element: <BlindfoldPage /> },
+      { path: 'arcade/simul', element: <SimulPage /> },
       { path: 'openings', element: <OpeningsPage /> },
       { path: 'openings/:repertoireId', element: <RepertoirePage /> },
       { path: 'games', element: <MyGamesPage /> },

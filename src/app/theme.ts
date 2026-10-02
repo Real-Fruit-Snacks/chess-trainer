@@ -13,7 +13,10 @@ export function applyColorScheme(scheme: ColorScheme): void {
     scheme === 'dark' ||
     (scheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  if (meta) meta.content = dark ? siteConfig.backgroundColor : siteConfig.themeColor;
+  if (meta) {
+    meta.content =
+      scheme === 'black' ? '#000000' : dark ? siteConfig.backgroundColor : siteConfig.themeColor;
+  }
 }
 
 export function useColorScheme(): void {

@@ -57,6 +57,13 @@ a.btn:focus {
   color: var(--text);
 }
 
+/* A toggle button (aria-pressed) shows its state. */
+.btn--secondary[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .btn--ghost {
   background: transparent;
   color: var(--text-muted);

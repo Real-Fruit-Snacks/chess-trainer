@@ -10,7 +10,8 @@ export type ArcadeGameId =
   | 'army-draft'
   | 'fortress'
   | 'engine-says'
-  | 'blindfold';
+  | 'blindfold'
+  | 'simul';
 
 export interface ArcadeGame {
   id: ArcadeGameId;
@@ -114,6 +115,17 @@ export const ARCADE_GAMES: readonly ArcadeGame[] = [
     icon: 'eye-off',
     engine: true,
     minutes: '10–30',
+  },
+  {
+    id: 'simul',
+    name: 'Simul',
+    tagline: 'Play several engines at once, each on its own board.',
+    description:
+      'Two to eight boards against Stockfish, all at one level or rising board by board. Move, move on, come back — and with clocks on, every board has its own clock, and yours runs wherever it is your move.',
+    trains: 'Quick decisions and switching between positions',
+    icon: 'boards',
+    engine: true,
+    minutes: '10–40',
   },
 ];
 

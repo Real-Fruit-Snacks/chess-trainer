@@ -21,14 +21,14 @@ async function storedProgress(page: Page): Promise<Record<string, unknown>> {
 }
 
 test.describe('arcade hub', () => {
-  test('lists the eight games and is reachable from the More menu', async ({ page }) => {
+  test('lists the nine games and is reachable from the More menu', async ({ page }) => {
     await seedProgress(page, { onboarded: true });
     await page.goto('/');
     await page.getByRole('button', { name: /More/ }).click();
     await page.getByRole('menuitem', { name: /Arcade/ }).click();
     await expect(page).toHaveURL(/\/arcade$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Arcade');
-    await expect(page.locator('[data-testid^="arcade-"].arcade-card')).toHaveCount(8);
+    await expect(page.locator('[data-testid^="arcade-"].arcade-card')).toHaveCount(9);
     await expect(page.getByTestId('arcade-best-fortress')).toHaveText('Not played yet');
   });
 });

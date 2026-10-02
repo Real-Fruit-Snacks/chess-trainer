@@ -4,9 +4,10 @@ import { ARCADE_GAMES, describeArcadeBest, getArcadeGame } from './games';
 const empty = { arcade: {}, dailyOpening: null, oddsLadder: { rung: 0, best: 0, results: {} } };
 
 describe('arcade registry', () => {
-  it('lists eight distinct games with routes', () => {
-    expect(ARCADE_GAMES).toHaveLength(8);
-    expect(new Set(ARCADE_GAMES.map((g) => g.id)).size).toBe(8);
+  it('lists nine distinct games with routes', () => {
+    expect(ARCADE_GAMES).toHaveLength(9);
+    expect(new Set(ARCADE_GAMES.map((g) => g.id)).size).toBe(9);
+    expect(getArcadeGame('simul')?.icon).toBe('boards');
     expect(getArcadeGame('fortress')?.name).toBe('Fortress');
     expect(getArcadeGame('nope')).toBeUndefined();
   });

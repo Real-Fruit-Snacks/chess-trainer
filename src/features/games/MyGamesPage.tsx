@@ -20,7 +20,7 @@ import { reviewGame } from '@/features/analyze/gameReview';
 import { digestReview } from './insights';
 import { InsightsCard } from './InsightsCard';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
-import { HANDOFF_PGN_KEY } from '@/features/play/PlayPage';
+import { handOffToAnalysis } from '@/lib/handoff';
 import { type OwnPuzzle, ownPuzzlesFromReview } from '@/features/puzzles/ownPuzzles';
 import { formatDate } from '@/lib/dates';
 import {
@@ -602,8 +602,7 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const openInAnalysis = (game: StoredGame) => {
-    sessionStorage.setItem(HANDOFF_PGN_KEY, game.pgn);
-    void navigate('/analyze?from=game');
+    void navigate(handOffToAnalysis(game.pgn));
   };
 
   const unreviewed = list.filter((g) => !g.review);

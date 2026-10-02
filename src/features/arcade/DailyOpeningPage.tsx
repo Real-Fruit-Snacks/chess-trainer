@@ -27,6 +27,7 @@ import {
 import { loadOpeningLines, type OpeningLine } from './openingLines';
 import '@/features/play/play.css';
 import './arcade.css';
+import { Notated } from '@/chess/San';
 
 type Mode = 'daily' | 'practice';
 
@@ -247,7 +248,8 @@ export default function DailyOpeningPage() {
                     : 'Not this time'}
                 </h2>
                 <p style={{ margin: '0 0 8px' }}>
-                  <strong>{answer.name}</strong> ({answer.eco}): {answer.moves.join(' ')}
+                  <strong>{answer.name}</strong> ({answer.eco}):{' '}
+                  <Notated text={answer.moves.join(' ')} />
                 </p>
                 {mode === 'daily' ? (
                   <div className="arcade__scoreline" style={{ justifyContent: 'flex-start' }}>

@@ -13,7 +13,7 @@ export interface UseEngine {
   engine: () => EngineClient;
   status: EngineStatus;
   error: Error | null;
-  /** Loads the engine (no-op if already loading/ready). */
+  /** Loads the engine (no-op if already loading/ready; after a failure, starts a fresh one). */
   start: () => Promise<void>;
 }
 
@@ -41,11 +41,17 @@ export function useEngine(options: UseEngineOptions = {}): UseEngine {
   }, []);
 
   const start = useCallback(async () => {
+    // A failed engine remembers its failure: trying again needs a fresh worker.
+    if (ref.current?.status === 'error') {
+      ref.current.terminate();
+      ref.current = null;
+    }
     const instance = engine();
     if (instance.status === 'ready') {
       setStatus('ready');
       return;
     }
+    setError(null);
     setStatus('loading');
     try {
       await instance.init();

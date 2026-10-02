@@ -51,6 +51,7 @@ export type IconName =
   | 'army'
   | 'repeat'
   | 'eye-off'
+  | 'boards'
   | 'settings';
 
 /** Path data per icon; `fill` marks icons drawn as filled shapes. */
@@ -143,6 +144,10 @@ const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
   },
   'eye-off': {
     d: 'M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.2A10 10 0 0 1 12 5c5 0 8.5 3.5 10 7a12 12 0 0 1-2.6 3.6M6.5 6.5A12 12 0 0 0 2 12c1.5 3.5 5 7 10 7a9.6 9.6 0 0 0 4-.9',
+  },
+  // A board with a second one behind it: several games at once.
+  boards: {
+    d: 'M16 6V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h2M9 8h11a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zM8 14.5h13M14.5 8v13',
   },
 };
 

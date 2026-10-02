@@ -1,0 +1,28 @@
+/*
+ * Figurine notation: the piece letter of a move is drawn as the piece itself,
+ * from whichever piece set is active (the piece CSS looks for `piece` elements
+ * inside a `.cg-wrap`). The letter stays in the DOM for screen readers and copying.
+ */
+/* Relative, so the visually hidden letters (absolutely positioned) stay inside
+   the move and never widen the page. */
+.san.cg-wrap {
+  display: inline;
+  position: relative;
+  box-sizing: inherit;
+  white-space: nowrap;
+}
+
+.san .san__piece {
+  position: static;
+  display: inline-block;
+  width: 1.2em;
+  height: 1.2em;
+  margin-right: 0.04em;
+  vertical-align: -0.24em;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  z-index: auto;
+  will-change: auto;
+  pointer-events: none;
+}

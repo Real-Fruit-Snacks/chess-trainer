@@ -16,6 +16,8 @@ const CROSS_BROWSER_SPECS = [
   /accessibility\.spec\.ts/,
   /release-0-8\.spec\.ts/,
   /release-0-9\.spec\.ts/,
+  /release-0-10\.spec\.ts/,
+  /release-0-11\.spec\.ts/,
 ];
 
 /** Pixel snapshots run only when asked (VISUAL=1); see e2e/visual.spec.ts. */

@@ -7,7 +7,14 @@ const FILES = 'abcdefgh';
  * navigation (which overlay the page), and returns its bounding box.
  */
 export async function revealBoard(board: Locator) {
-  await board.scrollIntoViewIfNeeded();
+  // A board is re-created when it switches between view-only and interactive
+  // (for example once the engine is ready); if that happens mid-scroll, try again.
+  try {
+    await board.scrollIntoViewIfNeeded();
+  } catch {
+    await board.page().waitForTimeout(300);
+    await board.scrollIntoViewIfNeeded();
+  }
   const adjusted = await board.evaluate((el) => {
     const rect = el.getBoundingClientRect();
     const header = document.querySelector('header')?.getBoundingClientRect().bottom ?? 0;

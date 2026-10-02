@@ -138,6 +138,37 @@ export function gameStatus(chess: Chess): GameStatus {
   return { over: false, result: '*', reason: null, winner: null };
 }
 
+/**
+ * Whether `color` could still deliver mate by some sequence of legal moves —
+ * the test for a flag fall: when the side with time left cannot mate, the game
+ * is drawn rather than won (FIDE 6.9). A queen, rook or pawn can always mate;
+ * a lone minor piece only with the defender's own men to box its king in;
+ * bishops alone that all stand on one square colour never can.
+ */
+export function canStillMate(chess: Chess, color: LongColor): boolean {
+  const mine: { type: string; square: Square }[] = [];
+  let defenders = 0;
+  const side = color === 'white' ? 'w' : 'b';
+  for (const row of chess.board()) {
+    for (const piece of row) {
+      if (!piece || piece.type === 'k') continue;
+      if (piece.color === side) mine.push(piece);
+      else defenders++;
+    }
+  }
+  if (mine.some((p) => p.type === 'p' || p.type === 'r' || p.type === 'q')) return true;
+  if (mine.length === 0) return false;
+  // The defender's own pieces can block its king's escape squares.
+  if (defenders > 0) return true;
+  if (mine.length === 1) return false;
+  const shade = (square: Square) => (square.charCodeAt(0) + Number(square[1])) % 2;
+  const bishops = mine.filter((p) => p.type === 'b');
+  if (bishops.length === mine.length && new Set(bishops.map((b) => shade(b.square))).size === 1) {
+    return false;
+  }
+  return true;
+}
+
 /** Material balance from White's point of view, in pawns. */
 export function materialBalance(chess: Chess): number {
   const values: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
