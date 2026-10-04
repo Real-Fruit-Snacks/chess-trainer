@@ -3,6 +3,7 @@ import {
   attemptScore,
   expectedSolveMs,
   HINT_CREDIT,
+  ratedSolveScore,
   SLOW_FLOOR,
   SLOW_MULTIPLE,
   timeFactor,
@@ -42,5 +43,17 @@ describe('puzzle score', () => {
       HINT_CREDIT[1] * SLOW_FLOOR,
       3,
     );
+  });
+
+  it('never lets a correct rated solve score below what was expected of the player', () => {
+    // A slow or hint-assisted solve keeps its reduced credit when that is above
+    // the expected score, and is lifted to the expected score when below.
+    expect(ratedSolveScore('solved', 0.75, 0.5)).toBe(0.75);
+    expect(ratedSolveScore('solved', 0.25, 0.6)).toBe(0.6);
+    expect(ratedSolveScore('solved', 0.75, 0.9)).toBe(0.9);
+    // A miss is still a miss, and a broken expectation cannot lift anything.
+    expect(ratedSolveScore('failed', 0.75, 0.9)).toBe(0);
+    expect(ratedSolveScore('solved', 0.75, Number.NaN)).toBe(0.75);
+    expect(ratedSolveScore('solved', 0.75, 7)).toBe(1);
   });
 });

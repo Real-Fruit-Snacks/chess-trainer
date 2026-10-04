@@ -282,13 +282,18 @@ export function nextBoard(state: SimulState, from: number): number {
   return live ?? from;
 }
 
-/** The player's move on a board; with auto-advance on, the next board comes up. */
+/**
+ * The player's move on a board; with auto-advance on, the next board comes up
+ * — unless the move ended that game (a mate, a stalemate, a draw), which stays
+ * on screen so the player sees how it finished.
+ */
 export function playerMove(state: SimulState, index: number, uci: Uci, now: number): Applied {
   const ticked = tick(state, now);
   const board = ticked.boards[index];
   if (!board || !isPlayerTurn(board)) return { state: ticked, move: null, check: false };
   const applied = applyMove(ticked, index, uci, 'player', now);
   if (!applied.move || !ticked.setup.autoAdvance) return applied;
+  if (applied.state.boards[index]?.result) return applied;
   return { ...applied, state: { ...applied.state, active: nextBoard(applied.state, index) } };
 }
 
@@ -349,11 +354,15 @@ export function selectBoard(state: SimulState, index: number): SimulState {
   return { ...state, active: index };
 }
 
+/** The shortest search worth asking for, when the engine's clock allows it. */
+const MIN_SEARCH_MS = 50;
+
 /**
  * The engine's search on a board. Without clocks, the level's own limits.
  * With clocks, at most a thirtieth of its time plus most of the increment,
  * and never more than the level would spend anyway; the level's depth limit
- * still applies, whichever comes first.
+ * still applies, whichever comes first. The 50 ms floor never takes more than
+ * half of what is left on the engine's clock, so the floor itself cannot flag it.
  */
 export function engineBudget(
   level: EngineLevel,
@@ -364,7 +373,9 @@ export function engineBudget(
   if (!control || !board.clock) return {};
   const left = remaining(board.clock, opposite(board.color), now);
   const budget = Math.min(left / 30 + control.incrementMs * 0.8, left / 4);
-  return { movetime: Math.max(50, Math.round(Math.min(level.movetime ?? Infinity, budget))) };
+  const floor = Math.min(MIN_SEARCH_MS, left / 2);
+  const movetime = Math.max(floor, Math.min(level.movetime ?? Infinity, budget));
+  return { movetime: Math.max(1, Math.round(movetime)) };
 }
 
 export interface Tally {

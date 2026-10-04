@@ -1,9 +1,15 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { safeLocalStorage } from '@/lib/persistStorage';
-import { START_FEN } from '@/chess/helpers';
+import {
+  keepCorruptBlob,
+  rehydrateOnStorageChange,
+  safeLocalStorage,
+  warnNewerSave,
+} from '@/lib/persistStorage';
+import { START_FEN } from '@/chess/startFen';
 import type { Fen } from '@/chess/types';
 import type { ImportedGame } from '@/lib/gameImport';
+import { analysesSlice, parse } from './backupSchema';
 import { storageKeyFor } from './profiles';
 
 /**
@@ -24,8 +30,35 @@ export interface SavedAnalysis {
 }
 
 export const ANALYSES_STORAGE_KEY = 'chess-trainer:analyses';
+export const ANALYSES_VERSION = 1;
 export const DEFAULT_COLLECTION = 'My analyses';
 export const MAX_ANALYSES = 500;
+
+export interface PersistedAnalyses {
+  items: Record<string, SavedAnalysis>;
+}
+
+/** The newest `MAX_ANALYSES` entries (by last update), re-keyed by id. */
+export function capAnalyses(items: Record<string, SavedAnalysis>): Record<string, SavedAnalysis> {
+  const all = Object.values(items);
+  if (all.length <= MAX_ANALYSES) return items;
+  const kept = all.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_ANALYSES);
+  return Object.fromEntries(kept.map((a) => [a.id, a]));
+}
+
+/** A stored blob checked entry by entry; damaged entries are dropped, unknown keys kept. */
+export function repairAnalyses(stored: unknown): PersistedAnalyses & Record<string, unknown> {
+  const parsed = parse(analysesSlice, stored, 'repair', 'analyses');
+  const state: Record<string, unknown> = {
+    items: capAnalyses(parsed.ok ? (parsed.value.items ?? {}) : {}),
+  };
+  if (typeof stored === 'object' && stored !== null && !Array.isArray(stored)) {
+    for (const [key, value] of Object.entries(stored as Record<string, unknown>)) {
+      if (key !== 'items' && value !== undefined) state[key] = value;
+    }
+  }
+  return state as PersistedAnalyses & Record<string, unknown>;
+}
 
 export interface AnalysesState {
   items: Record<string, SavedAnalysis>;
@@ -40,23 +73,11 @@ export interface AnalysesState {
   remove: (id: string) => void;
   removeCollection: (collection: string) => void;
   clear: () => void;
-  /** Merges entries from a backup file (unknown shapes are ignored). */
-  importState: (raw: unknown) => void;
-}
-
-function isSavedAnalysis(value: unknown): value is SavedAnalysis {
-  if (typeof value !== 'object' || value === null) return false;
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v.id === 'string' &&
-    typeof v.name === 'string' &&
-    typeof v.collection === 'string' &&
-    typeof v.pgn === 'string' &&
-    typeof v.startFen === 'string' &&
-    typeof v.moves === 'number' &&
-    typeof v.createdAt === 'number' &&
-    typeof v.updatedAt === 'number'
-  );
+  /**
+   * Replaces the library with a validated backup part (like every other store
+   * on import); the cap applies, newest entries first.
+   */
+  replaceState: (state: Partial<PersistedAnalyses>) => void;
 }
 
 const nonEmpty = (text: string | undefined): string | undefined =>
@@ -65,7 +86,7 @@ const nonEmpty = (text: string | undefined): string | undefined =>
 const newId = () => `an-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
 export const useAnalyses = create<AnalysesState>()(
-  persist(
+  persist<AnalysesState, [], [], PersistedAnalyses>(
     (set, get) => ({
       items: {},
 
@@ -81,12 +102,8 @@ export const useAnalyses = create<AnalysesState>()(
           createdAt: now,
           updatedAt: now,
         };
-        const items = { ...get().items, [entry.id]: entry };
         // Keep the library bounded: the oldest entries go first.
-        const kept = Object.values(items)
-          .sort((a, b) => b.updatedAt - a.updatedAt)
-          .slice(0, MAX_ANALYSES);
-        set({ items: Object.fromEntries(kept.map((a) => [a.id, a])) });
+        set({ items: capAnalyses({ ...get().items, [entry.id]: entry }) });
         return entry;
       },
 
@@ -123,25 +140,39 @@ export const useAnalyses = create<AnalysesState>()(
 
       clear: () => set({ items: {} }),
 
-      importState: (raw) => {
-        if (typeof raw !== 'object' || raw === null || !('items' in raw)) return;
-        const items = raw.items;
-        if (typeof items !== 'object' || items === null) return;
-        const merged = { ...get().items };
-        for (const value of Object.values(items as Record<string, unknown>)) {
-          if (isSavedAnalysis(value)) merged[value.id] = value;
-        }
-        set({ items: merged });
+      replaceState: (state) => {
+        const items: Record<string, SavedAnalysis> = {};
+        for (const entry of Object.values(state.items ?? {})) items[entry.id] = entry;
+        set({ items: capAnalyses(items) });
       },
     }),
     {
       name: storageKeyFor(ANALYSES_STORAGE_KEY),
-      version: 1,
+      version: ANALYSES_VERSION,
       storage: createJSONStorage(() => safeLocalStorage),
-      partialize: (state) => ({ items: state.items }),
+      partialize: (state) => {
+        const out = {} as Record<string, unknown>;
+        for (const [key, value] of Object.entries(state)) {
+          if (typeof value !== 'function') out[key] = value;
+        }
+        return out as unknown as PersistedAnalyses;
+      },
+      migrate: (stored, version): PersistedAnalyses => {
+        if (version > ANALYSES_VERSION) {
+          warnNewerSave(ANALYSES_STORAGE_KEY, version, ANALYSES_VERSION);
+        }
+        return repairAnalyses(stored);
+      },
+      merge: (persistedState, current): AnalysesState => ({
+        ...current,
+        ...repairAnalyses(persistedState),
+      }),
+      onRehydrateStorage: keepCorruptBlob(storageKeyFor(ANALYSES_STORAGE_KEY)),
     },
   ),
 );
+
+rehydrateOnStorageChange(useAnalyses, storageKeyFor(ANALYSES_STORAGE_KEY));
 
 /** Collections with their entries, newest first, the default collection first. */
 export function groupAnalyses(

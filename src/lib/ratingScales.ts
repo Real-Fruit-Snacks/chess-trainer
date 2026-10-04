@@ -107,7 +107,7 @@ export function approximateGameRatings(puzzleRating: number): GameRatingEstimate
   };
 }
 
-export function formatRange(r: RatingRange, locale = 'en-US'): string {
+export function formatRange(r: RatingRange, locale = 'en-GB'): string {
   const fmt = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
   return `${fmt.format(r.low)}–${fmt.format(r.high)}`;
 }

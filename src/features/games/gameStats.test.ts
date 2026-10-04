@@ -65,8 +65,9 @@ describe('game statistics', () => {
     expect(stats.unknown).toBe(1);
     expect(stats.white.map((r) => [r.name, r.games, r.score])).toEqual([
       ['Italian Game', 1, 1],
-      ["King's Knight Opening", 1, 0],
-      ["Queen's Pawn Game", 1, 0.5],
+      // Shown as the app writes them, with curly apostrophes.
+      ['King’s Knight Opening', 1, 0],
+      ['Queen’s Pawn Game', 1, 0.5],
     ]);
     expect(stats.black).toHaveLength(1);
     expect(stats.black[0]).toMatchObject({ name: 'Italian Game', games: 1, wins: 1 });
@@ -82,6 +83,8 @@ describe('game statistics', () => {
   it('parses a main line and rejects garbage', () => {
     expect(mainLineOfPgn(GAMES[2]!.pgn)?.sans).toEqual(['d4', 'd5']);
     expect(mainLineOfPgn('1. e4 e5 2. Ke2xx')).toBeNull();
+    // Memoised: the same text gives the same object back.
+    expect(mainLineOfPgn(GAMES[2]!.pgn)).toBe(mainLineOfPgn(GAMES[2]!.pgn));
   });
 });
 

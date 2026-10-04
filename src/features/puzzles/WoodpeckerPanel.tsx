@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { Alert, Button, Card, Stat } from '@/components/ui';
+import { useLocation, useNavigate } from 'react-router';
+import { Alert, Button, Card, ConfirmDialog, Dialog, ScrollRegion, Stat } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import { formatDate } from '@/lib/dates';
-import { decodeShare, shareUrl } from '@/lib/shareCodes';
+import { readShare, shareUrl } from '@/lib/shareCodes';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { chooseWoodpeckerPuzzles } from './chooseWoodpeckerPuzzles';
+import {
+  MIN_SHARED_WOODPECKER,
+  type ValidatedWoodpeckerSet,
+  validateSharedWoodpecker,
+} from './sharedWoodpecker';
 import {
   cycleStats,
   describeImprovement,
@@ -29,20 +34,50 @@ export function WoodpeckerPanel({ onContinue }: { onContinue: () => void }) {
   const [size, setSize] = useState<WoodpeckerSize>(100);
   const [building, setBuilding] = useState(false);
   const [confirmAbandon, setConfirmAbandon] = useState(false);
-  const [shared, setShared] = useState<{ puzzleIds: string[]; rating: number } | null>(null);
+  const [shared, setShared] = useState<ValidatedWoodpeckerSet | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
-  // A shared set (`#wp=…`): offer to take it over, replacing any current set.
+  // A shared set (`#wp=…`): check it against the bundled puzzles, then offer to take it over.
+  // The fragment is cleared only once the check is done: clearing it re-runs this
+  // effect, which would cancel a check still waiting for the puzzle files.
   useEffect(() => {
     if (!location.hash) return;
     let cancelled = false;
-    void decodeShare(location.hash).then((payload) => {
+    const clearFragment = () => void navigate(location.pathname, { replace: true });
+    void (async () => {
+      const read = await readShare(location.hash);
       if (cancelled) return;
-      if (payload?.kind === 'woodpecker' && payload.puzzleIds.length >= 10) setShared(payload);
-      else toast('That link does not contain a Woodpecker set.', { tone: 'warning' });
-      void navigate(location.pathname, { replace: true });
-    });
+      if (!read.ok || read.payload.kind !== 'woodpecker') {
+        toast(
+          !read.ok && read.kind === 'unsupported'
+            ? 'This browser cannot open compressed links, so the shared set cannot be read here.'
+            : !read.ok && read.kind === 'too-large'
+              ? 'That link is too large to be a Woodpecker set.'
+              : 'That link does not contain a Woodpecker set.',
+          { tone: 'warning' },
+        );
+        clearFragment();
+        return;
+      }
+      const payload = read.payload;
+      try {
+        const checked = await validateSharedWoodpecker(payload.puzzleIds, payload.rating);
+        if (cancelled) return;
+        if (!checked) {
+          toast(
+            `That link holds fewer than ${MIN_SHARED_WOODPECKER} puzzles from the bundled set, so it cannot be used.`,
+            { tone: 'warning' },
+          );
+        } else {
+          setShared(checked);
+        }
+      } catch (err) {
+        if (!cancelled) toast(err instanceof Error ? err.message : String(err), { tone: 'danger' });
+      } finally {
+        if (!cancelled) clearFragment();
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -76,28 +111,46 @@ export function WoodpeckerPanel({ onContinue }: { onContinue: () => void }) {
     }
   };
 
-  const sharedOffer = shared ? (
-    <Alert tone="info">
-      <div data-testid="shared-woodpecker">
-        A friend shared a Woodpecker set of {shared.puzzleIds.length} puzzles (around rating{' '}
-        {Math.round(shared.rating)}).{set ? ' Taking it replaces your current set.' : ''}{' '}
-        <div className="row" style={{ marginTop: 8 }}>
-          <Button size="sm" variant="primary" onClick={acceptShared}>
+  const sharedOffer = (
+    <Dialog
+      open={shared !== null}
+      onClose={() => setShared(null)}
+      title="Take a shared Woodpecker set"
+      actions={
+        <>
+          <Button variant="ghost" onClick={() => setShared(null)}>
+            Not now
+          </Button>
+          <Button variant="primary" onClick={acceptShared} data-testid="accept-shared-woodpecker">
             Take this set
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setShared(null)}>
-            Ignore
-          </Button>
+        </>
+      }
+    >
+      {shared ? (
+        <div data-testid="shared-woodpecker">
+          <p>
+            A friend shared a Woodpecker set of {shared.puzzleIds.length} puzzles (around rating{' '}
+            {Math.round(shared.rating)}).{set ? ' Taking it replaces your current set.' : ''}
+          </p>
+          {shared.unknown > 0 ? (
+            <p className="small muted">
+              {shared.unknown} id{shared.unknown === 1 ? ' was' : 's were'} not in the bundled
+              puzzles and {shared.unknown === 1 ? 'was' : 'were'} left out.
+            </p>
+          ) : null}
         </div>
-      </div>
-    </Alert>
-  ) : null;
+      ) : null}
+    </Dialog>
+  );
 
   const start = async () => {
     setBuilding(true);
     try {
       const ids = await chooseWoodpeckerPuzzles(size, rating);
-      if (ids.length < 10) throw new Error('Not enough puzzles available for a set.');
+      if (ids.length < MIN_SHARED_WOODPECKER) {
+        throw new Error('Not enough puzzles available for a set.');
+      }
       startWoodpecker(ids, rating);
       toast(`Set of ${ids.length} puzzles ready. Cycle 1 starts now.`, { tone: 'success' });
       onContinue();
@@ -204,56 +257,50 @@ export function WoodpeckerPanel({ onContinue }: { onContinue: () => void }) {
         </Alert>
       ) : null}
       {stats.length ? (
-        <table className="history" style={{ marginTop: 8 }} data-testid="woodpecker-cycles">
-          <thead>
-            <tr>
-              <th scope="col">Cycle</th>
-              <th scope="col">Accuracy</th>
-              <th scope="col">Per puzzle</th>
-              <th scope="col">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stats.map((c) => (
-              <tr key={c.cycle}>
-                <td>{c.cycle}</td>
-                <td>{c.accuracy}%</td>
-                <td>{c.pace}s</td>
-                <td>{c.minutes} min</td>
+        // On a narrow phone the table scrolls inside the card instead of widening the page.
+        <ScrollRegion label="Woodpecker cycles" style={{ marginTop: 8 }}>
+          <table className="history" data-testid="woodpecker-cycles">
+            <thead>
+              <tr>
+                <th scope="col">Cycle</th>
+                <th scope="col">Accuracy</th>
+                <th scope="col">Per puzzle</th>
+                <th scope="col">Total</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {stats.map((c) => (
+                <tr key={c.cycle}>
+                  <td>{c.cycle}</td>
+                  <td>{c.accuracy}%</td>
+                  <td>{c.pace}s</td>
+                  <td>{c.minutes} min</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollRegion>
       ) : null}
       <div className="row" style={{ marginTop: 12 }}>
-        {confirmAbandon ? (
-          <>
-            <span className="small muted">Drop this set and its history?</span>
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={() => {
-                abandon();
-                setConfirmAbandon(false);
-              }}
-            >
-              Drop the set
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirmAbandon(false)}>
-              Keep it
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button size="sm" variant="ghost" onClick={() => void share()}>
-              Share this set
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirmAbandon(true)}>
-              {done ? 'Start a new set' : 'Drop this set'}
-            </Button>
-          </>
-        )}
+        <Button size="sm" variant="ghost" onClick={() => void share()}>
+          Share this set
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setConfirmAbandon(true)}>
+          {done ? 'Start a new set' : 'Drop this set'}
+        </Button>
       </div>
+      <ConfirmDialog
+        open={confirmAbandon}
+        title={done ? 'Start a new set?' : 'Drop this set?'}
+        confirmLabel={done ? 'Start a new set' : 'Drop the set'}
+        danger
+        onConfirm={abandon}
+        onClose={() => setConfirmAbandon(false)}
+      >
+        {done
+          ? 'The finished set and its cycle history are removed so a new set can be chosen.'
+          : `The set and its ${set.cycles.length} recorded cycle${set.cycles.length === 1 ? '' : 's'} are removed. This cannot be undone.`}
+      </ConfirmDialog>
     </Card>
   );
 }

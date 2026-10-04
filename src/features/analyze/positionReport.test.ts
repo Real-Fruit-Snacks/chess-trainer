@@ -125,3 +125,21 @@ describe('position report', () => {
     }
   });
 });
+
+describe('king safety files', () => {
+  it('counts the files the opponent’s rooks can use, not the king’s own missing pawns', () => {
+    // White king on g1 behind f2 g2 h2; Black has no h-pawn, so the h-file is
+    // half-open for Black: a lane towards the king. White lacks the a-pawn
+    // (half-open for White) but that is no danger to White's own king.
+    const report = reportPosition(
+      'r1b1kb1r/1pp2pp1/p1np1n2/4p3/2BPP3/2N2N2/1PP2PPP/R1BQ1RK1 w kq - 0 9',
+    );
+    expect(report.halfOpen.black).toContain('h');
+    expect(report.halfOpen.white).toContain('a');
+    expect(report.kings.white.openFilesNear).toEqual(['h']);
+    const item = report.items.find((i) => i.topic === 'king' && i.side === 'white');
+    if (item) expect(item.text).toMatch(/half-open/);
+    // Black's king on e8: no open or half-open-for-White file touches it (d, e, f all hold black pawns).
+    expect(report.kings.black.openFilesNear).toEqual([]);
+  });
+});

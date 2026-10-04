@@ -1,12 +1,24 @@
 import type { Square } from 'chess.js';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import {
+  type ChangeEvent,
+  type FormEvent,
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Link } from 'react-router';
 import { ClickBoard, type ClickBoardPiece } from '@/components/board/ClickBoard';
 import { Button, Card, Segmented, Stat, Switch, LinkButton } from '@/components/ui';
 import type { LongColor } from '@/chess/types';
+import { NONE } from '@/lib/format';
 import { playSound } from '@/lib/sound';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
+import { parseTypedSquare } from './typedSquare';
+import '@/features/puzzles/puzzles.css';
 import './drills.css';
 
 const DURATION_MS = 30_000;
@@ -57,9 +69,14 @@ export default function CoordinatesDrill() {
   const [mistakes, setMistakes] = useState(0);
   const [leftMs, setLeftMs] = useState(DURATION_MS);
   const [flash, setFlash] = useState<{ square: Square; kind: 'correct' | 'wrong' } | null>(null);
+  const [typed, setTyped] = useState('');
   const startedAtRef = useRef(0);
   const scoreRef = useRef(0);
   const mistakesRef = useRef(0);
+  const typedRef = useRef<HTMLInputElement>(null);
+  // A run started from the keyboard continues on the keyboard: the typed answer field gets
+  // the focus (a tap or click keeps it off, so no on-screen keyboard covers the board).
+  const typeAnswersRef = useRef(false);
 
   useEffect(() => {
     document.title = `Coordinates drill · ${siteConfig.name}`;
@@ -73,19 +90,26 @@ export default function CoordinatesDrill() {
     playSound('gameEnd');
   }, [recordDrill]);
 
-  const start = () => {
+  const start = (event?: MouseEvent) => {
+    // A button activated with Enter or Space reports no pointer clicks (`detail` 0).
+    typeAnswersRef.current = event?.detail === 0;
     scoreRef.current = 0;
     mistakesRef.current = 0;
     setScore(0);
     setMistakes(0);
     setFinished(null);
     setFlash(null);
+    setTyped('');
     setLeftMs(DURATION_MS);
     startedAtRef.current = Date.now();
     setOrientation(side === 'random' ? (Math.random() < 0.5 ? 'white' : 'black') : side);
     setTarget(randomSquare(null));
     setRunning(true);
   };
+
+  useEffect(() => {
+    if (running && typeAnswersRef.current) typedRef.current?.focus();
+  }, [running]);
 
   useEffect(() => {
     if (!running) return;
@@ -115,6 +139,24 @@ export default function CoordinatesDrill() {
     window.setTimeout(() => setFlash((f) => (f?.square === square ? null : f)), 250);
   };
 
+  // Typing a square is the keyboard route: two characters answer at once, Enter answers too.
+  const answerTyped = (text: string) => {
+    const square = parseTypedSquare(text);
+    if (!square) return false;
+    setTyped('');
+    onSquare(square);
+    return true;
+  };
+  const onTypedChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (value.trim().length >= 2 && answerTyped(value)) return;
+    setTyped(value.slice(0, 2));
+  };
+  const onTypedSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!answerTyped(typed)) setTyped('');
+  };
+
   const marks = useMemo(() => {
     const map = new Map<Square, string>();
     if (flash) map.set(flash.square, flash.kind);
@@ -131,12 +173,12 @@ export default function CoordinatesDrill() {
         </p>
         <h1>Coordinates</h1>
         <p>
-          Click the named square as fast as you can. Coordinates are hidden on the board — that is
-          the point.
+          Click the named square as fast as you can — or type it. Coordinates are hidden on the
+          board; that is the point.
         </p>
       </div>
 
-      <div className="trainer">
+      <div className="trainer trainer--lead">
         <div className="trainer__board" style={{ position: 'relative' }}>
           <ClickBoard
             pieces={withPieces ? START_PIECES : undefined}
@@ -150,7 +192,7 @@ export default function CoordinatesDrill() {
           />
           {!running && !finished ? (
             <div className="trainer__overlay">
-              <Button variant="primary" size="lg" onClick={start}>
+              <Button variant="primary" size="lg" onClick={(e) => start(e)}>
                 Start · 30 seconds
               </Button>
             </div>
@@ -171,7 +213,7 @@ export default function CoordinatesDrill() {
                   % accuracy
                 </p>
                 <div className="row">
-                  <Button variant="primary" onClick={start}>
+                  <Button variant="primary" onClick={(e) => start(e)} autoFocus>
                     Again
                   </Button>
                   <LinkButton to="/drills">All drills</LinkButton>
@@ -181,27 +223,57 @@ export default function CoordinatesDrill() {
           ) : null}
         </div>
 
-        <aside className="trainer__panel stack">
-          <Card>
-            <div
-              className={`drill__prompt${flash ? ` drill__prompt--${flash.kind}` : ''}`}
-              aria-live="assertive"
-            >
-              {target ?? '—'}
-            </div>
-            <div
-              className={`drill__timer${leftMs < 5000 && running ? ' drill__timer--low' : ''}`}
-              aria-hidden="true"
-            >
-              <span style={{ width: `${timerPct}%` }} />
-            </div>
-            <div className="drill__hud">
-              <Stat value={score} label="Correct" />
-              <Stat value={mistakes} label="Mistakes" />
-              <Stat value={`${Math.ceil(leftMs / 1000)}s`} label="Left" />
-            </div>
-          </Card>
+        <Card className="trainer__lead">
+          <div
+            className={`drill__prompt${flash ? ` drill__prompt--${flash.kind}` : ''}`}
+            aria-live="assertive"
+            data-testid="coordinates-prompt"
+          >
+            {target ?? NONE}
+          </div>
+          <div
+            className={`drill__timer${leftMs < 5000 && running ? ' drill__timer--low' : ''}`}
+            aria-hidden="true"
+          >
+            <span style={{ width: `${timerPct}%` }} />
+          </div>
+          <div className="drill__hud">
+            <Stat value={score} label="Correct" />
+            <Stat value={mistakes} label="Mistakes" />
+            <Stat value={`${Math.ceil(leftMs / 1000)}s`} label="Left" />
+          </div>
+          <form className="row drill__typed" onSubmit={onTypedSubmit}>
+            <label className="small muted" htmlFor="coordinates-typed">
+              Or type the square
+            </label>
+            <input
+              ref={typedRef}
+              id="coordinates-typed"
+              className="input drill__typed-input"
+              value={typed}
+              onChange={onTypedChange}
+              disabled={!running}
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              inputMode="text"
+              maxLength={2}
+              placeholder="e4"
+              aria-describedby="coordinates-typed-help"
+            />
+            <span id="coordinates-typed-help" className="sr-only">
+              Two characters, a file and a rank, answer as soon as they are typed.
+            </span>
+          </form>
+          {/* Always in the page, so the result is announced when the time is up. */}
+          <p className="sr-only" role="status" data-testid="coordinates-result">
+            {finished
+              ? `Time! ${finished.score} square${finished.score === 1 ? '' : 's'}, ${finished.mistakes} mistake${finished.mistakes === 1 ? '' : 's'}.`
+              : ''}
+          </p>
+        </Card>
 
+        <aside className="trainer__panel stack">
           <Card>
             <div className="stack">
               <Segmented
@@ -227,7 +299,7 @@ export default function CoordinatesDrill() {
 
           <Card>
             <div className="puzzle-stats">
-              <Stat value={best?.best ?? '–'} label="Best score" />
+              <Stat value={best?.best ?? NONE} label="Best score" />
               <Stat value={best?.attempts ?? 0} label="Runs" />
             </div>
             <p className="small muted" style={{ margin: '8px 0 0' }}>

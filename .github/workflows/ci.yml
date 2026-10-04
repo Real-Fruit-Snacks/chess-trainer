@@ -5,32 +5,51 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Nightly on main: the same jobs, and a test that only passes on a retry fails the run.
+  schedule:
+    - cron: '17 3 * * *'
 
+# The nightly run gets a group of its own, so it can never cancel the run that gates a deploy.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # A pull request is checked out as its merge commit, whose first parent is the base.
+          fetch-depth: 2
+
+      # Documentation-only pull requests skip the build, the browsers and the audits.
+      - name: Documentation only?
+        id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            node scripts/ci-changes.mjs HEAD^1 >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
   quality:
     name: Lint, typecheck & unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Download engine binaries
-        run: npm run engine:setup
+      - uses: ./.github/actions/setup
 
       - name: Lint
         run: npm run lint
@@ -44,18 +63,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Unit tests
+      - name: Unit tests (fails below the coverage floor)
         run: npm run test:coverage
 
       - name: Validate puzzle data
         run: npm run puzzles:verify
 
-      - name: Verify endgame drill positions with the engine
-        run: npm run drills:verify -- --depth 24
-
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage
           path: coverage/
@@ -63,17 +79,16 @@ jobs:
 
   build:
     name: Production build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: ./.github/actions/setup
         with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - run: npm ci
+          engine: 'true'
 
       - name: Build
         run: npm run build
@@ -84,7 +99,7 @@ jobs:
         run: npm run bundle:check
 
       - name: Upload build
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: dist
           path: dist/
@@ -108,34 +123,65 @@ jobs:
           - project: desktop-webkit
             browser: webkit
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: ./.github/actions/setup
         with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - run: npm ci
+          browser: ${{ matrix.browser }}
 
       - name: Download build
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: dist
           path: dist/
 
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps ${{ matrix.browser }}
-
       - name: Run Playwright
-        run: npx playwright test --project=${{ matrix.project }}
+        run: npx playwright test --project="$PROJECT"
+        env:
+          CI: 'true'
+          PROJECT: ${{ matrix.project }}
+          # Pull requests and pushes keep two retries; the nightly run fails on any flaky test.
+          PLAYWRIGHT_FAIL_ON_FLAKY: ${{ github.event_name == 'schedule' && '1' || '0' }}
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: playwright-report/
+          retention-days: 7
+
+  production-path:
+    name: Production base path (desktop Chromium)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # A project site's path on GitHub Pages; playwright.config.ts follows it and serves the
+      # build with scripts/serve-dist.mjs, which answers deep links with 404.html as Pages does.
+      VITE_BASE_PATH: /chess-trainer/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: ./.github/actions/setup
+        with:
+          engine: 'true'
+          browser: chromium
+
+      - name: Build for /chess-trainer/
+        run: npm run build
+
+      - name: Smoke test, deep link and 404 fallback
+        run: npx playwright test --project=desktop-chromium e2e/release-0-12-meta.spec.ts
         env:
           CI: 'true'
 
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: playwright-report-${{ matrix.project }}
+          name: playwright-report-production-path
           path: playwright-report/
           retention-days: 7
 
@@ -145,23 +191,17 @@ jobs:
     timeout-minutes: 15
     needs: build
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: ./.github/actions/setup
         with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - run: npm ci
+          browser: chromium
 
       - name: Download build
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: dist
           path: dist/
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
 
       - name: Compare snapshots
         run: npm run e2e:visual
@@ -170,7 +210,7 @@ jobs:
 
       - name: Upload snapshot diffs
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: visual-diffs
           path: test-results/
@@ -182,17 +222,12 @@ jobs:
     timeout-minutes: 15
     needs: build
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - run: npm ci
+      - uses: ./.github/actions/setup
 
       - name: Download build
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: dist
           path: dist/
@@ -210,7 +245,7 @@ jobs:
 
       - name: Upload Lighthouse reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: lighthouse
           path: lighthouse.json

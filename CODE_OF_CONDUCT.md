@@ -10,5 +10,8 @@ Unacceptable behaviour includes harassment, personal attacks, discriminatory rem
 others' private information. Maintainers may remove, edit or reject contributions and comments that do
 not follow this code, and may ban repeat offenders.
 
-To report a problem, open an issue or contact the maintainers privately via the email listed on the
-repository profile. Reports are handled confidentially.
+To report a problem, open an issue on the repository's
+[issue tracker](https://github.com/Real-Fruit-Snacks/chess-trainer/issues) or start a thread in its
+[Discussions](https://github.com/Real-Fruit-Snacks/chess-trainer/discussions). If the report should not
+be public, open an issue that only asks a maintainer to get in touch — no names or details — and the
+conversation will move somewhere private. Reports are handled with discretion.

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router';
 import {
   Alert,
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   Dialog,
   Field,
   Input,
@@ -15,7 +16,8 @@ import {
 import { toast } from '@/components/ui/toastStore';
 import { GameTree } from '@/chess/tree';
 import type { LongColor } from '@/chess/types';
-import { decodeShare, type SharedRepertoire } from '@/lib/shareCodes';
+import { formatDate } from '@/lib/dates';
+import { readShare, type SharedRepertoire } from '@/lib/shareCodes';
 import { useNow } from '@/lib/useNow';
 import { siteConfig } from '@/site.config';
 import { cardsFor, useRepertoire } from '@/store/repertoire';
@@ -48,10 +50,19 @@ export default function OpeningsPage() {
   useEffect(() => {
     if (!location.hash) return;
     let cancelled = false;
-    void decodeShare(location.hash).then((payload) => {
+    void readShare(location.hash).then((read) => {
       if (cancelled) return;
-      if (payload?.kind === 'repertoire') setShared(payload);
-      else toast('That link does not contain a repertoire.', { tone: 'warning' });
+      if (read.ok && read.payload.kind === 'repertoire') setShared(read.payload);
+      else {
+        toast(
+          !read.ok && read.kind === 'unsupported'
+            ? 'This browser cannot open compressed links. Ask for the repertoire as a PGN instead.'
+            : !read.ok && read.kind === 'too-large'
+              ? 'That link is too large to be a repertoire.'
+              : 'That link does not contain a repertoire.',
+          { tone: 'warning' },
+        );
+      }
       void navigate(location.pathname, { replace: true });
     });
     return () => {
@@ -132,8 +143,9 @@ export default function OpeningsPage() {
         <div>
           <h1>Openings</h1>
           <p>
-            Learn a repertoire move by move. Lines you know come back less often; lines you miss
-            come back tomorrow. Everything is spaced repetition, like flashcards.
+            Learn a repertoire move by move. Lines you know come back less often; a move you miss
+            comes back ten minutes later, then at growing intervals. Everything is spaced
+            repetition, like flashcards.
           </p>
         </div>
         <Button onClick={() => setImportOpen(true)}>Import PGN</Button>
@@ -151,14 +163,15 @@ export default function OpeningsPage() {
         {recent.length ? (
           <p className="small muted" style={{ margin: '12px 0 0' }}>
             Last session: {recent[0]?.correct}/{recent[0]?.total} moves recalled in{' '}
-            {all.find((r) => r.id === recent[0]?.repertoireId)?.name ?? 'a repertoire'}.
+            {all.find((r) => r.id === recent[0]?.repertoireId)?.name ?? 'a repertoire'}
+            {recent[0] ? ` on ${formatDate(recent[0].at)}` : ''}.
           </p>
         ) : null}
       </Card>
 
       {(['white', 'black'] as const).map((side) => (
         <section key={side} className="openings__section">
-          <h2>As {side}</h2>
+          <h2>As {side === 'white' ? 'White' : 'Black'}</h2>
           <div className="grid grid--cards">
             {all
               .filter((rep) => rep.color === side)
@@ -176,7 +189,7 @@ export default function OpeningsPage() {
                       ) : s.learned === s.total && s.total > 0 ? (
                         <Badge tone="success">All learned</Badge>
                       ) : (
-                        <Badge>{rep.level}</Badge>
+                        <Badge>{LEVEL_LABEL[rep.level] ?? rep.level}</Badge>
                       )}
                     </div>
                     <code className="small muted">{rep.line}</code>
@@ -283,29 +296,23 @@ export default function OpeningsPage() {
         </div>
       </Dialog>
 
-      <Dialog
+      <ConfirmDialog
         open={confirmDelete !== null}
+        title={`Delete “${custom.find((c) => c.id === confirmDelete)?.name ?? 'this repertoire'}”?`}
+        cancelLabel="Keep it"
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => {
+          if (!confirmDelete) return;
+          removeCustom(confirmDelete);
+          toast('Repertoire deleted.');
+        }}
         onClose={() => setConfirmDelete(null)}
-        title="Delete this repertoire?"
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmDelete(null)}>
-              Keep it
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                if (confirmDelete) removeCustom(confirmDelete);
-                setConfirmDelete(null);
-              }}
-            >
-              Delete
-            </Button>
-          </>
-        }
       >
-        <p className="muted">Its lines and your review history for them will be removed.</p>
-      </Dialog>
+        <p className="muted">
+          Its lines and your review history for them will be removed. This cannot be undone.
+        </p>
+      </ConfirmDialog>
       <Dialog
         open={shared !== null}
         onClose={() => setShared(null)}
@@ -323,9 +330,10 @@ export default function OpeningsPage() {
       >
         {shared ? (
           <p>
-            Someone shared <strong>{shared.name}</strong> ({shared.color}) with you —{' '}
-            {countMoves(shared.pgn)} moves of lines. Adding it makes a copy you can edit and train
-            like any custom repertoire.
+            Someone shared <strong>{shared.name}</strong> (for{' '}
+            {shared.color === 'white' ? 'White' : 'Black'}) with you — a main line of{' '}
+            {countMoves(shared.pgn)} moves. Adding it makes a copy you can edit and train like any
+            custom repertoire.
           </p>
         ) : null}
       </Dialog>
@@ -333,9 +341,16 @@ export default function OpeningsPage() {
   );
 }
 
+const LEVEL_LABEL: Record<string, string> = {
+  beginner: 'Beginner',
+  intermediate: 'Intermediate',
+  advanced: 'Advanced',
+};
+
+/** Full moves on the main line (the deepest line counts, not every branch). */
 function countMoves(pgn: string): number {
   try {
-    return GameTree.fromPgn(pgn).mainLine().length;
+    return Math.ceil(GameTree.fromPgn(pgn).mainLine().length / 2);
   } catch {
     return 0;
   }

@@ -1,43 +1,22 @@
 #!/usr/bin/env node
 /**
  * Engine-checks the endgame drill positions in src/features/drills/endgameDrills.ts:
- *   - "mate" / "promote" drills must be winning for the side the user plays
+ *   - "mate" / "promote" / "capture" drills must be winning for the side the user plays
  *   - "hold" drills must be drawn with best play
+ *
+ * The drills are loaded as the app loads them (through Vite), not scraped from
+ * the source, and the run fails unless it accounted for every drill: each one
+ * either has fixed positions, all checked here, or places its pieces at random
+ * (the mating drills, whose generator the unit tests cover).
  *
  * Usage:  node scripts/verify-drills.mjs [--depth 28]
  */
-import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Chess } from 'chess.js';
+import { withAppModules } from './lib/load-module.mjs';
 import { NodeEngine } from './lib/node-engine.mjs';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, '..');
-const FILE = join(ROOT, 'src', 'features', 'drills', 'endgameDrills.ts');
 
 const args = process.argv.slice(2);
 const depth = args.includes('--depth') ? Number(args[args.indexOf('--depth') + 1]) : 24;
-
-/** Minimal extraction of the drill objects (id, goal, color, positions) from the TS source. */
-function extractDrills(source) {
-  const drills = [];
-  const blocks = source.split(/\n {2}\{\n/).slice(1);
-  for (const block of blocks) {
-    const id = /id: '([^']+)'/.exec(block)?.[1];
-    const goal = /goal: '([^']+)'/.exec(block)?.[1];
-    const color = /color: '([^']+)'/.exec(block)?.[1];
-    const positionsMatch = /positions: \[([\s\S]*?)\]/.exec(block);
-    if (!id || !goal || !color) {
-      continue;
-    }
-    const positions = positionsMatch
-      ? [...positionsMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1])
-      : [];
-    drills.push({ id, goal, color, positions });
-  }
-  return drills;
-}
 
 function scoreForUser(score, sideToMove, userColor) {
   // Engine scores are from the side to move's point of view.
@@ -47,13 +26,37 @@ function scoreForUser(score, sideToMove, userColor) {
     : { type: 'cp', value: score.value * sign };
 }
 
+async function loadDrills() {
+  const drills = await withAppModules(
+    async (load) => (await load('/src/features/drills/endgameDrills.ts')).ENDGAME_DRILLS,
+  );
+  if (!Array.isArray(drills) || drills.length === 0) {
+    throw new Error('No drills found: ENDGAME_DRILLS is missing or empty.');
+  }
+  return drills;
+}
+
 async function main() {
-  const source = await readFile(FILE, 'utf8');
-  const drills = extractDrills(source);
+  const drills = await loadDrills();
+  const fixed = drills.filter((drill) => Array.isArray(drill.positions));
+  const random = drills.filter((drill) => drill.positions === 'random');
+  const unaccounted = drills.filter((d) => !fixed.includes(d) && !random.includes(d));
+  if (unaccounted.length) {
+    throw new Error(
+      `Drills with neither fixed positions nor 'random': ${unaccounted.map((d) => d.id).join(', ')}`,
+    );
+  }
+
   const engine = new NodeEngine();
   await engine.init({ hashMb: 64 });
   let failures = 0;
-  for (const drill of drills) {
+  let checked = 0;
+  for (const drill of fixed) {
+    if (drill.positions.length === 0) {
+      console.error(`✗ ${drill.id}: no positions`);
+      failures++;
+      continue;
+    }
     for (const fen of drill.positions) {
       let chess;
       try {
@@ -80,6 +83,7 @@ async function main() {
         failures++;
         continue;
       }
+      checked++;
       const score = scoreForUser(raw, sideToMove, drill.color);
       const text = score.type === 'mate' ? `mate ${score.value}` : `${score.value} cp`;
       let ok;
@@ -99,11 +103,14 @@ async function main() {
     }
   }
   engine.quit();
-  if (failures) {
-    console.error(`\n${failures} drill position(s) failed verification.`);
+  const summary =
+    `${checked} position(s) of ${fixed.length} drill(s) checked; ${random.length} drill(s) place ` +
+    `their pieces at random; ${drills.length} drill(s) in all.`;
+  if (failures || checked === 0) {
+    console.error(`\n${summary}\n${failures} drill position(s) failed verification.`);
     process.exit(1);
   }
-  console.log('\nAll drill positions verified.');
+  console.log(`\n${summary}\nAll drill positions verified.`);
 }
 
 main().catch((err) => {

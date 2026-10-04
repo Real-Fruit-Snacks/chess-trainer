@@ -72,15 +72,14 @@ export const advancedLessons5: Lesson[] = [
       {
         title: 'The defender’s toolbox',
         text:
-          'Most games are decided by the side that defends worse, not the side that attacks better. When you stand worse:\n\n' +
-          '- **Activity before material.** A pawn given for an active rook or king is usually a good deal.\n' +
-          '- **Know the drawn endings** and steer for them: rook and pawn against rook with the king in front, opposite ' +
-          'bishops, king against king.\n' +
-          '- **Check from a distance.** A rook three or more files away from the enemy king can check for ever; a rook next ' +
-          'to it gets attacked.\n' +
-          '- **Look for a fortress** — a set-up the stronger side cannot break — and for counterplay that keeps them busy.\n' +
-          '- **Make them prove it.** Do not resign in your head; the win still has to be found and executed.\n\n' +
-          'The rook endings that follow are the ones where these tools decide.',
+          'Most games are decided by the side that defends worse, not the side that attacks better. When you ' +
+          'stand worse:\n\n- **Activity before material.** A pawn given for an active rook or king is usually a ' +
+          'good deal.\n- **Know the drawn endings** and steer for them: rook endings with the king in front of ' +
+          'the pawn, opposite bishops, king against king.\n- **Check from a distance.** A rook three or more ' +
+          'files from the enemy king can check for ever; one next to it gets attacked.\n- **Look for a ' +
+          'fortress** — a set-up the stronger side cannot break.\n- **Make them prove it.** Do not resign in ' +
+          'your head; the win still has to be found.\n\nThe rook endings that follow are where these tools ' +
+          'decide.',
         fen: DEF_CHECK_DISTANCE,
         orientation: 'black',
         shapes: ['e4c4', 'c4c1:blue', 'd6:red'],
@@ -214,19 +213,20 @@ export const advancedLessons5: Lesson[] = [
           hint: 'Remove the queen first — with tempo.',
           success: 'Rxd8! Rxd8 and now Qxh6 wins the bishop for nothing. Play on.',
           failure:
-            'Qxh6? Qe7! and the queen on h6 is trapped. Trade the queens first: Rxd8 Rxd8, then take the bishop.',
+            'Qxh6? Qe7! and the queen on h6 is trapped. Take Black’s queen first: Rxd8 Rxd8, then the bishop.',
         },
       },
       {
         title: 'Now the bishop',
-        text: 'The queens are gone and the bishop on h6 is still attacked.',
+        text: 'Black’s queen is gone and the bishop on h6 is still attacked.',
         fen: ZW_TRADE_FIRST_2,
         task: {
           prompt: 'White to move.',
           moves: ['Qxh6'],
           hint: 'Free piece.',
-          success: 'Qxh6 — a piece up. The order of captures was everything.',
-          failure: 'Qxh6 takes the bishop now that the queen trade is done.',
+          success:
+            'Qxh6 — queen and rook against two rooks and a bishop, and White is winning. The order of captures was everything.',
+          failure: 'Qxh6 takes the bishop now that Black’s queen is gone.',
         },
       },
       {
@@ -258,7 +258,7 @@ export const advancedLessons5: Lesson[] = [
           moves: ['Qxd4'],
           hint: 'Take the queen.',
           success:
-            'Qxd4 and Black is a queen up. Check, then capture — the order made the difference.',
+            'Qxd4 and Black has won the queen and a knight for nothing — a lost position has become a winning one. Check, then capture: the order made the difference.',
           failure: 'Qxd4 takes the queen for free.',
         },
       },
@@ -324,11 +324,11 @@ export const advancedLessons5: Lesson[] = [
           prompt: 'White to move.',
           moves: ['Rh4'],
           reply: 'Qe5',
-          hint: 'Bring the rook to the h-file and threaten mate on h7.',
+          hint: 'Bring the rook to the h-file so that the queen checks on h7 and h8 win.',
           success:
-            'Rh4! threatens Qh7 mate. Black’s only defence, Qe5, is met by Qh7+ Kf8 Qh8+ and the queen goes. Play on.',
+            'Rh4! and Qh7+ followed by Qh8+ cannot be met. Black’s best, Qe5, runs into Qh7+ Kf8 Qh8+ Qxh8 Rxh8+ Ke7 Rxb8 and White is a rook up. Play on.',
           failure:
-            'No check works yet. Rh4! is quiet, but Qh7 mate cannot be stopped without losing the queen.',
+            'No check works yet. Rh4! is quiet, but Qh7+ and Qh8+ then cost Black the queen or the rook.',
         },
       },
       {
@@ -342,9 +342,9 @@ export const advancedLessons5: Lesson[] = [
           prompt: 'White to move.',
           moves: ['Nb5'],
           reply: 'a3',
-          hint: 'From which square does the knight give mate?',
-          success: 'Nb5! and Nd6 is mate next move — Black has no way to stop it. Play on.',
-          failure: 'Nb5! threatens Nd6 mate, and nothing can prevent it.',
+          hint: 'From which squares could the knight give mate?',
+          success: 'Nb5! and mate follows next move — Nd6 or Nc7, whatever Black does. Play on.',
+          failure: 'Nb5! threatens mate on d6 and on c7, and nothing can stop both.',
         },
       },
       {
@@ -604,8 +604,9 @@ export const advancedLessons5: Lesson[] = [
       {
         title: 'When ahead, simplify',
         text:
-          'From a Lichess game. Black is a pawn up in a rook ending — the kind of position that is easy to spoil in time ' +
-          'trouble. The practical decision: trade rooks and win the pawn ending, where nothing can go wrong.',
+          'From a Lichess game. Material is level in this rook ending, but Black’s king is far closer to ' +
+          'the centre — the kind of edge that is easy to spoil in time trouble. The practical decision: ' +
+          'trade rooks and win the pawn ending, where nothing can go wrong.',
         fen: PRACTICAL_SIMPLIFY,
         orientation: 'black',
         shapes: ['c2c4', 'g7f6:blue'],
@@ -615,9 +616,11 @@ export const advancedLessons5: Lesson[] = [
           reply: 'bxc4',
           hint: 'Trade into the ending you can count.',
           success:
-            'Rxc4! bxc4 Kf6 and the king walks to e5, d4 and c4: two connected passed pawns follow. Play on.',
+            'Rxc4! bxc4 Kf6 and the king walks to e5 and d4 and wins the c4 pawn: a pawn ending that wins ' +
+            'itself. Play on.',
           failure:
-            'Keeping the rooks may also win, but Rxc4! bxc4 Kf6 leads to a pawn ending that wins itself — the practical choice.',
+            'With the rooks on, White’s rook wins the c6 pawn back and it is a draw. Rxc4! bxc4 Kf6 leads to ' +
+            'a pawn ending that wins itself — the practical choice.',
         },
       },
       {
@@ -637,8 +640,9 @@ export const advancedLessons5: Lesson[] = [
       {
         title: 'Again: count, then trade',
         text:
-          'From a Lichess game. Black to move, a pawn up, both rooks attacked. Count the pawn ending after the rook trade ' +
-          'before you decide — it is the kind of counting that takes twenty seconds and saves twenty minutes.',
+          'From a Lichess game. Black to move, the pawns level, both rooks attacked. Count the pawn ending ' +
+          'after the rook trade before you decide — it is the kind of counting that takes twenty seconds ' +
+          'and saves twenty minutes.',
         fen: PRACTICAL_SIMPLIFY_2,
         orientation: 'black',
         shapes: ['b2c2', 'f5f4:blue'],
@@ -648,14 +652,15 @@ export const advancedLessons5: Lesson[] = [
           reply: 'Kxc2',
           hint: 'The pawn ending is won — reach it.',
           success:
-            'Rxc2! Kxc2 Kf4 and the black king takes h3 while the white king is far too slow to stop both the g-pawn and the b-pawn. Play on.',
+            'Rxc2! Kxc2 Kf4 and the black king takes h3. White’s king can win the b-pawn, but by then the ' +
+            'g-pawn is unstoppable. Play on.',
           failure:
             'Rxc2! Kxc2 Kf4 wins: Black’s king collects h3 and the g-pawn runs, and White’s a-pawn is too slow.',
         },
       },
       {
         title: 'The king goes forward',
-        text: 'Black is a pawn up in the pawn ending and the white king is on c2.',
+        text: 'The pawns are level, but Black’s king stands next to the h3 pawn and the white king is on c2.',
         fen: fenAfter('Rxc2 Kxc2', PRACTICAL_SIMPLIFY_2),
         orientation: 'black',
         task: {
@@ -669,23 +674,27 @@ export const advancedLessons5: Lesson[] = [
       {
         title: 'Do not panic in the pawn race',
         text:
-          'From a Lichess game. Both sides have a passed pawn; Black’s d-pawn is closer. In time trouble the hand plays ' +
-          'Kxd3? or Ke2? and draws. Count instead: who queens first, and with check?',
+          'From a Lichess game. Both sides have a passed pawn and Black’s d-pawn is closer to queening, ' +
+          'which in time trouble looks frightening. Count instead: White’s king is near enough to catch ' +
+          'the d-pawn, and Black’s king is too far from the b-pawn. Keep both facts true and the game is won.',
         fen: PRACTICAL_CALM,
         shapes: ['b4b5', 'd3d2:red'],
         task: {
-          prompt: 'White to move.',
-          moves: ['b5'],
-          reply: 'd2',
-          hint: 'Your pawn runs; the black pawn can be stopped by the king.',
+          prompt: 'White to move: stay calm and keep the win.',
+          // Every move that keeps the king in touch with the d-pawn wins; only a step to the g-file loses.
+          moves: ['b5', 'Ke3', 'Kf3', 'Ke1', 'Kf1', 'h4+', 'h3'],
+          hint: 'The king only has to stay near the d-pawn; the black king cannot reach the b-pawn.',
           success:
-            'b5! d2 Ke2 — the king stops the d-pawn while the b-pawn cannot be caught. Play on.',
-          failure: 'b5! runs first: after ...d2 Ke2 the d-pawn is stopped and the b-pawn queens.',
+            'Calm wins: the white king stays in reach of the d-pawn (Ke2 or Kxd3 stops it) and the b-pawn ' +
+            'cannot be caught. b5 is the most direct: after ...d2 Ke2 it is over.',
+          failure:
+            'That walks the king away from the d-pawn: ...d2 and ...d1=Q, and Black wins the race. Count ' +
+            'first — the king on f2 is close enough to the d-pawn, so keep it there.',
         },
       },
       {
         title: 'Stop the runner',
-        text: 'Black pushed to d2. One king move ends it.',
+        text: 'Say White pushed b5 and Black ran with ...d2. One king move ends it.',
         fen: fenAfter('b5 d2', PRACTICAL_CALM),
         task: {
           prompt: 'White to move.',
@@ -721,16 +730,13 @@ export const advancedLessons5: Lesson[] = [
       {
         title: 'A piece the defender cannot trade',
         text:
-          'With bishops of opposite colour, each side has a piece the other **cannot oppose**: nothing the defender owns ' +
-          'can ever contest the squares of the attacker’s bishop. In the endgame that produces draws — the defender ' +
-          'simply blockades the pawns on the colour of their own bishop. In the middlegame, with queens and rooks on the ' +
-          'board, it is the attacker’s dream:\n\n' +
-          '- **Attack on your bishop’s colour.** Every square it covers is effectively yours.\n' +
-          '- **Put the pawns on the other colour**, so they do not block the bishop and the enemy bishop has targets to ' +
-          'hit only where it does not matter.\n' +
-          '- **The initiative counts double** — the defender’s bishop cannot come to the rescue, so the first attack usually ' +
-          'lands.\n\n' +
-          'From a Lichess game: White’s light-squared bishop pins f7 to the king, and Black’s dark bishop can do nothing about g6.',
+          'With bishops of opposite colour, each side has a piece the other **cannot oppose**. In the endgame ' +
+          'that means draws: the defender blockades the pawns on the colour of their own bishop. In the ' +
+          'middlegame, with queens and rooks on the board, it is the attacker’s dream:\n\n- **Attack on your ' +
+          'bishop’s colour.** Every square it covers is effectively yours.\n- **Put your pawns on the other ' +
+          'colour**, so they do not block your bishop.\n- **The initiative counts double** — the defender’s ' +
+          'bishop cannot come to the rescue, so the first attack usually lands.\n\nFrom a Lichess game: White’s ' +
+          'light-squared bishop pins f7 to the king, and Black’s dark bishop can do nothing about g6.',
         fen: OPP_PIN,
         shapes: ['b3f7:red', 'g5g6', 'e7:blue'],
       },
@@ -773,9 +779,9 @@ export const advancedLessons5: Lesson[] = [
           moves: ['Rxh6+'],
           reply: 'Kg7',
           hint: 'Open the king with a sacrifice on a light square.',
-          success:
-            'Rxh6+! Kg7 (Qxh6 Qxf6+ wins the queen) and now Rxf6 wins the queen anyway. Play on.',
-          failure: 'Rxh6+! opens the king: Qxh6 Qxf6+ or Kg7 Rxf6 — either way the queen falls.',
+          success: 'Rxh6+! Kg7 (Qxh6 Qxh6 is mate) and now Rxf6 wins the queen anyway. Play on.',
+          failure:
+            'Rxh6+! opens the king: Qxh6 Qxh6 mate, or Kg7 Rxf6 — either way the queen falls.',
         },
       },
       {
@@ -786,8 +792,10 @@ export const advancedLessons5: Lesson[] = [
           prompt: 'White to move.',
           moves: ['Rxf6'],
           hint: 'The rook is protected by the queen.',
-          success: 'Rxf6 and the queen is gone: Kxf6 Qxd6+ next. The light squares decided.',
-          failure: 'Rxf6 wins the queen; after Kxf6 comes Qxd6+.',
+          success:
+            'Rxf6 and the queen is gone — the king cannot take back because the queen on e6 guards f6, and Rxf6 Qxc8 wins even more. The light squares decided.',
+          failure:
+            'Rxf6 wins the queen; the rook is protected by the queen on e6, so the king cannot take back.',
         },
       },
       {

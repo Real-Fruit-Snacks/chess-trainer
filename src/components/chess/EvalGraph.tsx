@@ -68,22 +68,36 @@ export function EvalGraph({
     onSelect(Math.max(0, Math.min(wins.length - 1, ply)));
   };
 
+  const current = Math.max(0, Math.min(wins.length - 1, currentPly));
+  const chance = Math.round((wins[current] ?? 0.5) * 100);
+  const judgement = current > 0 ? judgements?.[current - 1] : undefined;
+  const valueText = `${current === 0 ? 'Start position' : `After ${labelFor(current)}`}, White ${chance}%${judgement ? `, ${judgement}` : ''}`;
+
   return (
     <svg
       className="evalgraph"
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-      role="img"
+      role="slider"
       aria-labelledby={titleId}
+      aria-valuemin={0}
+      aria-valuemax={wins.length - 1}
+      aria-valuenow={current}
+      aria-valuetext={valueText}
+      aria-orientation="horizontal"
       tabIndex={0}
       onClick={(e) => pick(e.clientX, e.currentTarget)}
       onKeyDown={(e) => {
-        if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          onSelect(Math.max(0, currentPly - 1));
-        } else if (e.key === 'ArrowRight') {
-          e.preventDefault();
-          onSelect(Math.min(wins.length - 1, currentPly + 1));
-        }
+        // Handled keys stop here: the page's own arrow-key handler must not step a second ply.
+        let next: number | null = null;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = Math.max(0, current - 1);
+        else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+          next = Math.min(wins.length - 1, current + 1);
+        } else if (e.key === 'Home') next = 0;
+        else if (e.key === 'End') next = wins.length - 1;
+        if (next === null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onSelect(next);
       }}
     >
       <title id={titleId}>

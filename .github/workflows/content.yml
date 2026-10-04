@@ -1,0 +1,99 @@
+name: Content
+
+# Stockfish checks of the chess content: every lesson task and scripted reply, every
+# endgame study (accepted moves and unlisted duals), every repertoire move and every
+# drill position. Slow, so they run when the content or its checks change, weekly
+# (a new engine or chess.js can disagree with old content), and on demand.
+on:
+  pull_request:
+    paths:
+      - 'src/features/learn/lessons/**'
+      - 'src/features/learn/model.ts'
+      - 'src/features/studies/**'
+      - 'src/features/openings/repertoires.ts'
+      - 'src/features/drills/endgameDrills.ts'
+      - 'scripts/verify-lessons.mjs'
+      - 'scripts/verify-studies.mjs'
+      - 'scripts/verify-repertoires.mjs'
+      - 'scripts/verify-drills.mjs'
+      - 'scripts/lib/node-engine.mjs'
+      - 'scripts/lib/load-module.mjs'
+      - 'scripts/setup-engine.mjs'
+      - '.github/workflows/content.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/features/learn/lessons/**'
+      - 'src/features/learn/model.ts'
+      - 'src/features/studies/**'
+      - 'src/features/openings/repertoires.ts'
+      - 'src/features/drills/endgameDrills.ts'
+      - 'scripts/verify-lessons.mjs'
+      - 'scripts/verify-studies.mjs'
+      - 'scripts/verify-repertoires.mjs'
+      - 'scripts/verify-drills.mjs'
+      - 'scripts/lib/node-engine.mjs'
+      - 'scripts/lib/load-module.mjs'
+      - 'scripts/setup-engine.mjs'
+      - '.github/workflows/content.yml'
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: content-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lessons:
+    name: Lessons (every task and scripted reply)
+    runs-on: ubuntu-latest
+    # About 21 minutes on one core for 372 tasks at depth 18.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup
+        with:
+          engine: 'true'
+      - name: Verify the lessons with Stockfish
+        run: npm run lessons:verify
+
+  studies:
+    name: Endgame studies (moves and duals)
+    runs-on: ubuntu-latest
+    # About ten minutes on a two-core runner; the margin is for a slow day.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup
+        with:
+          engine: 'true'
+      - name: Verify the studies with Stockfish
+        run: npm run studies:verify
+
+  repertoires:
+    name: Opening repertoires (every move)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup
+        with:
+          engine: 'true'
+      - name: Verify the repertoires with Stockfish
+        run: npm run repertoires:verify
+
+  drills:
+    name: Endgame drill positions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup
+        with:
+          engine: 'true'
+      - name: Verify the drill positions with Stockfish
+        run: npm run drills:verify -- --depth 24

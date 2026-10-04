@@ -1,12 +1,17 @@
 import { Chess } from 'chess.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { Score } from '@/engine/uci';
 import {
   gameTitle,
+  isAcceptableAlternative,
   isOwnPuzzleId,
   type MainLine,
+  MIN_OWN_PUZZLE_GAP_CP,
   ownPuzzleFromMoment,
   ownPuzzleId,
   ownPuzzlesFromReview,
+  scoreCp,
+  verifyOwnPuzzleMove,
 } from './ownPuzzles';
 
 /** Scholar's mate: Black's 3...Nf6?? is the blunder; the fix is 3...g6 (or Qe7). */
@@ -69,6 +74,74 @@ describe('ownPuzzleFromMoment', () => {
       META,
     );
     expect(illegal).toBeNull();
+  });
+
+  it('needs a clear gap to the second-best move when the review measured one', () => {
+    const moment = {
+      ply: 6,
+      san: 'Nf6',
+      mover: 'black' as const,
+      judgement: 'blunder' as const,
+      loss: 0.9,
+      bestUci: 'g7g6',
+    };
+    // g6 and Qe7 both parry the mate: no single answer, no puzzle.
+    expect(ownPuzzleFromMoment(SCHOLAR, { ...moment, bestGapCp: 20 }, META)).toBeNull();
+    expect(
+      ownPuzzleFromMoment(SCHOLAR, { ...moment, bestGapCp: MIN_OWN_PUZZLE_GAP_CP }, META),
+    ).toMatchObject({ verified: true });
+    // Without a measurement the puzzle is made, and the trainer checks alternatives later.
+    expect(ownPuzzleFromMoment(SCHOLAR, moment, META)).toMatchObject({ verified: false });
+    expect(ownPuzzleFromMoment(SCHOLAR, { ...moment, bestGapCp: null }, META)).toMatchObject({
+      verified: false,
+    });
+  });
+});
+
+describe('verifyOwnPuzzleMove', () => {
+  const fen = SCHOLAR.fens[5] ?? '';
+  const engineWith = (lines: { pv: string[]; score: Score }[], bestmove = lines[0]?.pv[0]) => ({
+    search: vi.fn(() => ({
+      id: 1,
+      stop: () => undefined,
+      result: Promise.resolve({
+        bestmove: { move: bestmove ?? null },
+        lines: new Map(lines.map((l, i) => [i + 1, { depth: 12, multipv: i + 1, ...l }])),
+        stopped: false,
+      }),
+    })),
+  });
+
+  it('accepts a move within 50 cp of the best and rejects a clearly worse one', async () => {
+    const close = engineWith([
+      { pv: ['g7g6'], score: { type: 'cp', value: -30 } },
+      { pv: ['d8e7'], score: { type: 'cp', value: -70 } },
+    ]);
+    expect(await verifyOwnPuzzleMove(close, fen, 'g7g6', 'd8e7')).toBe(true);
+    expect(close.search).toHaveBeenCalledWith(
+      expect.objectContaining({ fen, depth: 12, multipv: 2, searchmoves: ['g7g6', 'd8e7'] }),
+    );
+    const worse = engineWith([
+      { pv: ['g7g6'], score: { type: 'cp', value: -30 } },
+      { pv: ['g8f6'], score: { type: 'mate', value: -1 } },
+    ]);
+    expect(await verifyOwnPuzzleMove(worse, fen, 'g7g6', 'g8f6')).toBe(false);
+  });
+
+  it('accepts the played move when the engine ranks it first, and fails safe otherwise', async () => {
+    const better = engineWith([
+      { pv: ['d8e7'], score: { type: 'cp', value: -20 } },
+      { pv: ['g7g6'], score: { type: 'cp', value: -30 } },
+    ]);
+    expect(await verifyOwnPuzzleMove(better, fen, 'g7g6', 'd8e7')).toBe(true);
+    const onlyBest = engineWith([{ pv: ['g7g6'], score: { type: 'cp', value: -30 } }]);
+    expect(await verifyOwnPuzzleMove(onlyBest, fen, 'g7g6', 'd8e7')).toBe(false);
+    expect(isAcceptableAlternative(100, 50)).toBe(true);
+    expect(isAcceptableAlternative(100, 49)).toBe(false);
+    expect(scoreCp({ type: 'mate', value: 2 })).toBeGreaterThan(
+      scoreCp({ type: 'cp', value: 900 }),
+    );
+    expect(scoreCp({ type: 'mate', value: -1 })).toBeLessThan(scoreCp({ type: 'cp', value: -900 }));
   });
 });
 

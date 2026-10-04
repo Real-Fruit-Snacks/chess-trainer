@@ -2,8 +2,8 @@ import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '@/lib/random';
 import { ENDGAME_DRILLS } from './endgameDrills';
-import { countMaterial, generateMatePosition } from './positions';
-import { drillScore } from './useDrillGame';
+import { canStillMate, countMaterial, generateMatePosition, isAttackedNow } from './positions';
+import { adjudicatePosition, drillScore, requestedPosition } from './useDrillGame';
 import { generateMovesTask, generateRecallTask, taskFromPuzzle, trackPieces } from './vision';
 
 describe('endgame drills', () => {
@@ -52,6 +52,16 @@ describe('endgame drills', () => {
     }
   });
 
+  it('starts from a random fixed position unless ?pos= names one', () => {
+    const drill = ENDGAME_DRILLS.find((d) => d.id === 'kp-run');
+    if (!drill || drill.positions === 'random') throw new Error('fixture');
+    expect(requestedPosition(drill, null)).toBeUndefined();
+    expect(requestedPosition(drill, '1')).toBe(drill.positions[1]);
+    expect(requestedPosition(drill, '0')).toBe(drill.positions[0]);
+    expect(requestedPosition(drill, '99')).toBeUndefined();
+    expect(requestedPosition(drill, 'x')).toBeUndefined();
+  });
+
   it('scores fewer moves higher and holds as a flat success', () => {
     const mate = ENDGAME_DRILLS.find((d) => d.goal === 'mate');
     const hold = ENDGAME_DRILLS.find((d) => d.goal === 'hold');
@@ -59,6 +69,166 @@ describe('endgame drills', () => {
     expect(drillScore(mate, 10, true)).toBeGreaterThan(drillScore(mate, 20, true));
     expect(drillScore(mate, 10, false)).toBe(0);
     expect(drillScore(hold, 30, true)).toBe(100);
+  });
+});
+
+describe('drill adjudication', () => {
+  type Pending = Parameters<typeof adjudicatePosition>[0]['pending'];
+  const judge = (
+    goal: 'mate' | 'promote' | 'hold' | 'capture',
+    color: 'white' | 'black',
+    startFen: string,
+    fen: string,
+    lastMover: 'white' | 'black',
+    pending: Pending = null,
+  ) => {
+    const chess = new Chess(fen);
+    return adjudicatePosition({
+      goal,
+      color,
+      lastMover,
+      fen,
+      status: {
+        over: chess.isGameOver(),
+        reason: chess.isCheckmate() ? 'checkmate' : chess.isStalemate() ? 'stalemate' : null,
+      },
+      pending,
+      startFen,
+    });
+  };
+  const promoted = { to: 'e8', promotion: 'q', capture: false } as const;
+
+  it('wins a promotion at once when nothing can take the new piece', () => {
+    const start = '8/4P3/8/4K3/8/8/8/k7 w - - 0 1';
+    expect(
+      judge('promote', 'white', start, '4Q3/8/8/4K3/8/8/8/k7 b - - 0 1', 'white', promoted),
+    ).toEqual({ outcome: 'won', reason: 'Promoted to a queen — and it is safe!' });
+  });
+
+  it('does not reward a promotion that is taken at once (e8=Q?? Rxe8)', () => {
+    const start = '1r5k/4P3/6K1/8/8/8/R7/8 w - - 0 1';
+    // The rook can take the new queen: no verdict until the reply.
+    expect(
+      judge('promote', 'white', start, '1r2Q2k/8/6K1/8/8/8/R7/8 b - - 0 1', 'white', promoted),
+    ).toBeNull();
+    const taken = judge(
+      'promote',
+      'white',
+      start,
+      '4r2k/8/6K1/8/8/8/R7/8 w - - 0 2',
+      'black',
+      promoted,
+    );
+    expect(taken?.outcome).toBe('lost');
+    expect(taken?.reason).toMatch(/new queen was taken/);
+    // With another pawn still on the board the drill goes on.
+    const twoPawns = '1r5k/4P3/6K1/P7/8/8/8/8 w - - 0 1';
+    expect(
+      judge('promote', 'white', twoPawns, '4r2k/8/6K1/P7/8/8/8/8 w - - 0 2', 'black', promoted),
+    ).toBeNull();
+  });
+
+  it('wins once an attacked promotion survives the reply', () => {
+    const start = '1r6/4P3/8/8/8/8/8/K6k w - - 0 1';
+    const pending = { to: 'e8', promotion: 'n', capture: false } as const;
+    expect(
+      judge('promote', 'white', start, '1r2N3/8/8/8/8/8/8/K6k b - - 0 1', 'white', pending),
+    ).toBeNull();
+    expect(
+      judge('promote', 'white', start, '1r2N3/8/8/8/8/8/7k/K7 w - - 1 2', 'black', pending),
+    ).toEqual({ outcome: 'won', reason: 'Promoted to a knight — and it survived!' });
+  });
+
+  it('loses a promotion drill with the last pawn, even with a rook left', () => {
+    const start = '1r5k/4P3/6K1/8/8/8/R7/8 w - - 0 1';
+    expect(judge('promote', 'white', start, '7k/4r3/6K1/8/8/8/R7/8 w - - 0 3', 'black')).toEqual({
+      outcome: 'lost',
+      reason: 'The pawn was captured.',
+    });
+  });
+
+  it('keeps a holding drill going when the attacker promotes or trades', () => {
+    const philidor = '4k3/R7/1r6/4PK2/8/8/8/8 b - - 0 1';
+    // White queened: pawns and pieces still number two, so nothing is decided.
+    expect(
+      judge('hold', 'black', philidor, '1r2Q3/R7/5K2/8/8/8/8/7k b - - 0 20', 'white'),
+    ).toBeNull();
+    // Rooks traded: material went down on both sides, the balance is unchanged.
+    expect(judge('hold', 'black', philidor, '8/8/8/2k1PK2/8/8/8/8 w - - 0 3', 'white')).toBeNull();
+  });
+
+  it('ends a holding drill when material is won and kept', () => {
+    const philidor = '4k3/R7/1r6/4PK2/8/8/8/8 b - - 0 1';
+    // The new queen is taken by a rook nothing can take back: the pawn is gone for good.
+    expect(
+      judge('hold', 'black', philidor, '4r3/R7/5K2/8/8/8/8/7k w - - 0 21', 'black', {
+        to: 'e8',
+        promotion: null,
+        capture: true,
+      }),
+    ).toEqual({ outcome: 'won', reason: 'The pawn is gone — the draw is safe.' });
+    // Rxe5 with the king beside it: the reply decides.
+    const rxe5 = { to: 'e5', promotion: null, capture: true } as const;
+    const taken = '4k3/R7/8/4rK2/8/8/8/8 w - - 0 2';
+    expect(judge('hold', 'black', philidor, taken, 'black', rxe5)).toBeNull();
+    expect(
+      judge('hold', 'black', philidor, '4k3/R7/8/4K3/8/8/8/8 b - - 0 2', 'white', rxe5),
+    ).toBeNull();
+    expect(
+      judge('hold', 'black', philidor, '4k3/R7/6K1/4r3/8/8/8/8 b - - 1 2', 'white', rxe5),
+    ).toMatchObject({ outcome: 'won' });
+    // One of two pawns falls: in this ending that is the draw.
+    const twoPawns = '8/8/8/8/PP6/5k2/8/K3b3 b - - 0 1';
+    expect(
+      judge('hold', 'black', twoPawns, '8/8/8/8/Pb6/5k2/8/K7 w - - 0 2', 'black', {
+        to: 'b4',
+        promotion: null,
+        capture: true,
+      }),
+    ).toEqual({ outcome: 'won', reason: 'You won a pawn — the draw is safe.' });
+  });
+
+  it('wins a capture drill with the last piece, and loses it with the queen', () => {
+    const start = '1k6/1r6/2K5/8/8/8/8/4Q3 w - - 0 1';
+    expect(
+      judge('capture', 'white', start, 'k7/8/2K5/8/8/8/1Q6/8 b - - 0 5', 'white', {
+        to: 'b2',
+        promotion: null,
+        capture: true,
+      }),
+    ).toEqual({ outcome: 'won', reason: 'Won the last piece — the rest is elementary.' });
+    expect(judge('capture', 'white', start, '1k6/8/2K5/8/8/8/8/1r6 w - - 0 5', 'black')).toEqual({
+      outcome: 'lost',
+      reason: 'Your piece was lost.',
+    });
+  });
+
+  it('lets the two-rooks drill continue with one rook, and ends it with no mating material', () => {
+    const start = '8/8/8/3k4/8/8/R6R/4K3 w - - 0 1';
+    const oneRook = '8/8/8/8/3k4/8/7R/4K3 w - - 0 2';
+    expect(judge('mate', 'white', start, oneRook, 'black')).toBeNull();
+    const bishopOnly = '8/8/8/8/3k4/8/7B/4K3 w - - 0 2';
+    expect(judge('mate', 'white', start, bishopOnly, 'black')).toMatchObject({ outcome: 'lost' });
+    expect(canStillMate('8/8/8/8/3k4/8/7R/4K3 w - - 0 2', 'white')).toBe(true);
+    expect(canStillMate('8/8/8/8/3k4/8/2B1N3/4K3 w - - 0 2', 'white')).toBe(true);
+    expect(canStillMate('8/8/8/8/3k4/8/2BB4/4K3 w - - 0 2', 'white')).toBe(true);
+    expect(canStillMate('8/8/8/8/3k4/8/2B1B3/4K3 w - - 0 2', 'white')).toBe(false); // same colour
+    expect(canStillMate('8/8/8/8/3k4/8/2N1N3/4K3 w - - 0 2', 'white')).toBe(false);
+    expect(canStillMate('8/8/8/8/3k4/8/4P3/4K3 w - - 0 2', 'white')).toBe(true);
+    expect(isAttackedNow('4Q3/3k4/8/4K3/8/8/8/8 b - - 0 1', 'e8')).toBe(true);
+    expect(isAttackedNow('4Q3/3k1K2/8/8/8/8/8/8 b - - 0 1', 'e8')).toBe(false); // defended
+    expect(isAttackedNow('4Q3/8/8/4K3/8/8/8/k7 b - - 0 1', 'e8')).toBe(false);
+  });
+
+  it('ends on the board result: mate wins, a draw wins only the holder', () => {
+    const start = '8/8/8/3k4/8/8/4Q3/4K3 w - - 0 1';
+    const mate = 'k1Q5/8/K7/8/8/8/8/8 b - - 0 1';
+    expect(judge('mate', 'white', start, mate, 'white')).toMatchObject({ outcome: 'won' });
+    const stalemate = 'k7/2Q5/K7/8/8/8/8/8 b - - 0 1';
+    const drawn = judge('mate', 'white', start, stalemate, 'white');
+    expect(drawn?.outcome).toBe('lost');
+    expect(drawn?.reason).toMatch(/Stalemate/);
+    expect(judge('hold', 'black', start, stalemate, 'white')).toMatchObject({ outcome: 'won' });
   });
 });
 

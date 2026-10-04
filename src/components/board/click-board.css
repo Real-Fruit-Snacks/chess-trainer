@@ -71,10 +71,22 @@
   background: rgba(20, 30, 25, 0.35);
 }
 
+/* A white ring edged in near-black reads on light and dark squares in every theme. */
 .clickboard__square:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: -3px;
+  outline: 3px solid #fff;
+  outline-offset: -5px;
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.9),
+    inset 0 0 0 7px rgba(0, 0, 0, 0.9);
   z-index: 1;
+}
+
+@media (forced-colors: active) {
+  .clickboard__square:focus-visible {
+    outline: 3px solid Highlight;
+    outline-offset: -3px;
+    box-shadow: none;
+  }
 }
 
 .clickboard piece {

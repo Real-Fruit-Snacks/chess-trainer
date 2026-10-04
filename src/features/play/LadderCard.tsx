@@ -1,6 +1,7 @@
+import { useEffect } from 'react';
 import { Button, Card } from '@/components/ui';
 import { useProgress } from '@/store/progress';
-import { buildEngineLadder } from './ladder';
+import { buildEngineLadder, describeRung } from './ladder';
 
 /**
  * The engine ladder on the Play page: which levels are beaten, which one is
@@ -8,22 +9,30 @@ import { buildEngineLadder } from './ladder';
  */
 export function LadderCard({ onPlay }: { onPlay: (levelId: number) => void }) {
   const games = useProgress((s) => s.games);
-  const ladder = buildEngineLadder(games);
+  const knownHeight = useProgress((s) => s.ladderHeight);
+  const setLadderHeight = useProgress((s) => s.setLadderHeight);
+  const ladder = buildEngineLadder(games, knownHeight);
+  // Remember the height so climbed rungs outlive the capped game list.
+  useEffect(() => {
+    if (ladder.height > knownHeight) setLadderHeight(ladder.height);
+  }, [ladder.height, knownHeight, setLadderHeight]);
   return (
     <Card data-testid="engine-ladder">
       <p className="card__eyebrow">Engine ladder</p>
-      <div className="ladder__rungs" role="list" aria-label="Engine levels">
+      {/* role="list": Safari drops the list semantics of a list styled without markers. */}
+      <ol className="engine-ladder__rungs" role="list" aria-label="Ladder rungs">
         {ladder.rungs.map((rung) => (
-          <span
+          <li
             key={rung.level.id}
-            role="listitem"
-            className={`ladder__rung ladder__rung--${rung.status}`}
-            title={`Level ${rung.level.id} · ${rung.level.name}: ${rung.wins} wins, ${rung.draws} draws, ${rung.losses} losses`}
+            className={`engine-ladder__rung engine-ladder__rung--${rung.status}`}
+            aria-current={rung.status === 'current' ? 'step' : undefined}
+            data-status={rung.status}
           >
-            {rung.level.id}
-          </span>
+            <span aria-hidden="true">{rung.level.id}</span>
+            <span className="sr-only">{describeRung(rung)}</span>
+          </li>
         ))}
-      </div>
+      </ol>
       <p className="small muted" style={{ margin: '8px 0' }} data-testid="ladder-reason">
         {ladder.reason}
       </p>

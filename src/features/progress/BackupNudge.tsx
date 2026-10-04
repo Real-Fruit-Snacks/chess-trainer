@@ -1,24 +1,58 @@
 import { Alert, Button } from '@/components/ui';
-import { backupStatus } from '@/lib/backup';
+import { BACKUP_SNOOZE_DAYS, backupStatus } from '@/lib/backup';
+import { localDateKey } from '@/lib/dates';
+import { DAY_MS } from '@/lib/srs';
+import { useGames } from '@/store/games';
 import { useProgress } from '@/store/progress';
-import { useSettings } from '@/store/settings';
+import { useRepertoire } from '@/store/repertoire';
 import { useBackupActions } from '@/features/settings/useBackupActions';
+
+/** "14 days ago", "yesterday", "today". */
+function describeDays(days: number): string {
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return `${days} days ago`;
+}
 
 /**
  * A reminder to back up after a stretch of training without one. Progress
- * lives only on this device, so a lost phone is lost progress.
+ * lives only on this device, so a lost phone is lost progress. Shown once
+ * there is anything worth keeping — puzzles, lessons, openings or games — and
+ * "Later" hides it for a week.
  */
 export function BackupNudge({ compact = false }: { compact?: boolean }) {
   const ratedAttempts = useProgress((s) => s.ratedAttempts);
-  const lastBackupAt = useSettings((s) => s.lastBackupAt);
-  const lastBackupAttempts = useSettings((s) => s.lastBackupAttempts);
+  const lastBackupAt = useProgress((s) => s.lastBackupAt);
+  const lastBackupAttempts = useProgress((s) => s.lastBackupAttempts);
+  const backupSnoozedUntil = useProgress((s) => s.backupSnoozedUntil);
+  const trainingDays = useProgress((s) => s.trainingDays.length);
+  const lastTrainingDay = useProgress((s) => s.trainingDays[s.trainingDays.length - 1] ?? null);
+  const lessonsCompleted = useProgress(
+    (s) => Object.values(s.lessons).filter((l) => l.completedAt !== null).length,
+  );
+  const engineGames = useProgress((s) => s.games.length);
+  const importedGames = useGames((s) => Object.keys(s.games).length);
+  const repertoireCards = useRepertoire((s) => Object.keys(s.cards).length);
+  const snooze = useProgress((s) => s.snoozeBackup);
   const actions = useBackupActions();
-  const status = backupStatus(ratedAttempts, lastBackupAt, lastBackupAttempts);
+  const status = backupStatus(
+    { ratedAttempts, lastBackupAt, lastBackupAttempts, backupSnoozedUntil },
+    {
+      trainingDays,
+      lessonsCompleted,
+      repertoireCards,
+      games: engineGames + importedGames,
+      activeSinceBackup:
+        lastBackupAt === null ||
+        (lastTrainingDay !== null && lastTrainingDay > localDateKey(new Date(lastBackupAt))),
+    },
+  );
   if (!status.due) return null;
+  const attempts = `${status.attemptsSince} rated puzzle attempt${status.attemptsSince === 1 ? '' : 's'}`;
   const since =
     status.daysSince === null
-      ? `You have solved ${status.attemptsSince} rated puzzles and never made a backup.`
-      : `${status.attemptsSince} rated puzzles since your last backup, ${status.daysSince} days ago.`;
+      ? `You have never made a backup${status.attemptsSince > 0 ? ` (${attempts} so far)` : ''}.`
+      : `Your last backup was ${describeDays(status.daysSince)}${status.attemptsSince > 0 ? `, ${attempts} ago` : ''}.`;
   return (
     <Alert tone="info">
       <div className="row row--between" data-testid="backup-nudge">
@@ -44,6 +78,14 @@ export function BackupNudge({ compact = false }: { compact?: boolean }) {
             onClick={actions.download}
           >
             Export
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => snooze(Date.now() + BACKUP_SNOOZE_DAYS * DAY_MS)}
+            data-testid="backup-later"
+          >
+            Later
           </Button>
         </span>
       </div>

@@ -107,6 +107,40 @@ function toFen(pieces: { square: Square; piece: string }[], turn: 'w' | 'b'): Fe
   return `${rows.join('/')} ${turn} - - 0 1`;
 }
 
+/**
+ * Whether `color` still has material that can force mate against a lone king:
+ * a queen, a rook, a pawn (it may promote), two bishops on opposite colours,
+ * or bishop and knight. Two knights (or one minor piece) cannot. Used when a
+ * mating drill loses a piece: two rooks down to one is still a win.
+ */
+export function canStillMate(fen: Fen, color: 'white' | 'black'): boolean {
+  const chess = new Chess(fen);
+  const own = chess
+    .board()
+    .flat()
+    .filter((p) => p !== null && p.color === (color === 'white' ? 'w' : 'b') && p.type !== 'k');
+  const has = (type: string) => own.some((p) => p?.type === type);
+  if (has('q') || has('r') || has('p')) return true;
+  const bishops = own.filter((p) => p?.type === 'b');
+  const knights = own.filter((p) => p?.type === 'n');
+  if (bishops.length >= 1 && knights.length >= 1) return true;
+  if (bishops.length >= 2) {
+    const colours = new Set(bishops.map((p) => (p ? squareColor(p.square) : 0)));
+    return colours.size === 2;
+  }
+  return false;
+}
+
+/**
+ * Whether the piece on `square` can be captured by the side to move. A
+ * promotion is only a win once the new piece survives — or stands where nothing
+ * can take it.
+ */
+export function isAttackedNow(fen: Fen, square: Square): boolean {
+  const chess = new Chess(fen);
+  return chess.moves({ verbose: true }).some((m) => m.to === square && m.captured !== undefined);
+}
+
 export interface MaterialCount {
   white: number;
   black: number;

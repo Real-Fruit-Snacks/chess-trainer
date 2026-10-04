@@ -6,6 +6,9 @@
  *   - index.json references existing chunk files and the counts match
  *   - every puzzle has a legal FEN and a fully legal move sequence
  *   - every puzzle's rating falls within its bucket
+ *   - each bucket's chunks are the round-robin deal of its puzzles (sorted by
+ *     rating, puzzle i in chunk i mod n), so every chunk — the precached first
+ *     one above all — samples the whole band; the index records each span
  *   - IDs are unique across chunks
  *   - the solution has at least one move for the solver
  *
@@ -19,6 +22,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Chess } from 'chess.js';
 import { engineInstalled, NodeEngine } from './lib/node-engine.mjs';
+import { dealChunks } from './lib/puzzle-index.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -56,19 +60,43 @@ async function structural() {
 
   for (const bucket of index.buckets) {
     const puzzles = [];
-    for (const file of bucketFiles(bucket)) {
+    const chunks = [];
+    const files = bucketFiles(bucket);
+    if (bucket.ranges && bucket.ranges.length !== files.length) {
+      fail(`${bucket.id}: ${bucket.ranges.length} chunk ranges for ${files.length} files`);
+    }
+    for (const [i, file] of files.entries()) {
       try {
         const chunk = JSON.parse(await readFile(join(DIR, file), 'utf8'));
         if (chunk.length > (index.chunk ?? Infinity)) {
           fail(`${file}: ${chunk.length} puzzles in a chunk of ${index.chunk}`);
         }
+        const range = bucket.ranges?.[i];
+        if (range) {
+          const ratings = chunk.map((p) => p.rating);
+          if (Math.min(...ratings) !== range.min || Math.max(...ratings) !== range.max) {
+            fail(
+              `${file}: ratings span ${Math.min(...ratings)}–${Math.max(...ratings)}, index says ${range.min}–${range.max}`,
+            );
+          }
+        }
         puzzles.push(...chunk);
+        chunks.push(chunk);
       } catch (err) {
         fail(`${file}: cannot read (${err.message})`);
       }
     }
     if (puzzles.length !== bucket.count) {
       fail(`${bucket.id}: index says ${bucket.count} puzzles, files have ${puzzles.length}`);
+    }
+    if (bucket.files?.length > 1 && chunks.length === files.length) {
+      const dealt = dealChunks(puzzles, index.chunk ?? 500);
+      const same =
+        dealt.length === chunks.length &&
+        dealt.every((chunk, i) => JSON.stringify(chunk) === JSON.stringify(chunks[i]));
+      if (!same) {
+        fail(`${bucket.id}: chunks are not the round-robin deal — run npm run puzzles:reindex`);
+      }
     }
     for (const p of puzzles) {
       total++;

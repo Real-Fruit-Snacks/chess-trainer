@@ -2,21 +2,27 @@ import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
 import {
   canStillMate,
+  castlingKingDest,
   checkedKingSquare,
   gameStatus,
   isPromotionMove,
+  isPromotionShorthand,
   isValidFen,
   legalDests,
   materialBalance,
   moveLabel,
+  normalizeFen,
   parseUci,
+  sanitizeFen,
   sanToUci,
   START_FEN,
   toUci,
   tryMove,
+  tryNotation,
   turnOf,
   uciLineToSan,
   uciToSan,
+  withRookCastleDests,
 } from './helpers';
 
 describe('chess helpers', () => {
@@ -98,7 +104,141 @@ describe('chess helpers', () => {
   it('validates FENs and reads the side to move', () => {
     expect(isValidFen(START_FEN)).toBe(true);
     expect(isValidFen('not a fen')).toBe(false);
+    // 4-field FENs (EPD style) and stale castling flags are accepted after normalisation.
+    expect(isValidFen('4k3/8/8/8/8/8/8/4K3 w - -')).toBe(true);
+    expect(isValidFen('4k3/8/8/8/8/8/4K3/R6R w KQkq - 0 1')).toBe(true);
+    expect(isValidFen('8/8/8/8/8/8/8/8 w - - 0 1')).toBe(false);
     expect(turnOf('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1')).toBe('black');
+  });
+});
+
+describe('normalizeFen / sanitizeFen', () => {
+  it('leaves a consistent FEN exactly as it is', () => {
+    expect(normalizeFen(START_FEN)).toBe(START_FEN);
+    const afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+    expect(normalizeFen(afterE4)).toBe(afterE4);
+    expect(normalizeFen('r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 4 30')).toBe(
+      'r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 4 30',
+    );
+  });
+
+  it('drops castling rights whose king or rook has moved', () => {
+    // White king on e2: no white castling; Black is untouched.
+    expect(normalizeFen('r3k2r/8/8/8/8/8/4K3/R6R w KQkq - 0 1')).toBe(
+      'r3k2r/8/8/8/8/8/4K3/R6R w kq - 0 1',
+    );
+    // Only the h-rook is home.
+    expect(normalizeFen('4k3/8/8/8/8/8/8/4K2R w KQkq - 0 1')).toBe(
+      '4k3/8/8/8/8/8/8/4K2R w K - 0 1',
+    );
+    // A rook of the wrong colour on h1 does not count.
+    expect(normalizeFen('4k3/8/8/8/8/8/8/4K2r w K - 0 1')).toBe('4k3/8/8/8/8/8/8/4K2r w - - 0 1');
+    // No phantom castling reaches chess.js.
+    const chess = new Chess(normalizeFen('4k3/8/8/8/8/8/4K3/R6R w KQkq - 0 1'));
+    expect(chess.moves().filter((m) => m.startsWith('O-O'))).toEqual([]);
+  });
+
+  it('clears an en passant square no pawn could have created', () => {
+    // No white pawn on e4.
+    expect(normalizeFen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq e3 0 1')).toBe(
+      START_FEN.replace(' w ', ' b '),
+    );
+    // Right pawn, wrong side to move.
+    expect(normalizeFen('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e3 0 1')).toBe(
+      'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1',
+    );
+    // A black double step is kept.
+    const blackStep = 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2';
+    expect(normalizeFen(blackStep)).toBe(blackStep);
+  });
+
+  it('fills in missing counters so 4- and 5-field FENs load', () => {
+    expect(normalizeFen('4k3/8/8/8/8/8/8/4K3 w - -')).toBe('4k3/8/8/8/8/8/8/4K3 w - - 0 1');
+    expect(normalizeFen('4k3/8/8/8/8/8/8/4K3 w - - 7')).toBe('4k3/8/8/8/8/8/8/4K3 w - - 7 1');
+    expect(sanitizeFen('  4k3/8/8/8/8/8/8/4K3 w - - ')).toBe('4k3/8/8/8/8/8/8/4K3 w - - 0 1');
+  });
+
+  it('returns null from sanitizeFen for text that is not a position', () => {
+    expect(sanitizeFen('not a fen')).toBeNull();
+    expect(sanitizeFen('8/8/8/8/8/8/8/8 w - - 0 1')).toBeNull();
+    expect(sanitizeFen('')).toBeNull();
+    expect(sanitizeFen(START_FEN)).toBe(START_FEN);
+  });
+});
+
+describe('castling by dropping the king on its rook', () => {
+  const BOTH = 'r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1';
+
+  it('legalDests lists the rook squares for the king when asked', () => {
+    const plain = legalDests(new Chess(BOTH));
+    expect(plain.get('e1')).not.toContain('h1');
+    const dests = legalDests(new Chess(BOTH), { rookCastle: true });
+    expect(dests.get('e1')).toEqual(expect.arrayContaining(['g1', 'c1', 'h1', 'a1']));
+    expect(dests.get('e1')).toHaveLength(plain.get('e1')!.length + 2);
+    // Without castling rights the rook squares stay off the list.
+    const none = legalDests(new Chess('r3k2r/8/8/8/8/8/8/R3K2R w - - 0 1'), { rookCastle: true });
+    expect(none.get('e1')).not.toContain('h1');
+  });
+
+  it('withRookCastleDests adds the rook squares only next to a real castling move', () => {
+    const dests = withRookCastleDests(BOTH, legalDests(new Chess(BOTH)));
+    expect(dests.get('e1')).toEqual(expect.arrayContaining(['h1', 'a1']));
+    const plain = legalDests(new Chess());
+    // Nothing to add: the same map comes back.
+    expect(withRookCastleDests(START_FEN, plain)).toBe(plain);
+    // Black to move, kingside only.
+    const black = 'r3k2r/8/8/8/8/8/8/R3K2R b Kk - 0 1';
+    const blackDests = withRookCastleDests(black, legalDests(new Chess(black)));
+    expect(blackDests.get('e8')).toContain('h8');
+    expect(blackDests.get('e8')).not.toContain('a8');
+  });
+
+  it('castlingKingDest translates the rook square into the king’s castling square', () => {
+    expect(castlingKingDest(BOTH, 'e1', 'h1')).toBe('g1');
+    expect(castlingKingDest(BOTH, 'e1', 'a1')).toBe('c1');
+    expect(castlingKingDest('r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1', 'e8', 'a8')).toBe('c8');
+    // Ordinary moves and anything that is not king-onto-own-rook pass through.
+    expect(castlingKingDest(BOTH, 'e1', 'f1')).toBe('f1');
+    expect(castlingKingDest(BOTH, 'a1', 'a8')).toBe('a8');
+    expect(castlingKingDest('r3k2r/8/8/8/8/8/8/R3K2r w Qkq - 0 1', 'e1', 'h1')).toBe('h1');
+  });
+});
+
+describe('tryNotation (typed moves)', () => {
+  it('reads SAN and coordinates, lowercase pieces and promotions included', () => {
+    expect(tryNotation(new Chess(), 'Nf3')?.san).toBe('Nf3');
+    expect(tryNotation(new Chess(), 'nf3')?.san).toBe('Nf3');
+    expect(tryNotation(new Chess(), 'g1f3')?.san).toBe('Nf3');
+    expect(tryNotation(new Chess(), 'e4')?.san).toBe('e4');
+    const promo = '8/P6k/8/8/8/8/8/K7 w - - 0 1';
+    expect(tryNotation(new Chess(promo), 'a8=q')?.san).toBe('a8=Q');
+    expect(tryNotation(new Chess(promo), 'a7a8r')?.san).toBe('a8=R');
+    expect(tryNotation(new Chess(promo), 'a8')).toBeNull();
+    expect(tryNotation(new Chess(promo), 'a7a8')).toBeNull();
+    // With auto-queen on, a promotion typed without a piece becomes a queen.
+    expect(tryNotation(new Chess(promo), 'a8', { autoQueen: true })?.san).toBe('a8=Q');
+    expect(tryNotation(new Chess(promo), 'a7a8', { autoQueen: true })?.san).toBe('a8=Q');
+    expect(tryNotation(new Chess(promo), 'a7a8r', { autoQueen: true })?.san).toBe('a8=R');
+    expect(tryNotation(new Chess(), 'e4', { autoQueen: true })?.san).toBe('e4');
+    expect(isPromotionShorthand('e8')).toBe(true);
+    expect(isPromotionShorthand('dxe1+')).toBe(true);
+    expect(isPromotionShorthand('e7e8')).toBe(true);
+    expect(isPromotionShorthand('e8=Q')).toBe(false);
+    expect(isPromotionShorthand('e4')).toBe(false);
+    expect(isPromotionShorthand('Re8')).toBe(false);
+    const castle = 'r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1';
+    expect(tryNotation(new Chess(castle), 'o-o')?.san).toBe('O-O');
+    expect(tryNotation(new Chess(castle), '0-0-0')?.san).toBe('O-O-O');
+  });
+
+  it('never mistakes a rank-disambiguated bishop move for coordinates', () => {
+    // Two bishops on the b-file can reach c3: B2c3 must be read as SAN, not as b2 → c3 coordinates.
+    const two = '4k3/8/8/8/1B6/8/1B6/4K3 w - - 0 1';
+    expect(tryNotation(new Chess(two), 'B2c3')?.san).toBe('B2c3');
+    expect(tryNotation(new Chess(two), 'B4c3')?.san).toBe('B4c3');
+    // A pawn move is tried first: "b3" is the pawn, never a bishop.
+    expect(tryNotation(new Chess(), 'b3')?.san).toBe('b3');
+    expect(tryNotation(new Chess(), 'bxc3')).toBeNull();
   });
 });
 

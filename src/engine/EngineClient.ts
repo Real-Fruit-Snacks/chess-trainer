@@ -58,6 +58,14 @@ export class EngineUnsupportedError extends Error {
   }
 }
 
+/** The worker died (or was shut down) while a search or `newGame` was waiting on it. */
+export class EngineCrashedError extends Error {
+  constructor(message = 'The engine stopped responding.') {
+    super(message);
+    this.name = 'EngineCrashedError';
+  }
+}
+
 export function isEngineSupported(): boolean {
   return typeof Worker !== 'undefined' && typeof WebAssembly === 'object';
 }
@@ -65,8 +73,15 @@ export function isEngineSupported(): boolean {
 /**
  * Thin, promise-based client for a UCI engine running in a Web Worker.
  *
- * All searches are serialised: starting a new search while one is running
- * stops the previous one first (its promise resolves with `stopped: true`).
+ * Every command that needs the engine's attention (`search`, `newGame`) goes
+ * through one FIFO queue, so only one search runs at a time. Starting a new
+ * search asks the running one to stop (it resolves early with `stopped: true`);
+ * searches already waiting in the queue still run, in order, unless their own
+ * handle's `stop()` is called first (they then resolve with `stopped: true` and
+ * no best move without reaching the engine). `newGame()` also stops the running
+ * search and then waits its turn in the queue. A worker that dies after the
+ * handshake rejects the pending command with `EngineCrashedError`, marks the
+ * client `error` and refuses further work until a fresh client is created.
  */
 export class EngineClient {
   private worker: Worker | null = null;
@@ -75,6 +90,10 @@ export class EngineClient {
   private readyPromise: Promise<void> | null = null;
   private queue: Promise<unknown> = Promise.resolve();
   private current: { id: number; stop: () => void } | null = null;
+  /** Rejects whatever is waiting on the worker when it dies or is terminated. */
+  private crashListeners = new Set<(err: Error) => void>();
+  /** Owners (e.g. `useEngine`) told when the worker dies after the handshake. */
+  private errorListeners = new Set<(err: Error) => void>();
   private nextId = 1;
   private currentMultiPv = 1;
   private terminated = false;
@@ -164,9 +183,19 @@ export class EngineClient {
       if (typeof data !== 'string') return;
       for (const listener of this.lineListeners) listener(data);
     };
+    let booted = false;
     const failure = new Promise<never>((_, reject) => {
       worker.onerror = (event) => {
-        reject(new Error(`Engine worker failed to load: ${event.message || 'unknown error'}`));
+        const message = event.message || 'unknown error';
+        if (!booted) {
+          reject(new Error(`Engine worker failed to load: ${message}`));
+          return;
+        }
+        // After the handshake a worker error means the engine is gone: fail the
+        // pending command and let the owner offer a retry with a fresh client.
+        if (this.worker === worker) {
+          this.crash(new EngineCrashedError(`Engine crashed: ${message}`));
+        }
       };
     });
 
@@ -182,11 +211,33 @@ export class EngineClient {
         })(),
         failure,
       ]);
+      booted = true;
     } catch (err) {
       worker.terminate();
       if (this.worker === worker) this.worker = null;
       throw err;
     }
+  }
+
+  /** The worker is unusable: settle everything waiting on it and stop accepting work. */
+  private crash(err: Error): void {
+    this.status = 'error';
+    this.error = err;
+    this.worker?.terminate();
+    this.worker = null;
+    this.current = null;
+    for (const listener of [...this.crashListeners]) listener(err);
+    this.crashListeners.clear();
+    for (const listener of [...this.errorListeners]) listener(err);
+  }
+
+  /**
+   * Called when the worker dies after a successful handshake (status becomes
+   * `error`). Boot failures are reported through `init()` instead.
+   */
+  onError(listener: (err: Error) => void): () => void {
+    this.errorListeners.add(listener);
+    return () => this.errorListeners.delete(listener);
   }
 
   /** Sends a raw UCI command. Prefer the typed helpers. */
@@ -204,32 +255,57 @@ export class EngineClient {
   private waitFor(predicate: (line: string) => boolean, timeoutMs: number): Promise<string> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        off();
+        cleanup();
         reject(new Error('Timed out waiting for the engine to respond.'));
       }, timeoutMs);
+      const onCrash = (err: Error) => {
+        cleanup();
+        reject(err);
+      };
+      const cleanup = () => {
+        clearTimeout(timer);
+        off();
+        this.crashListeners.delete(onCrash);
+      };
       const off = this.onLine((line) => {
         if (predicate(line)) {
-          clearTimeout(timer);
-          off();
+          cleanup();
           resolve(line);
         }
       });
+      this.crashListeners.add(onCrash);
     });
+  }
+
+  private assertUsable(): void {
+    if (this.terminated) throw new EngineCrashedError('Engine was terminated.');
+    if (this.status === 'error' && this.error) throw this.error;
   }
 
   async setOption(name: string, value: string | number | boolean): Promise<void> {
     await this.init();
+    this.assertUsable();
     this.send(`setoption name ${name} value ${String(value)}`);
   }
 
-  /** Clears hash and search history — call between unrelated games/positions. */
-  async newGame(): Promise<void> {
-    await this.init();
+  /**
+   * Clears hash and search history — call between unrelated games/positions.
+   * Queued like a search: the running search (which belongs to the old game)
+   * is asked to stop, and `ucinewgame` goes out once it has, before any search
+   * started later.
+   */
+  newGame(): Promise<void> {
     this.stop();
-    await this.queue;
-    this.send('ucinewgame');
-    this.send('isready');
-    await this.waitFor((line) => line === 'readyok', this.options.initTimeoutMs);
+    const run = this.queue.then(async () => {
+      this.assertUsable();
+      await this.init();
+      this.assertUsable();
+      this.send('ucinewgame');
+      this.send('isready');
+      await this.waitFor((line) => line === 'readyok', this.options.initTimeoutMs);
+    });
+    this.queue = run.catch(() => undefined);
+    return run;
   }
 
   /** Stops the running search, if any. The search's promise resolves with `stopped: true`. */
@@ -238,8 +314,10 @@ export class EngineClient {
   }
 
   /**
-   * Starts a search. If another search is in progress it is stopped first.
-   * The returned handle resolves when the engine reports `bestmove`.
+   * Starts a search. The running search is asked to stop so the queue drains
+   * quickly; searches queued earlier still run first, in order (call their
+   * handle's `stop()` to skip them). The returned handle resolves when the
+   * engine reports `bestmove`.
    */
   search(params: SearchParams, onInfo?: (info: SearchInfo) => void): SearchHandle {
     const id = this.nextId++;
@@ -252,11 +330,12 @@ export class EngineClient {
     this.stop();
 
     const result = this.queue.then(async () => {
-      await this.init();
-      if (this.terminated) throw new Error('Engine was terminated.');
       if (stopRequested) {
         return { bestmove: { move: null }, lines: new Map(), stopped: true } satisfies SearchResult;
       }
+      this.assertUsable();
+      await this.init();
+      this.assertUsable();
       return this.runSearch(id, params, onInfo, (fn) => {
         stopFn = fn;
       });
@@ -282,12 +361,22 @@ export class EngineClient {
       let stopped = false;
       let settled = false;
 
+      const cleanup = () => {
+        off();
+        this.crashListeners.delete(onCrash);
+        if (this.current?.id === id) this.current = null;
+      };
       const finish = (bestmove: BestMove) => {
         if (settled) return;
         settled = true;
-        off();
-        if (this.current?.id === id) this.current = null;
+        cleanup();
         resolve({ bestmove, lines, stopped });
+      };
+      const onCrash = (err: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err);
       };
 
       const off = this.onLine((line) => {
@@ -300,6 +389,7 @@ export class EngineClient {
         const best = parseBestMove(line);
         if (best) finish(best);
       });
+      this.crashListeners.add(onCrash);
 
       const stop = () => {
         if (settled || stopped) return;
@@ -331,19 +421,27 @@ export class EngineClient {
         this.send(go.join(' '));
       } catch (err) {
         settled = true;
-        off();
+        cleanup();
         reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
   }
 
-  /** Shuts the worker down. The instance cannot be reused afterwards. */
+  /**
+   * Shuts the worker down. The instance cannot be reused afterwards; searches
+   * and `newGame` calls still waiting reject with `EngineCrashedError`.
+   */
   terminate(): void {
+    if (this.terminated) return;
     this.terminated = true;
-    this.stop();
     this.send('quit');
     this.worker?.terminate();
     this.worker = null;
+    this.current = null;
+    const err = new EngineCrashedError('Engine was terminated.');
+    for (const listener of [...this.crashListeners]) listener(err);
+    this.crashListeners.clear();
+    this.errorListeners.clear();
     this.lineListeners.clear();
     this.status = 'idle';
   }

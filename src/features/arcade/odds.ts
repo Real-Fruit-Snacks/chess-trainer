@@ -71,9 +71,13 @@ export function oddsFen(rung: OddsRung): Fen {
 
 export type OddsVerdict = 'win' | 'loss' | 'draw';
 
+/** One rung's games so far (`draws` is missing in saves from before 0.12). */
+export type RungResults = OddsLadderState['results'][number];
+
 /**
  * The ladder after a game on `rungIndex`: a win on the current rung climbs
- * (replaying a lower rung never moves it down), anything else stays.
+ * (replaying a lower rung never moves it down), anything else stays. Every
+ * game is counted on its rung, draws included.
  */
 export function advanceOdds(
   state: OddsLadderState,
@@ -86,6 +90,7 @@ export function advanceOdds(
     [rungIndex]: {
       wins: current.wins + (verdict === 'win' ? 1 : 0),
       losses: current.losses + (verdict === 'loss' ? 1 : 0),
+      draws: (current.draws ?? 0) + (verdict === 'draw' ? 1 : 0),
     },
   };
   const top = ODDS_RUNGS.length - 1;
@@ -93,7 +98,45 @@ export function advanceOdds(
   return { rung, best: Math.max(state.best, rung), results };
 }
 
+/** Games played on the whole ladder, draws included. */
+export function oddsGamesPlayed(state: OddsLadderState): number {
+  return Object.values(state.results).reduce((n, r) => n + r.wins + r.losses + (r.draws ?? 0), 0);
+}
+
+/** "2 wins · 1 draw · 3 losses" (only what happened; empty before the first game). */
+export function describeRungResults(results: RungResults | undefined): string {
+  if (!results) return '';
+  const parts: string[] = [];
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  if (results.wins) parts.push(count(results.wins, 'win', 'wins'));
+  if (results.draws) parts.push(count(results.draws, 'draw', 'draws'));
+  if (results.losses) parts.push(count(results.losses, 'loss', 'losses'));
+  return parts.join(' · ');
+}
+
+/**
+ * What a finished game did to the ladder, judged from the ladder as it was
+ * before the game: climbed a rung, climbed onto the level game, beat the
+ * level game (the top: nothing left to climb), won a lower rung again, or
+ * left it where it was (a draw or a loss).
+ */
+export type OddsStep = 'climbed' | 'reached-top' | 'beat-top' | 'replayed' | 'drew' | 'lost';
+
+export function oddsStep(
+  before: OddsLadderState,
+  rungIndex: number,
+  verdict: OddsVerdict,
+): OddsStep {
+  if (verdict === 'draw') return 'drew';
+  if (verdict === 'loss') return 'lost';
+  const top = ODDS_RUNGS.length - 1;
+  if (rungIndex >= top) return 'beat-top';
+  if (rungIndex < before.rung) return 'replayed';
+  return rungIndex + 1 === top ? 'reached-top' : 'climbed';
+}
+
 export function describeRung(index: number): string {
-  const rung = ODDS_RUNGS[Math.min(Math.max(index, 0), ODDS_RUNGS.length - 1)];
-  return rung ? `Rung ${index + 1} · ${rung.name}` : '';
+  const clamped = Math.min(Math.max(index, 0), ODDS_RUNGS.length - 1);
+  const rung = ODDS_RUNGS[clamped];
+  return rung ? `Rung ${clamped + 1} · ${rung.name}` : '';
 }

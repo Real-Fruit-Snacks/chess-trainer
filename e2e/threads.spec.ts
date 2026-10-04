@@ -66,8 +66,8 @@ test.describe('multi-threaded engine', () => {
     await page.goto('/analyze');
     await page.getByRole('button', { name: 'Import FEN / PGN' }).click();
     await page
-      .getByRole('group', { name: 'Import source' })
-      .getByRole('button', { name: 'Lichess' })
+      .getByRole('radiogroup', { name: 'Import source' })
+      .getByRole('radio', { name: 'Lichess' })
       .click();
     await page.getByLabel('Lichess username').fill('someone');
     await page.getByRole('button', { name: 'Fetch recent games' }).click();

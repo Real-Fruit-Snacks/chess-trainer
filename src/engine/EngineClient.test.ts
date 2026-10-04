@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ENGINE_BUILD_URLS } from './build';
-import { EngineClient } from './EngineClient';
+import { EngineClient, EngineCrashedError } from './EngineClient';
 
 /**
  * A stand-in for the Stockfish worker: answers the UCI handshake and records
@@ -9,6 +9,8 @@ import { EngineClient } from './EngineClient';
 class FakeWorker {
   static instances: FakeWorker[] = [];
   static failingUrl: string | null = null;
+  /** When set, `go` commands are recorded but never answered (until `stop`). */
+  static silentSearches = false;
   readonly url: string;
   readonly sent: string[] = [];
   onmessage: ((event: MessageEvent<string>) => void) | null = null;
@@ -30,9 +32,16 @@ class FakeWorker {
     if (command === 'uci') reply('uciok');
     if (command === 'isready') reply('readyok');
     if (command.startsWith('go ')) {
+      if (FakeWorker.silentSearches) return;
       reply('info depth 1 multipv 1 score cp 10 pv e2e4');
       reply('bestmove e2e4');
     }
+    if (command === 'stop' && FakeWorker.silentSearches) reply('bestmove e2e4');
+  }
+
+  /** The worker dies after the handshake. */
+  crash(message = 'RuntimeError: memory access out of bounds') {
+    this.onerror?.({ message });
   }
 
   terminate() {
@@ -108,15 +117,114 @@ describe('EngineClient builds', () => {
   });
 });
 
+/** Lets queued microtasks and the fake worker's replies run. */
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
 describe('EngineClient searches', () => {
   beforeEach(() => {
     FakeWorker.instances = [];
     FakeWorker.failingUrl = null;
+    FakeWorker.silentSearches = false;
     vi.stubGlobal('Worker', FakeWorker);
     vi.stubGlobal('WebAssembly', {});
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('runs newGame after the running search and before a later one', async () => {
+    FakeWorker.silentSearches = true;
+    const client = new EngineClient();
+    await client.init();
+    const first = client.search({ fen: 'first' });
+    const fresh = client.newGame();
+    // `ucinewgame` must wait for the search to finish.
+    await tick();
+    const sent = () => FakeWorker.instances[0]?.sent ?? [];
+    expect(sent()).toContain('position fen first');
+    expect(sent()).not.toContain('ucinewgame');
+    first.stop();
+    await first.result;
+    await fresh;
+    const second = client.search({ fen: 'second' });
+    await tick();
+    second.stop();
+    await second.result;
+    const commands = sent();
+    expect(commands.indexOf('ucinewgame')).toBeGreaterThan(commands.indexOf('position fen first'));
+    expect(commands.indexOf('ucinewgame')).toBeLessThan(commands.indexOf('position fen second'));
+    client.terminate();
+  });
+
+  it('newGame stops a search that is already running, which belongs to the old game', async () => {
+    FakeWorker.silentSearches = true;
+    const client = new EngineClient();
+    await client.init();
+    const old = client.search({ fen: 'old', infinite: true });
+    await tick();
+    const fresh = client.newGame();
+    const result = await old.result;
+    expect(result.stopped).toBe(true);
+    await fresh;
+    const commands = FakeWorker.instances[0]?.sent ?? [];
+    expect(commands.indexOf('stop')).toBeGreaterThan(commands.indexOf('go infinite'));
+    expect(commands.indexOf('ucinewgame')).toBeGreaterThan(commands.indexOf('stop'));
+    client.terminate();
+  });
+
+  it('runs queued searches in order, skipping one whose handle was stopped before it started', async () => {
+    FakeWorker.silentSearches = true;
+    const client = new EngineClient();
+    await client.init();
+    const running = client.search({ fen: 'running' });
+    await tick();
+    const queued = client.search({ fen: 'queued' });
+    const newest = client.search({ fen: 'newest' });
+    queued.stop();
+    const skipped = await queued.result;
+    expect(skipped.stopped).toBe(true);
+    expect(skipped.bestmove.move).toBeNull();
+    // The running search was asked to stop when the next one was requested.
+    const first = await running.result;
+    expect(first.stopped).toBe(true);
+    await tick();
+    newest.stop();
+    await newest.result;
+    const positions = (FakeWorker.instances[0]?.sent ?? []).filter((c) => c.startsWith('position'));
+    expect(positions).toEqual(['position fen running', 'position fen newest']);
+    client.terminate();
+  });
+
+  it('rejects the running search and reports an error when the worker dies after booting', async () => {
+    FakeWorker.silentSearches = true;
+    const client = new EngineClient();
+    await client.init();
+    const errors: Error[] = [];
+    client.onError((err) => errors.push(err));
+    const handle = client.search({ fen: 'x' });
+    await tick();
+    FakeWorker.instances[0]?.crash();
+    await expect(handle.result).rejects.toBeInstanceOf(EngineCrashedError);
+    expect(client.status).toBe('error');
+    expect(client.error?.message).toMatch(/crashed/);
+    expect(errors).toHaveLength(1);
+    // Further work is refused rather than left pending.
+    await expect(client.search({ fen: 'y' }).result).rejects.toBeInstanceOf(EngineCrashedError);
+    await expect(client.newGame()).rejects.toBeInstanceOf(EngineCrashedError);
+    expect(FakeWorker.instances[0]?.terminated).toBe(true);
+  });
+
+  it('terminate() rejects the pending search and newGame', async () => {
+    FakeWorker.silentSearches = true;
+    const client = new EngineClient();
+    await client.init();
+    const handle = client.search({ fen: 'x' });
+    const fresh = client.newGame();
+    await tick();
+    client.terminate();
+    await expect(handle.result).rejects.toBeInstanceOf(EngineCrashedError);
+    await expect(fresh).rejects.toBeInstanceOf(EngineCrashedError);
+    expect(FakeWorker.instances[0]?.terminated).toBe(true);
   });
 
   it('puts searchmoves after the limits, since the engine reads every later token as a move', async () => {

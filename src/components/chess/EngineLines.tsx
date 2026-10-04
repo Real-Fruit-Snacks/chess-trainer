@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { uciLineToSan } from '@/chess/helpers';
 import type { Fen, LongColor, Uci } from '@/chess/types';
 import { formatScore, type SearchInfo } from '@/engine/uci';
@@ -19,6 +19,11 @@ export interface EngineLinesProps {
   moveLabel: string;
 }
 
+/**
+ * The engine's principal variations. The list itself is not a live region (it
+ * changes many times a second); instead the top line is announced once, when
+ * a search finishes.
+ */
 export function EngineLines({
   fen,
   turn,
@@ -38,6 +43,25 @@ export function EngineLines({
     return out;
   }, [fen, lines, count]);
 
+  // Announce the best line when thinking stops (true → false), not on every update.
+  const wasThinking = useRef(thinking);
+  const [announcement, setAnnouncement] = useState('');
+  useEffect(() => {
+    const finished = wasThinking.current && !thinking;
+    wasThinking.current = thinking;
+    if (!finished) return;
+    const top = rendered[0];
+    if (!top) return;
+    const score = formatScore(top.info.score, turn === 'white');
+    setAnnouncement(`Engine: ${score}, ${moveLabel} ${top.sans.slice(0, 6).join(' ')}`);
+  }, [thinking, rendered, turn, moveLabel]);
+
+  const live = (
+    <span className="sr-only" aria-live="polite" aria-atomic="true">
+      {announcement}
+    </span>
+  );
+
   if (rendered.length === 0) {
     return (
       <div className="lines">
@@ -48,12 +72,14 @@ export function EngineLines({
             <span className="muted small">No analysis yet.</span>
           )}
         </div>
+        {live}
       </div>
     );
   }
 
   return (
-    <div className="lines" aria-live="polite" aria-busy={thinking}>
+    <div className="lines" aria-busy={thinking}>
+      {live}
       {rendered.map(({ multipv, info, sans }) => {
         const label = formatScore(info.score, turn === 'white');
         const whiteAhead = !label.startsWith('-') && label !== '0.0' && label !== '0-1';
@@ -76,6 +102,7 @@ export function EngineLines({
                   onClick={i === 0 && onPlayMove ? () => onPlayMove(info.pv[0] as Uci) : undefined}
                   disabled={i !== 0 || !onPlayMove}
                   style={i !== 0 ? { cursor: 'default' } : undefined}
+                  aria-label={i === 0 && onPlayMove ? `Play ${san}` : undefined}
                 >
                   <San san={san} />
                 </button>
@@ -93,20 +120,29 @@ export function EngineStatus({
   depth,
   nps,
   thinking,
+  loading = false,
 }: {
   name: string;
   depth?: number;
   nps?: number;
   thinking: boolean;
+  /** The engine is still being downloaded or started. */
+  loading?: boolean;
 }) {
   const knps = nps ? `${Math.round(nps / 1000)} kN/s` : '';
   return (
     <div className="engine-status">
       <span>{name}</span>
       <span>
-        {depth ? `depth ${depth}` : ''}
-        {knps ? ` · ${knps}` : ''}
-        {thinking ? ' · thinking' : ' · idle'}
+        {loading ? (
+          'loading engine…'
+        ) : (
+          <>
+            {depth ? `depth ${depth}` : ''}
+            {knps ? ` · ${knps}` : ''}
+            {thinking ? ' · thinking' : ' · idle'}
+          </>
+        )}
       </span>
     </div>
   );

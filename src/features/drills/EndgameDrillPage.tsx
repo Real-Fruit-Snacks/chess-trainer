@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { PlayerBar } from '@/components/chess/PlayerBar';
 import { MoveList } from '@/components/chess/MoveList';
-import { Alert, Button, Card, Spinner, Stat, LinkButton } from '@/components/ui';
+import { Alert, Button, Card, NotFound, Spinner, Stat, LinkButton } from '@/components/ui';
 import type { LongColor } from '@/chess/types';
+import { NONE } from '@/lib/format';
 import { getLessonMeta } from '@/features/learn/lessonMeta';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { type EndgameDrill, getDrill } from './endgameDrills';
 import { buildEndgameLadder } from './endgameLadder';
-import { pickStartFen, useDrillGame } from './useDrillGame';
+import { pickStartFen, requestedPosition, useDrillGame } from './useDrillGame';
 import '@/features/play/play.css';
 import './drills.css';
 
@@ -25,14 +26,12 @@ export default function EndgameDrillPage() {
 
   if (!drill) {
     return (
-      <div>
-        <div className="page-header">
-          <h1>Drill not found</h1>
-          <p>
-            <Link to="/drills">Back to all drills</Link>
-          </p>
-        </div>
-      </div>
+      <NotFound title="Drill not found" backTo="/drills" backLabel="All drills">
+        <p className="muted">
+          There is no endgame drill called <code>{drillId}</code>. It may have been renamed in an
+          update — the library lists every drill.
+        </p>
+      </NotFound>
     );
   }
 
@@ -47,13 +46,10 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
   const rung = ladder.rungs.find((r) => r.drill.id === drill.id);
   const nextRung = ladder.rungs.find((r) => !r.done && r.drill.id !== drill.id) ?? null;
   const lesson = drill.lessonId ? getLessonMeta(drill.lessonId) : undefined;
-  // `?pos=N` starts from the drill's N-th fixed position (links from lessons and tests).
+  // `?pos=N` starts from the drill's N-th fixed position (links from lessons and tests);
+  // without it one of the positions is picked at random.
   const [searchParams] = useSearchParams();
-  const requested = Number(searchParams.get('pos'));
-  const fixedStart =
-    drill.positions !== 'random' && Number.isInteger(requested) && requested >= 0
-      ? drill.positions[requested]
-      : undefined;
+  const fixedStart = requestedPosition(drill, searchParams.get('pos'));
   // The board shows the position that Start will use, so the task is visible before playing.
   const [preview] = useState(() => fixedStart ?? pickStartFen(drill));
   const begin = () => game.start(drill, preview);
@@ -125,7 +121,7 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
                       : drill.goal === 'promote'
                         ? `Promote the pawn within ${drill.moveLimit} moves.`
                         : drill.goal === 'capture'
-                          ? `Win the opponent's last piece (or mate) within ${drill.moveLimit} moves.`
+                          ? `Win the opponent’s last piece (or mate) within ${drill.moveLimit} moves.`
                           : `Hold the draw for ${drill.moveLimit} moves.`}
                   </p>
                   <div className="row">
@@ -143,7 +139,7 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
             ) : null}
             {game.result ? (
               <div className="trainer__overlay">
-                <Card className="summary">
+                <Card className="summary" data-testid="drill-result">
                   <p className="card__eyebrow">
                     {game.result.outcome === 'won' ? 'Well done' : 'Not this time'}
                   </p>
@@ -153,7 +149,8 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
                     {best?.detail && game.result.outcome === 'won' ? ` · best: ${best.detail}` : ''}
                   </p>
                   <div className="row">
-                    <Button variant="primary" onClick={() => game.start(drill)}>
+                    {/* The board is done with: the keyboard goes to what comes next. */}
+                    <Button variant="primary" onClick={() => game.start(drill)} autoFocus>
                       New position
                     </Button>
                     <Button onClick={game.restart}>Same position</Button>
@@ -173,18 +170,24 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
             ) : null}
           </div>
           <PlayerBar name="You" color={userColor} fen={shownFen} showMaterial={false} />
+          {/* Always in the page, so the outcome is announced the moment it is set. */}
+          <p className="sr-only" role="status" data-testid="drill-outcome">
+            {game.result
+              ? `${game.result.outcome === 'won' ? 'Well done' : 'Not this time'}: ${game.result.reason}`
+              : ''}
+          </p>
         </div>
 
         <aside className="trainer__panel stack">
           <Card>
             {game.engineStatus === 'loading' ? (
-              <p className="small muted" style={{ margin: '0 0 8px' }}>
-                <Spinner label="Loading engine" /> Loading engine…
-              </p>
+              <div style={{ margin: '0 0 8px' }}>
+                <Spinner label="Loading engine…" />
+              </div>
             ) : null}
             <div className="drill__hud">
               <Stat value={game.userMoves} label={`Moves (limit ${drill.moveLimit})`} />
-              <Stat value={best?.best ? (best.detail ?? 'Done') : '–'} label="Best" />
+              <Stat value={best?.best ? (best.detail ?? 'Done') : NONE} label="Best" />
               <Stat value={best?.attempts ?? 0} label="Attempts" />
             </div>
             <div className="puzzle-actions">
@@ -200,7 +203,7 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
               </Button>
               {game.startFen ? (
                 <LinkButton variant="ghost" to={`/analyze?fen=${encodeURIComponent(position.fen)}`}>
-                  Analyze
+                  Analyze position
                 </LinkButton>
               ) : null}
             </div>
@@ -221,7 +224,6 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
             <MoveList
               moves={position.history}
               currentPly={position.history.length}
-              onSelectPly={() => undefined}
               startsWithBlack={startsWithBlack}
               startMoveNumber={startMoveNumber}
             />

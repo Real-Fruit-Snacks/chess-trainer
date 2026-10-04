@@ -80,6 +80,7 @@ export default tseslint.config(
       'playwright.config.ts',
       'e2e/**/*.ts',
       'scripts/**/*.mjs',
+      'scripts/**/*.ts',
       'eslint.config.js',
     ],
     languageOptions: {
@@ -101,7 +102,7 @@ export default tseslint.config(
   },
   // Tests
   {
-    files: ['src/**/*.test.{ts,tsx}', 'src/test/**/*.ts'],
+    files: ['src/**/*.test.{ts,tsx}', 'src/test/**/*.ts', 'scripts/**/*.test.ts'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/unbound-method': 'off',

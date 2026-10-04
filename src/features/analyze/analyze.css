@@ -79,7 +79,9 @@
   gap: 4px;
   max-height: 320px;
   overflow-y: auto;
-  padding-right: var(--space-1);
+  padding: 0 var(--space-1) 0 0;
+  margin: 0;
+  list-style: none;
 }
 
 .import__game {
@@ -144,7 +146,11 @@
 .report__item:hover,
 .report__item:focus-visible {
   background: var(--surface-3);
-  outline: none;
+}
+
+.report__item:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
 }
 
 .report__lesson {
@@ -193,4 +199,32 @@
 
 .library__actions {
   gap: 2px;
+}
+
+/* ---------- Move navigation under the board (phones) ---------- */
+/* On narrow screens the panel sits three or four cards below the board, so the
+   navigation is repeated right under it; wide screens keep it in the panel. */
+.analyze__strip {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.analyze__strip-move {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 899px) {
+  .analyze__strip {
+    display: flex;
+  }
+
+  .analyze__panelnav {
+    display: none;
+  }
 }

@@ -1,7 +1,6 @@
 import { Chess, type Square } from 'chess.js';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useFocus } from '@/app/focus';
+import { Link, useBlocker, useNavigate } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { ClockDisplay } from '@/components/chess/ClockDisplay';
@@ -11,7 +10,7 @@ import {
   Badge,
   Button,
   Card,
-  Dialog,
+  ConfirmDialog,
   Field,
   Kbd,
   LinkButton,
@@ -24,7 +23,7 @@ import {
 import { San } from '@/chess/San';
 import { legalDests, opposite } from '@/chess/helpers';
 import type { LongColor, PromotionPiece } from '@/chess/types';
-import { ENGINE_LEVELS, getLevel } from '@/engine/levels';
+import { getLevel } from '@/engine/levels';
 import { type ClockState, getTimeControl, remaining } from '@/lib/clock';
 import { handOffToAnalysis } from '@/lib/handoff';
 import { prefersReducedMotion } from '@/lib/useReducedMotion';
@@ -32,6 +31,8 @@ import { useTicker } from '@/lib/useTicker';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { DEFAULT_SETTINGS, type SimulColor, useSettings } from '@/store/settings';
+import { EngineLevelField } from './arcadeControls';
+import { useArcadeFocus } from './arcadeGame';
 import {
   boardPgn,
   describeLevels,
@@ -50,6 +51,8 @@ import {
   tally,
   timeControlOf,
 } from './simul';
+import { isNextBoardKey } from './simulKeys';
+import { characterShortcutsOn } from '@/lib/shortcutKey';
 import { SIMUL_ARCADE_ID, type UseSimul, useSimul } from './useSimul';
 import '@/features/play/play.css';
 import './arcade.css';
@@ -109,7 +112,6 @@ function SimulSetupCard({ simul }: { simul: UseSimul }) {
   const best = useProgress((s) => s.arcade[SIMUL_ARCADE_ID]);
   const [setup, setSetup] = useState<SimulSetup>(() => ({ ...DEFAULT_SETTINGS.simul, ...saved }));
   const patch = (next: Partial<SimulSetup>) => setSetup((s) => ({ ...s, ...next }));
-  const level = getLevel(setup.levelId);
   const control = timeControlOf(setup);
   const pace = paceSeconds(setup);
 
@@ -132,21 +134,12 @@ function SimulSetupCard({ simul }: { simul: UseSimul }) {
               options={SIMUL_BOARD_COUNTS.map((n) => ({ value: n, label: String(n) }))}
             />
           </div>
-          <Field label="Strength" hint={level.description}>
-            {(id) => (
-              <Select
-                id={id}
-                value={setup.levelId}
-                onChange={(e) => patch({ levelId: Number(e.target.value) })}
-              >
-                {ENGINE_LEVELS.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    Level {l.id} · {l.name} (~{l.approxElo})
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
+          <EngineLevelField
+            value={setup.levelId}
+            onChange={(levelId) => patch({ levelId })}
+            testId="simul-level"
+            describe
+          />
           <Switch
             checked={setup.rising}
             onChange={(rising) => patch({ rising })}
@@ -245,11 +238,12 @@ function SimulSetupCard({ simul }: { simul: UseSimul }) {
 /* Playing                                                            */
 /* ------------------------------------------------------------------ */
 
-function statusOf(board: SimulBoard, loading: boolean): string {
+function statusOf(board: SimulBoard, loading: boolean, stalled: boolean): string {
   if (board.result) return `${describeResult(board.result)}.`;
   if (board.turn === board.color) return 'Your move.';
   const name = engineName(board.levelId);
   if (board.engine === 'thinking') return `${name} is thinking…`;
+  if (stalled) return `${name} is waiting for the engine, which has stopped answering.`;
   return loading ? 'Loading the engine…' : `${name} will answer in a moment…`;
 }
 
@@ -266,38 +260,48 @@ function SimulGame({ simul, state }: { simul: UseSimul; state: SimulState }) {
   const [boardKey, setBoardKey] = useState(0);
   const playFocus = useSettings((s) => s.playFocus);
   const update = useSettings((s) => s.update);
-  const setFocus = useFocus((s) => s.set);
 
   // Focus mode, as in Play: no header and navigation while the simul is on.
-  const focusOn = playFocus && !finished;
-  useEffect(() => {
-    setFocus(focusOn);
-    return () => setFocus(false);
-  }, [focusOn, setFocus]);
+  useArcadeFocus(!finished);
 
-  // N: the next board waiting for a move (not while a dialog is open or a field has the keys).
-  const { next } = simul;
+  // Leaving mid-simul: ask first, and resign what is still in play so the record adds up
+  // (the finished boards are already saved). A reload or a closed tab asks through the browser.
+  const inPlay = !finished;
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      inPlay && currentLocation.pathname !== nextLocation.pathname,
+  );
+  const leavingRef = useRef(false);
+  // The last board ended (a flag) while the question was up: nothing is left to resign.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== 'n') return;
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)
-      ) {
-        return;
-      }
-      if (document.querySelector('dialog[open]')) return;
+    if (blocker.state === 'blocked' && !inPlay) {
+      leavingRef.current = true;
+      blocker.proceed();
+    }
+  }, [blocker, inPlay]);
+  const { resignAll } = simul;
+  useEffect(() => {
+    if (!inPlay) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      next();
+      // Older browsers need a value to show their prompt.
+      e.returnValue = '';
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [next]);
+    // The page really goes (the prompt was accepted): the boards in play are resigned.
+    const onPageHide = (e: PageTransitionEvent) => {
+      if (!e.persisted) resignAll();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [inPlay, resignAll]);
 
-  // A keyboard player keeps the keyboard on the board when the next board comes up.
+  // A keyboard player keeps the keyboard on the big board when another board comes up:
+  // the board is re-created for each game, so its focus would otherwise fall to the page.
   const lastInput = useRef<'key' | 'pointer'>('pointer');
-  const refocus = useRef(false);
   const boardCol = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = () => (lastInput.current = 'key');
@@ -309,11 +313,30 @@ function SimulGame({ simul, state }: { simul: UseSimul; state: SimulState }) {
       window.removeEventListener('pointerdown', onPointer, true);
     };
   }, []);
+  const keepKeyboardOnBoard = () => {
+    if (!boardCol.current?.contains(document.activeElement)) return;
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body && document.contains(active)) return;
+      boardCol.current?.querySelector<HTMLElement>('.board__cg')?.focus();
+    });
+  };
+
+  // N: the next board waiting for a move (not while a dialog or the promotion picker is
+  // open, nor while a field has the keys).
+  const { next } = simul;
+  const promotionPending = !!simul.promotion;
   useEffect(() => {
-    if (!refocus.current) return;
-    refocus.current = false;
-    boardCol.current?.querySelector<HTMLElement>('.board__cg')?.focus();
-  }, [state.active]);
+    const onKey = (e: KeyboardEvent) => {
+      // N is also the knight in the promotion picker: a pending promotion keeps its move.
+      if (!characterShortcutsOn() || !isNextBoardKey(e, promotionPending)) return;
+      e.preventDefault();
+      keepKeyboardOnBoard();
+      next();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [next, promotionPending]);
 
   const playerTurn = !!board && isPlayerTurn(board) && !simul.promotion;
   const fen = board?.fen;
@@ -328,8 +351,7 @@ function SimulGame({ simul, state }: { simul: UseSimul; state: SimulState }) {
   const counts = tally(state);
 
   const onMove = (from: Square, to: Square) => {
-    const inBoard = boardCol.current?.contains(document.activeElement) ?? false;
-    refocus.current = lastInput.current === 'key' && inBoard;
+    if (lastInput.current === 'key') keepKeyboardOnBoard();
     simul.move(from, to);
   };
 
@@ -337,7 +359,8 @@ function SimulGame({ simul, state }: { simul: UseSimul; state: SimulState }) {
     if (!simul.resolvePromotion(piece)) setBoardKey((k) => k + 1);
   };
 
-  const analyze = (b: SimulBoard) => void navigate(handOffToAnalysis(boardPgn(state, b)));
+  const analyze = (b: SimulBoard) =>
+    void navigate(handOffToAnalysis(boardPgn(state, b), { orientation: b.color }));
 
   return (
     <>
@@ -384,8 +407,22 @@ function SimulGame({ simul, state }: { simul: UseSimul; state: SimulState }) {
             extra={timed ? <SimulClock clock={board.clock} side={board.color} /> : null}
           />
           <p className="arcade__status" role="status" data-testid="simul-status">
-            Board {board.index + 1}: {statusOf(board, simul.engineStatus === 'loading')}
+            Board {board.index + 1}:{' '}
+            {statusOf(board, simul.engineStatus === 'loading', simul.stalled)}
           </p>
+          {simul.stalled && !finished && simul.engineStatus !== 'error' ? (
+            <Alert tone="warning">
+              <span data-testid="simul-stalled">
+                The engine has stopped answering; the boards waiting for it are on hold.{' '}
+                <Button size="sm" onClick={simul.retry} data-testid="simul-retry">
+                  Retry
+                </Button>
+              </span>
+            </Alert>
+          ) : null}
+          {!finished ? (
+            <SimulStrip state={state} onSelect={simul.select} onNext={simul.next} />
+          ) : null}
         </div>
 
         <aside className="trainer__panel stack">
@@ -473,55 +510,107 @@ function SimulGame({ simul, state }: { simul: UseSimul; state: SimulState }) {
         </aside>
       </div>
 
-      <Dialog
+      <ConfirmDialog
         open={typeof confirm === 'number'}
-        onClose={() => setConfirm(null)}
         title={`Resign board ${(typeof confirm === 'number' ? confirm : board.index) + 1}?`}
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setConfirm(null)}>
-              Keep playing
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                if (typeof confirm === 'number') simul.resign(confirm);
-                setConfirm(null);
-              }}
-            >
-              Resign
-            </Button>
-          </>
-        }
-      >
-        <p className="muted">The other boards play on.</p>
-      </Dialog>
-      <Dialog
-        open={confirm === 'all'}
+        confirmLabel="Resign"
+        cancelLabel="Keep playing"
+        danger
+        onConfirm={() => {
+          if (typeof confirm === 'number') simul.resign(confirm);
+        }}
         onClose={() => setConfirm(null)}
+      >
+        <p className="muted">It counts as a loss; the other boards play on.</p>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirm === 'all'}
         title="End the simul?"
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setConfirm(null)}>
-              Keep playing
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                simul.resignAll();
-                setConfirm(null);
-              }}
-            >
-              Resign every board
-            </Button>
-          </>
-        }
+        confirmLabel="Resign every board"
+        cancelLabel="Keep playing"
+        danger
+        onConfirm={simul.resignAll}
+        onClose={() => setConfirm(null)}
       >
         <p className="muted">
           Every board still in play counts as a loss; the finished ones keep their results.
         </p>
-      </Dialog>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        title="Leave the simul?"
+        confirmLabel="Leave and resign"
+        cancelLabel="Stay"
+        danger
+        onConfirm={() => {
+          leavingRef.current = true;
+          simul.resignAll();
+          blocker.proceed?.();
+        }}
+        onClose={() => {
+          if (!leavingRef.current) blocker.reset?.();
+        }}
+      >
+        <p className="muted" data-testid="simul-leave-note">
+          {describeLeaving(state.boards.length - counts.finished, counts.finished)}
+        </p>
+      </ConfirmDialog>
     </>
+  );
+}
+
+/** What leaving does to the boards, for the confirmation. */
+function describeLeaving(inPlay: number, finished: number): string {
+  const boards =
+    inPlay === 1 ? 'The board still in play is' : `The ${inPlay} boards still in play are`;
+  const kept = finished > 0 ? '; the finished ones keep their results.' : '.';
+  return `${boards} resigned and ${inPlay === 1 ? 'counts as a loss' : 'count as losses'}${kept}`;
+}
+
+/**
+ * Under the big board on a phone: every board's number and state, and Next —
+ * the thumbnails are in the panel further down, a scroll away from the board.
+ * Hidden wherever the panel sits beside the board.
+ */
+function SimulStrip({
+  state,
+  onSelect,
+  onNext,
+}: {
+  state: SimulState;
+  onSelect: (index: number) => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="simul__strip" role="group" aria-label="Boards" data-testid="simul-strip">
+      {state.boards.map((b) => {
+        const kind = thumbState(b);
+        const active = b.index === state.active;
+        return (
+          <button
+            key={`${state.id}-${b.index}`}
+            type="button"
+            className={`simul__chip simul__chip--${kind}${active ? ' is-active' : ''}`}
+            aria-pressed={active}
+            aria-label={`Board ${b.index + 1}: ${STATE_LABEL[kind].toLowerCase()}`}
+            onClick={() => onSelect(b.index)}
+          >
+            <span className="simul__chip-number">{b.index + 1}</span>
+            <span className="simul__chip-state" aria-hidden="true">
+              {STATE_LABEL[kind]}
+            </span>
+          </button>
+        );
+      })}
+      <Button
+        size="sm"
+        className="simul__strip-next"
+        onClick={onNext}
+        data-testid="simul-strip-next"
+      >
+        Next board
+      </Button>
+    </div>
   );
 }
 
@@ -668,7 +757,7 @@ function SimulSummary({
               ? `Best so far: ${formatPoints(bestBefore)}.`
               : 'Win a board to set a score to beat.'}
         </p>
-        <ol className="simul__results">
+        <ol className="simul__results" role="list" aria-label="Results by board">
           {state.boards.map((b) => (
             <li key={b.index} data-testid={`simul-result-${b.index + 1}`}>
               <span>
@@ -676,18 +765,28 @@ function SimulSummary({
                 {COLOR_NAME[b.color]} — {b.result ? describeResult(b.result) : 'unfinished'}
                 <span className="faint simul__count"> ({moveCount(b.sans.length)})</span>
               </span>
-              <Button size="sm" variant="ghost" onClick={() => onAnalyze(b)}>
-                Analyze
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onAnalyze(b)}
+                aria-label={`Analyze game on board ${b.index + 1}`}
+              >
+                Analyze game
               </Button>
             </li>
           ))}
         </ol>
         <div className="row">
-          <Button variant="primary" onClick={onAgain} data-testid="simul-again">
+          <Button
+            variant="primary"
+            onClick={onAgain}
+            title="The same boards, levels and clocks"
+            data-testid="simul-again"
+          >
             Play again
           </Button>
-          <Button onClick={onNew} data-testid="simul-new">
-            New simul
+          <Button onClick={onNew} title="Set up a new simul" data-testid="simul-new">
+            New game
           </Button>
           <LinkButton to="/arcade">Arcade</LinkButton>
         </div>

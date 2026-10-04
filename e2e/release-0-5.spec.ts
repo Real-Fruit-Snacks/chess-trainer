@@ -87,6 +87,12 @@ test.describe('Glicko-2 puzzle rating', () => {
     await expect(scales).toContainText('below 1000'); // FIDE
     await page.goto('/settings');
     await page.getByLabel('Start again from').selectOption('calibrate');
+    // Picking alone changes nothing: the reset is a button with a confirmation.
+    await page.getByTestId('rating-reset').click();
+    await page
+      .getByRole('dialog', { name: 'Reset your puzzle rating?' })
+      .getByTestId('confirm-accept')
+      .click();
     await page.goto('/progress');
     await expect(page.getByTestId('provisional-note')).toContainText('calibration: 0 of 12');
     const state = await readProgress(page);

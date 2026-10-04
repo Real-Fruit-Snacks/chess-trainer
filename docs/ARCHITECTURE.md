@@ -61,27 +61,56 @@ document explains the moving parts and the reasoning behind them.
 
 - **Vite + React 19 + TypeScript**, strict settings (`noUncheckedIndexedAccess`, no non-null assertions).
 - Each feature page is a lazily loaded chunk (`src/app/routes.tsx`), so the first paint only needs the
-  shell (~110 kB gzipped including React and the router). The lesson content (~55 kB gzipped) is only
-  loaded on the Learn pages: everything else (Home, Progress, courses, the reference) reads
+  shell (~133 kB gzipped including React and the router, of which React is ~96 kB; measured for 0.12
+  with `node scripts/check-bundle-size.mjs --print`). Code that only some visits need — the import
+  dialog for a file the OS opens the app with, the lab's clean-up, the sound engine, the repertoire
+  part of the due count — is imported dynamically when it is needed. The lesson content (~91 kB
+  gzipped) is only loaded on the Learn pages: everything else (Home, Progress, courses, the reference) reads
   `src/features/learn/lessonMeta.ts`, a generated index of ids, titles and lengths that
   `scripts/build-lesson-index.mjs` rewrites before every build (`npm run lessons:index`); a unit test fails
   when it is stale.
 - `VITE_BASE_PATH` sets the URL prefix. The deploy workflow derives it from `actions/configure-pages`,
   so the same code works at `https://user.github.io/` and `https://user.github.io/repo/`.
-- `scripts/postbuild.mjs` copies `index.html` to `404.html` (deep links on Pages) and writes `.nojekyll`.
+- `scripts/postbuild.mjs` copies `index.html` to `404.html` (deep links on Pages), writes `.nojekyll`,
+  ships the licence and the third-party notices as `licence.txt` and `notices.txt` (the footer links
+  them; they are not precached) and moves the source maps out of `dist/` into `sourcemaps/`. The build
+  writes hidden maps (no `sourceMappingURL`), so they are never deployed or precached; the deploy
+  workflow keeps them as an artifact per commit, which crash reports name.
+- Builds are reproducible: `__BUILD_DATE__` is the commit's date (`git log -1`, or
+  `SOURCE_DATE_EPOCH`; the clock only outside git) and `__BUILD_COMMIT__` its hash, so rebuilding a
+  commit gives byte-identical files and a redeploy that changed nothing triggers no update.
+- `index.html` carries a Content-Security-Policy meta tag written by a Vite html transform
+  (`scripts/lib/html.ts`): scripts from the site plus the inline pre-paint theme script by its SHA-256
+  hash (computed from the final HTML at build time, so it cannot go stale), `'wasm-unsafe-eval'` for the
+  engine, connections to the site and the four APIs (lichess.org, explorer.lichess.ovh,
+  tablebase.lichess.ovh, api.chess.com), inline styles (Chessground and React set style attributes),
+  and `object-src`/`base-uri` `'none'`. A meta tag cannot set `frame-ancestors`; the service worker
+  adds that header to the pages it serves (`src/sw/framing.ts`). The dev server has no policy.
 - The engine binaries are **not in git**. `scripts/setup-engine.mjs` downloads the pinned Stockfish.js
-  release and verifies SHA-256 checksums; it runs before `dev` and `build`. This keeps the repository
-  small and avoids a 200 MB npm dependency, while still failing loudly if the upstream file changes.
+  release and verifies SHA-256 checksums; it runs before `dev` and `build` (CI caches the download and
+  still checks it), and writes `public/engine/version.json`, a record of the build for people — the
+  app does not read it and it is not precached. This keeps the repository small and avoids a 200 MB
+  npm dependency, while still failing loudly if the upstream file changes.
 
 ## The engine layer (`src/engine/`)
 
 `EngineClient` wraps a Web Worker running Stockfish and speaks UCI over `postMessage`:
 
 - `init()` performs the `uci`/`isready` handshake once and caches the promise.
-- `search(params, onInfo)` returns a handle whose `result` resolves on `bestmove`. Searches are
-  **serialised**: starting a new one stops the previous (its promise resolves with `stopped: true`).
+- `search(params, onInfo)` returns a handle whose `result` resolves on `bestmove`. Searches and
+  `newGame()` share one **FIFO queue**, so only one command talks to the engine at a time. Starting a
+  search asks the _running_ one to stop (it resolves early with `stopped: true`); searches already
+  waiting in the queue still run, in order, unless their own handle's `stop()` is called before they
+  start (they then resolve with `stopped: true` and no best move without reaching the engine).
+  `newGame()` stops the search in progress (it belongs to the old game), runs once it has ended and
+  before any search requested later, so `ucinewgame` can never land after the new game's first `go`.
   This makes React effects safe — an effect can start a search and stop it in its cleanup without
-  worrying about interleaved `bestmove` lines.
+  worrying about interleaved `bestmove` lines. Callers must not trust a `stopped` result (it may be
+  depth 1) and must never cache one.
+- A worker that dies **after** the handshake rejects the pending search or `newGame` with
+  `EngineCrashedError`, sets `status = 'error'` and notifies `onError` listeners; `useEngine()` mirrors
+  that into React state so pages show their Retry button, and `start()` then builds a fresh client.
+  `terminate()` likewise rejects everything still waiting instead of leaving promises pending.
 - `uci.ts` parses `info`/`bestmove` lines into typed objects and converts scores to White's
   perspective and to win probabilities (the same logistic model Lichess uses).
 
@@ -112,8 +141,12 @@ GitHub Pages cannot set headers, so the service worker does it on request:
    them because a worker must be at least as isolated as its owner).
 3. `chooseEngineBuild()` (`src/engine/build.ts`) picks the pthreads build only when the page reports
    `crossOriginIsolated`, `SharedArrayBuffer` exists and there are at least three logical cores; it uses
-   all cores but one, capped at eight. `EngineClient` sends `setoption name Threads` after `uciok` and
-   falls back to the single-threaded build if the worker fails to start.
+   all cores but one, capped at eight (four on phones and tablets, detected through
+   `navigator.userAgentData.mobile` or a coarse pointer). A hidden core count (iOS Safari, Firefox with
+   resist-fingerprinting) or fewer than three cores means the single-threaded build — the message says
+   "fewer than three cores are reported, or the count is hidden", never "only one core". `EngineClient`
+   sends `setoption name Threads` after `uciok` and falls back to the single-threaded build if the
+   worker fails to start.
 
 The option is off by default: under `require-corp` every cross-origin resource must be CORS-enabled,
 and the single-threaded build already reaches depth 18–20 in a few seconds on a laptop. The threaded
@@ -125,10 +158,19 @@ build is excluded from the precache manifest and cached by a `CacheFirst` route 
 Lichess. The instance is created once per mount and reconfigured through `api.set()` on prop changes,
 which keeps piece animations intact. `viewOnly` is the only creation-time prop (it changes which DOM
 events Chessground binds), so toggling it recreates the board. Board colours come from a CSS variable
-holding an SVG data URI generated in `boardThemes.ts`; piece sprites are Chessground's cburnett set.
+holding an SVG data URI generated in `boardThemes.ts`; piece sprites come from the piece-set
+stylesheets described below (the default Classic set is Colin M.L. Burnett's cburnett figurines,
+CC BY-SA 3.0, credited in the footer).
 
 The board is deliberately "dumb": it reports `onMove(from, to)` and renders whatever `fen`, `dests`,
-`shapes` and highlights it is given. All rules live in hooks built on chess.js. Coordinates are not
+`shapes` and highlights it is given. All rules live in hooks built on chess.js. It is also
+self-healing: after `onMove` it re-applies the position from its props unless the page answered with a
+new one, so a cancelled promotion or a drill that keeps its position puts the piece back and stays
+movable. `onMove` runs inside `flushSync`, because Chessground calls it from a timeout. A king dropped on
+its own rook castles (the rook squares are added to the king's destinations and translated back to
+the castling square before `onMove`). User-drawn arrows survive reconfiguration (`drawable.shapes` is
+passed along with every `fen`). `Board` and `MoveList` are memoised so a ticking clock in the parent
+does not redraw them. Coordinates are not
 Chessground's: with `showCoordinates` on, the `.board` element keeps a gutter (`--coord-gutter`, sized
 from the board width with container-query units) down the left and along the bottom, the playing
 surface (`.board__surface`, which holds Chessground and the keyboard cursor) fills the rest, and
@@ -140,9 +182,16 @@ with the same gutter (`.trainer__board:has(.board--coords) > .evalbar`).
 Every interactive board is also keyboard-operable (`keyboard.ts`): the container is focusable, the arrow
 keys move a square cursor (from the viewer's side), Enter selects the piece under the cursor and then its
 destination through Chessground's own `selectSquare`, so the same legality, callbacks and highlights apply
-as for the mouse; Escape clears the selection and typing a square name jumps to it. Letters are not
-swallowed, so page shortcuts such as `h` keep working. A visually hidden "Describe position" button reads
-the whole position out through a live region. Piece sets are chosen with a `data-pieces` attribute on
+as for the mouse; Escape clears the selection and typing a square name (either case) jumps to it. While
+the board has focus, file letters, Space and Enter are swallowed, so page shortcuts such as `h` (hint)
+or `s` (solution) never fire from a typed square and Space never scrolls. The cursor square is spoken on
+focus and after every step (with ", legal destination" while a piece is selected); a refused Enter says
+"Not a legal destination" or "It is not your move". An `aria-describedby` paragraph holds the key
+instructions, a visually hidden "Describe position" button reads the whole position out through a live
+region, and a view-only board (`role="img"`) carries the same description as `aria-description`. The
+promotion picker is a modal dialog with a focus trap that gives focus back on close; `ClickBoard` (the
+drills and the board editor) is one `role="group"` tab stop with a roving tabindex and the same arrow
+keys, and marks the selected square with `aria-pressed`. Piece sets are chosen with a `data-pieces` attribute on
 `<html>`; every set is a stylesheet of inline SVG with the same selectors (`pieces-*.css`, written by
 `scripts/generate-pieces.mjs`: the cburnett figurines re-emitted from the Chessground package, and the
 original Modern and Pixel sets, drawn in the script; the Letters set is hand-written). A more specific
@@ -159,16 +208,30 @@ letters.
 
 ## Chess state (`src/chess/`)
 
-- `helpers.ts` — pure functions: legal destinations for Chessground, UCI/SAN conversion (including
-  `tryNotation` for typed moves), promotion detection, game status, material.
+- `helpers.ts` — pure functions: legal destinations for Chessground (with the rook squares for
+  castling-by-rook), UCI/SAN conversion (including `tryNotation` for typed moves: lowercase pieces,
+  `a8=q`, and `e8`/`e7e8` promotions completed as a queen when `autoQueen` is on), promotion detection,
+  game status, material. `normalizeFen` repairs a user FEN — castling rights whose king or rook has
+  moved are dropped, an impossible en passant square is cleared, 4- and 5-field FENs/EPDs are padded —
+  and `isValidFen`/`sanitizeFen` build on it; `GameTree` and `useChess` normalise every start position.
 - `useChess.ts` — owns a mutable `Chess` instance in a ref and publishes immutable
   `PositionSnapshot`s. It also models the **promotion dialog**: `playMove` returns `'promotion'` when
   a piece must be chosen and `resolvePromotion` completes or cancels it. Used by Play and the drills.
 - `pgn.ts` — a tokenising PGN parser that understands headers, `{comments}`, nested `(variations)`,
-  `$n` NAGs and `!?`-style glyphs. `splitPgnGames` handles multi-game files.
+  `$n` NAGs and `!?`-style glyphs, and is forgiving about movetext in the wild: move numbers glued to
+  moves (`1.e4`, `2...Nc6`), `[%clk …]`/`[%eval …]`/`[%csl …]` commands split out of comments into
+  each move's `commands` (the prose stays clean), evaluation symbols (`+-`, `∞`, `±` …) turned into
+  NAGs, `%` escape lines and stray words dropped, a comment before a variation's first move kept as
+  `commentBefore`. `splitPgnGames` handles multi-game files, header-less games included (a result
+  followed by a blank line, or a `1.` that restarts a game).
 - `tree.ts` — `GameTree`, a tree of positions where the first child is the main line. It supports
   adding moves (re-using existing children), navigation, promoting/deleting variations, comments and
-  glyphs, and round-trips to PGN. The analysis board and the repertoire trainer are built on it.
+  glyphs, and round-trips to PGN (the comment before the first move and `[%clk]` commands included).
+  `fromParsed` validates a `FEN` header and throws a `PgnParseError` naming it, so a bad header never
+  reaches a board; `parsePgnGames` (`lib/gameImport.ts`) skips such games. `parsePgnCached` memoises
+  `fromPgn` per PGN string (a 32-entry LRU, each call returns a fresh clone) for the Home, Progress and
+  due-count code that re-reads the repertoires on every render. The analysis board and the repertoire
+  trainer are built on it.
 
 ### Sounds and clocks (`src/lib/`)
 
@@ -179,11 +242,19 @@ letters.
 - `clock.ts` is a pure clock model (timestamps, increments, flagging) that Play drives with a 100 ms tick.
 - `srs.ts` is an SM-2 scheduler used for opening moves; `puzzleReview.ts` is the simpler fixed-step
   (1-3-7-14-30 days) scheduler behind the puzzle review queue; `openings.ts` looks up ECO names by EPD;
-  `tablebase.ts` wraps the Lichess tablebase API and normalises per-move results to the mover's view.
-- `gameImport.ts` splits multi-game PGN text, replays each game for legality, and fetches recent games
-  from the public Lichess (`/api/games/user/…`, PGN stream) and chess.com (monthly archives) APIs with
-  typed errors (`not-found`, `rate-limited`, `network`, `empty`), time-control / colour / rated filters
-  and cursors for "load older games".
+  `tablebase.ts` wraps the Lichess tablebase API and normalises per-move results to the mover's view;
+  results are cached per position including the halfmove clock (the 50-move categories depend on it),
+  and `describeDtm` turns the API's half-move DTM into "mate in N" moves.
+- `fetchWithTimeout.ts` is the one `fetch` wrapper for every network call (Lichess, chess.com, the
+  explorer, the tablebase): it combines the caller's signal with a 15 s `AbortSignal.timeout` and reads
+  `Retry-After` on 429 responses.
+- `gameImport.ts` splits multi-game PGN text (`parsePgnGamesDetailed` also returns the first parse error
+  and the legal prefix before an illegal move), replays each game for legality, skips variant games
+  (`Variant` header, chess.com `rules`), keeps only `https:` links on lichess.org or chess.com as source
+  URLs (`safeSourceUrl`), and fetches recent games from the public Lichess (`/api/games/user/…`, PGN
+  stream, standard perfs only) and chess.com (monthly archives under the player's own path, at most six
+  per page) APIs with typed errors (`not-found`, `rate-limited`, `network`, `empty`), time-control /
+  colour / rated filters and cursors for "load older games" (the chess.com cursor carries the month).
 - `shareLink.ts` builds and reads the analysis share links: the PGN is deflated with the Compression
   Streams API and carried in the URL fragment (`#z=…&ply=N`, or `#pgn=` / `#fen=` as fallbacks), so a
   link never reaches a server.
@@ -191,51 +262,70 @@ letters.
 
 ## Feature state machines
 
-| Hook                                           | Phases                                                                                   | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `usePuzzleTrainer`                             | idle → intro → solving ⇄ replying → solved / failed                                      | Lichess semantics: first move is the opponent's; any checkmate is accepted as the final move; outcome reported exactly once; "try again" continues unrated.                                                                                                                                                                                                                                                                                                                                                                           |
-| `useLessonStep`                                | reading / awaiting → wrong → awaiting / replying → correct / revealed                    | Judges SAN against the task (`taskCheck.ts`), plays scripted replies, exposes hint shapes.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `usePlayVsEngine`                              | setup → playing (player turn / engine thinking) → game over                              | Engine moves are requested from an effect keyed on the position; take-backs cancel pending searches. Optional clock: flag = loss, engine think time capped by its remaining time. With `opponent: 'human'` the engine never moves, both colours are movable, the board can turn towards the side to move and the game is not recorded.                                                                                                                                                                                                |
-| `useStudy`                                     | solving → wrong → solving / replying → solved / revealed                                 | One endgame study: each solver move is checked against the scripted line (alternatives allowed), the reply is played automatically, hints escalate from a circle to an arrow, and the outcome is reported once with an "assisted" flag.                                                                                                                                                                                                                                                                                               |
-| `useAnalysis`                                  | continuous evaluation of the current `GameTree` node; optional review                    | A move played from the middle of a line becomes a variation; the review grades the main line at the configured depth and produces win probabilities for the evaluation graph and `keyMoments()`. Opening name, tablebase and opening-explorer lookups follow the current node. Each reviewed move keeps its best line and the reply line so `commentary.ts` can explain it.                                                                                                                                                           |
-| coach (in `usePlayVsEngine`)                   | player moves → coach checking → alert (take back / play on) → engine replies             | In untimed engine games the position before and after the learner's move is searched at a fixed depth (`COACH_DEPTH`); a mistake or blunder, or any missed or allowed mate, pauses the game with the rules-based explanation and the lesson it belongs to. The engine's reply waits until the alert is resolved.                                                                                                                                                                                                                      |
-| `useRush`                                      | idle → running → finished                                                                | Difficulty climbs with every solve; three misses (or the 3-minute clock) end the run. Built on `usePuzzleTrainer`.                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `useDrillGame`                                 | idle → playing → won / lost                                                              | Full-strength engine plays the other side; the position is adjudicated after every move (mate, promotion, stalemate, material loss counted from the learner's side, move limit, engine eval). `endgameLadder.ts` orders the 41 drills by difficulty into rungs and reports what is climbed.                                                                                                                                                                                                                                           |
-| `PatternDrill`                                 | intro → solving → solved / failed, per pattern                                           | The nineteen named mates (`matingPatterns.ts`: a lead-in move plus a forced mate, all checked in tests) run through `usePuzzleTrainer` one after another; results are stored per pattern and per full run.                                                                                                                                                                                                                                                                                                                            |
-| book (in `usePlayVsEngine`)                    | in-book ⇄ out-of-book / deviated                                                         | `openingBook.ts` follows the game through a repertoire's tree: the opponent's replies come from the book (weighted towards the learner's least-known moves), the engine takes over when the book ends, and a learner move outside the book pauses the game with a take-back and lapses the SM-2 card.                                                                                                                                                                                                                                 |
-| `useRepertoireTrainer`                         | idle → opponent ⇄ learner → lineDone → sessionDone                                       | Picks the line with the most due SM-2 cards, shows new moves with an arrow, grades every recall into the repertoire store.                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `useGuessTheMove`                              | intro → guess → (checking) → feedback → auto … → done                                    | 3 points for the game move; a different move is scored 2 when the engine rates it within 40 cp of the game move.                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `useHandAndBrain`                              | setup → (partner thinking → call → partner move / hand move → grading) ⇄ opponent → over | One engine instance serves both sides: the partner searches at full strength (`Skill Level` 20, depth 12) and the opponent at its level (`engineMove.ts`, shared with `usePlayVsEngine`). The Brain's call restricts a second search to that piece's moves (`searchmoves`); the Hand's move is graded by searching the position after it. Work in flight carries a run token, so re-renders never cancel it and a new game makes it stale.                                                                                            |
-| `useFortress`                                  | idle → playing → held / fallen → … → over                                                | A position from `positions.json` where the side to move is clearly worse; after every opponent move the position is graded at full strength and becomes the health bar; `FALLEN_CP` or mate ends the position, `HOLD_MOVES` of the learner's moves or a draw holds it; three lives per run.                                                                                                                                                                                                                                           |
-| Odds Ladder, Army Draft, Blindfold             | plain `usePlayVsEngine` games                                                            | Each starts the shared play hook from its own FEN (`odds.ts`, `army.ts`) or with the board's `board--blindfold` class and a peek budget (`blindfold.ts`); results go to the progress store's arcade slices.                                                                                                                                                                                                                                                                                                                           |
-| Daily Opening, Engine Says, Who Stands Better? | pure models + a page                                                                     | No engine at run time: `dailyOpening.ts` seeds the day's line from the date and grades guesses like Wordle; `engineSays.ts` grows a sequence by one move per round; `whoStandsBetter.ts` scores a slider guess against evaluations computed offline.                                                                                                                                                                                                                                                                                  |
-| `useSimul`                                     | setup → playing (per board: your move → waiting → thinking → your move) → over           | One engine serves every board from a first-in, first-out queue (`SimulRunner`, a plain class so the engine loop never reads a stale state); the pure model (`simul.ts`) keeps a clock per board for each side — the player's runs wherever it is their move, the engine's only while it searches, with the search time cut to what it has left. A flag against a side that cannot mate is a draw (FIDE 6.9), here and in Play. Finished boards are saved as games; the summary hands any of them to Analyze through `lib/handoff.ts`. |
+| Hook                                           | Phases                                                                                   | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `usePuzzleTrainer`                             | idle → intro → solving ⇄ replying → solved / failed                                      | Lichess semantics: first move is the opponent's; any checkmate is accepted as the final move; outcome reported exactly once; "try again" continues unrated.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `useLessonStep`                                | reading / awaiting → wrong → awaiting / replying → correct / revealed                    | Judges SAN against the task (`taskCheck.ts`), plays scripted replies, exposes hint shapes (also on their own, for Recall). Reports how the task ended (`{ revealed, mistakes, hinted }`) to `onSolved` in the same call, so Recall grades a shown answer or a wrong move as a miss; “Show answer” works only while the task waits for a move.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `usePlayVsEngine`                              | setup → playing (player turn / engine thinking) → game over                              | Engine moves come from an effect keyed on the position; take-backs cancel pending searches and are refused once the game is over (it is recorded once), and pause alerts close with the game. Clock: a flag loses (draws when the winner cannot mate); the engine's think time is capped by its clock — the level's depth kept, a `movetime` added as a second limit, the cosmetic pause skipped under ten seconds. Hints and threats carry a run token, are dropped if the position changed and are also given in words (`hintMove`, a live region on the page). `start({ source, event })` names the mode the game is recorded under (`'play'` by default; `'ladder'`, `'book'`, `'arcade'`); the hook never writes the Play defaults — `PlayPage` does. The skill cache resets when `useEngine` hands out a new client (on Retry). With `opponent: 'human'` the engine never moves, both colours are movable, the board can turn towards the side to move and the game is never recorded. |
+| `useStudy`                                     | solving → wrong → solving / replying → solved / revealed                                 | One endgame study: each solver move is checked against the scripted line (alternatives allowed), the reply is played automatically, hints escalate from a circle to an arrow, and the outcome is reported once with an "assisted" flag.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `useAnalysis`                                  | continuous evaluation of the current `GameTree` node; optional review                    | A move played from the middle of a line becomes a variation; the review grades the main line at the configured depth and produces win probabilities for the evaluation graph and `keyMoments()`. Opening name, tablebase and opening-explorer lookups follow the current node. Each reviewed move keeps its best line and the reply line so `commentary.ts` can explain it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| coach (in `usePlayVsEngine`)                   | player moves → coach checking → alert (take back / play on) → engine replies             | In untimed engine games the position before and after the learner's move is searched at a fixed depth (`COACH_DEPTH`) and at `Skill Level` 20, one search after the other (a parallel pair would stop the first at a shallow depth; stopped results are never cached); the best move is the top line's first move, not the skill-weakened `bestmove`. A mistake or blunder, or any missed or allowed mate, pauses the game with the rules-based explanation and the lesson it belongs to. A move that ends the game is never checked, and a mated position with no engine line counts as a win. The engine's reply waits until the alert is resolved; resolving the coach or book alert clears both.                                                                                                                                                                                                                                                                                         |
+| `useRush`                                      | idle → running → finished                                                                | Difficulty climbs with every solve; three misses (or the 3-minute clock) end the run. Built on `usePuzzleTrainer`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `useDrillGame`                                 | idle → playing → won / lost                                                              | Full-strength engine plays the other side; the position is adjudicated after every move (mate, promotion, stalemate, material loss counted from the learner's side, move limit, engine eval). `endgameLadder.ts` orders the 41 drills by difficulty into rungs and reports what is climbed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `PatternDrill`                                 | intro → solving → solved / failed, per pattern                                           | The nineteen named mates (`matingPatterns.ts`: a lead-in move plus a forced mate, all checked in tests) run through `usePuzzleTrainer` one after another; results are stored per pattern and per full run.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| book (in `usePlayVsEngine`)                    | in-book ⇄ out-of-book / deviated                                                         | `openingBook.ts` follows the game through a repertoire's tree: the opponent's replies come from the book, weighted towards the learner's least-known moves (the store keys cards by repertoire and path, so the hook passes them through `cardsFor()`; a lapsed move counts as relearning, not new). The engine takes over when the book ends. A learner move outside the book pauses the game, clocks included, with a take-back, and lapses the SM-2 card: the alert comes with the move that left the book (again after a take-back and the same move; never for later moves of a game played on), the lapse once per ply and move. The hint in book is the repertoire's move; a repertoire that cannot be read is refused at the start.                                                                                                                                                                                                                                                  |
+| `useRepertoireTrainer`                         | idle → opponent ⇄ learner → lineDone → sessionDone                                       | Picks the line with the most due SM-2 cards, shows new moves with an arrow (a lapsed move is relearning, not new), grades every recall into the repertoire store. Cards are keyed by move path; grading a move also grades its transpositions (the same move from the same position reached by another move order, `transpositionTwins()` in `model.ts`) — a success only if that card was not already recalled today, a miss always.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `useGuessTheMove`                              | intro → guess → (checking) → feedback → auto … → done                                    | 3 points for the game move; a different move is scored 2 when the engine rates it within 40 cp of the game move.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `useHandAndBrain`                              | setup → (partner thinking → call → partner move / hand move → grading) ⇄ opponent → over | One engine instance serves both sides: the partner searches at full strength (`Skill Level` 20, depth 12) and the opponent at its level (`engineMove.ts`, shared with `usePlayVsEngine`). The Brain's call restricts a second search to that piece's moves (`searchmoves`); the Hand's move is graded by searching the position after it. `busy` tells the partner studying the position from the partner finding the called piece's move. Work in flight carries a run token, so re-renders never cancel it and a new game makes it stale. The score (`handAndBrainScore`) is the accuracy × the engine level × the share of a full game (30 calls); a resignation before 10 calls is not scored.                                                                                                                                                                                                                                                                                           |
+| `useFortress`                                  | idle → playing → held / fallen → … → over                                                | A position from `positions.json` where the side to move is clearly worse (either side defends); after every opponent move the position is graded at full strength and becomes the health bar; `FALLEN_CP` or mate ends the position, `HOLD_MOVES` of the learner's moves or a draw holds it — the last move graded like the others before it counts; three lives per run, each position held scoring the engine level.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Odds Ladder, Army Draft, Blindfold             | plain `usePlayVsEngine` games                                                            | Each starts the shared play hook from its own FEN (`odds.ts`, `army.ts`) or with the board's `board--blindfold` class and a peek budget (`blindfold.ts`), with `source: 'arcade'` and an event naming the game; results go to the progress store's arcade slices (the Odds Ladder keeps wins, draws and losses per rung). `EngineGameBoard.tsx` holds the shared board column and move panel; `arcadeControls.tsx` the engine-level field, focus toggle, PGN/analysis buttons and the resign confirmation every arcade engine game uses.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Daily Opening, Engine Says, Who Stands Better? | pure models + a page                                                                     | No engine at run time: `dailyOpening.ts` seeds the day's line from the date (answers and guesses come from the same entries; the page freezes the day while a game is under way, and a day in the history is never playable again) and grades guesses like Wordle; `engineSays.ts` grows a sequence by one move per round and carries the moves of every finished line into the score; `whoStandsBetter.ts` scores a slider guess in tenths of a pawn against evaluations computed offline.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `useSimul`                                     | setup → playing (per board: your move → waiting → thinking → your move) → over           | One engine serves every board from a first-in, first-out queue (`SimulRunner`, a plain class so the engine loop never reads a stale state); the pure model (`simul.ts`) keeps a clock per board for each side — the player's runs wherever it is their move, the engine's only while it searches, with the search time cut to what it has left (never a floor longer than half of it). A flag against a side that cannot mate is a draw (FIDE 6.9), here and in Play. A board that ends while the engine thinks about it stops that search; an engine that keeps failing sets `stalled`, which the page shows with a Retry; announcements wait their turn (`Announcer`). Finished boards are saved as games (`source: 'simul'`); leaving mid-simul asks first (`useBlocker`, `beforeunload`) and resigns the boards in play; the summary hands any board to Analyze through `lib/handoff.ts`.                                                                                                |
 
 ## Persistence (`src/store/`)
 
 Five zustand stores persisted to `localStorage` with versioned keys (and `migrate` functions), plus the
 profile list:
 
-- `settings` — appearance (colour scheme, notation), board (theme, piece set, highlights, drag
-  feel, material display), sound theme and volume, focus mode, engine defaults, review depth, the multi-threaded engine opt-in, puzzle preferences, time control,
-  keyboard move entry, blindfold play, tablebase opt-in, remembered import usernames and the first-run
-  tour flag.
-- `progress` — onboarding flag, puzzle rating and history, attempts, seen puzzle IDs, streaks, daily
-  puzzle state, lesson progress and lesson-recall cards, game records, per-theme statistics, Puzzle Rush
-  runs, drill results, study results, guess-the-move scores, the puzzle review queue (which also holds
-  bookmarks and the puzzles made from the learner's own games) and the list of training days. Every
-  recorded activity calls `touchTraining()`, which is what the Home page streak is built on. Capped lists
-  keep storage small. Export/import includes the repertoire store.
+- `settings` (version 4) — device-wide preferences only: appearance (colour scheme, notation), board
+  (theme, piece set, highlights, drag feel, material display), sound theme and volume, focus mode, the
+  engine level for the next game, review depth, the multi-threaded engine opt-in, puzzle preferences,
+  time control, keyboard move entry, blindfold play, tablebase opt-in. Enum fields are validated on
+  load (an unknown board theme falls back to the default) and nested defaults (`simul`) are merged
+  field by field. The learner-scoped fields it used to hold (backup reminder, tour flag, import
+  usernames) moved to `progress` in 0.12; `migrate` hands them over once.
+- `progress` (version 7) — onboarding flag, puzzle rating and history, attempts (capped) plus
+  `lifetime` counters that never forget (attempts, solved, failed, solves per theme, solve time), seen
+  puzzle IDs (capped at 20,000), streaks (`puzzleStreak()` gives the live value, `bestStreak` the
+  longest training run ever), daily puzzle state, lesson progress (steps keyed by the step's `id`, or its position without one) and lesson-recall cards, game records
+  (each with a unique `id` and a `source`: play, ladder, book, arcade, simul or drill), per-theme
+  statistics, Puzzle Rush runs, drill results, study results, guess-the-move scores, the puzzle review
+  queue (capped at 500; bookmarks and own-game puzzles live there too; Woodpecker misses stay out of it)
+  and the list of training days. Every recorded activity calls `touchTraining()`, which is what the
+  Home page streak is built on. Also the learner's backup reminder state, tour flag and import
+  usernames. Export/import covers all four per-learner stores.
 - `repertoire` — SM-2 cards keyed by repertoire and move path, custom PGN repertoires, session history.
-- `games` — the learner's imported games (up to 200) with their review results, keyed by URL or PGN hash.
-  Each review also stores a `digest` (loss and errors per phase and colour, mistake motifs) that
-  `insights.ts` aggregates for the Insights card and the daily plan's work-on items.
+- `games` — the learner's imported games (up to 200; past the cap unreviewed games go first, and
+  `addGames` returns `{ added, dropped }`) with their review results, keyed by URL or PGN hash. Each
+  review also stores a `digest` (loss and errors per phase and colour, mistake motifs) that
+  `insights.ts` aggregates for the Insights card and the daily plan's work-on items. Included in
+  backups since export version 7.
 - `analyses` — the analysis library: PGNs with variations under a name and a collection (a Lichess study
-  export becomes one collection per study). Included in backups (export version 5).
-- `profiles` (`src/store/profiles.ts`, plain `localStorage`) — the learners on this device and which one is
-  active. `storageKeyFor(base)` maps a store's key into the active profile's namespace at module load; the
-  first profile keeps the plain keys, others get `<key>:<profile id>`. Switching profiles reloads the app.
-  Settings are shared across profiles.
+  export becomes one collection per study). Included in backups (export version 5); an import replaces
+  the library, within the 500 cap, like every other store.
+- `profiles` (`src/store/profiles.ts`, `localStorage` through the quota-safe wrapper) — the learners on
+  this device and which one is active. `storageKeyFor(base)` maps a store's key into the active
+  profile's namespace at module load; the first profile keeps the plain keys, others get
+  `<key>:<profile id>`. Switching profiles reloads the app (not when the choice could not be saved).
+  Names are unique; when the list is unreadable it is rebuilt from the store keys that exist. Settings
+  are shared across profiles.
+
+Every store hydrates through a schema (`src/store/backupSchema.ts`, shared with the backup validator)
+in repair mode: a field of the wrong type falls back to its default, damaged list entries are
+dropped, unknown keys are kept (so a save from a newer version survives a round trip through an
+older build, which `migrate` also tolerates), and a blob that cannot be parsed is copied to
+`<key>:corrupt-<timestamp>` by `keepCorruptBlob` before the first write replaces it.
+`rehydrateOnStorageChange` reloads a store when another tab writes its key.
 
 ### The puzzle rating
 
@@ -277,19 +367,34 @@ Lichess CSV.zst ──▶ import-lichess-puzzles.mjs ──▶ public/puzzles/in
 ```
 
 Buckets are rating bands (400–799, 800–1099, …, 2600+), 6,000 puzzles each, written as chunks of 500
-(`b1400-00.json` … `b1400-11.json`). Re-importing keeps the ids already in `public/puzzles` (the
-`--keep` list) so review queues and histories survive a refresh. The app loads the chunks of the buckets
-around the user's rating on demand; `puzzleService.ts` caches per chunk and can download every chunk into
-the service worker's runtime cache (`downloadAllPuzzles`) for full offline use. `index.json` carries the
-chunk size, the file list per bucket and per-theme counts for the practice catalogue.
+(`b1400-00.json` … `b1400-11.json`). A band's puzzles are dealt over its chunks round-robin by rating
+(sorted by rating and id, puzzle i goes to chunk i mod n — `dealChunks` in `scripts/lib/puzzle-index.mjs`,
+checked by `verify-puzzles.mjs`), so every chunk, the precached first one included, samples the whole
+band; `npm run puzzles:reindex` re-deals the files without re-importing. Re-importing keeps the ids
+already in `public/puzzles` (the `--keep` list) so review queues and histories survive a refresh.
+`index.json` carries the chunk size, the file list and each chunk's rating span per bucket, and the
+per-theme and per-opening counts for the practice catalogues.
+
+`puzzleService.ts` caches per chunk and loads lazily: a selection (rated, theme, opening, Rush, a
+Woodpecker set) searches the chunks already in memory, then one more chunk per band (the precached
+one), then two, four and the rest, stopping as soon as it has enough candidates — usually after the
+first. A lookup by id does the same, nearest band to its rating hint first, and stops at the hit; the
+daily puzzle loads the one chunk that holds it. Chunks are fetched with `allSettled`: one that cannot
+be loaded (offline, not cached) is passed over, and only a load where nothing at all arrives fails
+(`PuzzleLoadError`, which tells "offline" from "not in the set"). `downloadAllPuzzles` fetches every
+chunk into the service worker's runtime cache for full offline use; Stop resolves it, a file that
+keeps failing rejects it and stops the other downloads.
 
 `import-openings.mjs` builds `public/openings/openings.json` (EPD → ECO code and name, ~3,800
 positions) and `public/openings/lines.json` (every line's moves, for the Daily Opening and Engine Says
-games) from the lichess-org/chess-openings TSV files; the output is committed.
+games) from the lichess-org/chess-openings TSV files at a pinned commit (`DATASET_REF`; `--ref` moves
+it), so a re-run reproduces the committed files; `openings.json` records the commit and the time under
+its `ref` and `generatedAt` keys.
 
 `build-arcade-positions.mjs` replays the classic games, evaluates their middlegame positions with the
 engine (depth 16) and writes `src/features/arcade/positions.json` (White-view centipawns, the best move,
-whether it is forcing, piece count). `positions.ts` filters it into the quiet positions of Who Stands
+whether it is forcing, piece count). Every other game is sampled a ply later, so about half the
+positions have Black to move. `positions.ts` filters it into the quiet positions of Who Stands
 Better? and the clearly-worse ones of Fortress; the games' names are joined from `CLASSIC_GAMES` at run
 time.
 
@@ -297,40 +402,84 @@ time.
 
 The service worker is hand-written (`src/sw.ts`, built by `vite-plugin-pwa` in `injectManifest` mode and
 type-checked by `tsconfig.sw.json` against the WebWorker library). It precaches every build asset, the
-single-threaded engine, the first puzzle chunk of every rating band and the opening table (~4.5 MB),
-serves `index.html` for navigations so deep links work offline, caches the remaining puzzle chunks
-(`chess-trainer-puzzles`, cache-first) and the threaded engine build on first use, and applies the
-cross-origin-isolation headers described above when asked. `registerType: 'prompt'` means a new deploy
-does not silently replace the running app; `UpdatePrompt` shows a "Reload" toast and the worker honours
-the `SKIP_WAITING` message. `pwa.ts` captures `beforeinstallprompt` before React mounts and exposes an
-install button; iOS gets manual instructions because Safari has no install API.
+single-threaded engine, the first puzzle chunk of every rating band and the opening table (~5.8 MB),
+serves `index.html` for navigations to the app's own routes so deep links work offline (the allowlist in
+`src/sw/appRoutes.ts` keeps a sibling site on the same origin out of it; a test checks it against
+`routes.tsx`), caches the remaining puzzle chunks (`chess-trainer-puzzles`, stale-while-revalidate — the
+chunk names carry no hash) and the threaded engine build (`chess-trainer-engine`, cache-first) on first
+use, applies the cross-origin-isolation headers described above when asked, and adds
+`Content-Security-Policy: frame-ancestors 'none'` to every page it serves. Both runtime caches keep
+only complete responses of the expected content type (`src/sw/cacheable.ts`) and expire them, so a
+captive portal's HTML can never poison a chunk for good. The isolation flag is read from the Cache API
+once per worker lifetime; `writeIsolationFlag` posts `ISOLATION_FLAG_CHANGED` so the worker drops its
+copy. `registerType: 'prompt'` means a new deploy does not silently replace the running app;
+`UpdatePrompt` shows a "Reload now" toast, otherwise applies the update at the next in-app navigation,
+and reloads only the tab that asked (it listens for `controllerchange` itself, so a page that was not
+controlled at registration still reloads). `pwa.ts` captures `beforeinstallprompt` before React mounts
+and exposes an install button; iOS gets manual instructions because Safari has no install API. "Not
+now" on the install banner is remembered in `localStorage['chess-trainer:install-dismissed']` for 30
+days; `detectStandalone` recognises every `display_override` mode, and `installUnavailableReason` tells
+Settings why there is nothing to offer. `index.html` runs a small inline script that applies the saved
+colour scheme and piece set before the first paint (the page's Content-Security-Policy allows it by
+hash), and its title, description and social-card tags are filled from `site.config.ts` by a Vite
+html transform.
 
 ## Platform integrations (`src/app/PlatformHooks.tsx`, `src/lib/backup.ts`)
 
-- **Icon badge.** `useDueCount` adds up due puzzle reviews, lesson recall and repertoire cards;
+- **Icon badge.** `useDueCount` adds up due puzzle reviews, lesson recall and repertoire cards (each
+  repertoire PGN parsed once, through `parsePgnCached`);
   `useAppBadge` writes the total with the Badging API (`navigator.setAppBadge`) and clears it when
   nothing is due or the setting is off. Browsers without the API ignore it.
-- **Backups.** Export is a JSON file (`downloadBackup`); where the Web Share API can share files
-  (`canShareBackup`) the same file goes straight to another device or app (`shareBackup`). The manifest
-  registers the app as a handler for `.json` files, and `consumeLaunchFiles` reads the launch queue so a
-  backup opened from a file manager imports itself. `backupStatus` decides when the reminder shows (40
-  rated puzzles or 14 days since the last backup, never before 20 rated puzzles).
+- **Backups.** Export is a JSON file (`downloadBackup`, named after the profile and the date); where
+  the Web Share API can share files (`canShareBackup`) the same file goes straight to another device or
+  app (`shareBackup`). The manifest registers the app as a handler for `.json` files, and
+  `consumeLaunchFiles` reads the launch queue; a launch file goes through the same flow as the Settings
+  import (`useImportBackup`): `readBackupFile` (size cap, PGN detection), `inspectBackup` (the
+  validator, no store touched), a confirmation dialog with the summary, then `importWithUndo`, which
+  stashes the current export under `chess-trainer:pre-import-backup` for the toast's "Undo import".
+  Nothing is ever imported without the confirmation. `backupStatus` decides when the reminder shows:
+  once there is activity worth keeping (5 training days, 3 lessons, 10 repertoire cards or 3 games),
+  then on the first backup, after 40 rated puzzles or after 14 days with activity; "Later" snoozes it
+  for a week.
 - **Haptics.** `playSound` also calls `vibrate` (Vibration API, `src/lib/haptics.ts`) with a pattern
-  per cue and sound theme, gated by the `haptics` setting.
+  per cue and sound theme, gated by the `haptics` setting. Neither plays before the first tap or key
+  press. Sound output runs through one limiter at the destination, resumes a suspended or interrupted
+  context, claims an `ambient` audio session where WebKit offers one and suspends after a quiet minute.
 - **Explorer.** `lib/explorer.ts` wraps the Lichess opening explorer (masters or community database),
-  cached per position and database, debounced and abortable in `useExplorer`; `ExplorerPanel` is the
-  shared card used by Analyze and the repertoire editor. Off by default because it uses the network.
+  cached per position and database, debounced and abortable in `useExplorer`, and goes through
+  `fetchWithTimeout` (15 s; a 429 names the server's `Retry-After` wait). `describeExplorerError`
+  turns offline, unreachable and timed-out lookups into plain words for the card. `ExplorerPanel` is
+  the shared card used by Analyze and the repertoire editor, with its own switch. Off by default
+  because it uses the network.
 
 ## Accessibility
 
 - Every `Board` derives a plain-language description of the last move from consecutive positions
   (`components/board/announce.ts`: "White knight takes pawn on f7, checkmate.") and announces it in a
-  visually hidden `aria-live` region, so no feature has to report its own moves. Statuses and engine
-  lines are live regions too.
+  visually hidden `aria-live` region, so no feature has to report its own moves. The move is replayed on
+  the previous position and that account is used only when it really produces the new one; otherwise
+  (stepping back, a jump, a new puzzle) the move is described from the shown position alone, and a
+  position change with no last move is announced as "New position". Statuses are live regions too;
+  the engine lines are not (they change many times a second) — the top line is announced once when a
+  search finishes. The eval bar is a `role="meter"` that reads "No evaluation" until a score arrives and
+  keeps the last score, marked stale, between searches; the evaluation graph is a `role="slider"`.
 - The keyboard shortcut reference (`src/app/shortcuts.ts`, opened with `?`) is the single source of
-  truth for the `keydown` handlers in the feature pages.
-- The shell moves focus to `<main>` after in-app navigation, dialogs use the native `<dialog>` element
-  (focus trap, Escape, inert background) and scroll internally when tall.
+  truth for the `keydown` handlers in the feature pages. Every page reads keys through
+  `src/lib/shortcutKey.ts`: case-insensitive, never with a modifier, never from a field, a dialog or
+  the board, and — with `pageShortcutKey` / `characterShortcutsOn` — no single-character shortcut
+  at all when the learner turns them off in Settings (WCAG 2.1.4); Enter, Space and the arrows are
+  not character keys and keep working.
+- The shell moves focus to `<main>` after in-app navigation (not when only the hash or the search
+  changed) and `<ScrollRestoration>` starts each new page at the top while back/forward restore the
+  old offset; `html { scroll-padding }` keeps focused controls clear of the sticky header and bottom
+  bar. Dialogs use the native `<dialog>` element (focus trap, Escape, inert background), carry a close
+  button whenever they are dismissible, scroll internally when tall and lock the page behind them;
+  `ConfirmDialog` is the one shape for "are you sure?", cancel first and the action last. Toasts live
+  in a permanent `aria-live` region (danger ones are alerts), show their tone as an edge colour and an
+  icon, and move into an open dialog so they stay reachable. The "More" navigation is a disclosure
+  over plain lists of links, not an ARIA menu. Focus is an opaque 2px outline with a halo in the page
+  colour; `@media (forced-colors: active)` redraws switches, segments, progress and focus with system
+  colours.
 - `useReducedMotion()` turns Chessground animation off under `prefers-reduced-motion`; the CSS does the
   same for transitions. The high-contrast board palette uses Okabe–Ito highlight colours, and the text
   tokens are chosen to meet WCAG AA contrast on every surface.
@@ -340,18 +489,25 @@ install button; iOS gets manual instructions because Safari has no install API.
 Three things are promised from 0.9 on, and `src/store/compatibility.test.ts` holds the fixtures that
 keep the promise honest:
 
-- **Backups.** `exportState` writes `{ app, version, progress, repertoire, analyses }`; `importState`
-  accepts any earlier shape, fills in the fields invented since (`withRatingDefaults` derives the
-  Glicko-2 deviation from the old Elo history, theme statistics are rebuilt from the attempts) and
-  rejects anything that is not a backup without touching the state. When the export version changes,
-  add a fixture for the previous one; never edit an old fixture.
+- **Backups.** `exportState` writes `{ app, version, progress, repertoire, analyses, games }` (format
+  7); `validateBackupFile` checks every field of every part against the schemas in `backupSchema.ts`
+  (strict: a field of the wrong type refuses the file by name, damaged list entries are dropped and
+  counted, unknown keys are dropped, actions can never be overwritten), `importState` applies all four
+  parts only after every one passed, fills in the fields invented since (`withRatingDefaults` derives
+  the Glicko-2 deviation from the old Elo history, theme statistics and lifetime counters are rebuilt
+  from the attempts, game records get ids and sources) and returns `{ ok, summary }` or
+  `{ ok: false, reason }`. A newer format imports with a warning. When the export version changes, add
+  a fixture for the previous one; never edit an old fixture. The compatibility test imports every
+  fixture and also rehydrates `{ state, version }` blobs of every store through `persist.rehydrate()`.
 - **Stored state.** The persisted stores carry a version and a `migrate` step; an update never
-  resets progress.
+  resets progress, and a newer save loaded by an older build keeps its unknown fields.
 - **Share links.** `#z=` (a deflated PGN), `#rep=` and `#wp=` are decoded from fixed strings made by
   earlier versions.
 
 Local storage is wrapped once (`src/lib/persistStorage.ts`): a write refused for lack of space is
-caught, recorded in `useStorageHealth` and reported once, so the stores never throw into the UI.
+caught, recorded per key in `useStorageHealth` and reported once, so the stores never throw into the
+UI; as soon as a write fits again every registered store is saved again (`repersistAll`) and the
+warning gives way to a confirmation.
 
 ## Testing strategy
 
@@ -370,12 +526,26 @@ caught, recorded in `useStorageHealth` and reported once, so the stores never th
   keyboard board control, shareable links, the settings, the accessibility features, the arcade games,
   the small-phone layout and the cross-origin-isolation switch (which needs the real service worker, so
   it only runs against the built app).
-- **Accessibility sweep (axe-core):** `e2e/axe.spec.ts` audits every top-level page, in both colour
-  schemes, against WCAG 2.1 A/AA and fails on any violation (the chessground board and the transient
-  toasts are excluded).
+- **Accessibility sweep (axe-core):** `e2e/axe.spec.ts` audits every page — the top-level ones and
+  one of each parameterised route — in all three colour schemes, against WCAG 2.1 A/AA, and fails on
+  any violation (the chessground board and the transient toasts are excluded). It sees each page as
+  it first renders; states reached by playing are covered by the release specs' own axe checks.
 - **Browsers.** CI runs four Playwright projects in parallel jobs: the whole suite on desktop and
-  mobile Chromium, and the shell, engine, arcade, settings, lab, small-phone and accessibility specs
-  on Firefox and WebKit.
+  mobile Chromium, and the shell, engine, arcade, settings, lab, small-phone, accessibility and
+  release specs on Firefox and WebKit. A local `npm run e2e` runs the two Chromium projects;
+  `ALL_BROWSERS=1` adds the other two. CI allows two retries; the nightly run sets
+  `PLAYWRIGHT_FAIL_ON_FLAKY=1`, so a test that needed one fails it.
+- **Production path.** One CI job builds with `VITE_BASE_PATH=/chess-trainer/` and runs
+  `e2e/release-0-12-meta.spec.ts` (every URL in it relative) behind `scripts/serve-dist.mjs`, which
+  answers like GitHub Pages: `404.html` with a 404 for a deep link. The same spec checks the footer
+  credits and licence files, that the app runs without a Content-Security-Policy violation (engine
+  included) and the service worker's frame policy.
+- **Coverage.** `npm run test:coverage` (CI) fails below the floor in `vite.config.ts`; lesson data,
+  the generated lesson index, fixtures and the service-worker entry are left out of the figures.
+- **Build scripts** have unit tests next to them (`scripts/**/*.test.ts`, run in Node): the static
+  server, the post-build step, the engine runner (a fake engine that exits mid-search must reject the
+  search), the engine version record, the release check, the CI path filter, the opening data's
+  provenance and the Content-Security-Policy, recomputed from `index.html`.
 - **Budgets.** `scripts/check-bundle-size.mjs` fails the build when a gzipped chunk, the start-up
   code (the entry chunk plus what it imports statically, React aside) or the precache outgrows its
   limit; `scripts/lighthouse.mjs` audits five pages against floors for accessibility,
@@ -394,10 +564,16 @@ caught, recorded in `useStorageHealth` and reported once, so the stores never th
 - **The test lab** (`src/features/lab/`) is for the checks no automation covers: sounds, haptics,
   installs and the feel of a real device.
 - **Engine verification:** `npm run lessons:verify` checks every lesson task against Stockfish (the
-  accepted moves must be mate, keep a decisive win, or stay within 80 cp of the engine's choice);
-  `npm run drills:verify` confirms the drill positions are won/drawn as claimed; `npm run studies:verify`
-  walks every study ply by ply (accepted moves keep the goal, the alternatives that are not listed lose
-  it); `scripts/verify-puzzles.mjs --engine` spot-checks puzzles.
+  accepted moves must be mate, keep a decisive win, or stay within 80 cp of the engine's choice) and
+  every scripted reply; `npm run drills:verify` confirms the drill positions are won/drawn as claimed
+  (it loads the drills through Vite and fails unless every drill is accounted for);
+  `npm run studies:verify` walks every study ply by ply (accepted moves keep the goal, the alternatives
+  that are not listed lose it); `npm run repertoires:verify` scores every move of every built-in
+  repertoire against the engine's best at depth 14 (a learner move may lose at most 120 cp, an
+  opponent move 300); `scripts/verify-puzzles.mjs --engine` spot-checks puzzles. The **Content**
+  workflow runs the first four whenever the content or the checks change, and weekly. The Node-side
+  engine (`scripts/lib/node-engine.mjs`) copies the WASM build into a temp directory of its own per
+  process and rejects pending requests if the engine process exits.
 
 ## Non-goals (for now)
 

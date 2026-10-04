@@ -145,7 +145,7 @@ export const THEMES: Record<string, ThemeInfo> = {
     group: 'Mates',
   },
   anastasiaMate: {
-    name: "Anastasia's mate",
+    name: 'Anastasia’s mate',
     description: 'Knight and rook trap the king against the side of the board.',
     group: 'Mates',
   },
@@ -155,7 +155,7 @@ export const THEMES: Record<string, ThemeInfo> = {
     group: 'Mates',
   },
   bodenMate: {
-    name: "Boden's mate",
+    name: 'Boden’s mate',
     description: 'Two bishops on criss-crossing diagonals mate a castled king.',
     group: 'Mates',
   },

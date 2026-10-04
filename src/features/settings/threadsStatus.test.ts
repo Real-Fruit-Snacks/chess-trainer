@@ -19,11 +19,29 @@ describe('threadsStatus', () => {
     ).toEqual({ kind: 'no-service-worker' });
   });
 
-  it('flags devices that cannot benefit', () => {
+  it('flags devices that cannot benefit, and says which way', () => {
     expect(threadsStatus(true, { ...ready, sharedMemory: false }, 8)).toEqual({
       kind: 'unsupported',
+      reason: 'no-shared-memory',
     });
-    expect(threadsStatus(true, ready, 1)).toEqual({ kind: 'unsupported' });
+    expect(threadsStatus(true, ready, 1)).toEqual({ kind: 'unsupported', reason: 'few-cores' });
+    // Two cores leave one for the engine: no better than single-threaded; a hidden count likewise.
+    expect(threadsStatus(true, ready, 2)).toEqual({ kind: 'unsupported', reason: 'few-cores' });
+    expect(threadsStatus(true, ready, undefined)).toEqual({
+      kind: 'unsupported',
+      reason: 'few-cores',
+    });
+    expect(describeThreadsStatus(threadsStatus(true, ready, 2))).toMatch(/fewer than three/i);
+    expect(describeThreadsStatus(threadsStatus(true, ready, 2))).toMatch(/hidden/);
+  });
+
+  it('tells a browser without service workers from one whose worker has not taken over yet', () => {
+    const none = { isolated: false, sharedMemory: false, serviceWorker: false };
+    expect(threadsStatus(true, none, 8, true)).toEqual({ kind: 'no-service-worker' });
+    expect(threadsStatus(true, none, 8, false)).toEqual({ kind: 'service-worker-unsupported' });
+    expect(describeThreadsStatus({ kind: 'service-worker-unsupported' })).toMatch(
+      /no service worker/,
+    );
   });
 
   it('has wording for every state', () => {

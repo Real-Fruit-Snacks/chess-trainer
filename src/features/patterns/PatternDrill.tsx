@@ -3,8 +3,8 @@ import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { Badge, Button, Card, LinkButton } from '@/components/ui';
 import { type PuzzleOutcomeEvent, usePuzzleTrainer } from '@/features/puzzles/usePuzzleTrainer';
+import { shortcutKey } from '@/lib/shortcutKey';
 import { useProgress } from '@/store/progress';
-import { useSettings } from '@/store/settings';
 import { type MatingPattern, patternDrillId, patternPuzzle } from './matingPatterns';
 import { Notated } from '@/chess/San';
 
@@ -24,7 +24,6 @@ export function PatternDrill({
   patterns: MatingPattern[];
   onExit: () => void;
 }) {
-  const autoQueen = useSettings((s) => s.autoQueen);
   const recordDrill = useProgress((s) => s.recordDrill);
   const [index, setIndex] = useState(0);
   const [results, setResults] = useState<Record<string, PatternResult>>({});
@@ -72,11 +71,12 @@ export function PatternDrill({
     }
   };
 
-  // Keyboard: Enter for the next pattern once this one is over.
+  // Keyboard: Enter for the next pattern once this one is over (not from a focused button,
+  // which Enter activates anyway, nor from the board or with a modifier held).
   useEffect(() => {
     if (finished || (trainer.phase !== 'solved' && trainer.phase !== 'failed')) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') next();
+      if (shortcutKey(e) === 'Enter') next();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -121,7 +121,8 @@ export function PatternDrill({
           check={trainer.position.check}
           highlights={trainer.highlights}
           shapes={trainer.shapes}
-          onMove={(from, to) => trainer.playUserMove(from, to, autoQueen ? 'q' : undefined)}
+          // Promotions always ask: a pattern may need a specific piece.
+          onMove={(from, to) => trainer.playUserMove(from, to)}
           ariaLabel={`${current.name} drill board, ${trainer.position.turn} to move`}
         />
         {trainer.needsPromotion ? (

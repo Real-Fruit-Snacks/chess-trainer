@@ -8,27 +8,81 @@
  * 2. `.nojekyll` — tells Pages not to run Jekyll, which would otherwise ignore
  *    files and folders that start with an underscore (Vite's asset hashes can
  *    produce those) and slow down deployments.
+ * 3. `licence.txt` and `notices.txt` — the project's licence (`LICENSE`) and the
+ *    third-party notices (`THIRD_PARTY_NOTICES.md`) ship with the site, and the
+ *    footer links to them. They are not precached: they are tiny and rarely
+ *    opened, and the service worker leaves them to the network.
+ * 4. Source maps — the build writes hidden maps (no `sourceMappingURL` comment);
+ *    they are moved out of `dist/` into `sourcemaps/`, so they are never deployed
+ *    or precached. CI keeps them as an artifact for reading crash-report stacks.
+ *
+ * Usage:  node scripts/postbuild.mjs
  */
-import { copyFile, writeFile, stat } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { copyFile, mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DIST = join(__dirname, '..', 'dist');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-async function main() {
-  try {
-    await stat(join(DIST, 'index.html'));
-  } catch {
-    throw new Error('dist/index.html not found — run `vite build` first.');
-  }
+/** Files copied from the repository into the site, as [source, published name]. */
+export const LICENCE_FILES = [
+  ['LICENSE', 'licence.txt'],
+  ['THIRD_PARTY_NOTICES.md', 'notices.txt'],
+];
 
-  await copyFile(join(DIST, 'index.html'), join(DIST, '404.html'));
-  await writeFile(join(DIST, '.nojekyll'), '');
-  console.log('postbuild: wrote dist/404.html and dist/.nojekyll');
+/** Every file below `dir`, as paths relative to it. */
+async function filesBelow(dir) {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(dir, join(entry.parentPath, entry.name)));
 }
 
-main().catch((err) => {
-  console.error(err.message);
-  process.exit(1);
-});
+/**
+ * Runs the post-build steps on `dist` and returns what it did.
+ * @param {{ dist?: string, root?: string, maps?: string }} [options]
+ */
+export async function postbuild({
+  dist = join(ROOT, 'dist'),
+  root = ROOT,
+  maps = join(ROOT, 'sourcemaps'),
+} = {}) {
+  try {
+    await stat(join(dist, 'index.html'));
+  } catch {
+    throw new Error(`${join(dist, 'index.html')} not found — run \`vite build\` first.`);
+  }
+
+  await copyFile(join(dist, 'index.html'), join(dist, '404.html'));
+  await writeFile(join(dist, '.nojekyll'), '');
+  for (const [source, target] of LICENCE_FILES) {
+    await copyFile(join(root, source), join(dist, target));
+  }
+
+  await rm(maps, { recursive: true, force: true });
+  const moved = [];
+  for (const file of await filesBelow(dist)) {
+    if (!file.endsWith('.map')) continue;
+    await mkdir(dirname(join(maps, file)), { recursive: true });
+    await rename(join(dist, file), join(maps, file));
+    moved.push(file);
+  }
+  return { licences: LICENCE_FILES.map(([, target]) => target), maps: moved };
+}
+
+const invokedDirectly =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (invokedDirectly) {
+  postbuild()
+    .then(({ licences, maps }) => {
+      console.log(
+        `postbuild: wrote dist/404.html, dist/.nojekyll, ${licences.map((f) => `dist/${f}`).join(', ')}` +
+          `; moved ${maps.length} source map${maps.length === 1 ? '' : 's'} to sourcemaps/`,
+      );
+    })
+    .catch((err) => {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    });
+}

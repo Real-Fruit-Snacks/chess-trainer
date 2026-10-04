@@ -1,7 +1,15 @@
-import type { Square } from 'chess.js';
+import { Chess, type Square } from 'chess.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DrawShape } from '@/components/board/Board';
-import { canStillMate, isValidFen, parseUci, START_FEN, toUci } from '@/chess/helpers';
+import {
+  canStillMate,
+  isValidFen,
+  parseUci,
+  START_FEN,
+  toUci,
+  tryMove,
+  uciToSan,
+} from '@/chess/helpers';
 import type { Fen, LongColor, PromotionPiece, Uci } from '@/chess/types';
 import { useChess } from '@/chess/useChess';
 import { ENGINE_LEVELS, type EngineLevel, getLevel } from '@/engine/levels';
@@ -18,8 +26,8 @@ import {
   type TimeControl,
 } from '@/lib/clock';
 import { gameEndSound, playSound } from '@/lib/sound';
-import { useProgress } from '@/store/progress';
-import { useRepertoire } from '@/store/repertoire';
+import { type GameRecordSource, useProgress } from '@/store/progress';
+import { cardsFor, useRepertoire } from '@/store/repertoire';
 import { chooseLevelMove, ensureSkill, type SkillCache } from './engineMove';
 import { useSettings } from '@/store/settings';
 import {
@@ -60,6 +68,14 @@ export interface GameSetup {
   coach?: boolean;
   /** Practise this repertoire: the opponent follows its lines while the game stays in book. */
   book?: { id: string; name: string; color: LongColor; pgn: string };
+  /**
+   * Which mode the finished game is recorded under (default `'play'`; a book
+   * game is recorded as `'book'` automatically). Arcade pages pass `'arcade'`
+   * so handicap games stay out of the engine ladder, the courses and Progress.
+   */
+  source?: GameRecordSource;
+  /** What the mode calls the game, e.g. "Odds Ladder · queen odds" (also the PGN Event). */
+  event?: string;
 }
 
 /** Where the game stands with respect to the practised repertoire. */
@@ -75,6 +91,12 @@ export interface BookInfo {
 export interface CoachAlert {
   san: string;
   verdict: CoachVerdict;
+}
+
+/** What the Hint or Threat arrow shows, in words (the arrow alone is invisible to a screen reader). */
+export interface HintMove {
+  kind: 'hint' | 'threat';
+  san: string;
 }
 
 export interface UsePlayVsEngine {
@@ -94,6 +116,8 @@ export interface UsePlayVsEngine {
   started: boolean;
   gameOver: GameOver | null;
   hintShapes: DrawShape[];
+  /** The move the hint or threat arrow points at, for a text alternative. */
+  hintMove: HintMove | null;
   hinting: boolean;
   /** Suggested level after the last game, if the results call for a change. */
   suggestedLevel: EngineLevel | null;
@@ -151,8 +175,10 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const [coachInterventions, setCoachInterventions] = useState(0);
   const [bookBase, setBookBase] = useState<BookState | null>(null);
   const [bookAlert, setBookAlert] = useState<BookDeviation | null>(null);
-  /** Deviations already counted as lapses this game (by ply), so take-backs do not double-count. */
-  const bookLapsesRef = useRef(new Set<number>());
+  /** Deviations already counted as lapses this game (by ply and move), so a repeat is not a second lapse. */
+  const bookLapsesRef = useRef(new Set<string>());
+  const [source, setSource] = useState<GameRecordSource>('play');
+  const [event, setEvent] = useState<string | undefined>(undefined);
   /** Evaluations of positions where it was the learner's turn, by FEN (for the coach). */
   const coachEvals = useRef(new Map<string, Promise<CoachEvaluation>>());
   const coachRunRef = useRef(0);
@@ -161,17 +187,30 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const [started, setStarted] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [gameOver, setGameOver] = useState<GameOver | null>(null);
-  const [hintShapes, setHintShapes] = useState<DrawShape[]>([]);
+  /** The arrow Hint or Threat drew, with its move in words. */
+  const [hintArrow, setHintArrow] = useState<(HintMove & { shape: DrawShape }) | null>(null);
+  const hintShapes = useMemo<DrawShape[]>(() => (hintArrow ? [hintArrow.shape] : []), [hintArrow]);
+  const hintMove = useMemo<HintMove | null>(
+    () => (hintArrow ? { kind: hintArrow.kind, san: hintArrow.san } : null),
+    [hintArrow],
+  );
   const [hinting, setHinting] = useState(false);
   const [suggestedLevel, setSuggestedLevel] = useState<EngineLevel | null>(null);
 
   const level = useMemo(() => getLevel(levelId), [levelId]);
   const timeControl = useMemo(() => getTimeControl(timeControlId), [timeControlId]);
   const skillCache = useRef<SkillCache>({ skill: null });
+  /** The engine instance the skill cache belongs to: a fresh worker (Retry) starts at Skill 20. */
+  const skillClientRef = useRef<ReturnType<typeof engine> | null>(null);
   const searchIdRef = useRef(0);
+  /** Bumped by every hint or threat request (and a new game): only the latest may draw. */
+  const hintRunRef = useRef(0);
   const recordedRef = useRef(false);
   const gameRef = useRef(game);
   gameRef.current = game;
+  /** The latest result, for handlers that may run from a render or two ago. */
+  const gameOverRef = useRef(gameOver);
+  gameOverRef.current = gameOver;
 
   // Clock state lives in a ref (timestamps) and is mirrored to React state for display.
   const clockRef = useRef<ClockState>(createClock(timeControl));
@@ -184,6 +223,16 @@ export function usePlayVsEngine(): UsePlayVsEngine {
 
   const { position } = game;
   const engineColor: LongColor = playerColor === 'white' ? 'black' : 'white';
+
+  /** The engine client, with the skill cache reset whenever the instance changed. */
+  const client = useCallback(() => {
+    const instance = engine();
+    if (skillClientRef.current !== instance) {
+      skillClientRef.current = instance;
+      skillCache.current = { skill: null };
+    }
+    return instance;
+  }, [engine]);
   const hasClock = timeControl.initialMs > 0;
   const hotSeat = opponent === 'human';
   /** The side whose threats "Threat" shows: the engine, or whoever is not to move. */
@@ -212,18 +261,29 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       }
     : null;
 
-  // Leaving the book: pause like the coach does and mark the forgotten move as lapsed.
+  // Leaving the book: pause like the coach does and mark the forgotten move as lapsed. The alert
+  // shows every time the learner leaves the book (also after a take-back and the same move again);
+  // the lapse is counted once per ply and move so a repeat is not a second miss.
+  const playedPlies = position.history.length;
+  const positionOver = position.status.over;
   useEffect(() => {
     const deviation = bookNow?.status === 'deviated' ? bookNow.deviation : null;
     if (!bookNow || !deviation || gameOver) return;
-    if (bookLapsesRef.current.has(deviation.ply)) return;
-    bookLapsesRef.current.add(deviation.ply);
-    if (deviation.cardKey) {
-      useRepertoire.getState().review(bookNow.repertoireId, deviation.cardKey, 1);
+    // Only the move that left the book raises it: the deviation stays on record for the rest of a
+    // game played on, and the engine's replies must not bring the alert back.
+    if (playedPlies !== deviation.ply) return;
+    const key = `${deviation.ply}:${deviation.played}`;
+    if (!bookLapsesRef.current.has(key)) {
+      bookLapsesRef.current.add(key);
+      if (deviation.cardKey) {
+        useRepertoire.getState().review(bookNow.repertoireId, deviation.cardKey, 1);
+      }
     }
+    // A move that ended the game is reported in the summary; there is nothing left to pause.
+    if (positionOver) return;
     playSound('failed');
     setBookAlert(deviation);
-  }, [bookNow, gameOver]);
+  }, [bookNow, gameOver, playedPlies, positionOver]);
 
   const syncClockView = useCallback(() => {
     const now = Date.now();
@@ -234,6 +294,27 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       running: state.running,
     });
   }, []);
+
+  // A book alert pauses the game: neither clock runs until the learner decides. Only a clock the
+  // alert stopped is restarted (the first move starts the clocks itself, without an increment).
+  const alertPausedRef = useRef(false);
+  useEffect(() => {
+    if (!hasClock || !started || gameOver) {
+      alertPausedRef.current = false;
+      return;
+    }
+    const now = Date.now();
+    if (bookAlert) {
+      if (clockRef.current.running === null) return;
+      clockRef.current = pauseClock(clockRef.current, now);
+      alertPausedRef.current = true;
+      syncClockView();
+    } else if (alertPausedRef.current) {
+      alertPausedRef.current = false;
+      clockRef.current = startClock(clockRef.current, position.turn, now);
+      syncClockView();
+    }
+  }, [bookAlert, hasClock, started, gameOver, position.turn, syncClockView]);
 
   // Tick the clock while it runs; detect flags and low time.
   useEffect(() => {
@@ -248,6 +329,8 @@ export function usePlayVsEngine(): UsePlayVsEngine {
         engine().stop();
         searchIdRef.current++;
         setThinking(false);
+        // A promotion still being chosen must not land in the finished game.
+        if (gameRef.current.pendingPromotion) gameRef.current.resolvePromotion(null);
         const winner: LongColor = lost === 'white' ? 'black' : 'white';
         // A flag against a side that cannot mate any more is a draw (FIDE 6.9).
         const decisive = canStillMate(gameRef.current.chess(), winner);
@@ -345,7 +428,11 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       result: gameOver.result,
       reason: gameOver.reason,
       plies: position.history.length,
-      pgn: gameRef.current.pgn(pgnHeaders(playerColor, level, timeControl, gameOver.result)),
+      pgn: gameRef.current.pgn(
+        pgnHeaders(playerColor, level, timeControl, gameOver.result, 'engine', event),
+      ),
+      source: bookNow ? 'book' : source,
+      ...(event ? { event } : {}),
       ...(bookNow
         ? {
             book: {
@@ -384,24 +471,26 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     timeControl,
     hotSeat,
     bookNow,
+    source,
+    event,
   ]);
 
   const chooseEngineMove = useCallback(
     async (fen: string, movesUci: Uci[]): Promise<Uci | null> => {
       // Never let the engine think longer than a slice of its own remaining time.
-      let depth = level.depth;
+      const depth = level.depth;
       let movetime = level.movetime;
       if (hasClock) {
         const left = remaining(clockRef.current, engineColor, Date.now());
         const budget = Math.max(50, Math.floor(left / 30));
         if (movetime !== undefined) movetime = Math.min(movetime, budget);
         if (depth !== undefined && left < 15_000) {
-          // Fixed-depth searches can overrun when short on time: switch to a time budget.
-          depth = undefined;
+          // Fixed-depth searches can overrun when short on time: keep the depth (so a weak level
+          // stays weak) and add the time budget as a second limit — whichever comes first ends it.
           movetime = Math.min(budget, 300);
         }
       }
-      return chooseLevelMove(engine(), skillCache.current, {
+      return chooseLevelMove(client(), skillCache.current, {
         level,
         fen,
         moves: movesUci,
@@ -411,29 +500,36 @@ export function usePlayVsEngine(): UsePlayVsEngine {
         movetime,
       });
     },
-    [engine, level, hasClock, engineColor],
+    [client, level, hasClock, engineColor],
   );
 
   const evaluateForCoach = useCallback(
     (fen: string): Promise<CoachEvaluation> => {
       const cached = coachEvals.current.get(fen);
       if (cached) return cached;
-      const promise = engine()
-        .search({ fen, depth: COACH_DEPTH, multipv: 1 })
-        .result.then((result) => {
-          const info = result.lines.get(1);
-          return {
-            fen,
-            score: info?.score ?? null,
-            best: result.bestmove.move,
-            pv: (info?.pv ?? []).slice(0, 6),
-          };
-        });
+      const promise = (async (): Promise<CoachEvaluation> => {
+        const engineClient = client();
+        // The coach judges at full strength, whatever level the learner is playing against.
+        await ensureSkill(engineClient, skillCache.current, 20);
+        const result = await engineClient.search({ fen, depth: COACH_DEPTH, multipv: 1 }).result;
+        // A stopped search is shallow and must not be remembered for the rest of the game.
+        if (result.stopped) throw new Error('Coach search stopped');
+        const info = result.lines.get(1);
+        return {
+          fen,
+          score: info?.score ?? null,
+          // Skill Level can make `bestmove` differ from the top line; the line is the real opinion.
+          best: info?.pv[0] ?? result.bestmove.move,
+          pv: (info?.pv ?? []).slice(0, 6),
+        };
+      })();
       coachEvals.current.set(fen, promise);
-      promise.catch(() => coachEvals.current.delete(fen));
+      promise.catch(() => {
+        if (coachEvals.current.get(fen) === promise) coachEvals.current.delete(fen);
+      });
       return promise;
     },
-    [engine],
+    [client],
   );
 
   // Coach mode: know the engine's opinion of the position before the learner moves.
@@ -467,7 +563,9 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     const startedAt = Date.now();
     const movesUci = position.history.map((m) => toUci(m));
     const bookMove =
-      bookNow?.status === 'in-book' ? bookReply(bookNow, useRepertoire.getState().cards) : null;
+      bookNow?.status === 'in-book'
+        ? bookReply(bookNow, cardsFor(useRepertoire.getState().cards, bookNow.repertoireId))
+        : null;
     const choose = bookMove
       ? Promise.resolve<Uci | null>(bookMove)
       : chooseEngineMove(position.startFen, movesUci);
@@ -475,7 +573,12 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     void choose
       .then(async (uci) => {
         if (cancelled || id !== searchIdRef.current || !uci) return;
-        const wait = Math.max(0, MIN_THINK_MS - (Date.now() - startedAt));
+        // The short "thinking" pause reads naturally, but not when it could flag the engine.
+        const engineLeft = hasClock
+          ? remaining(clockRef.current, engineColor, Date.now())
+          : Number.POSITIVE_INFINITY;
+        const wait =
+          engineLeft < LOW_TIME_MS ? 0 : Math.max(0, MIN_THINK_MS - (Date.now() - startedAt));
         if (wait) await new Promise((r) => setTimeout(r, wait));
         if (cancelled || id !== searchIdRef.current) return;
         gameRef.current.playNotation(uci);
@@ -503,6 +606,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     coachAlert,
     bookAlert,
     bookNow,
+    hasClock,
   ]);
 
   const start = useCallback(
@@ -515,11 +619,21 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       autoFlip: nextAutoFlip = false,
       coach: nextCoach = false,
       book: nextBook,
+      source: nextSource = 'play',
+      event: nextEvent,
     }: GameSetup) => {
       engine().stop();
       searchIdRef.current++;
       // A repertoire decides the colour and the opponent; the book only makes sense from the start.
-      const bookState = nextBook && nextOpponent === 'engine' && !fen ? createBook(nextBook) : null;
+      let bookState: BookState | null = null;
+      if (nextBook && nextOpponent === 'engine' && !fen) {
+        try {
+          bookState = createBook(nextBook);
+        } catch (err) {
+          // A damaged custom repertoire: play an ordinary game rather than not start at all.
+          console.warn('The repertoire could not be read; playing without the book.', err);
+        }
+      }
       const chosen: LongColor = bookState
         ? bookState.color
         : color === 'random'
@@ -530,6 +644,8 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       setBookBase(bookState);
       setBookAlert(null);
       bookLapsesRef.current = new Set();
+      setSource(nextSource);
+      setEvent(nextEvent);
       const control = getTimeControl(nextTc);
       setOpponent(nextOpponent);
       setAutoFlip(nextAutoFlip);
@@ -546,21 +662,21 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       setTimeControlId(control.id);
       setGameOver(null);
       setSuggestedLevel(null);
-      setHintShapes([]);
+      hintRunRef.current++;
+      setHintArrow(null);
+      setHinting(false);
       setThinking(false);
       recordedRef.current = false;
       lowTimeWarnedRef.current = new Set();
       clockRef.current = createClock(control);
       lastPliesRef.current = 0;
+      alertPausedRef.current = false;
       setClockView({ white: control.initialMs, black: control.initialMs, running: null });
       game.reset(fen && isValidFen(fen) ? fen : START_FEN);
       void engine()
         .newGame()
         .catch(() => undefined);
       setStarted(true);
-      useSettings
-        .getState()
-        .update({ playLevel: nextLevelId, playColor: color, playTimeControl: control.id });
     },
     [engine, game],
   );
@@ -578,12 +694,18 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const coachCheck = useCallback(
     (fenBefore: string, san: string, uci: Uci) => {
       if (!coach || engineStatus !== 'ready') return;
+      // The React snapshot lags one render behind; the live instance already has the move.
+      const live = gameRef.current.chess();
+      // A move that ends the game (mate, stalemate, a draw) is not a mistake to pause over.
+      if (live.isGameOver()) return;
+      const fenAfter = live.fen();
       const run = ++coachRunRef.current;
       setCoachChecking(true);
-      // The React snapshot lags one render behind; the live instance already has the move.
-      const fenAfter = gameRef.current.chess().fen();
-      void Promise.all([evaluateForCoach(fenBefore), evaluateForCoach(fenAfter)])
-        .then(([before, after]) => {
+      // One search at a time: a second request would stop the first at a shallow depth.
+      void evaluateForCoach(fenBefore)
+        .then(async (before) => {
+          if (run !== coachRunRef.current) return;
+          const after = await evaluateForCoach(fenAfter);
           if (run !== coachRunRef.current) return;
           const verdict = coachVerdict(before, san, uci, after);
           if (coachShouldInterrupt(verdict)) {
@@ -603,7 +725,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const playerMove = useCallback(
     (from: Square, to: Square, promotion?: PromotionPiece) => {
       if (!canPlayerMove) return;
-      setHintShapes([]);
+      setHintArrow(null);
       const fenBefore = position.fen;
       const move = game.playMove(from, to, promotion);
       if (move && move !== 'promotion' && !hotSeat) coachCheck(fenBefore, move.san, toUci(move));
@@ -614,7 +736,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const playerNotation = useCallback(
     (notation: string): boolean => {
       if (!canPlayerMove) return false;
-      setHintShapes([]);
+      setHintArrow(null);
       const fenBefore = position.fen;
       const move = game.playNotation(notation);
       if (move && !hotSeat) coachCheck(fenBefore, move.san, toUci(move));
@@ -623,39 +745,68 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     [canPlayerMove, game, position.fen, hotSeat, coachCheck],
   );
 
-  const coachTakeBack = useCallback(() => {
-    if (!coachAlert) return;
+  /** Dismisses both pause alerts: resolving one must not leave the other standing. */
+  const clearAlerts = useCallback(() => {
     coachRunRef.current++;
     setCoachAlert(null);
     setCoachChecking(false);
+    setBookAlert(null);
+  }, []);
+
+  // An alert never outlives the game (a resignation while it is up, say): its "Take it back" would
+  // reopen a game that has already been recorded. A hint still being searched is dropped too.
+  useEffect(() => {
+    if (!gameOver) return;
+    clearAlerts();
+    hintRunRef.current++;
+    setHinting(false);
+  }, [gameOver, clearAlerts]);
+
+  /** Takes the learner's last move back from a pause alert, with the board live again. */
+  const alertTakeBack = useCallback(() => {
+    clearAlerts();
+    // Alerts close when the game ends; should a click still arrive, a finished game has been
+    // recorded and is not reopened (that would record it twice).
+    if (gameOverRef.current) return;
+    setHintArrow(null);
     game.undo();
-  }, [coachAlert, game]);
+  }, [clearAlerts, game]);
+
+  const coachTakeBack = useCallback(() => {
+    if (!coachAlert) return;
+    alertTakeBack();
+  }, [coachAlert, alertTakeBack]);
 
   const coachPlayOn = useCallback(() => {
-    setCoachAlert(null);
-  }, []);
+    clearAlerts();
+  }, [clearAlerts]);
 
   const bookTakeBack = useCallback(() => {
     if (!bookAlert) return;
-    setBookAlert(null);
-    game.undo();
-  }, [bookAlert, game]);
+    alertTakeBack();
+  }, [bookAlert, alertTakeBack]);
 
   const bookPlayOn = useCallback(() => {
-    setBookAlert(null);
-  }, []);
+    clearAlerts();
+  }, [clearAlerts]);
 
   const resolvePromotion = useCallback(
     (piece: PromotionPiece | null) => {
+      // A picker left open past a resignation or flag must not play into the finished game.
+      if (!canPlayerMove) {
+        game.resolvePromotion(null);
+        return;
+      }
       const fenBefore = position.fen;
       const move = game.resolvePromotion(piece);
       if (move && !hotSeat) coachCheck(fenBefore, move.san, toUci(move));
     },
-    [game, position.fen, hotSeat, coachCheck],
+    [canPlayerMove, game, position.fen, hotSeat, coachCheck],
   );
 
   const takeBack = useCallback(() => {
-    if (!started || position.history.length === 0) return;
+    // Once the game is over it has been recorded: taking a move back would record it twice.
+    if (!started || gameOver || position.history.length === 0) return;
     engine().stop();
     searchIdRef.current++;
     coachRunRef.current++;
@@ -663,9 +814,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     setCoachChecking(false);
     setBookAlert(null);
     setThinking(false);
-    setHintShapes([]);
-    setGameOver(null);
-    recordedRef.current = false;
+    setHintArrow(null);
     // Undo back to the player's previous turn (one ply between two people).
     if (!hotSeat && position.turn === playerColor) {
       game.undo();
@@ -673,13 +822,23 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     } else {
       game.undo();
     }
-  }, [started, position.history.length, position.turn, playerColor, engine, game, hotSeat]);
+  }, [
+    started,
+    gameOver,
+    position.history.length,
+    position.turn,
+    playerColor,
+    engine,
+    game,
+    hotSeat,
+  ]);
 
   const resign = useCallback(() => {
     if (!started || gameOver) return;
     engine().stop();
     searchIdRef.current++;
     setThinking(false);
+    if (game.pendingPromotion) game.resolvePromotion(null);
     clockRef.current = pauseClock(clockRef.current, Date.now());
     syncClockView();
     // Between two people the side to move resigns.
@@ -691,31 +850,66 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       reason: 'resignation',
       verdict,
     });
-  }, [started, gameOver, engine, playerColor, syncClockView, hotSeat, position.turn]);
+  }, [started, gameOver, engine, playerColor, syncClockView, hotSeat, position.turn, game]);
 
+  /** Full-strength answer for hints and threats; null when the search was stopped. */
   const askEngine = useCallback(
     async (fen: string, moves: Uci[]): Promise<Uci | null> => {
-      const client = engine();
-      await ensureSkill(client, skillCache.current, 20);
-      const handle = client.search({ fen, moves, depth: 14, multipv: 1 });
+      const engineClient = client();
+      await ensureSkill(engineClient, skillCache.current, 20);
+      const handle = engineClient.search({ fen, moves, depth: 14, multipv: 1 });
       const result = await handle.result;
+      if (result.stopped) return null;
       return result.bestmove.move;
     },
-    [engine],
+    [client],
+  );
+
+  /** Only the latest hint or threat request may draw, and only on the position it was asked for. */
+  const drawArrow = useCallback(
+    (ask: Promise<Uci | null>, kind: HintMove['kind'], forFen: Fen, moveFen: Fen) => {
+      const run = ++hintRunRef.current;
+      setHinting(true);
+      ask
+        .then((best) => {
+          if (run !== hintRunRef.current || !best) return;
+          if (gameRef.current.position.fen !== forFen) return;
+          const { from, to } = parseUci(best);
+          setHintArrow({
+            kind,
+            san: sanOf(moveFen, best) ?? `${from}–${to}`,
+            shape: { orig: from, dest: to, brush: kind === 'hint' ? 'paleBlue' : 'red' },
+          });
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (run === hintRunRef.current) setHinting(false);
+        });
+    },
+    [],
   );
 
   const hint = useCallback(() => {
     if (!canPlayerMove || engineStatus !== 'ready') return;
-    setHinting(true);
+    // In opening practice the hint is the repertoire's move, not the engine's: following it stays in book.
+    if (bookNow?.status === 'in-book' && bookNow.node) {
+      const san = bookNow.node.children[0]?.san;
+      const move = san ? tryMove(new Chess(position.fen), san) : null;
+      if (move) {
+        // A search still running for an earlier request must not replace this arrow.
+        hintRunRef.current++;
+        setHinting(false);
+        setHintArrow({
+          kind: 'hint',
+          san: move.san,
+          shape: { orig: move.from, dest: move.to, brush: 'paleBlue' },
+        });
+        return;
+      }
+    }
     const movesUci = position.history.map((m) => toUci(m));
-    void askEngine(position.startFen, movesUci)
-      .then((best) => {
-        if (!best) return;
-        const { from, to } = parseUci(best);
-        setHintShapes([{ orig: from, dest: to, brush: 'paleBlue' }]);
-      })
-      .finally(() => setHinting(false));
-  }, [canPlayerMove, engineStatus, position, askEngine]);
+    drawArrow(askEngine(position.startFen, movesUci), 'hint', position.fen, position.fen);
+  }, [canPlayerMove, engineStatus, position, askEngine, bookNow, drawArrow]);
 
   const showThreat = useCallback(() => {
     if (!canPlayerMove || engineStatus !== 'ready' || position.inCheck) return;
@@ -723,21 +917,26 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     const parts = position.fen.split(' ');
     parts[1] = rivalColor === 'white' ? 'w' : 'b';
     parts[3] = '-';
-    setHinting(true);
-    void askEngine(parts.join(' '), [])
-      .then((best) => {
-        if (!best) return;
-        const { from, to } = parseUci(best);
-        setHintShapes([{ orig: from, dest: to, brush: 'red' }]);
-      })
-      .finally(() => setHinting(false));
-  }, [canPlayerMove, engineStatus, position.inCheck, position.fen, rivalColor, askEngine]);
+    const flipped = parts.join(' ');
+    drawArrow(askEngine(flipped, []), 'threat', position.fen, flipped);
+  }, [
+    canPlayerMove,
+    engineStatus,
+    position.inCheck,
+    position.fen,
+    rivalColor,
+    askEngine,
+    drawArrow,
+  ]);
 
   const flip = useCallback(() => setOrientation((o) => (o === 'white' ? 'black' : 'white')), []);
 
   const pgn = useCallback(
-    () => game.pgn(pgnHeaders(playerColor, level, timeControl, gameOver?.result ?? '*', opponent)),
-    [game, playerColor, level, timeControl, gameOver, opponent],
+    () =>
+      game.pgn(
+        pgnHeaders(playerColor, level, timeControl, gameOver?.result ?? '*', opponent, event),
+      ),
+    [game, playerColor, level, timeControl, gameOver, opponent, event],
   );
 
   return {
@@ -754,6 +953,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     started,
     gameOver,
     hintShapes,
+    hintMove,
     hinting,
     suggestedLevel,
     coach,
@@ -781,19 +981,33 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   };
 }
 
+/** SAN of a UCI move in `fen`, or null when the position or the move cannot be read. */
+function sanOf(fen: Fen, uci: Uci): string | null {
+  try {
+    return uciToSan(fen, uci);
+  } catch {
+    return null;
+  }
+}
+
 function pgnHeaders(
   playerColor: LongColor,
   level: EngineLevel,
   timeControl: TimeControl,
   result: string,
   opponent: Opponent = 'engine',
+  event?: string,
 ): Record<string, string> {
   const engineName = `Stockfish (level ${level.id} · ${level.name})`;
   const date = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   const hotSeat = opponent === 'human';
   const headers: Record<string, string> = {
-    Event: hotSeat ? 'Chess Trainer — two players' : 'Chess Trainer — play vs engine',
+    Event: event
+      ? `Chess Trainer — ${event}`
+      : hotSeat
+        ? 'Chess Trainer — two players'
+        : 'Chess Trainer — play vs engine',
     Site: 'Chess Trainer',
     Date: `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`,
     White: hotSeat ? 'White' : playerColor === 'white' ? 'You' : engineName,

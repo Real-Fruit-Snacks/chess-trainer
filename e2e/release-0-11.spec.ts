@@ -43,15 +43,15 @@ async function startSimul(
   await page.goto('/arcade/simul');
   await expect(page.getByTestId('simul-setup')).toBeVisible();
   await page
-    .getByRole('group', { name: 'Boards' })
-    .getByRole('button', { name: String(options.boards), exact: true })
+    .getByRole('radiogroup', { name: 'Boards' })
+    .getByRole('radio', { name: String(options.boards), exact: true })
     .click();
-  await page.getByLabel('Strength', { exact: true }).selectOption(String(options.level));
+  await page.getByLabel('Engine level', { exact: true }).selectOption(String(options.level));
   await page.getByTestId('simul-clock').selectOption(options.clock);
   if (options.color) {
     await page
-      .getByRole('group', { name: 'Your colour' })
-      .getByRole('button', { name: options.color })
+      .getByRole('radiogroup', { name: 'Your colour' })
+      .getByRole('radio', { name: options.color })
       .click();
   }
   if (options.rising) await page.getByText('Rising strength', { exact: true }).click();

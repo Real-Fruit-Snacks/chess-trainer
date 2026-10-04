@@ -1,0 +1,72 @@
+name: Set up the project
+description: >-
+  Node from .nvmrc and the locked dependencies (no install scripts), plus, when
+  asked, the pinned engine binaries and one Playwright browser, each restored
+  from a cache when it can be.
+
+inputs:
+  engine:
+    description: Install the pinned Stockfish binaries into public/engine/ ('true' or 'false').
+    default: 'false'
+  browser:
+    description: A Playwright browser to install (chromium, firefox or webkit); empty for none.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+
+    # No dependency needs an install script (fsevents, the only one with one, is
+    # an optional macOS package), so none is allowed to run.
+    - name: Install dependencies
+      shell: bash
+      run: npm ci --ignore-scripts
+
+    # The engine is downloaded from a pinned release and checksum-verified; the
+    # cache only saves the download — engine:setup still checks every file.
+    - name: Restore the engine binaries
+      if: inputs.engine == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: |
+          public/engine/*.js
+          public/engine/*.wasm
+        key: engine-${{ hashFiles('scripts/setup-engine.mjs') }}
+
+    - name: Install the engine
+      if: inputs.engine == 'true'
+      shell: bash
+      run: npm run engine:setup
+
+    - name: Read the Playwright version
+      if: inputs.browser != ''
+      id: playwright
+      shell: bash
+      run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the Playwright browser
+      if: inputs.browser != ''
+      id: browser-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ inputs.browser }}-${{ steps.playwright.outputs.version }}
+
+    - name: Install the Playwright browser
+      if: inputs.browser != '' && steps.browser-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        BROWSER: ${{ inputs.browser }}
+      run: npx playwright install --with-deps "$BROWSER"
+
+    # The cache holds the browser, not the system libraries it needs.
+    - name: Install the browser's system libraries
+      if: inputs.browser != '' && steps.browser-cache.outputs.cache-hit == 'true'
+      shell: bash
+      env:
+        BROWSER: ${{ inputs.browser }}
+      run: npx playwright install-deps "$BROWSER"

@@ -1,5 +1,11 @@
 import { expect, type Page, test } from '@playwright/test';
-import { completeOnboarding, continueLesson, expectBoard, playMove } from './helpers';
+import {
+  completeOnboarding,
+  continueLesson,
+  expectBoard,
+  playMove,
+  waitForBoardIdle,
+} from './helpers';
 
 const PROGRESS_KEY = 'chess-trainer:progress';
 
@@ -55,6 +61,7 @@ test.describe('own-game puzzles', () => {
     // Solving in Mine mode is unrated and the puzzle stays available.
     await expect(page.locator('.puzzle-stats')).toContainText('My puzzles');
     await page.getByRole('button', { name: 'Remove from my puzzles' }).click();
+    await page.getByTestId('confirm-accept').click();
     await expect(page.getByText('No puzzles from your games yet')).toBeVisible();
   });
 
@@ -66,9 +73,9 @@ test.describe('own-game puzzles', () => {
     await expect(page.locator('.puzzle-status')).toContainText(/Your move/i, { timeout: 20_000 });
     await page.getByRole('button', { name: 'Bookmark', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Bookmarked' })).toBeVisible();
-    await expect(page.locator('.segmented__option', { hasText: 'Review' })).toContainText('1');
+    await expect(page.locator('.segmented__option', { hasText: 'Due' })).toContainText('1');
     await page.getByRole('button', { name: 'Bookmarked' }).click();
-    await expect(page.locator('.segmented__option', { hasText: 'Review' })).not.toContainText('1');
+    await expect(page.locator('.segmented__option', { hasText: 'Due' })).not.toContainText('1');
   });
 });
 
@@ -135,10 +142,10 @@ test.describe('my games', () => {
     await expect(page.getByLabel('Your name in the games')).toHaveValue('alice');
     await expect(page.getByTestId('openings-white')).toContainText('Ruy Lopez');
     await page
-      .getByRole('group', { name: 'Colour' })
-      .getByRole('button', { name: 'As Black' })
+      .getByRole('radiogroup', { name: 'Colour' })
+      .getByRole('radio', { name: 'As Black' })
       .click();
-    await expect(page.getByTestId('openings-black')).toContainText("Bishop's Opening");
+    await expect(page.getByTestId('openings-black')).toContainText('Bishop’s Opening');
     // 3. Bb5 now follows the Ruy Lopez repertoire; the Black games left the Caro-Kann on move one.
     await expect(page.getByTestId('deviations')).toContainText('e5 instead of c6');
     await expect(page.getByTestId('deviations')).toContainText('Caro-Kann');
@@ -211,8 +218,8 @@ test.describe('my games', () => {
     );
     await page.goto('/games');
     await page
-      .getByRole('group', { name: 'Import source' })
-      .getByRole('button', { name: 'chess.com' })
+      .getByRole('radiogroup', { name: 'Import source' })
+      .getByRole('radio', { name: 'chess.com' })
       .click();
     await page.getByLabel('chess.com username').fill('dave');
     await page.getByLabel('Time control').selectOption('rapid');
@@ -228,10 +235,11 @@ test.describe('adaptive plan and weekly summary', () => {
   test('the daily plan targets the weakest theme and Progress shows the week', async ({ page }) => {
     const day = 86_400_000;
     await seedSettings(page, { tourDismissed: true });
+    // Weak means 20+ attempts and 15 points under the learner's own accuracy (64% here).
     await seedProgress(page, {
       onboarded: true,
       puzzleRating: 1200,
-      themeStats: { fork: { solved: 2, failed: 6 }, pin: { solved: 8, failed: 1 } },
+      themeStats: { fork: { solved: 5, failed: 15 }, pin: { solved: 40, failed: 10 } },
       attempts: [
         {
           id: 'a',
@@ -376,12 +384,15 @@ test.describe('endgame studies', () => {
     // A wrong move is taken back…
     await playMove(board, 'h1', 'g1', 'black');
     await expect(page.getByTestId('study-status')).toContainText('Not the study’s move');
-    // …then the pin and the capture solve it.
-    await page.waitForTimeout(800);
+    // …then the pin and the capture solve it. The Hint button is live again once the
+    // study waits for a move, and the next click waits for the board to stop moving.
+    const hint = page.getByRole('button', { name: /^Hint/ });
+    await expect(hint).toBeEnabled();
+    await waitForBoardIdle(page);
     await playMove(board, 'a2', 'b2', 'black');
     await expect(page.locator('.study__moves')).toContainText('Rb2+ Kc7', { timeout: 10_000 });
-    // Let the reply animation finish before the next click-click move.
-    await page.waitForTimeout(500);
+    await expect(hint).toBeEnabled();
+    await waitForBoardIdle(page);
     await playMove(board, 'b2', 'b8', 'black');
     await expect(page.getByTestId('study-status')).toContainText(/Solved/);
     await expect(page.getByText('Why it works')).toBeVisible();
@@ -421,7 +432,7 @@ test.describe('two players and blindfold', () => {
     await playMove(board, 'e2', 'e4', 'white');
     // The board now faces Black, and Black moves next — no engine involved.
     await expect(page.locator('.board').first()).toHaveAttribute('data-orientation', 'black');
-    await page.waitForTimeout(400);
+    await waitForBoardIdle(page);
     await playMove(board, 'e7', 'e5', 'black');
     await expect(page.locator('.board').first()).toHaveAttribute('data-orientation', 'white');
     await expect(page.locator('.movelist')).toContainText('e5');
@@ -497,7 +508,7 @@ test.describe('guess the position drill', () => {
       if (answer === null) {
         await page.getByRole('button', { name: 'It was captured' }).click();
       } else {
-        await page.getByRole('gridcell', { name: `${answer}, empty` }).click();
+        await page.getByRole('button', { name: `${answer}, empty`, exact: true }).click();
       }
       await expect(page.locator('.drill__hud')).toContainText(`${i + 1}Found`);
       if (i < 2) await expect(status).toContainText(/Question|Where is/);
@@ -579,8 +590,8 @@ test.describe('settings: piece set, sound theme and engine diagnostics', () => {
       .click();
     await expect(page.locator('html')).toHaveAttribute('data-pieces', 'letters');
     await page
-      .getByRole('group', { name: 'Sound theme' })
-      .getByRole('button', { name: 'Soft' })
+      .getByRole('radiogroup', { name: 'Sound theme' })
+      .getByRole('radio', { name: 'Soft' })
       .click();
     await page.goto('/analyze');
     await expectBoard(page);
@@ -605,7 +616,7 @@ test.describe('settings: piece set, sound theme and engine diagnostics', () => {
     await page.goto('/settings');
     const panel = page.getByTestId('engine-diagnostics');
     await panel.locator('summary').click();
-    await expect(panel).toContainText('Engine build in use');
+    await expect(panel).toContainText('Build selected');
     await expect(panel).toContainText('Stockfish 19 lite');
     await expect(panel).toContainText('WebAssembly');
     await page.getByRole('button', { name: 'Test the engine' }).click();

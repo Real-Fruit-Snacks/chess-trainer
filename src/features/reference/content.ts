@@ -9,9 +9,14 @@ export interface ReferenceSection {
 
 export interface GlossaryEntry {
   term: string;
+  /** Lightweight markdown, like the lessons: **bold**, *italic*, `code`; moves follow the notation setting. */
   definition: string;
   /** Lesson id to link to, if one covers the idea. */
   lesson?: string;
+  /** The step of that lesson that teaches it (1-based), to open the lesson right there. */
+  step?: number;
+  /** A page of the app where the idea is used, e.g. the Woodpecker mode. */
+  see?: { to: string; label: string };
 }
 
 export const RULES: ReferenceSection[] = [
@@ -117,7 +122,8 @@ export const GLOSSARY: GlossaryEntry[] = [
     term: 'Back rank',
     definition:
       'The rank where the pieces start (1 for White, 8 for Black). A “back-rank mate” happens when a king is trapped there by its own pawns.',
-    lesson: 'mating-patterns',
+    lesson: 'basic-checkmates',
+    step: 1,
   },
   {
     term: 'Battery',
@@ -128,7 +134,8 @@ export const GLOSSARY: GlossaryEntry[] = [
     term: 'Blockade',
     definition:
       'Placing a piece directly in front of an enemy passed pawn so it cannot advance. Knights are ideal blockaders.',
-    lesson: 'opposite-bishops',
+    lesson: 'passed-pawns-in-the-middlegame',
+    step: 5,
   },
   {
     term: 'Blunder',
@@ -160,6 +167,16 @@ export const GLOSSARY: GlossaryEntry[] = [
     definition:
       'Moving one piece uncovers an attack from another piece behind it. With check it is a discovered check.',
     lesson: 'discovered-attacks',
+  },
+  {
+    term: 'DTM (distance to mate)',
+    definition:
+      'In a tablebase, how far checkmate is with best play by both sides. Tablebases count it in half-moves; the analysis board turns it into “mate in N” moves and keeps the half-moves in the tooltip.',
+  },
+  {
+    term: 'DTZ (distance to zeroing)',
+    definition:
+      'In a tablebase, how many half-moves it takes, with best play, until the next capture or pawn move — the moves that reset the fifty-move count. The analysis board shows “DTZ 12” when the tablebase has no mate distance for the position.',
   },
   {
     term: 'Doubled pawns',
@@ -200,6 +217,12 @@ export const GLOSSARY: GlossaryEntry[] = [
       'An opening that gives up a pawn (or more) for development, time or attacking chances.',
   },
   {
+    term: 'Glicko-2',
+    definition:
+      'The rating system behind the puzzle rating here, as on Lichess. Like Elo it predicts results from the rating gap, but it also tracks how sure it is of a rating (the *rating deviation*), so a new or rusty rating moves quickly and a settled one slowly.',
+    see: { to: '/progress', label: 'Your puzzle rating' },
+  },
+  {
     term: 'Initiative',
     definition:
       'Being the side that makes threats, so the opponent must react rather than carry out their own plans.',
@@ -225,6 +248,7 @@ export const GLOSSARY: GlossaryEntry[] = [
     definition:
       'Kings facing each other with one square between them. The side *not* to move has the opposition and can force the other king to give way.',
     lesson: 'king-and-pawn-endgames',
+    step: 2,
   },
   {
     term: 'Outpost',
@@ -254,6 +278,12 @@ export const GLOSSARY: GlossaryEntry[] = [
     lesson: 'defence-and-prophylaxis',
   },
   {
+    term: 'Rating deviation (RD)',
+    definition:
+      'The ± after a Glicko-2 rating: how uncertain it still is. A new rating starts at ± 350 and moves a lot with every result; below ± 110 it counts as established, and it grows again during long breaks.',
+    see: { to: '/progress', label: 'Your puzzle rating' },
+  },
+  {
     term: 'Sacrifice',
     definition:
       'Deliberately giving up material for a bigger gain: an attack, a promotion, or a mating net.',
@@ -265,6 +295,11 @@ export const GLOSSARY: GlossaryEntry[] = [
     lesson: 'pins-and-skewers',
   },
   {
+    term: 'Tablebase',
+    definition:
+      'A database of every position with up to seven pieces, solved by computer: whether it is won, drawn or lost, and how far it is to mate (DTM) or to the next capture or pawn move (DTZ). The analysis board can look positions up in the Lichess tablebase; the lookup is off by default.',
+  },
+  {
     term: 'Tempo',
     definition:
       'One move as a unit of time. “Gaining a tempo” means making a useful move that also forces the opponent to lose time.',
@@ -274,10 +309,17 @@ export const GLOSSARY: GlossaryEntry[] = [
     definition: 'Reaching the same position by a different order of moves.',
   },
   {
+    term: 'Woodpecker method',
+    definition:
+      'Solving one fixed set of puzzles again and again, each cycle faster than the last, until the patterns are automatic. Named after the book by Axel Smith and Hans Tikkanen.',
+    see: { to: '/puzzles/woodpecker', label: 'Woodpecker sets' },
+  },
+  {
     term: 'Zugzwang',
     definition:
       'A position where every legal move makes things worse and the player would prefer to pass. Common in endgames.',
-    lesson: 'king-and-pawn-endgames',
+    lesson: 'fortresses-and-zugzwang',
+    step: 1,
   },
   {
     term: 'Zwischenzug',
@@ -305,7 +347,17 @@ export const FAQ: { question: string; answer: string }[] = [
   {
     question: 'What does the ± next to my puzzle rating mean?',
     answer:
-      'How uncertain the rating still is (Glicko-2 calls it the rating deviation). ± 350 means the trainer has almost no idea yet and each puzzle moves the rating a lot; ± 60 means it is settled and moves about ten points at a time. Long breaks make it grow again, and you can restart a calibration run from the Progress page.',
+      'How uncertain the rating still is (Glicko-2 calls it the *rating deviation*). ± 350 means the trainer has almost no idea yet and each puzzle moves the rating a lot; ± 60 means it is settled and moves about ten points at a time. Long breaks make it grow again, and you can start a new calibration run (or reset the rating) on the Settings page.',
+  },
+  {
+    question: 'How does a puzzle change my rating?',
+    answer:
+      'Every rated puzzle counts as a game against the puzzle’s own rating. A clean solve in good time counts as a win and a miss as a loss. A slow solve earns less — the credit falls to three-quarters at three times the expected time for the puzzle’s length and difficulty — and a hint costs more. But a correct solve never scores below what the rating system expected of you, so **solving a puzzle never costs rating points**; it just earns fewer when it was slow. A puzzle you have seen before moves the rating a quarter as much.',
+  },
+  {
+    question: 'When do missed puzzles and lesson positions come back?',
+    answer:
+      'A missed puzzle comes back the next day, then after 3, 7, 14 and 30 days as long as you keep solving it. The task positions of a finished lesson first come back three days later, then after 7, 14 and 30 days; a miss brings one back the next day. Anything due a day or more away comes due at 04:00 local time on that day, so the day’s reviews are all waiting in the morning.',
   },
   {
     question: 'How do I get better fastest?',
@@ -315,7 +367,7 @@ export const FAQ: { question: string; answer: string }[] = [
   {
     question: 'Does Chess Trainer need an internet connection?',
     answer:
-      'Only for the first visit. Everything — the engine, the puzzles, the lessons — is stored on your device so it works offline afterwards, and it can be installed like an app from your browser’s menu. Three optional features use the network when you ask: importing your games from Lichess or chess.com, the opening explorer and the endgame tablebase lookups; the last two are off by default.',
+      'Only for the first visit. The app, the engine, the lessons, the opening repertoires and a first set of puzzles at every level are then stored on your device and work offline; more puzzles are kept as you solve them, and Settings can download every puzzle before a trip. It can be installed like an app from your browser’s menu. Three optional features use the network when you ask: importing your games from Lichess or chess.com, the opening explorer and the endgame tablebase lookups; the last two are off by default.',
   },
   {
     question: 'What does Chess Trainer know about me?',
@@ -325,7 +377,7 @@ export const FAQ: { question: string; answer: string }[] = [
   {
     question: 'Is my progress backed up anywhere?',
     answer:
-      'Progress is stored only in this browser, so clearing site data or switching browsers loses it. Use Export on the Settings page to save a backup file (or share it straight to another device) and Import to restore it. A backup made by any version imports into every later version.',
+      'Progress is stored only in this browser, so clearing site data or switching browsers loses it. Use Export on the Settings page to save a backup file (or share it straight to another device) and Import to restore it. A backup holds your progress, repertoires and saved analyses, and since version 0.12 your imported games too. An import shows what the file holds and asks before it replaces anything, and *Undo import* on the message that follows puts everything back. A backup made by any version imports into every later version. Once there is something worth keeping, the app reminds you to make one now and then; *Later* hides the reminder for a week.',
   },
   {
     question: 'How much can the app store?',

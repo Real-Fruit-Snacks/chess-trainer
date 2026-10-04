@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router';
 import { Card, Input } from '@/components/ui';
+import { renderInline } from '@/features/learn/inline';
 import { LessonText } from '@/features/learn/LessonText';
 import { getLessonMeta } from '@/features/learn/lessonMeta';
+import { prefersReducedMotion } from '@/lib/useReducedMotion';
 import { siteConfig } from '@/site.config';
 import { FAQ, GLOSSARY, NOTATION, RULES } from './content';
 import './reference.css';
@@ -24,7 +26,9 @@ export default function ReferencePage() {
 
   useEffect(() => {
     if (location.hash) {
-      document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth' });
+      document
+        .getElementById(location.hash.slice(1))
+        ?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     }
   }, [location.hash]);
 
@@ -95,19 +99,30 @@ export default function ReferencePage() {
         {glossary.length === 0 ? (
           <p className="muted">No terms match “{query}”.</p>
         ) : (
-          <dl className="reference__glossary">
+          <dl className="reference__glossary" data-testid="glossary">
             {glossary.map((entry) => {
               const lesson = entry.lesson ? getLessonMeta(entry.lesson) : undefined;
               return (
                 <div key={entry.term} className="reference__entry">
                   <dt>{entry.term}</dt>
                   <dd>
-                    {entry.definition}
+                    {renderInline(entry.definition)}
                     {lesson ? (
                       <>
                         {' '}
-                        <Link to={`/learn/${lesson.id}`} className="small">
+                        <Link
+                          to={`/learn/${lesson.id}${entry.step ? `?step=${entry.step}` : ''}`}
+                          className="small"
+                        >
                           Lesson: {lesson.title}
+                        </Link>
+                      </>
+                    ) : null}
+                    {entry.see ? (
+                      <>
+                        {' '}
+                        <Link to={entry.see.to} className="small">
+                          {entry.see.label}
                         </Link>
                       </>
                     ) : null}
@@ -126,7 +141,7 @@ export default function ReferencePage() {
             <details key={item.question} className="card reference__faq">
               <summary>{item.question}</summary>
               <p className="muted" style={{ margin: '8px 0 0' }}>
-                {item.answer}
+                {renderInline(item.answer)}
               </p>
             </details>
           ))}

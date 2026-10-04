@@ -1,10 +1,20 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import {
+  type KeyboardEvent,
+  type FocusEvent,
+  Suspense,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import { Link, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router';
 import { Spinner, Icon, type IconName } from '@/components/ui';
 import { Toasts } from '@/components/ui/toast';
 import { siteConfig } from '@/site.config';
 import { activeProfile, useProfiles } from '@/store/profiles';
 import { useSettings } from '@/store/settings';
+import { ErrorBoundary } from './ErrorBoundary';
 import { InstallButton } from './InstallPrompt';
 import { PlatformHooks } from './PlatformHooks';
 import { ShortcutsDialog } from './ShortcutsDialog';
@@ -13,6 +23,7 @@ import { useColorScheme, usePieceSet } from './theme';
 import { useShortcutsDialog } from './useShortcutsDialog';
 import './shell.css';
 import { useFocus } from './focus';
+import { navSection } from './navSection';
 
 interface NavItem {
   to: string;
@@ -83,11 +94,15 @@ const SETTINGS: NavItem = {
   blurb: 'Appearance, engine, backups',
 };
 
-/** Extra sections behind the desktop "More" menu, one column per group. */
+/**
+ * Extra sections behind the desktop "More" menu, one column per group. The
+ * groups carry the same names as the mobile sheet's; only the sections already
+ * in the header are left out.
+ */
 const DESKTOP_MORE: NavGroup[] = [
-  { title: 'Games', items: [ARCADE, MY_GAMES, CLASSICS] },
   { title: 'Train', items: [STUDIES, PATTERNS] },
-  { title: 'App', items: [REFERENCE, SETTINGS] },
+  { title: 'Games', items: [ARCADE, MY_GAMES, CLASSICS] },
+  { title: 'Tools', items: [REFERENCE, SETTINGS] },
 ];
 
 /** Mobile bottom bar. */
@@ -124,6 +139,12 @@ const MOBILE_MORE: NavGroup[] = [
 const MORE_PATHS = new Set(
   [...DESKTOP_MORE, ...MOBILE_MORE].flatMap((group) => group.items.map((i) => i.to)),
 );
+
+/** Whether a nav link to `to` is the current section (the home link only matches exactly). */
+function isSectionActive(to: string, pathname: string, end?: boolean): boolean {
+  if (end) return pathname === to;
+  return navSection(pathname) === to;
+}
 
 function Logo() {
   return (
@@ -169,7 +190,14 @@ function ThemeToggle() {
           ? 'black'
           : 'system';
   const label = `Theme: ${scheme}`;
-  const icon: IconName = scheme === 'system' ? 'auto' : scheme === 'light' ? 'sun' : 'moon';
+  const icon: IconName =
+    scheme === 'system'
+      ? 'auto'
+      : scheme === 'light'
+        ? 'sun'
+        : scheme === 'dark'
+          ? 'moon'
+          : 'moon-filled';
   return (
     <button
       type="button"
@@ -183,7 +211,13 @@ function ThemeToggle() {
   );
 }
 
-/** A "More" button with a dropdown (desktop) or bottom sheet (mobile) of extra sections. */
+/**
+ * A "More" button that discloses the extra sections: a dropdown (desktop) or a
+ * bottom sheet (mobile). It is a disclosure of plain lists of links, not an
+ * ARIA menu — Tab moves through the links as anywhere else. It closes on a
+ * link, on Escape (focus back on the button), when focus leaves it, on an
+ * outside tap and on navigation.
+ */
 function MoreMenu({
   groups,
   variant,
@@ -195,37 +229,49 @@ function MoreMenu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   const location = useLocation();
 
-  // Close on navigation, outside click and Escape.
+  // Close on navigation and on an outside tap.
   useEffect(() => setOpen(false), [location.pathname]);
   useEffect(() => {
     if (!open) return;
     const onPointer = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
     document.addEventListener('pointerdown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
+    return () => document.removeEventListener('pointerdown', onPointer);
   }, [open]);
 
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Escape' || !open) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(false);
+    buttonRef.current?.focus();
+  };
+
+  // Tabbing out of the disclosure closes it. A null relatedTarget (a click on
+  // something that takes no focus, the window losing focus) is left alone: the
+  // outside-tap listener handles clicks, and a link's own click must still land.
+  const onBlur = (e: FocusEvent<HTMLDivElement>) => {
+    const next = e.relatedTarget;
+    if (next && ref.current && !ref.current.contains(next)) setOpen(false);
+  };
+
   return (
-    <div className={`more more--${variant}`} ref={ref}>
+    <div className={`more more--${variant}`} ref={ref} onKeyDown={onKeyDown} onBlur={onBlur}>
       <button
+        ref={buttonRef}
         type="button"
         className={
           variant === 'dropdown'
             ? `shell__navlink${active ? ' is-active' : ''}`
             : `shell__bottomlink${active ? ' is-active' : ''}`
         }
-        aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
       >
         {variant === 'sheet' ? (
@@ -237,41 +283,80 @@ function MoreMenu({
         {variant === 'dropdown' ? <Icon name="chevron-down" size={14} /> : null}
       </button>
       {open ? (
-        <div className="more__menu" role="menu" aria-label="More sections">
-          {groups.map((group) => (
-            <div key={group.title} className="more__group" role="group" aria-label={group.title}>
-              <span className="more__heading" aria-hidden="true">
-                {group.title}
-              </span>
-              {group.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  role="menuitem"
-                  className={({ isActive }) => `more__item${isActive ? ' is-active' : ''}`}
-                >
-                  <span className="more__icon" aria-hidden="true">
-                    <Icon name={item.icon} size={20} />
-                  </span>
-                  <span className="more__text">
-                    <span className="more__label">{item.label}</span>
-                    {item.blurb ? <span className="more__blurb">{item.blurb}</span> : null}
-                  </span>
-                </NavLink>
-              ))}
-            </div>
-          ))}
+        <div
+          className="more__menu"
+          id={panelId}
+          data-testid="more-menu"
+          role="region"
+          aria-label="More sections"
+        >
+          {groups.map((group) => {
+            const headingId = `${panelId}-${group.title}`;
+            return (
+              <div
+                key={group.title}
+                className="more__group"
+                role="group"
+                aria-labelledby={headingId}
+              >
+                <span className="more__heading" id={headingId}>
+                  {group.title}
+                </span>
+                <ul className="more__list" role="list">
+                  {group.items.map((item) => (
+                    <li key={item.to}>
+                      <NavLink
+                        to={item.to}
+                        className={({ isActive }) => `more__item${isActive ? ' is-active' : ''}`}
+                        onClick={() => setOpen(false)}
+                      >
+                        <span className="more__icon" aria-hidden="true">
+                          <Icon name={item.icon} size={20} />
+                        </span>
+                        <span className="more__text">
+                          <span className="more__label">{item.label}</span>
+                          {item.blurb ? <span className="more__blurb">{item.blurb}</span> : null}
+                        </span>
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>
   );
 }
 
+/**
+ * Route changes land at their scroll position at once. The stylesheet gives the
+ * page smooth scrolling for in-page links, which would otherwise turn every
+ * navigation's scroll-to-top (ScrollRestoration) into a glide through the new
+ * page. Rendered just before <ScrollRestoration /> so its effect runs first.
+ */
+function InstantRouteScroll() {
+  const { key } = useLocation();
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.style.scrollBehavior = 'auto';
+    const frame = requestAnimationFrame(() => {
+      root.style.scrollBehavior = '';
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      root.style.scrollBehavior = '';
+    };
+  }, [key]);
+  return null;
+}
+
 export function Shell() {
   useColorScheme();
   usePieceSet();
   const location = useLocation();
-  const section = `/${location.pathname.split('/')[1] ?? ''}`;
+  const section = navSection(location.pathname);
   const inMore = MORE_PATHS.has(section);
   const shortcuts = useShortcutsDialog();
   const mainRef = useRef<HTMLElement>(null);
@@ -289,10 +374,19 @@ export function Shell() {
 
   const focus = useFocus((s) => s.active);
 
+  // Focus the page directly: following the fragment would rewrite the URL hash,
+  // which carries shared positions and openings (/analyze#z=…).
+  const skipToContent = (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    mainRef.current?.focus();
+  };
+
   return (
     <div className={focus ? 'shell shell--focus' : 'shell'} data-focus={focus || undefined}>
+      <InstantRouteScroll />
+      <ScrollRestoration />
       <PlatformHooks />
-      <a className="skip-link" href="#main">
+      <a className="skip-link" href="#main" onClick={skipToContent}>
         Skip to content
       </a>
       <header className="shell__header">
@@ -302,16 +396,19 @@ export function Shell() {
             <span>{siteConfig.name}</span>
           </NavLink>
           <nav className="shell__nav" aria-label="Primary">
-            {DESKTOP_NAV.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) => `shell__navlink${isActive ? ' is-active' : ''}`}
-              >
-                {item.label}
-              </NavLink>
-            ))}
+            {DESKTOP_NAV.map((item) => {
+              const active = isSectionActive(item.to, location.pathname, item.end);
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={`shell__navlink${active ? ' is-active' : ''}`}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
             <MoreMenu
               groups={DESKTOP_MORE}
               variant="dropdown"
@@ -329,28 +426,49 @@ export function Shell() {
       </header>
 
       <main id="main" className="shell__main container" tabIndex={-1} ref={mainRef}>
-        <Suspense
-          fallback={
-            <div className="shell__loading">
-              <Spinner label="Loading…" />
-            </div>
-          }
-        >
-          <Outlet key={location.pathname.split('/')[1]} />
-        </Suspense>
+        {/* A page that crashes takes only the page with it: the header and the
+            navigation stay, and the next route starts afresh. */}
+        <ErrorBoundary resetKey={location.pathname} inline>
+          <Suspense
+            fallback={
+              <div className="shell__loading">
+                <Spinner label="Loading…" />
+              </div>
+            }
+          >
+            <Outlet key={location.pathname.split('/')[1]} />
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
       <footer className="shell__footer">
         <div className="container shell__footer-inner">
+          {/* The licence texts are copied into the build by scripts/postbuild.mjs. */}
           <span>
-            {siteConfig.name} v{__APP_VERSION__} · Free and open source ·{' '}
+            {siteConfig.name} v{__APP_VERSION__} · Free and open source (GPL-3.0-or-later) ·{' '}
             <a href={siteConfig.repositoryUrl} target="_blank" rel="noreferrer">
               GitHub
+            </a>{' '}
+            ·{' '}
+            <a href={`${import.meta.env.BASE_URL}licence.txt`} target="_blank" rel="noreferrer">
+              Licence
+            </a>{' '}
+            ·{' '}
+            <a href={`${import.meta.env.BASE_URL}notices.txt`} target="_blank" rel="noreferrer">
+              Third-party notices
             </a>
           </span>
-          <span className="faint">
-            Engine: Stockfish · Board: Chessground · Puzzles: Lichess (CC0) · Runs entirely in your
-            browser ·{' '}
+          <span className="faint" data-testid="credits">
+            Engine: Stockfish (GPL-3.0) · Board: Chessground (GPL-3.0) · Pieces (Classic): Colin
+            M.L. Burnett,{' '}
+            <a
+              href="https://creativecommons.org/licenses/by-sa/3.0/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              CC BY-SA 3.0
+            </a>{' '}
+            · Puzzles and openings: Lichess (CC0) · Runs entirely in your browser ·{' '}
             <button type="button" className="linklike" onClick={() => shortcuts.setOpen(true)}>
               Keyboard shortcuts
             </button>
@@ -360,19 +478,22 @@ export function Shell() {
       <ShortcutsDialog open={shortcuts.open} onClose={() => shortcuts.setOpen(false)} />
 
       <nav className="shell__bottomnav" aria-label="Primary (mobile)">
-        {MOBILE_NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) => `shell__bottomlink${isActive ? ' is-active' : ''}`}
-          >
-            <span className="shell__bottomicon" aria-hidden="true">
-              <Icon name={item.icon} size={22} />
-            </span>
-            <span>{item.label}</span>
-          </NavLink>
-        ))}
+        {MOBILE_NAV.map((item) => {
+          const active = isSectionActive(item.to, location.pathname, item.end);
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              className={`shell__bottomlink${active ? ' is-active' : ''}`}
+              aria-current={active ? 'page' : undefined}
+            >
+              <span className="shell__bottomicon" aria-hidden="true">
+                <Icon name={item.icon} size={22} />
+              </span>
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
         <MoreMenu groups={MOBILE_MORE} variant="sheet" active={inMore} />
       </nav>
 

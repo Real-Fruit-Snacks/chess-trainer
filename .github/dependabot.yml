@@ -15,8 +15,10 @@ updates:
         update-types: [minor, patch]
     labels: [dependencies]
 
+  # Workflows pin every action to a commit SHA with its version in a comment;
+  # Dependabot moves both. The composite setup action is watched too.
   - package-ecosystem: github-actions
-    directory: /
+    directories: ['/', '/.github/actions/*']
     schedule:
       interval: monthly
     groups:

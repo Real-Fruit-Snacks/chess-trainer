@@ -23,6 +23,12 @@ export interface LessonTask {
 }
 
 export interface LessonStep {
+  /**
+   * Stable key for progress and recall cards. Without it the step is keyed by its
+   * position, so inserting a step above it shifts its progress; set one before
+   * reordering a lesson's steps. Unique within the lesson.
+   */
+  id?: string;
   title?: string;
   /**
    * Lightweight markdown: blank-line separated paragraphs, `- ` bullet lists,
@@ -52,6 +58,20 @@ export interface Lesson {
   practiceThemes?: string[];
 }
 
+/**
+ * The rating at which each level starts. The level labels and the placement quiz
+ * both read it, so the course a quiz result recommends always matches the
+ * rating range printed next to that level.
+ */
+export const LEVEL_START_RATING = { intermediate: 800, advanced: 1600 } as const;
+
+/** The lesson level for a (puzzle) rating, by `LEVEL_START_RATING`. */
+export function levelForRating(rating: number): LessonLevel {
+  if (rating < LEVEL_START_RATING.intermediate) return 'beginner';
+  if (rating < LEVEL_START_RATING.advanced) return 'intermediate';
+  return 'advanced';
+}
+
 export const LEVEL_LABELS: Record<
   LessonLevel,
   { title: string; blurb: string; ratingHint: string }
@@ -59,17 +79,17 @@ export const LEVEL_LABELS: Record<
   beginner: {
     title: 'Beginner',
     blurb: 'The rules, how the pieces move and the first ideas that win games.',
-    ratingHint: 'up to ~800',
+    ratingHint: `up to ~${LEVEL_START_RATING.intermediate}`,
   },
   intermediate: {
     title: 'Intermediate',
     blurb: 'Tactical patterns, mating nets and the endgames every club player needs.',
-    ratingHint: '~800–1600',
+    ratingHint: `~${LEVEL_START_RATING.intermediate}–${LEVEL_START_RATING.advanced}`,
   },
   advanced: {
     title: 'Advanced',
     blurb: 'Calculation, pawn structures, prophylaxis and converting advantages.',
-    ratingHint: '1600+',
+    ratingHint: `${LEVEL_START_RATING.advanced}+`,
   },
 };
 

@@ -1,9 +1,9 @@
-import { GameTree } from '@/chess/tree';
+import { parsePgnCached } from '@/chess/tree';
 import { ladderOrder } from '@/features/drills/endgameLadder';
 import { LESSON_META } from '@/features/learn/lessonMeta';
 import { repertoireStats } from '@/features/openings/model';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
-import { buildThemeReport } from '@/features/progress/themeReport';
+import { buildThemeReport, themeBaseline } from '@/features/progress/themeReport';
 import { themeName } from '@/features/puzzles/themes';
 import { localDateKey } from '@/lib/dates';
 import { dueReviews } from '@/lib/puzzleReview';
@@ -20,6 +20,8 @@ export interface PlanItem {
   done: boolean;
   /** Rough minutes, for the header. */
   minutes: number;
+  /** The estimate was capped at `minutes`: there is more to do than that ("10+ min"). */
+  moreThan?: boolean;
 }
 
 export interface DailyPlan {
@@ -29,8 +31,16 @@ export interface DailyPlan {
 }
 
 const RATED_TARGET = 5;
-/** A theme is "weak" below this accuracy; the plan then targets it instead of rated puzzles. */
-const WEAK_THEME_ACCURACY = 70;
+const THEME_TARGET = 5;
+/** A theme is weak only this many points below the learner's own accuracy… */
+export const WEAK_THEME_MARGIN = 15;
+/** …and only once it has this many attempts. */
+export const WEAK_THEME_MIN_ATTEMPTS = 20;
+
+/** A minutes estimate capped at `max`, flagged when the cap cut it short. */
+function capped(minutes: number, max: number): Pick<PlanItem, 'minutes' | 'moreThan'> {
+  return minutes > max ? { minutes: max, moreThan: true } : { minutes };
+}
 
 /** Drills the plan rotates through: never done first (in endgame-ladder order), then the least recent. */
 const DRILL_ROTATION: { id: string; title: string; description: string; to: string }[] = [
@@ -60,14 +70,21 @@ const DRILL_ROTATION: { id: string; title: string; description: string; to: stri
   },
 ];
 
-/** The weakest practiceable theme with enough attempts, if it is weak enough to matter. */
+/**
+ * The weakest practiceable theme, when it is weak enough to matter: at least
+ * `WEAK_THEME_MIN_ATTEMPTS` attempts and an accuracy more than
+ * `WEAK_THEME_MARGIN` points below what the learner scores across all themes.
+ * (Rated puzzles are chosen near the rating, so a fixed bar such as 70 % would
+ * flag nearly every theme.)
+ */
 export function weakestTheme(
   themeStats: ProgressState['themeStats'],
-): { tag: string; accuracy: number } | null {
-  const report = buildThemeReport(themeStats);
-  const worst = report[0];
-  return worst && worst.accuracy < WEAK_THEME_ACCURACY
-    ? { tag: worst.tag, accuracy: worst.accuracy }
+): { tag: string; accuracy: number; expected: number } | null {
+  const expected = themeBaseline(themeStats);
+  if (expected === null) return null;
+  const worst = buildThemeReport(themeStats, WEAK_THEME_MIN_ATTEMPTS)[0];
+  return worst && worst.accuracy < expected - WEAK_THEME_MARGIN
+    ? { tag: worst.tag, accuracy: worst.accuracy, expected }
     : null;
 }
 
@@ -98,19 +115,19 @@ export function buildDailyPlan(
     id: 'daily',
     title: 'Daily puzzle',
     detail: dailyDone
-      ? `Done — ${progress.daily?.outcome === 'solved' ? 'solved' : 'missed, try again tomorrow'}`
+      ? `Done — ${progress.daily?.outcome === 'solved' ? 'solved' : 'missed; a new puzzle tomorrow'}`
       : 'One puzzle, same for everyone today',
     to: '/puzzles/daily',
     done: dailyDone,
     minutes: 2,
   });
 
-  // 1b. Daily opening: two minutes of naming the opening of the day.
+  // 1b. The Daily Opening (an arcade game, so a proper name): two minutes of naming the opening of the day.
   const openingDone =
     progress.dailyOpening?.date === today && progress.dailyOpening.result !== null;
   items.push({
     id: 'dailyOpening',
-    title: 'Daily opening',
+    title: 'Daily Opening',
     detail: openingDone
       ? `Done — ${
           progress.dailyOpening?.result === 'solved'
@@ -123,30 +140,28 @@ export function buildDailyPlan(
     minutes: 2,
   });
 
-  // 2. Rated puzzles — or the weakest theme, once the statistics show one.
+  // 2. Rated puzzles: always — they are what the rating is built from. Solves count.
+  const solvedToday = progress.attempts.filter((a) => a.at >= dayStart && a.outcome === 'solved');
+  const ratedToday = solvedToday.filter((a) => a.ratingBefore !== a.ratingAfter).length;
+  items.push({
+    id: 'rated',
+    title: `Solve ${RATED_TARGET} rated puzzles`,
+    detail: `${Math.min(ratedToday, RATED_TARGET)} of ${RATED_TARGET} today`,
+    to: '/puzzles',
+    done: ratedToday >= RATED_TARGET,
+    minutes: 8,
+  });
+
+  // 2b. The weakest theme, once the statistics clearly show one.
   const weak = weakestTheme(progress.themeStats ?? {});
   if (weak) {
-    const themedToday = progress.attempts.filter(
-      (a) => a.at >= dayStart && a.themes.split(' ').includes(weak.tag),
-    ).length;
+    const themedToday = solvedToday.filter((a) => a.themes.split(' ').includes(weak.tag)).length;
     items.push({
-      id: 'rated',
-      title: `Solve ${RATED_TARGET} puzzles on ${themeName(weak.tag)}`,
-      detail: `Your weakest theme (${weak.accuracy}%) · ${Math.min(themedToday, RATED_TARGET)} of ${RATED_TARGET} today`,
+      id: 'weakTheme',
+      title: `Solve ${THEME_TARGET} puzzles on ${themeName(weak.tag)}`,
+      detail: `Your weakest theme (${weak.accuracy}% against ${weak.expected}% overall) · ${Math.min(themedToday, THEME_TARGET)} of ${THEME_TARGET} solved today`,
       to: `/puzzles/themes?theme=${encodeURIComponent(weak.tag)}`,
-      done: themedToday >= RATED_TARGET,
-      minutes: 8,
-    });
-  } else {
-    const ratedToday = progress.attempts.filter(
-      (a) => a.at >= dayStart && a.ratingBefore !== a.ratingAfter,
-    ).length;
-    items.push({
-      id: 'rated',
-      title: `Solve ${RATED_TARGET} rated puzzles`,
-      detail: `${Math.min(ratedToday, RATED_TARGET)} of ${RATED_TARGET} today`,
-      to: '/puzzles',
-      done: ratedToday >= RATED_TARGET,
+      done: themedToday >= THEME_TARGET,
       minutes: 8,
     });
   }
@@ -160,21 +175,25 @@ export function buildDailyPlan(
       detail: due > 0 ? `${due} due` : 'Nothing due — all caught up',
       to: '/puzzles/review',
       done: due === 0,
-      minutes: Math.min(10, due * 2),
+      ...capped(due * 2, 10),
     });
   }
 
   // 3b. Lesson recall
   const recallCards = progress.lessonRecall ?? {};
   const recallDue = dueReviews(recallCards, now).length;
-  if (Object.keys(recallCards).length > 0) {
+  const recallScheduled = Object.keys(recallCards).length;
+  if (recallScheduled > 0) {
     items.push({
       id: 'recall',
       title: 'Recall lesson positions',
-      detail: recallDue > 0 ? `${recallDue} due` : 'Nothing due — all remembered',
+      detail:
+        recallDue > 0
+          ? `${recallDue} due`
+          : `Nothing due today · ${recallScheduled} position${recallScheduled === 1 ? '' : 's'} scheduled`,
       to: '/learn/recall',
       done: recallDue === 0,
-      minutes: Math.min(8, recallDue + 1),
+      ...capped(recallDue + 1, 8),
     });
   }
 
@@ -190,7 +209,7 @@ export function buildDailyPlan(
   for (const rep of all) {
     try {
       const stats = repertoireStats(
-        GameTree.fromPgn(rep.pgn),
+        parsePgnCached(rep.pgn),
         rep.color,
         cardsFor(repertoire.cards, rep.id),
         now,
@@ -216,7 +235,7 @@ export function buildDailyPlan(
           : 'Nothing due today',
       to: '/openings',
       done: openingDue === 0,
-      minutes: Math.min(10, Math.ceil(openingDue / 4) + 2),
+      ...capped(Math.ceil(openingDue / 4) + 2, 10),
     });
   }
 

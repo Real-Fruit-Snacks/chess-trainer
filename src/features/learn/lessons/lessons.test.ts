@@ -1,13 +1,69 @@
 import { Chess, validateFen } from 'chess.js';
 import { describe, expect, it } from 'vitest';
+import { COURSES } from '../courses';
 import { normalizeSan } from '../taskCheck';
 import { lessons } from './index';
 import { parseShapes } from '../model';
+import {
+  PROSE_ALLOW_LIST,
+  candidateStarts,
+  quotedLines,
+  replay,
+  replayFromAny,
+} from './quotedLines';
+
+/**
+ * Steps allowed to run past the word limit, as "lessonId:index" (0-based). Empty:
+ * every step fits — trim a step before adding it here.
+ */
+const LONG_STEPS = new Set<string>([]);
+const MAX_STEP_WORDS = 130;
 
 describe('lesson content', () => {
   it('has unique ids', () => {
     const ids = lessons.map((l) => l.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('has unique step ids within a lesson', () => {
+    for (const lesson of lessons) {
+      const ids = lesson.steps.flatMap((s) => (s.id ? [s.id] : []));
+      expect(new Set(ids).size, lesson.id).toBe(ids.length);
+      // Kebab-case words, never a bare number: a number would read as a step position.
+      for (const id of ids) {
+        expect(id, `${lesson.id}: step id "${id}"`).toMatch(/^[a-z][a-z0-9-]*$/);
+      }
+    }
+  });
+
+  it('every lesson sits in the course of its level', () => {
+    const courseOf = new Map<string, string>();
+    for (const course of COURSES) {
+      for (const unit of course.units) {
+        for (const item of unit.items) {
+          if (item.type === 'lesson') courseOf.set(item.id, course.level);
+        }
+      }
+    }
+    for (const lesson of lessons) {
+      expect(courseOf.get(lesson.id), `${lesson.id} is in no course`).toBeDefined();
+      expect(courseOf.get(lesson.id), `${lesson.id} (${lesson.level}) is in the wrong course`).toBe(
+        lesson.level,
+      );
+    }
+  });
+
+  it(`keeps steps under ~${MAX_STEP_WORDS} words`, () => {
+    const long: string[] = [];
+    for (const lesson of lessons) {
+      lesson.steps.forEach((step, index) => {
+        const words = step.text.split(/\s+/).filter(Boolean).length;
+        if (words > MAX_STEP_WORDS && !LONG_STEPS.has(`${lesson.id}:${index}`)) {
+          long.push(`${lesson.id} step ${index + 1}: ${words} words`);
+        }
+      });
+    }
+    expect(long).toEqual([]);
   });
 
   for (const lesson of lessons) {
@@ -34,6 +90,32 @@ describe('lesson content', () => {
           it('has parseable shapes', () => {
             const shapes = parseShapes(step.shapes);
             expect(shapes.length).toBe(step.shapes?.length ?? 0);
+          });
+
+          it('quoted lines are legal and claimed mates are mate', () => {
+            const starts = candidateStarts(step, lesson.steps[index - 1]);
+            // A line may continue (or branch from) a line quoted earlier in the same field.
+            const reached: Partial<Record<string, string[]>> = {};
+            for (const line of quotedLines(step)) {
+              if (PROSE_ALLOW_LIST.has(`${lesson.id}|${line.raw}`)) continue;
+              const from = [...(reached[line.field] ?? []), ...starts];
+              const played = replayFromAny(from, line.moves);
+              if (line.moves.length >= 2 || line.mateAt >= 0) {
+                expect(
+                  played,
+                  `"${line.raw}" (${line.field}) is not legal from any position`,
+                ).not.toBe(null);
+              }
+              if (!played) continue;
+              (reached[line.field] ??= []).unshift(...played.positions.map((p) => p.fen()));
+              if (line.mateAt >= 0) {
+                const upTo = line.moves.slice(0, line.mateAt + 1);
+                const mates = from.some((f) => replay(f, upTo)?.at(-1)?.isCheckmate());
+                expect(mates, `"${line.raw}" (${line.field}): ${upTo.at(-1)} is not mate`).toBe(
+                  true,
+                );
+              }
+            }
           });
 
           if (step.task) {

@@ -23,7 +23,8 @@ export function diagnosticRows(input: DiagnosticsInput): DiagnosticRow[] {
   const choice = chooseEngineBuild(input.wantThreads, input.env);
   const rows: DiagnosticRow[] = [
     {
-      label: 'Engine build in use',
+      // What this environment and setting select; the running client is not probed.
+      label: 'Build selected',
       value: describeEngine(choice.build, choice.threads),
       tone: choice.build === 'multi' ? 'good' : 'neutral',
     },
@@ -69,7 +70,8 @@ export function diagnosticRows(input: DiagnosticsInput): DiagnosticRow[] {
       'not-isolated':
         'The page is not cross-origin isolated yet — reload after switching threads on.',
       'no-shared-memory': 'This browser does not expose shared memory.',
-      'one-core': 'Only one core is available, so threads would not help.',
+      'one-core':
+        'Fewer than three cores are reported, or the count is hidden, so threads would not help.',
     };
     rows.push({ label: 'Why single-threaded', value: why[choice.reason], tone: 'warn' });
   }

@@ -5,12 +5,21 @@
  */
 export type CheckState = 'yes' | 'no' | 'unknown';
 
+/**
+ * What a "no" means: a capability the app would use is missing (worth a red
+ * badge), a preference or circumstance is simply not set (neutral), or the row
+ * is plain information.
+ */
+export type CheckKind = 'capability' | 'preference' | 'info';
+
 export interface PlatformCheck {
   id: string;
   label: string;
   state: CheckState;
   /** A value or explanation shown next to the state. */
   detail?: string;
+  /** How to colour a "no"; capabilities when missing. */
+  kind?: CheckKind;
 }
 
 function yesNo(value: boolean | undefined): CheckState {
@@ -65,18 +74,21 @@ export function platformChecks(): PlatformCheck[] {
   return [
     {
       id: 'standalone',
+      kind: 'preference',
       label: 'Running as an installed app',
       state:
         media('(display-mode: standalone)') === 'yes' || nav.standalone === true ? 'yes' : 'no',
     },
     {
       id: 'service-worker',
+      kind: 'preference',
       label: 'Service worker controls the page',
       state: yesNo(!!nav.serviceWorker?.controller),
       detail: nav.serviceWorker ? undefined : 'Service workers are not available',
     },
     {
       id: 'online',
+      kind: 'preference',
       label: 'Online',
       state: yesNo(nav.onLine),
     },
@@ -92,16 +104,19 @@ export function platformChecks(): PlatformCheck[] {
     },
     {
       id: 'shared-memory',
+      kind: 'preference',
       label: 'SharedArrayBuffer (multi-threaded engine)',
       state: yesNo(typeof SharedArrayBuffer !== 'undefined'),
     },
     {
       id: 'isolated',
+      kind: 'preference',
       label: 'Cross-origin isolated',
       state: yesNo(g.crossOriginIsolated === true),
     },
     {
       id: 'cores',
+      kind: 'info',
       label: 'CPU cores reported',
       state: nav.hardwareConcurrency ? 'yes' : 'unknown',
       detail: nav.hardwareConcurrency ? String(nav.hardwareConcurrency) : undefined,
@@ -116,21 +131,25 @@ export function platformChecks(): PlatformCheck[] {
     },
     {
       id: 'vibrate',
+      kind: 'preference',
       label: 'Vibration API (haptics)',
       state: yesNo(typeof nav.vibrate === 'function'),
     },
     {
       id: 'badge',
+      kind: 'preference',
       label: 'App icon badge',
       state: yesNo(typeof nav.setAppBadge === 'function'),
     },
     {
       id: 'share',
+      kind: 'preference',
       label: 'Web Share',
       state: yesNo(typeof nav.share === 'function'),
     },
     {
       id: 'share-files',
+      kind: 'preference',
       label: 'Web Share with files (share a backup)',
       state: canShareFiles,
     },
@@ -163,27 +182,32 @@ export function platformChecks(): PlatformCheck[] {
     },
     {
       id: 'dark',
+      kind: 'preference',
       label: 'System prefers dark colours',
       state: media('(prefers-color-scheme: dark)'),
     },
     {
       id: 'reduced-motion',
+      kind: 'preference',
       label: 'System prefers reduced motion',
       state: media('(prefers-reduced-motion: reduce)'),
     },
     {
       id: 'coarse',
+      kind: 'preference',
       label: 'Touch (coarse pointer)',
       state: media('(pointer: coarse)'),
     },
     {
       id: 'viewport',
+      kind: 'info',
       label: 'Viewport',
       state: 'yes',
       detail: `${window.innerWidth} × ${window.innerHeight} at ${window.devicePixelRatio}×`,
     },
     {
       id: 'language',
+      kind: 'info',
       label: 'Language',
       state: 'yes',
       detail: nav.language,

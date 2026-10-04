@@ -1,11 +1,13 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import {
   Alert,
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   Field,
+  Icon,
   Input,
   LinkButton,
   ProgressBar,
@@ -33,7 +35,7 @@ import {
 } from '@/lib/gameImport';
 import { loadOpenings } from '@/lib/openings';
 import { siteConfig } from '@/site.config';
-import { sortedGames, type StoredGame, useGames } from '@/store/games';
+import { MAX_STORED_GAMES, sortedGames, type StoredGame, useGames } from '@/store/games';
 import { useProgress } from '@/store/progress';
 import { cardsFor, useRepertoire } from '@/store/repertoire';
 import { REVIEW_DEPTHS, useSettings } from '@/store/settings';
@@ -51,6 +53,8 @@ import './games.css';
 
 type Source = 'lichess' | 'chesscom' | 'paste';
 const PAGE_SIZE = 30;
+
+const OUTCOME_LABEL = { win: 'Win', draw: 'Draw', loss: 'Loss' } as const;
 
 const SPEEDS: { value: GameSpeed | 'all'; label: string }[] = [
   { value: 'all', label: 'Any time control' },
@@ -119,9 +123,9 @@ function ImportCard() {
   const addGames = useGames((s) => s.addGames);
   const player = useGames((s) => s.player);
   const setPlayer = useGames((s) => s.setPlayer);
-  const settings = useSettings();
+  const setUsernames = useProgress((s) => s.setUsernames);
   const [source, setSource] = useState<Source>('lichess');
-  const [username, setUsername] = useState(settings.lichessUsername);
+  const [username, setUsername] = useState(() => useProgress.getState().lichessUsername);
   const [filters, setFilters] = useState<GameFilters>({ rated: false, speed: 'all', color: 'all' });
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -131,7 +135,7 @@ function ImportCard() {
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const saved = useSettings.getState();
+    const saved = useProgress.getState();
     setUsername(
       source === 'lichess'
         ? saved.lichessUsername
@@ -142,6 +146,12 @@ function ImportCard() {
     setCursor(null);
     setError(null);
   }, [source]);
+
+  // A new filter means a new list: "Load older games" must not continue the old one.
+  useEffect(() => {
+    setCursor(null);
+    setLastFetch(null);
+  }, [filters]);
 
   const fetchPage = async (more: boolean) => {
     abortRef.current?.abort();
@@ -159,11 +169,14 @@ function ImportCard() {
       });
       if (controller.signal.aborted) return;
       const trimmed = username.trim();
-      settings.update(
+      setUsernames(
         source === 'lichess' ? { lichessUsername: trimmed } : { chesscomUsername: trimmed },
       );
       if (!player) setPlayer(trimmed);
-      const added = addGames(page.games, source === 'lichess' ? 'lichess' : 'chesscom');
+      const { added, dropped } = addGames(
+        page.games,
+        source === 'lichess' ? 'lichess' : 'chesscom',
+      );
       setCursor(page.next);
       setLastFetch({ username: trimmed, source });
       if (page.games.length === 0) {
@@ -171,7 +184,7 @@ function ImportCard() {
       } else {
         toast(
           added
-            ? `Added ${added} game${added === 1 ? '' : 's'}.`
+            ? `Added ${added} game${added === 1 ? '' : 's'}.${dropped ? ` ${dropped} older unreviewed game${dropped === 1 ? '' : 's'} made room (the collection keeps ${MAX_STORED_GAMES}).` : ''}`
             : 'Those games were already imported.',
           { tone: added ? 'success' : 'info' },
         );
@@ -193,13 +206,13 @@ function ImportCard() {
       setError('Could not read any games from that text.');
       return;
     }
-    const added = addGames(parsed, 'pgn');
+    const { added, dropped } = addGames(parsed, 'pgn');
     if (!player) setPlayer(guessPlayer(parsed));
     setText('');
     setError(null);
     toast(
       added
-        ? `Added ${added} game${added === 1 ? '' : 's'}.`
+        ? `Added ${added} game${added === 1 ? '' : 's'}.${dropped ? ` ${dropped} older unreviewed game${dropped === 1 ? '' : 's'} made room (the collection keeps ${MAX_STORED_GAMES}).` : ''}`
         : 'Those games were already imported.',
       { tone: added ? 'success' : 'info' },
     );
@@ -483,7 +496,7 @@ function RepertoireCard({ list, player }: { list: StoredGame[]; player: string }
           of book first.
         </p>
       ) : (
-        <ul className="games__deviations" data-testid="deviations">
+        <ul role="list" className="games__deviations" data-testid="deviations">
           {grouped.map((d) => (
             <li key={`${d.repertoireId}|${d.fen}|${d.played}`} className="games__deviation">
               <div>
@@ -527,10 +540,18 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
   const puzzleRating = useProgress((s) => Math.round(s.puzzleRating));
   const ownPuzzles = useProgress((s) => s.ownPuzzles);
   const addOwnPuzzles = useProgress((s) => s.addOwnPuzzles);
-  const { engine, status: engineStatus, error: engineError } = useEngine({ autoStart: false });
+  const {
+    engine,
+    status: engineStatus,
+    error: engineError,
+    start: startEngine,
+  } = useEngine({ autoStart: false });
   const [queue, setQueue] = useState<string[]>([]);
   const [current, setCurrent] = useState<{ id: string; done: number; total: number } | null>(null);
   const [pending, setPending] = useState<Record<string, OwnPuzzle>>({});
+  const [confirm, setConfirm] = useState<
+    { kind: 'clear' } | { kind: 'remove'; game: StoredGame } | null
+  >(null);
   const abortRef = useRef<AbortController | null>(null);
   const gamesRef = useRef(list);
   gamesRef.current = list;
@@ -585,24 +606,42 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
     abortRef.current = controller;
     setCurrent({ id, done: 0, total: 1 });
     void (async () => {
+      let failed = false;
       try {
-        await engine().init();
+        // Through the hook, so the page learns the engine's status (and its error).
+        await startEngine();
+        if (engine().status !== 'ready') throw new Error('The engine could not start.');
         await reviewOne(game, controller.signal);
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
-          toast('Review failed for one game.', { tone: 'danger' });
+          failed = true;
+          toast(
+            err instanceof Error && /engine/i.test(err.message)
+              ? 'The engine is not available, so the reviews were stopped.'
+              : 'Review failed for one game; the rest of the queue was stopped.',
+            { tone: 'danger' },
+          );
         }
       } finally {
         setCurrent(null);
-        setQueue((q) => (controller.signal.aborted ? [] : q.slice(1)));
+        // One failure stops the queue: a broken engine would fail every game the same way.
+        setQueue((q) => (controller.signal.aborted || failed ? [] : q.slice(1)));
       }
     })();
-  }, [queue, current, engine, reviewOne]);
+  }, [queue, current, engine, startEngine, reviewOne]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const openInAnalysis = (game: StoredGame) => {
-    void navigate(handOffToAnalysis(game.pgn));
+    void navigate(
+      handOffToAnalysis(game.pgn, { orientation: learnerColor(game, player) ?? 'white' }),
+    );
+  };
+
+  const stopReviews = () => {
+    abortRef.current?.abort();
+    engine().stop();
+    setQueue([]);
   };
 
   const unreviewed = list.filter((g) => !g.review);
@@ -616,13 +655,7 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
         {list.length > 0 ? (
           <div className="row">
             {running ? (
-              <Button
-                size="sm"
-                onClick={() => {
-                  abortRef.current?.abort();
-                  setQueue([]);
-                }}
-              >
+              <Button size="sm" onClick={stopReviews}>
                 Stop
               </Button>
             ) : (
@@ -630,24 +663,56 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
                 size="sm"
                 variant="primary"
                 disabled={unreviewed.length === 0 || engineStatus === 'error'}
+                title={
+                  engineStatus === 'error' ? 'The engine could not start on this device' : undefined
+                }
                 onClick={() => setQueue(unreviewed.map((g) => g.id))}
               >
                 Review all ({unreviewed.length})
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                if (confirm('Remove all imported games from this device?')) clear();
-              }}
-            >
+            <Button size="sm" variant="ghost" onClick={() => setConfirm({ kind: 'clear' })}>
               Clear
             </Button>
           </div>
         ) : null}
       </div>
-      {engineError ? <Alert tone="danger">{engineError.message}</Alert> : null}
+      <ConfirmDialog
+        open={confirm?.kind === 'clear'}
+        title="Remove all imported games?"
+        confirmLabel="Remove all"
+        danger
+        onConfirm={clear}
+        onClose={() => setConfirm(null)}
+      >
+        Every imported game and its review is removed from this device. Puzzles you already added
+        from them stay. There is no undo.
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirm?.kind === 'remove'}
+        title={
+          confirm?.kind === 'remove'
+            ? `Remove ${confirm.game.white} – ${confirm.game.black}?`
+            : 'Remove game?'
+        }
+        confirmLabel="Remove"
+        danger
+        onConfirm={() => {
+          if (confirm?.kind === 'remove') removeGame(confirm.game.id);
+        }}
+        onClose={() => setConfirm(null)}
+      >
+        The game{confirm?.kind === 'remove' && confirm.game.review ? ' and its review are' : ' is'}{' '}
+        removed from this device. There is no undo.
+      </ConfirmDialog>
+      {engineError ? (
+        <Alert tone="danger" role="alert">
+          The engine could not start: {engineError.message}{' '}
+          <Button size="sm" onClick={() => void startEngine()}>
+            Retry
+          </Button>
+        </Alert>
+      ) : null}
       {current ? (
         <div className="stack-sm" style={{ marginTop: 8 }}>
           <ProgressBar value={current.done} max={current.total} label="Review progress" />
@@ -730,7 +795,7 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
                                 : 'neutral'
                           }
                         >
-                          {outcome}
+                          {OUTCOME_LABEL[outcome]}
                         </Badge>
                       ) : (
                         game.result
@@ -746,7 +811,7 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
                     <td>
                       <div className="games__actions">
                         <Button size="sm" variant="ghost" onClick={() => openInAnalysis(game)}>
-                          Analyze
+                          Analyze game
                         </Button>
                         {!game.review ? (
                           <Button
@@ -763,9 +828,10 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
                           variant="ghost"
                           icon
                           aria-label={`Remove ${game.white} – ${game.black}`}
-                          onClick={() => removeGame(game.id)}
+                          title="Remove this game"
+                          onClick={() => setConfirm({ kind: 'remove', game })}
                         >
-                          ×
+                          <Icon name="close" size={14} />
                         </Button>
                       </div>
                     </td>

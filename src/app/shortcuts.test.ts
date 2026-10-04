@@ -18,6 +18,26 @@ describe('shortcut reference', () => {
     }
   });
 
+  it('describes what the pages really do', () => {
+    const titles = SHORTCUT_GROUPS.map((g) => g.title);
+    // Only Analyze has the move-list keys; Play has no keyboard handler at all.
+    expect(titles).toContain('Analyze');
+    expect(titles).not.toContain(expect.stringMatching(/Play\b/));
+    expect(titles.join(' ')).not.toMatch(/\bPlay\b/);
+    const flat = SHORTCUT_GROUPS.flatMap((g) => g.shortcuts.map((s) => ({ group: g.title, ...s })));
+    const keysIn = (group: string) => flat.filter((s) => s.group === group).flatMap((s) => s.keys);
+    expect(keysIn('Analyze')).toEqual(expect.arrayContaining(['←', '→', 'Home', 'End', 'F']));
+    expect(keysIn('Puzzles')).toEqual(expect.arrayContaining(['H', 'S', 'N', 'Enter']));
+    expect(keysIn('Lessons')).toEqual(expect.arrayContaining(['←', '→', 'H']));
+    expect(keysIn('Endgame studies')).toEqual(['H', 'S']);
+    expect(keysIn('Lesson recall')).toEqual(expect.arrayContaining(['H', 'N', '→']));
+    expect(keysIn('Mating patterns')).toEqual(['Enter']);
+    expect(keysIn('Classic games')).toEqual(['Space', 'Enter', '→']);
+    expect(keysIn('Arcade')).toEqual(expect.arrayContaining(['Enter', 'N']));
+    // F is Analyze-only.
+    expect(flat.filter((s) => s.keys.includes('F')).map((s) => s.group)).toEqual(['Analyze']);
+  });
+
   it('opens on ? but not while typing or with modifiers', () => {
     expect(isHelpShortcut(key({ key: '?' }))).toBe(true);
     expect(isHelpShortcut(key({ key: '/', shiftKey: true }))).toBe(true);

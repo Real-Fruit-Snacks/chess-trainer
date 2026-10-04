@@ -1,10 +1,23 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { decodeShare } from '@/lib/shareCodes';
 import { parseShareFragment } from '@/lib/shareLink';
+import { useAnalyses } from './analyses';
+import { EXPORT_VERSION, validateBackupFile } from './backupSchema';
 import backupV2 from './fixtures/backup-v2.json';
 import backupV4 from './fixtures/backup-v4.json';
 import backupV5 from './fixtures/backup-v5.json';
-import { type PersistedProgress, useProgress, withRatingDefaults } from './progress';
+import backupV6 from './fixtures/backup-v6.json';
+import backupV7 from './fixtures/backup-v7.json';
+import { useGames } from './games';
+import {
+  type PersistedProgress,
+  PROGRESS_STORAGE_KEY,
+  PROGRESS_VERSION,
+  useProgress,
+  withRatingDefaults,
+} from './progress';
+import { useRepertoire } from './repertoire';
+import { SETTINGS_STORAGE_KEY, useSettings } from './settings';
 
 /**
  * The compatibility promise: a backup made by any earlier version imports
@@ -13,14 +26,47 @@ import { type PersistedProgress, useProgress, withRatingDefaults } from './progr
  * fixtures are real export shapes from earlier releases — add a new one
  * whenever the export version changes, never edit an old one.
  */
+const FIXTURES = [
+  ['v2 (0.3)', backupV2],
+  ['v4 (0.5)', backupV4],
+  ['v5 (0.7)', backupV5],
+  ['v6 (0.9)', backupV6],
+  ['v7 (0.12)', backupV7],
+] as const;
+
 describe('backups from earlier versions', () => {
   beforeEach(() => {
     localStorage.clear();
     useProgress.getState().resetAll();
   });
 
+  it.each(FIXTURES)('the validator accepts the %s fixture with nothing dropped', (_, fixture) => {
+    const checked = validateBackupFile(fixture);
+    expect(checked.ok).toBe(true);
+    if (checked.ok) {
+      expect(checked.shape.dropped).toBe(0);
+      expect(checked.warning).toBeUndefined();
+    }
+  });
+
+  it.each(FIXTURES)('imports the %s fixture', (_, fixture) => {
+    const result = useProgress.getState().importState(fixture);
+    expect(result.ok).toBe(true);
+    const s = useProgress.getState();
+    expect(s.onboarded).toBe(true);
+    expect(s.puzzleRating).toBe(1212);
+    // Every game record has an id and a source, whatever the file carried.
+    for (const game of s.games) {
+      expect(game.id).toBeTruthy();
+      expect(game.source).toBeTruthy();
+    }
+    expect(new Set(s.games.map((g) => g.id)).size).toBe(s.games.length);
+    // Lifetime counters exist and never lag behind the attempt list.
+    expect(s.lifetime.attempts).toBeGreaterThanOrEqual(s.attempts.length);
+  });
+
   it('imports a 0.3-era backup (export v2, Elo rating, no theme statistics)', () => {
-    expect(useProgress.getState().importState(backupV2)).toBe(true);
+    expect(useProgress.getState().importState(backupV2).ok).toBe(true);
     const s = useProgress.getState();
     expect(s.onboarded).toBe(true);
     expect(s.puzzleRating).toBe(1212);
@@ -29,6 +75,7 @@ describe('backups from earlier versions', () => {
     expect(s.ratingHistory).toHaveLength(4);
     expect(s.lessons['the-board']?.completedAt).toBe(1726990000000);
     expect(s.games[0]?.result).toBe('1-0');
+    expect(s.games[0]?.source).toBe('play');
     expect(s.streak.best).toBe(4);
     // Glicko-2 fields are derived rather than defaulted blindly …
     expect(s.puzzleRd).toBe(200);
@@ -37,16 +84,21 @@ describe('backups from earlier versions', () => {
     // … theme statistics are rebuilt from the attempts …
     expect(s.themeStats.fork).toEqual({ solved: 2, failed: 0 });
     expect(s.themeStats.pin).toEqual({ solved: 0, failed: 1 });
+    // … lifetime counters too …
+    expect(s.lifetime).toMatchObject({ attempts: 3, solved: 2, failed: 1 });
+    expect(s.lifetime.solvedByTheme.fork).toBe(2);
     // … and everything invented since starts empty rather than undefined.
     expect(s.puzzleReviews).toEqual({});
     expect(s.ownPuzzles).toEqual({});
     expect(s.arcade).toEqual({});
     expect(s.dailyOpening).toBeNull();
     expect(s.oddsLadder.rung).toBe(0);
+    expect(s.lastBackupAt).toBeNull();
+    expect(s.tourDismissed).toBe(false);
   });
 
   it('imports a 0.5-era backup (export v4, Glicko-2 and the review queue)', () => {
-    expect(useProgress.getState().importState(backupV4)).toBe(true);
+    expect(useProgress.getState().importState(backupV4).ok).toBe(true);
     const s = useProgress.getState();
     expect(s.puzzleRd).toBe(92.5);
     expect(s.puzzleVolatility).toBe(0.06);
@@ -59,7 +111,7 @@ describe('backups from earlier versions', () => {
   });
 
   it('imports a 0.7-era backup (export v5, studies, recall and placement)', () => {
-    expect(useProgress.getState().importState(backupV5)).toBe(true);
+    expect(useProgress.getState().importState(backupV5).ok).toBe(true);
     const s = useProgress.getState();
     expect(s.placement?.courseId).toBe('intermediate');
     expect(s.studies['reti-1921']?.attempts).toBe(2);
@@ -68,33 +120,189 @@ describe('backups from earlier versions', () => {
     expect(s.arcade).toEqual({});
   });
 
+  it('imports a 0.9-era backup (export v6, arcade, daily opening, odds ladder, library)', () => {
+    const result = useProgress.getState().importState(backupV6);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.summary).toMatchObject({ version: 6, analyses: 1, repertoires: 1, games: 0 });
+    }
+    const s = useProgress.getState();
+    expect(s.woodpecker?.puzzleIds).toEqual(['abc12', 'def34', 'ghi56']);
+    expect(s.games).toHaveLength(2);
+    expect(s.games[0]?.book?.repertoireId).toBe('sicilian');
+    expect(useRepertoire.getState().custom[0]?.name).toBe('My London');
+    expect(Object.keys(useAnalyses.getState().items)).toHaveLength(1);
+    // Imported games were not part of the format yet: the store starts empty.
+    expect(useGames.getState().games).toEqual({});
+  });
+
+  it('imports a 0.12-era backup (export v7, imported games and lifetime counters)', () => {
+    const result = useProgress.getState().importState(backupV7);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.summary).toMatchObject({
+        version: 7,
+        games: 2,
+        analyses: 1,
+        repertoires: 1,
+        attempts: 8,
+      });
+    }
+    const s = useProgress.getState();
+    expect(s.lifetime.attempts).toBe(8);
+    expect(s.games[0]).toMatchObject({ id: 'g-simul-1', source: 'simul', event: 'Simul board 2' });
+    expect(s.lichessUsername).toBe('fixture_user');
+    expect(s.tourDismissed).toBe(true);
+    expect(s.lastBackupAt).toBe(1790700000000);
+    const games = useGames.getState();
+    expect(games.player).toBe('fixture_user');
+    expect(games.games['https://lichess.org/abcd1234']?.review?.accuracy.white).toBe(91.2);
+    expect(games.games['pgn-fixture']?.review).toBeNull();
+  });
+
   it('round-trips the current export through import unchanged', () => {
-    useProgress.getState().importState(backupV5);
+    useProgress.getState().importState(backupV7);
     useProgress.getState().recordArcade('fortress', 12, 'Held level 2');
-    const exported = JSON.parse(useProgress.getState().exportState()) as { version: number };
-    expect(exported.version).toBe(6);
+    const exported = JSON.parse(useProgress.getState().exportState()) as {
+      version: number;
+      games: { games: Record<string, unknown>; player: string };
+    };
+    expect(exported.version).toBe(EXPORT_VERSION);
+    expect(Object.keys(exported.games.games)).toHaveLength(2);
+    expect(exported.games.player).toBe('fixture_user');
     useProgress.getState().resetAll();
-    expect(useProgress.getState().importState(exported)).toBe(true);
+    expect(useGames.getState().games).toEqual({});
+    expect(useProgress.getState().importState(exported).ok).toBe(true);
     expect(useProgress.getState().arcade.fortress?.best).toBe(12);
     expect(useProgress.getState().studies['reti-1921']?.attempts).toBe(2);
+    expect(Object.keys(useGames.getState().games)).toHaveLength(2);
   });
 
   it('rejects things that are not a backup without touching the state', () => {
     useProgress.getState().importState(backupV5);
-    expect(useProgress.getState().importState({ hello: 'world' })).toBe(false);
-    expect(useProgress.getState().importState('nope')).toBe(false);
+    expect(useProgress.getState().importState({ hello: 'world' }).ok).toBe(false);
+    expect(useProgress.getState().importState('nope').ok).toBe(false);
     expect(useProgress.getState().placement?.courseId).toBe('intermediate');
   });
 });
 
+/** Writes a `{state, version}` blob the way zustand's persist middleware does, then reloads the store. */
+async function rehydrate(
+  store: { persist: { rehydrate: () => unknown } },
+  key: string,
+  state: unknown,
+  version: number,
+) {
+  localStorage.setItem(key, JSON.stringify({ state, version }));
+  await store.persist.rehydrate();
+}
+
 describe('stored state from earlier versions', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it('migrates a version-1 save: rating defaults and rebuilt theme statistics', () => {
-    const migrated = withRatingDefaults(backupV2.progress as Partial<PersistedProgress>);
+    const migrated = withRatingDefaults(backupV2.progress as unknown as Partial<PersistedProgress>);
     expect(migrated.puzzleRd).toBe(200);
     expect(migrated.puzzleVolatility).toBeGreaterThan(0);
     expect(migrated.placement).toBeNull();
     expect(migrated.woodpecker).toBeNull();
     expect(migrated.arcade).toEqual({});
+    expect(migrated.lifetime.attempts).toBe(3);
+  });
+
+  it.each([
+    ['v1', backupV2.progress, 1],
+    ['v4', backupV4.progress, 4],
+    ['v5', backupV5.progress, 5],
+    ['v6', backupV6.progress, 6],
+    ['v7', backupV7.progress, 7],
+  ] as const)(
+    'rehydrates a %s progress blob through the persist path',
+    async (_, state, version) => {
+      await rehydrate(useProgress, PROGRESS_STORAGE_KEY, state, version);
+      const s = useProgress.getState();
+      expect(s.puzzleRating).toBe(1212);
+      expect(s.onboarded).toBe(true);
+      expect(Number.isFinite(s.puzzleRd)).toBe(true);
+      expect(s.lifetime.attempts).toBeGreaterThanOrEqual(s.attempts.length);
+      for (const game of s.games) expect(game.source).toBeTruthy();
+      expect(typeof s.lichessUsername).toBe('string');
+      // The next write stores the current version.
+      useProgress.getState().touchTraining();
+      const stored = JSON.parse(localStorage.getItem(PROGRESS_STORAGE_KEY) ?? '{}') as {
+        version: number;
+      };
+      expect(stored.version).toBe(PROGRESS_VERSION);
+    },
+  );
+
+  it('rehydrates the repertoire, library and games blobs of every version that had them', async () => {
+    await rehydrate(
+      useRepertoire,
+      'chess-trainer:repertoire',
+      {
+        ...backupV4.repertoire,
+        cards: {
+          'italian|e2e4': { ease: 2.5, interval: 1, due: 1, reps: 1, lapses: 0, lastReviewed: 0 },
+        },
+      },
+      1,
+    );
+    expect(useRepertoire.getState().cards['italian|e2e4']?.reps).toBe(1);
+    await rehydrate(useRepertoire, 'chess-trainer:repertoire', backupV7.repertoire, 1);
+    expect(useRepertoire.getState().custom[0]?.name).toBe('My London');
+    await rehydrate(useAnalyses, 'chess-trainer:analyses', backupV5.analyses, 1);
+    expect(useAnalyses.getState().items).toEqual({});
+    await rehydrate(useAnalyses, 'chess-trainer:analyses', backupV6.analyses, 1);
+    expect(Object.keys(useAnalyses.getState().items)).toHaveLength(1);
+    await rehydrate(useGames, 'chess-trainer:games', backupV7.games, 1);
+    expect(useGames.getState().player).toBe('fixture_user');
+    expect(Object.keys(useGames.getState().games)).toHaveLength(2);
+  });
+
+  it('moves the learner fields of a version-3 settings save into the progress store', async () => {
+    await rehydrate(
+      useSettings,
+      SETTINGS_STORAGE_KEY,
+      {
+        colorScheme: 'dark',
+        lastBackupAt: 1790000000000,
+        lastBackupAttempts: 12,
+        tourDismissed: true,
+        lichessUsername: 'oldname',
+        chesscomUsername: 'oldcc',
+        puzzleThemes: ['fork'],
+      },
+      3,
+    );
+    const settings = useSettings.getState() as unknown as Record<string, unknown>;
+    expect(settings.colorScheme).toBe('dark');
+    expect(settings.lastBackupAt).toBeUndefined();
+    expect(settings.puzzleThemes).toBeUndefined();
+    await rehydrate(useProgress, PROGRESS_STORAGE_KEY, backupV6.progress, 6);
+    const s = useProgress.getState();
+    expect(s.lastBackupAt).toBe(1790000000000);
+    expect(s.lastBackupAttempts).toBe(12);
+    expect(s.tourDismissed).toBe(true);
+    expect(s.lichessUsername).toBe('oldname');
+    expect(s.chesscomUsername).toBe('oldcc');
+  });
+
+  it('keeps the unknown fields of a save from a newer version', async () => {
+    await rehydrate(
+      useProgress,
+      PROGRESS_STORAGE_KEY,
+      { ...backupV7.progress, futureField: { answer: 42 } },
+      PROGRESS_VERSION + 5,
+    );
+    expect(useProgress.getState().puzzleRating).toBe(1212);
+    useProgress.getState().touchTraining();
+    const stored = JSON.parse(localStorage.getItem(PROGRESS_STORAGE_KEY) ?? '{}') as {
+      state: Record<string, unknown>;
+    };
+    expect(stored.state.futureField).toEqual({ answer: 42 });
   });
 });
 

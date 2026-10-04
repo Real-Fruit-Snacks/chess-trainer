@@ -1,30 +1,73 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-GB">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Chess Trainer — learn, practice and solve at any level</title>
+    <title>%SITE_NAME% — %SITE_TAGLINE%</title>
+    <meta name="description" content="%SITE_DESCRIPTION%" />
+    <!-- The browser UI follows the page background; the inline script below picks
+         the saved scheme before the first paint, the app keeps it current after. -->
     <meta
-      name="description"
-      content="A free, open-source chess trainer that runs entirely in your browser: interactive lessons, rating-aware puzzles, games against a scalable engine and a full analysis board. Works offline."
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="%SITE_LIGHT_BACKGROUND%"
     />
-    <meta name="theme-color" content="#1f6f5b" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="%SITE_BACKGROUND%" />
     <meta name="color-scheme" content="light dark" />
+    <script>
+      // Applies the saved colour scheme and piece set before anything paints, so
+      // a visitor who chose dark (or light, or black) never sees a flash of the
+      // other scheme. Mirrors applyColorScheme() in src/app/theme.ts.
+      (function () {
+        try {
+          var raw = localStorage.getItem('chess-trainer:settings');
+          var state = raw ? JSON.parse(raw).state || {} : {};
+          var scheme = state.colorScheme;
+          var root = document.documentElement;
+          if (scheme === 'light' || scheme === 'dark' || scheme === 'black') {
+            root.setAttribute('data-theme', scheme);
+            var colour =
+              scheme === 'black'
+                ? '%SITE_BLACK_BACKGROUND%'
+                : scheme === 'dark'
+                  ? '%SITE_BACKGROUND%'
+                  : '%SITE_LIGHT_BACKGROUND%';
+            var metas = document.querySelectorAll('meta[name="theme-color"]');
+            for (var i = 0; i < metas.length; i++) {
+              if (i === 0) {
+                metas[i].removeAttribute('media');
+                metas[i].setAttribute('content', colour);
+              } else {
+                metas[i].parentNode.removeChild(metas[i]);
+              }
+            }
+          }
+          if (typeof state.pieceSet === 'string') root.setAttribute('data-pieces', state.pieceSet);
+        } catch (e) {
+          // No storage, or a damaged blob: the system scheme applies until the app loads.
+        }
+      })();
+    </script>
 
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Chess" />
+    <meta name="apple-mobile-web-app-title" content="%SITE_SHORT_NAME%" />
 
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Chess Trainer" />
-    <meta
-      property="og:description"
-      content="Learn, practice and solve chess puzzles — free, offline-capable, no account needed."
-    />
-    <meta property="og:image" content="/icons/icon-512.png" />
+    <meta property="og:site_name" content="%SITE_NAME%" />
+    <meta property="og:title" content="%SITE_NAME% — %SITE_TAGLINE%" />
+    <meta property="og:description" content="%SITE_DESCRIPTION%" />
+    <meta property="og:url" content="%SITE_URL%" />
+    <meta property="og:image" content="%SITE_URL%icons/icon-512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="%SITE_NAME% — %SITE_TAGLINE%" />
+    <meta name="twitter:description" content="%SITE_DESCRIPTION%" />
+    <meta name="twitter:image" content="%SITE_URL%icons/icon-512.png" />
   </head>
   <body>
     <noscript>
@@ -33,7 +76,7 @@
       >
         <h1>JavaScript is required</h1>
         <p>
-          Chess Trainer runs entirely in your browser — the lessons, puzzles and engine all need
+          %SITE_NAME% runs entirely in your browser — the lessons, puzzles and engine all need
           JavaScript enabled.
         </p>
       </div>

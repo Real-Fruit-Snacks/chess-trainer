@@ -1,7 +1,8 @@
 name: Release
 
 # Publishes a GitHub release for every version tag, with that version's
-# CHANGELOG.md section as the notes.
+# CHANGELOG.md section as the notes and a link to the live app (its URL is
+# read from src/site.config.ts).
 on:
   push:
     tags: ['v*']
@@ -15,14 +16,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version-file: .nvmrc
 
-      - name: Release notes from the changelog
-        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
+      # Fails unless package.json carries the tag's version and the changelog has its section.
+      - name: Check the version and write the notes
+        run: node scripts/release-notes.mjs --check "$GITHUB_REF_NAME" > release-notes.md
 
       - name: Create or update the release
         env:

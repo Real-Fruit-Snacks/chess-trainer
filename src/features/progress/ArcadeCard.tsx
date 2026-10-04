@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Card, Icon } from '@/components/ui';
 import { ARCADE_GAMES, describeArcadeBest } from '@/features/arcade/games';
 import { useProgress } from '@/store/progress';
@@ -16,7 +16,7 @@ export function ArcadeCard() {
   return (
     <Card data-testid="arcade-results">
       <h2 style={{ fontSize: '1.15rem' }}>Arcade</h2>
-      <ul className="arcade-results">
+      <ul className="arcade-results" role="list">
         {rows.map(({ game, best }) => (
           <li key={game.id} className="arcade-results__row">
             <span className="arcade-results__icon">

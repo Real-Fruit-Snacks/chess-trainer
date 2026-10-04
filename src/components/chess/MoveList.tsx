@@ -1,5 +1,5 @@
 import type { Move } from 'chess.js';
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import './chess-components.css';
 import { scrollIntoContainer } from '@/lib/scroll';
 import { San } from '@/chess/San';
@@ -18,7 +18,8 @@ export interface MoveListProps {
   moves: Move[];
   /** Index of the currently displayed ply (0 = starting position, moves.length = latest). */
   currentPly: number;
-  onSelectPly: (ply: number) => void;
+  /** Jump to a ply. Omit for a read-only list: the moves are then plain text, not buttons. */
+  onSelectPly?: (ply: number) => void;
   /** Optional annotations aligned with `moves`. */
   judgements?: (MoveJudgement | undefined)[];
   /** Move number of the first move (from the start FEN). */
@@ -27,7 +28,13 @@ export interface MoveListProps {
   startsWithBlack?: boolean;
 }
 
-export function MoveList({
+/**
+ * A two-column move list. With `onSelectPly` every move is a button that jumps
+ * to it; without it (a game in progress) the moves are plain text and the list
+ * itself takes focus so it can be scrolled from the keyboard. Memoised: a
+ * clock ticking in the parent must not redraw it ten times a second.
+ */
+export const MoveList = memo(function MoveList({
   moves,
   currentPly,
   onSelectPly,
@@ -64,31 +71,48 @@ export function MoveList({
   const renderMove = (entry: { move: Move; ply: number } | undefined) => {
     if (!entry) return <span />;
     const judgement = judgements?.[entry.ply - 1] ?? null;
-    return (
-      <button
-        type="button"
-        className={[
-          'movelist__move',
-          judgement &&
-            judgement !== 'best' &&
-            judgement !== 'good' &&
-            `movelist__move--${judgement}`,
-        ]
-          .filter(Boolean)
-          .join(' ')}
-        aria-current={entry.ply === currentPly ? 'true' : undefined}
-        onClick={() => onSelectPly(entry.ply)}
-      >
+    const className = [
+      'movelist__move',
+      judgement && judgement !== 'best' && judgement !== 'good' && `movelist__move--${judgement}`,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const content = (
+      <>
         <San san={entry.move.san} />
         {judgement && GLYPH[judgement] ? (
           <span className="movelist__glyph">{GLYPH[judgement]}</span>
         ) : null}
+      </>
+    );
+    const current = entry.ply === currentPly ? ('true' as const) : undefined;
+    if (!onSelectPly) {
+      return (
+        <span className={className} aria-current={current}>
+          {content}
+        </span>
+      );
+    }
+    return (
+      <button
+        type="button"
+        className={className}
+        aria-current={current}
+        onClick={() => onSelectPly(entry.ply)}
+      >
+        {content}
       </button>
     );
   };
 
   return (
-    <div className="movelist" ref={listRef} role="group" aria-label="Move list">
+    <div
+      className="movelist"
+      ref={listRef}
+      role={onSelectPly ? 'group' : 'region'}
+      aria-label="Move list"
+      tabIndex={onSelectPly ? undefined : 0}
+    >
       {rows.length === 0 ? <div className="movelist__empty">No moves yet.</div> : null}
       {rows.map((row) => (
         <div key={row.number} style={{ display: 'contents' }}>
@@ -99,4 +123,4 @@ export function MoveList({
       ))}
     </div>
   );
-}
+});

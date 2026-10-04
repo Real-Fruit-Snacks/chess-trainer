@@ -45,11 +45,12 @@ export const intermediateLessons2: Lesson[] = [
         shapes: ['h8:blue', 'f7g8', 'f7g7'],
         task: {
           prompt: 'Black to move: head for the saving corner.',
-          moves: ['Kg7', 'Kg8'],
+          moves: ['Kg7', 'Kg8', 'Kf8'],
           hint: 'Which corner does the h-pawn promote in? Get there.',
           success:
             'Right. Once the king reaches h8 (or g8/g7 next to it) White can never make progress: h7+ is met by ...Kh8 and it is stalemate or the pawn falls.',
-          failure: 'That lets the white king cut you off. Go straight for g7/g8 and then h8.',
+          failure:
+            'That lets the white king cut you off from the corner. Go straight for g7/g8 and then h8.',
         },
       },
       {
@@ -123,11 +124,12 @@ export const intermediateLessons2: Lesson[] = [
         orientation: 'black',
         task: {
           prompt: 'Black to move: keep the blockade.',
-          moves: ['Bc5', 'Bb4', 'Ba3', 'Be7', 'Bf8', 'Bc7', 'Bb8'],
+          moves: ['Bc5', 'Bb4', 'Ba3', 'Be7', 'Bf8', 'Bc7', 'Bb8', 'Bg3', 'Bh2', 'Be5'],
           hint: 'Move the bishop along a diagonal from which it still controls d6.',
           success:
             'The bishop still watches d6 and the king still blocks f6. White cannot make progress: draw.',
-          failure: 'That gives up control of d6 or f6 — one of the pawns will run through.',
+          failure:
+            'That loosens the grip on d6 or f6. The position may still be holdable, but why make it hard? Keep the king on f6 and the bishop on a diagonal through d6.',
         },
       },
       {
@@ -189,12 +191,13 @@ export const intermediateLessons2: Lesson[] = [
         fen: 'K7/8/8/8/7Q/8/3kp3/8 w - - 0 1',
         task: {
           prompt: 'White to move: begin the winning method.',
-          moves: ['Qd4+', 'Qf2'],
-          hint: 'Check along the d-file (or pin the pawn along the second rank).',
+          // Every check except Qe1+ (which hangs the queen), and both pins along the second rank.
+          moves: ['Qd4+', 'Qf2', 'Qf4+', 'Qg5+', 'Qh6+', 'Qd8+', 'Qb4+', 'Qh2'],
+          hint: 'Check the king, or pin the pawn along the second rank.',
           success:
-            'Qd4+ Kc2 Qe3 Kd1 Qd3+ Ke1 — the king is in front of the pawn and White’s king steps closer. Repeat and win.',
+            'That starts it. For example Qd4+ Kc2 Qe3 Kd1 Qd3+ Ke1 — the king is in front of the pawn and White’s king steps closer. Repeat and win.',
           failure:
-            'That lets the pawn promote or loses time. Check from the d-file or pin the pawn.',
+            'That gives Black a free move to promote (or gives the queen away) — a draw at best. Begin with a check or a pin: the black king must be kept busy on every move.',
         },
       },
       {
@@ -202,8 +205,8 @@ export const intermediateLessons2: Lesson[] = [
         text:
           'Against a **bishop pawn** (c- or f-file) the defender has a trick. White has just checked on b4; Black is ' +
           'about to be forced in front of the pawn... or not. If the black king goes to the **corner**, the queen ' +
-          'cannot take the pawn: Qxc2 would be *stalemate*.\n\nWith the white king far away, the game is a draw.',
-        fen: '8/7K/8/8/1Q6/8/1kp5/8 b - - 0 1',
+          'cannot take the pawn: Qxc2 would be *stalemate*.\n\nThe white king on f5 is too far away to help in time, so the game is a draw — but only from the corner.',
+        fen: '8/8/8/5K2/1Q6/8/1kp5/8 b - - 0 1',
         orientation: 'black',
         shapes: ['a1:blue', 'b4c2:red'],
         task: {
@@ -213,25 +216,18 @@ export const intermediateLessons2: Lesson[] = [
           success:
             'Into the corner! Now Qxc2 is stalemate, and Qc3+ Kb1 Qb3+ Ka1 just repeats. The white king is too far away.',
           failure:
-            'After that the queen wins the pawn with the usual method. Use the stalemate trick: head for a1.',
+            'Kc1? steps in front of the pawn and the queen wins it with the usual method. Use the stalemate trick: head for a1.',
         },
       },
       {
         title: 'Rook pawn: same trick',
         text:
           'A **rook pawn** draws for the same reason: with the king on a1 and the pawn on a2, the queen can never ' +
-          'approach without stalemating. Again the attacker needs the king nearby to win.',
+          'approach without stalemating — Qb3 here would be stalemate at once, and the checks lead nowhere. Here every ' +
+          'black king move holds, because the king is never far from a1. Again the attacker needs the king nearby to win.',
         fen: '8/7K/8/8/1Q6/8/pk6/8 b - - 0 1',
         orientation: 'black',
-        task: {
-          prompt: 'Black to move: draw.',
-          moves: ['Ka1'],
-          hint: 'Step into the corner.',
-          success:
-            'Ka1! Qb3 would be stalemate, so White can only check — and the checks lead nowhere.',
-          failure:
-            'Only the corner saves this. Anything else and the queen wins the pawn with tempo.',
-        },
+        shapes: ['a1:blue', 'b4b3:red'],
       },
       {
         title: 'Summary',
@@ -271,7 +267,7 @@ export const intermediateLessons2: Lesson[] = [
           success:
             'Ra1! Now a6 comes, and every pawn step widens the rook’s reach. Black’s rook is stuck on a8.',
           failure:
-            'Not the best square. Behind the pawn — on the a-file — is where the rook wants to be.',
+            'Other active rook moves are not bad here, but this is about Tarrasch’s rule: behind the passed pawn, on the a-file, is where the rook wants to be.',
         },
       },
       {
@@ -331,18 +327,18 @@ export const intermediateLessons2: Lesson[] = [
           'The **Philidor position** is the mirror image: the defender holds a draw against rook and pawn. Keep the ' +
           'rook on your **third rank** (the sixth from White’s side) so the enemy king cannot advance. The moment the ' +
           'pawn steps forward to take that rank away, swing the rook *behind* the king and check from a distance.\n\n' +
-          'White has just played e5. Now the pawn no longer shields the king from behind.',
-        fen: '4k3/R7/1r6/3KP3/8/8/8/8 b - - 0 1',
+          'White has just played e6. The pawn has taken the sixth rank, but it also shields nothing: the king can no longer hide in front of it.',
+        fen: '4k3/R7/1r2P3/3K4/8/8/8/8 b - - 0 1',
         orientation: 'black',
         shapes: ['b6b1', 'b1d1:blue'],
         task: {
           prompt: 'Black to move: switch to checking from behind.',
-          moves: ['Rb1', 'Rb2', 'Rb3'],
-          hint: 'Take the rook as far down the b-file as you can.',
+          moves: ['Rb1', 'Rb2', 'Rb3', 'Rb4'],
+          hint: 'Take the rook down the b-file.',
           success:
-            'Rb1! Now Kd6 Rd1+ Ke6 Re1 and the king has no shelter from the checks. A textbook draw.',
+            'Rb1! Now Kd6 Rd1+ Ke5 Re1+ Kf6 Rf1+ and the king has no shelter from the checks. A textbook draw.',
           failure:
-            'The pawn took away your third rank; the rook must go behind the king now — down the b-file.',
+            'Not the textbook way. The pawn took away your third rank; swing the rook down the b-file and check from behind.',
         },
       },
       {
@@ -404,7 +400,7 @@ export const intermediateLessons2: Lesson[] = [
       {
         title: 'Only moves: the key square',
         text:
-          'The pawn is on d5 and the black king on d8. The pawn must **not** move yet: d6? Kd7 and the position is ' +
+          'The pawn is on d5 and the black king on d8. The pawn must **not** move yet: d6? Ke8 and the position is ' +
           'a dead draw. Only one white king move wins.',
         fen: '3k4/8/4K3/3P4/8/8/8/8 w - - 0 1',
         task: {

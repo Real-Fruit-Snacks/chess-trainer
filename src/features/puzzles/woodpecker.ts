@@ -43,6 +43,9 @@ export interface WoodpeckerSet {
 const CYCLE_GAP_DAYS = [1, 2, 4, 7, 14, 21];
 export const WOODPECKER_TARGET_CYCLES = 7;
 
+/** A set's puzzles come from within this many points of its rating whenever the pool allows. */
+export const WOODPECKER_NEAR = 250;
+
 /**
  * Picks `size` puzzles around the rating (±250 first, widening as needed),
  * unseen ones first, then anything. Deterministic given the input order plus
@@ -70,7 +73,7 @@ export function buildWoodpeckerSet(
   };
   const chosen: string[] = [];
   const taken = new Set<string>();
-  for (const window of [250, 400, 700, 4000]) {
+  for (const window of [WOODPECKER_NEAR, 400, 700, 4000]) {
     const inRange = pool.filter((p) => Math.abs(p.rating - rating) <= window && !taken.has(p.id));
     const unseen = shuffle(inRange.filter((p) => !(p.id in seen)));
     const rest = shuffle(inRange.filter((p) => p.id in seen));

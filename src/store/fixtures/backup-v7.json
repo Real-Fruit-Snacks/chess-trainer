@@ -1,0 +1,369 @@
+{
+  "app": "chess-trainer",
+  "version": 7,
+  "exportedAt": "2026-10-03T09:00:00.000Z",
+  "progress": {
+    "onboarded": true,
+    "puzzleRating": 1212,
+    "puzzleRd": 92.5,
+    "puzzleVolatility": 0.06,
+    "lastRatedAt": 1727000200000,
+    "calibration": null,
+    "placement": {
+      "courseId": "intermediate",
+      "rating": 1200,
+      "at": 1726980000000
+    },
+    "woodpecker": {
+      "id": "wp-muofwy80",
+      "createdAt": 1790793000000,
+      "rating": 1500,
+      "puzzleIds": ["abc12", "def34", "ghi56"],
+      "cycles": [],
+      "current": {
+        "cycle": 1,
+        "index": 1,
+        "startedAt": 1790793000000,
+        "solved": 1,
+        "failed": 0,
+        "timeMs": 12000
+      }
+    },
+    "ratedAttempts": 3,
+    "ratingHistory": [
+      {
+        "at": 1726999000000,
+        "rating": 1200
+      },
+      {
+        "at": 1727000000000,
+        "rating": 1214
+      },
+      {
+        "at": 1727000100000,
+        "rating": 1201
+      },
+      {
+        "at": 1727000200000,
+        "rating": 1212
+      }
+    ],
+    "attempts": [
+      {
+        "id": "abc12",
+        "puzzleRating": 1180,
+        "outcome": "solved",
+        "hintUsed": false,
+        "ratingBefore": 1200,
+        "ratingAfter": 1214,
+        "themes": "fork short",
+        "at": 1727000000000,
+        "durationMs": 12000
+      },
+      {
+        "id": "def34",
+        "puzzleRating": 1250,
+        "outcome": "failed",
+        "hintUsed": true,
+        "ratingBefore": 1214,
+        "ratingAfter": 1201,
+        "themes": "pin middlegame long",
+        "at": 1727000100000,
+        "durationMs": 40000
+      },
+      {
+        "id": "ghi56",
+        "puzzleRating": 1150,
+        "outcome": "solved",
+        "hintUsed": false,
+        "ratingBefore": 1201,
+        "ratingAfter": 1212,
+        "themes": "fork mateIn2 short",
+        "at": 1727000200000,
+        "durationMs": 9000
+      }
+    ],
+    "seen": {
+      "abc12": "solved",
+      "def34": "failed",
+      "ghi56": "solved"
+    },
+    "streak": {
+      "current": 2,
+      "best": 4,
+      "lastDate": "2026-09-22"
+    },
+    "daily": null,
+    "lessons": {
+      "the-board": {
+        "stepsDone": [0, 1, 2],
+        "completedAt": 1726990000000,
+        "lastVisitedAt": 1726990000000
+      },
+      "forks": {
+        "stepsDone": [0, 1],
+        "completedAt": null,
+        "lastVisitedAt": 1726995000000
+      }
+    },
+    "games": [
+      {
+        "id": "g-simul-1",
+        "at": 1790794000000,
+        "level": 3,
+        "color": "white",
+        "result": "1/2-1/2",
+        "reason": "stalemate",
+        "plies": 80,
+        "pgn": "1. e4 e5 1/2-1/2",
+        "source": "simul",
+        "event": "Simul board 2"
+      },
+      {
+        "level": 4,
+        "color": "black",
+        "result": "0-1",
+        "reason": "checkmate",
+        "plies": 62,
+        "pgn": "1. e4 c5 2. Nf3 d6 0-1",
+        "book": {
+          "repertoireId": "sicilian",
+          "status": "deviated",
+          "endedAtPly": 6,
+          "deviationPly": 6
+        },
+        "at": 1790793000000,
+        "id": "g-0-fixture",
+        "source": "book"
+      },
+      {
+        "at": 1726998000000,
+        "level": 2,
+        "color": "white",
+        "result": "1-0",
+        "reason": "checkmate",
+        "plies": 41,
+        "pgn": "1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7# 1-0",
+        "id": "g-1-fixture",
+        "source": "play"
+      }
+    ],
+    "themeStats": {
+      "fork": {
+        "solved": 2,
+        "failed": 0
+      },
+      "pin": {
+        "solved": 0,
+        "failed": 1
+      },
+      "mateIn2": {
+        "solved": 1,
+        "failed": 0
+      }
+    },
+    "rushRuns": [
+      {
+        "at": 1726997000000,
+        "mode": "timed",
+        "score": 9,
+        "peakRating": 1300,
+        "durationMs": 180000
+      }
+    ],
+    "drills": {
+      "coordinates": {
+        "best": 18,
+        "attempts": 2,
+        "lastAt": 1726996500000
+      }
+    },
+    "guessGames": {
+      "opera-game": {
+        "score": 14,
+        "maxScore": 18,
+        "completedAt": 1726996000000
+      }
+    },
+    "puzzleReviews": {
+      "def34": {
+        "id": "def34",
+        "rating": 1250,
+        "themes": "pin middlegame long",
+        "step": 0,
+        "due": 1727260100000,
+        "lapses": 1,
+        "addedAt": 1727000100000
+      }
+    },
+    "trainingDays": ["2026-09-21", "2026-09-22", "2026-09-30"],
+    "ownPuzzles": {},
+    "lessonRecall": {
+      "forks:1": {
+        "id": "forks:1",
+        "rating": 0,
+        "themes": "",
+        "step": 1,
+        "due": 1727400000000,
+        "lapses": 0,
+        "addedAt": 1727000000000
+      }
+    },
+    "studies": {
+      "reti-1921": {
+        "solvedAt": 1726999500000,
+        "attempts": 2,
+        "clean": false
+      }
+    },
+    "arcade": {
+      "fortress": {
+        "best": 12,
+        "plays": 1,
+        "lastAt": 1790793000000,
+        "detail": "Held level 2 for 20 moves"
+      },
+      "hand-and-brain": {
+        "best": 3,
+        "plays": 1,
+        "lastAt": 1790793000000,
+        "detail": "Brain \u00b7 94% \u00b7 beat Level 4"
+      }
+    },
+    "dailyOpening": {
+      "date": "2026-09-30",
+      "guesses": ["Italian Game", "Ruy Lopez"],
+      "result": "solved",
+      "streak": 2,
+      "bestStreak": 4,
+      "history": {
+        "2026-09-29": 3,
+        "2026-09-30": 2
+      }
+    },
+    "oddsLadder": {
+      "rung": 2,
+      "best": 3,
+      "results": {
+        "0": {
+          "wins": 1,
+          "losses": 0
+        },
+        "1": {
+          "wins": 1,
+          "losses": 1
+        }
+      }
+    },
+    "bestStreak": 4,
+    "lifetime": {
+      "attempts": 8,
+      "solved": 6,
+      "failed": 2,
+      "solvedByTheme": {
+        "fork": 2,
+        "short": 2,
+        "mateIn2": 1
+      },
+      "solveTimeMs": 61000
+    },
+    "lastBackupAt": 1790700000000,
+    "lastBackupAttempts": 2,
+    "backupSnoozedUntil": null,
+    "tourDismissed": true,
+    "lichessUsername": "fixture_user",
+    "chesscomUsername": ""
+  },
+  "repertoire": {
+    "cards": {},
+    "custom": [
+      {
+        "name": "My London",
+        "color": "white",
+        "pgn": "1. d4 d5 2. Bf4 *",
+        "id": "custom-muofwy80-fruf",
+        "createdAt": 1790793000000
+      }
+    ],
+    "sessions": [
+      {
+        "repertoireId": "italian",
+        "correct": 7,
+        "total": 8,
+        "at": 1790793000000
+      }
+    ]
+  },
+  "analyses": {
+    "items": {
+      "an-muofwy80-b2y86": {
+        "id": "an-muofwy80-b2y86",
+        "name": "Fixture analysis",
+        "collection": "My analyses",
+        "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 *",
+        "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "moves": 4,
+        "createdAt": 1790793000000,
+        "updatedAt": 1790793000000
+      }
+    }
+  },
+  "games": {
+    "games": {
+      "https://lichess.org/abcd1234": {
+        "id": "https://lichess.org/abcd1234",
+        "pgn": "[Event \"Rated blitz game\"]\n[Site \"https://lichess.org/abcd1234\"]\n[White \"fixture_user\"]\n[Black \"someone\"]\n[Result \"1-0\"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 1-0",
+        "white": "fixture_user",
+        "black": "someone",
+        "result": "1-0",
+        "date": "2026.09.30",
+        "event": "Rated blitz game",
+        "url": "https://lichess.org/abcd1234",
+        "plies": 6,
+        "speed": "blitz",
+        "rated": true,
+        "timestamp": 1790790000000,
+        "source": "lichess",
+        "importedAt": 1790791000000,
+        "review": {
+          "accuracy": {
+            "white": 91.2,
+            "black": 84.5
+          },
+          "counts": {
+            "white": {
+              "inaccuracy": 1,
+              "mistake": 0,
+              "blunder": 0
+            },
+            "black": {
+              "inaccuracy": 2,
+              "mistake": 1,
+              "blunder": 0
+            }
+          },
+          "depth": 13,
+          "at": 1790792000000
+        }
+      },
+      "pgn-fixture": {
+        "id": "pgn-fixture",
+        "pgn": "1. d4 d5 2. c4 e6 *",
+        "white": "fixture_user",
+        "black": "club mate",
+        "result": "*",
+        "date": "2026.09.29",
+        "event": "Club night",
+        "url": null,
+        "plies": 4,
+        "speed": null,
+        "rated": null,
+        "timestamp": null,
+        "source": "pgn",
+        "importedAt": 1790791500000,
+        "review": null
+      }
+    },
+    "player": "fixture_user"
+  }
+}

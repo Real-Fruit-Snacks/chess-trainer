@@ -147,16 +147,13 @@ export const advancedLessons4: Lesson[] = [
       {
         title: 'Why the pawns attack',
         text:
-          'With both kings on the same wing, advancing the pawns in front of your king weakens it. When the kings ' +
-          'stand on **opposite wings**, the pawns in front of your king are far away from the fight and the pawns on ' +
-          'the other wing are free to charge: **h4-h5**, **g4-g5**, and each pawn that is exchanged opens a file ' +
-          'towards the enemy king.\n\n' +
-          'The rules of these races:\n\n' +
-          '- **Speed**: every tempo counts; do not stop to defend small things.\n' +
-          '- **Open a file**, then put a rook and the queen on it.\n' +
-          '- **Trade the defender** — usually the fianchettoed bishop.\n' +
-          '- The defender needs counterplay of the same kind on the other wing, or must **slow the storm**.\n\n' +
-          'This is the Sicilian Dragon with the Yugoslav Attack: White has just played 12.h4 and wants h5.',
+          'With both kings on the same wing, pushing the pawns in front of your king weakens it. With the kings ' +
+          'on **opposite wings**, the pawns on the other wing do not shelter your own king, so they are free to ' +
+          'charge: **h4-h5**, **g4-g5**, and each pawn exchange opens a file towards the enemy king.\n\nThe rules ' +
+          'of these races:\n\n- **Speed**: every tempo counts; do not stop to defend small things.\n- **Open a ' +
+          'file**, then put a rook and the queen on it.\n- **Trade the defender** — usually the fianchettoed ' +
+          'bishop.\n- The defender needs counterplay on the other wing, or must **slow the storm**.\n\nThis is the ' +
+          'Sicilian Dragon, Yugoslav Attack: White has just played 12.h4 and wants h5.',
         fen: YUGOSLAV,
         orientation: 'black',
         shapes: ['h4h5:red', 'h5g6:red', 'c8c3:blue'],

@@ -34,6 +34,13 @@ export function armyPieces(army: Army): number {
   return army.q + army.r + army.b + army.n;
 }
 
+/** The budget in words, for screen readers: "28 of 30 points spent, 2 left." */
+export function describeBudget(army: Army, budget: number): string {
+  const cost = armyCost(army);
+  if (cost > budget) return `${cost} of ${budget} points: ${cost - budget} over budget.`;
+  return `${cost} of ${budget} points spent, ${budget - cost} left.`;
+}
+
 /** Why an army cannot be fielded, or null when it can. */
 export function armyProblem(army: Army, budget: number): string | null {
   if (armyCost(army) > budget) return `Over budget by ${armyCost(army) - budget}.`;

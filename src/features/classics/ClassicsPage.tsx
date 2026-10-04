@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { MoveList } from '@/components/chess/MoveList';
@@ -9,11 +9,15 @@ import {
   Button,
   Card,
   Kbd,
-  Segmented,
-  Stat,
-  Stars,
   LinkButton,
+  NotFound,
+  Segmented,
+  Stars,
+  Stat,
 } from '@/components/ui';
+import { Difficulty } from '@/features/drills/Difficulty';
+import { NONE } from '@/lib/format';
+import { shortcutKey } from '@/lib/shortcutKey';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { type ClassicsFilter, DEFAULT_FILTER, type Era, ERAS, eraOf, filterGames } from './eras';
@@ -122,9 +126,7 @@ export default function ClassicsPage() {
                     {result.score}/{result.maxScore}
                   </Badge>
                 ) : (
-                  <Badge>
-                    <Stars count={game.difficulty} />
-                  </Badge>
+                  <Difficulty level={game.difficulty} />
                 )}
               </div>
               <span className="classic-card__players">
@@ -155,14 +157,9 @@ export function ClassicGamePage() {
 
   if (!game) {
     return (
-      <div>
-        <div className="page-header">
-          <h1>Game not found</h1>
-          <p>
-            <Link to="/classics">Back to classic games</Link>
-          </p>
-        </div>
-      </div>
+      <NotFound title="Game not found" backTo="/classics" backLabel="Back to classic games">
+        <p>No classic game has that id.</p>
+      </NotFound>
     );
   }
   return <GuessTrainer key={game.id} game={game} />;
@@ -173,13 +170,12 @@ function GuessTrainer({ game }: { game: ClassicGame }) {
   const best = useProgress((s) => s.guessGames[game.id]);
 
   useEffect(() => {
+    // The shared rule: never with a modifier, never from a field, a dialog or the board
+    // (role="application"), and Space/Enter never from a button, which acts on them itself.
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-      if (
-        (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') &&
-        guess.phase === 'feedback'
-      ) {
+      // Space, Enter and the arrow are not single-key shortcuts: they work whatever the setting.
+      const key = shortcutKey(e);
+      if ((key === ' ' || key === 'Enter' || key === 'ArrowRight') && guess.phase === 'feedback') {
         e.preventDefault();
         guess.next();
       }
@@ -320,12 +316,13 @@ function GuessTrainer({ game }: { game: ClassicGame }) {
             <div className="puzzle-stats">
               <Stat value={`${guess.score}/${guess.maxScore}`} label="Points" />
               <Stat value={guess.guesses} label="Guesses" />
-              <Stat value={best ? `${best.score}/${best.maxScore}` : '–'} label="Best" />
+              <Stat value={best ? `${best.score}/${best.maxScore}` : NONE} label="Best" />
             </div>
             {guess.engineStatus !== 'ready' ? (
               <p className="small muted" style={{ margin: '8px 0 0' }}>
-                Engine {guess.engineStatus === 'error' ? 'unavailable' : 'loading'} — alternative
-                moves score 0 until it is ready.
+                {guess.engineStatus === 'error'
+                  ? 'Engine unavailable — a move other than the one played cannot be judged and scores 0.'
+                  : 'Engine loading — a move other than the one played waits for it before being judged.'}
               </p>
             ) : null}
           </Card>

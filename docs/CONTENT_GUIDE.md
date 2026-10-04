@@ -35,6 +35,7 @@ A lesson is a sequence of **steps**. Each step shows one position with some text
 
 ```ts
 {
+  id: 'two-targets',                // optional, stable key: see "Step ids" below
   title: 'One move, two targets',
   text: 'A **fork** is a single move that attacks two pieces at once. …',
   fen: '4k3/p6p/8/3r4/4N3/8/P6P/4K3 w - - 0 1',
@@ -67,6 +68,17 @@ is ever injected.
 - The side to move in the FEN is the side the learner plays. Set `orientation: 'black'` when Black is
   to move.
 
+### Step ids
+
+A learner's progress (`stepsDone`) and the lesson recall cards (`lessonId:key`) are keyed by each
+step's `id` when it has one, and by its position in the lesson otherwise. Positions shift when a step
+is inserted or removed above them, so **give the steps around the change an `id` before you insert,
+remove or reorder steps** in a lesson that has shipped — then progress and recall cards follow the step,
+not the slot. Ids are kebab-case words (never a bare number), unique within the lesson, and never
+change once shipped. Progress saved under the old position is not carried over to a step that gains an
+id (the lesson's completion is kept), and a lesson counts as complete only when every one of its
+current steps is done, so a shortened lesson is never completed by the keys of steps it no longer has.
+
 ## Rules for a good task
 
 1. **Exactly the moves you list are correct** — and every other legal move is wrong or clearly
@@ -78,7 +90,18 @@ is ever injected.
    in-between move saves it, and that the winning piece is not immediately lost.
 4. **Mates:** use `acceptAnyMate: true` and list _all_ mating moves — the test suite computes them and
    fails if the lists differ.
-5. **Keep it short.** One idea per step, three to seven steps per lesson, at most ~120 words per step.
+5. **Keep it short.** One idea per step, three to seven steps per lesson, at most ~120 words per step
+   (the tests fail above 130).
+6. **The failure text must be true of every wrong move.** It is shown for any move you did not list, so
+   never claim "that loses" in a drawn ending where other moves hold as well — list them, or say
+   "That also holds, but…".
+7. **A scripted reply is a fair defence.** It may not lose more than 3 pawns against the opponent's
+   best answer (once the best defence is lost anyway, it only may not walk into a forced mate); when
+   a lesson deliberately follows a weaker but natural reply (the classic line of a pattern), say so
+   in the success text and add the step to `REPLY_ALLOW_LIST` in `lessons.engine.test.ts` with the
+   reason.
+8. **Count before you claim.** "A piece up", "two pawns down", "material is level": count the diagram
+   (and the position after the quoted line) before writing it.
 
 ## Verifying positions
 
@@ -89,7 +112,15 @@ npm test -- lessons
 ```
 
 This confirms every FEN is legal (including that the side _not_ to move is not in check), every
-accepted move and scripted reply is playable, mate lists are complete, and orientations match.
+accepted move and scripted reply is playable, mate lists are complete, and orientations match. It also
+finds the move sequences quoted in a step's text, prompt, hint, success and failure ("Nxf6+ gxf6
+Qxh7") and replays them: a run of two or more moves must be legal from the diagram (either side to
+move), from the position after an accepted move or the scripted reply (also with the same side to move
+again, for threats), from the previous step's diagram or from the initial position; and a move
+followed by "mate" (or written with `#`) must be checkmate. Move pairs that describe a plan rather than
+a line ("the minority attack ends in bxc6 bxc6") go in `PROSE_ALLOW_LIST` in
+`src/features/learn/lessons/quotedLines.ts` — keep it short and prefer fixing the prose. Every lesson
+must also sit in the course of its own level, and step ids must be unique kebab-case words.
 
 Chess claims need an engine. The whole lesson set is checked against Stockfish with
 
@@ -98,8 +129,12 @@ npm run lessons:verify          # add "-- --depth 22" for a deeper (slower) chec
 ```
 
 For every task, the accepted moves must be checkmate (for mate tasks), keep a decisive advantage when
-the position is already won, or otherwise score within 80 centipawns of the engine's best move. Run it
-after adding or changing a lesson; CI only runs the fast structural checks.
+the position is already won, or otherwise score within 80 centipawns of the engine's best move; and a
+scripted reply may not lose more than 300 centipawns against the best defence, or walk into a forced
+mate when the best defence is lost anyway (see rule 7). Run it
+after adding or changing a lesson. CI runs the structural checks on every pull request, and the
+**Content** workflow (`.github/workflows/content.yml`) runs this check — with the study, repertoire and
+drill checks below — on every pull request that touches the content, and weekly.
 
 With the engine installed (`npm run engine:setup`) you can also analyse any position from Node:
 
@@ -132,17 +167,24 @@ Two practical warnings from experience:
 
 `ENDGAME_DRILLS` describes each drill: the goal (`mate`, `promote`, `hold` or `capture` — win the
 opponent's last piece, after which the rest is elementary), the group it is listed under, the colour the
-learner plays, either fixed starting positions (one is picked at random) or `'random'` with the white
+learner plays, either fixed starting positions (one is picked at random; `?pos=N` on the drill's URL
+starts from the N-th, for links from lessons and tests) or `'random'` with the white
 material to place (for the mating drills), a technique tip and a move limit. `npm run drills:verify`
 confirms with Stockfish that every fixed position is won (for `mate`/`promote`/`capture`) or drawn (for
-`hold`) for the learner's side. The unit tests check legality — including that no position starts with
-a check to answer — and the random position generator.
+`hold`) for the learner's side; it reads `ENDGAME_DRILLS` as the app does and fails unless every drill
+has fixed positions or `'random'`. The unit tests check legality — including that no position starts
+with a check to answer — and the random position generator.
 
-Adjudication is automatic (`useDrillGame`): checkmate, promotion, stalemate, losing the mating material
-or the last pawn, the move limit, and the engine evaluation after each learner move (a drawn evaluation in
-a winning drill, or a lost one in a holding drill, ends the attempt with an explanation). Material is
-counted from the learner's side, so a drill can have the learner play either colour, hold with pawns of
-its own (Réti) or give up material deliberately (the outside passed pawn).
+Adjudication is automatic (`adjudicatePosition` in `useDrillGame.ts`, a pure function with unit
+tests): checkmate, stalemate, a promotion once the new piece is safe (at once when nothing can take it,
+otherwise after the reply has left it standing), losing the last pawn of a promotion drill, losing a
+piece in a mating drill only when the rest can no longer mate (two rooks down to one still can), the
+move limit, and the engine evaluation after each learner move (a drawn evaluation in a winning drill, or
+a lost one in a holding drill, ends the attempt with an explanation). In capture and holding drills,
+won material counts once it is kept: the balance of pieces and pawns against the start, so a promotion
+or a trade changes nothing and a capture that is taken straight back is no win. Material is counted
+from the learner's side, so a drill can have the learner play either colour, hold with pawns of its own
+(Réti) or give up material deliberately (the outside passed pawn).
 
 Every drill is a rung of the **endgame ladder** (`endgameLadder.ts`): rungs are ordered by `difficulty`
 (1–4) and then by group, so give a new drill the difficulty that matches where a learner should meet
@@ -162,8 +204,9 @@ and en passant to produce the questions.
 (one entry per `…Mate` theme in `themes.ts`). Each is a `before` position with the defender to move, the
 `setup` move that leads to the diagram, and the mating `line` from the diagram, plus the explanation and
 a "spot it" paragraph. The tests require the setup move and the line to be legal, the line to end in mate,
-the mate to be forced in that many moves (a small exhaustive search), and the set of ids to match the
-themes exactly — add a theme to `themes.ts` and a pattern together. Keep diagrams minimal: only the pieces
+the mate to be forced in that many moves (a small exhaustive search), a mate-in-one diagram to have
+exactly one mating move (the named one — the hook mate's g7 pawn exists to rule out Nf6#), and the set
+of ids to match the themes exactly — add a theme to `themes.ts` and a pattern together. Keep diagrams minimal: only the pieces
 the pattern needs, plus whatever blocks the king's escape.
 
 ## Endgame studies
@@ -188,21 +231,27 @@ that are equally good), the scripted reply and a note shown after the move. The 
 }
 ```
 
-Two things the tests enforce: every accepted move and every reply must be legal, and the reply must be
-legal **after each accepted alternative** (so a reply that only works after the main move is rejected —
-either drop the alternative or split the line). `npm run studies:verify` then walks the line with
-Stockfish: after every accepted move the goal must still hold (a win stays above +2.5, a draw stays above
-−0.6 for the solver), and every legal move that is _not_ accepted must lose the goal, otherwise it is a
-second solution and has to be listed. Use compositions that are in the public domain (Réti, Saavedra,
+The tests enforce that every accepted move and every reply is legal, that the reply is legal **after
+each accepted alternative**, and that the next main-line move (the one a hint shows) is legal after it
+too — alternatives have to converge on the line, or the solver gets stuck; either drop the alternative
+or end the study at that move. `npm run studies:verify` then walks the line with Stockfish: after every
+accepted move the goal must still hold (a win stays above +2.5, a draw stays above −0.6 for the solver),
+and every legal move that is _not_ accepted must lose the goal (checked at depth 16,
+`VERIFY_DUAL_DEPTH`), otherwise it is a second solution and has to be listed. A move that only shuffles
+back into the study's own line — a main-line position reached again within two moves, or the engine's
+best play returning to one — is a repetition, not a second solution. Use compositions that are in the public domain (Réti, Saavedra,
 Troitzky, the classical only-move endings) or your own; keep the prose original.
 
 ## Courses
 
 `COURSES` groups lessons, drills, puzzle targets, repertoire targets, engine games and classic games into
 units. A unit unlocks when the previous one is done; an item is done when the lesson is completed, the
-drill has been won, the puzzle/repertoire target has been reached, a game at the level has been played or
-the classic game has been finished. Every lesson may appear in at most one course (a test checks it),
-and every referenced lesson, drill and classic id must exist.
+drill has been won, the puzzle/repertoire target has been reached (puzzle solves are counted from the
+lifetime per-theme counters, so a checkpoint never comes undone when old attempts age out of the list),
+an ordinary game at the level has been played (not an arcade, simul or drill game) or the classic game
+has been finished. Every lesson appears in exactly one course, the one of its own level (tests check
+both), and every referenced lesson, drill and classic id must exist. Lessons opened from a course carry
+`?course=<id>`, which gives them "Back to course" and "Next in course".
 
 ## Opening repertoires
 
@@ -211,14 +260,16 @@ learner will be asked to recall; comments become tips shown after the move. The 
 repertoire, require at least four lines of at least eight plies, and fail on any illegal move. Keep
 lines about eight to fifteen moves deep and prefer plans over sharp theory; the spaced-repetition
 scheduler treats every learner move as a separate card, so a repertoire with 50–90 learner moves is a
-comfortable size.
+comfortable size. Cards are keyed by the move path; where two move orders transpose, the same move from
+the same position is graded together in both lines, so a transposition costs no extra reviews.
 
-Legality is not soundness: before shipping a repertoire, run every line through the engine and make sure
-no learner move loses more than about a pawn compared with the engine's choice (opponent moves may be
-inaccurate — they are what people play — but not outright blunders). A quick way is a script that walks
-the PGN, evaluates each position at depth 14 and prints any move whose evaluation drops by more than 120
-centipawns for the learner or 300 for the opponent; the 0.6.0 release did this for all sixteen
-repertoires and repaired the lines it flagged.
+Legality is not soundness: no learner move may lose more than about a pawn compared with the engine's
+choice (opponent moves may be inaccurate — they are what people play — but not outright blunders).
+`npm run repertoires:verify` checks exactly that: it reads every built-in repertoire into the app's
+move tree and scores every move at depth 14 against the engine's best in the same position (the move's
+own score from a search restricted to it), and fails on a learner move that gives away more than 120
+centipawns or an opponent move that gives away more than 300, naming the line. All sixteen repertoires
+pass (2,624 moves); run it after changing one — the Content workflow runs it too.
 
 Learners can also build repertoires in the app: **Add line to repertoire** on the analysis board merges
 the current line into a custom repertoire (`mergeLine.ts`), and a custom repertoire's **Edit lines** mode
@@ -229,8 +280,14 @@ adds moves from the board or the opening explorer, stores per-move notes and del
 A classic game is a space-separated SAN move list plus notes keyed by the 1-based ply they describe.
 `guessColor` is the side the learner guesses for and `guessFromPly` the number of half-moves replayed
 first (it must land on the guesser's move). The tests replay every game, check the final position of
-games that end in `#`, and require that every note belongs to the guessed side. Annotations should be
-original prose in your own words. Game scores themselves are facts and not copyrightable; type them in
+games that end in `#`, and require that every note belongs to the guessed side and sits after
+`guessFromPly` (a note on a replayed move is never shown — fold it into the `intro` instead). A note
+that opens with a move ("Rad1!! — …") must name the move actually played at that ply, and a variation
+introduced with "after" or "with" must be legal from the position after the noted move; the tests check
+both. A note that claims something about a position (a mate, which piece covers which square, what a
+capture runs into) is worth a chess.js assertion of its own, as `games.test.ts` does for the corrected
+Evergreen, Steinitz–Bardeleben and Bernstein–Capablanca notes. Annotations should be original prose in
+your own words. Game scores themselves are facts and not copyrightable; type them in
 from a reliable source and replay them (the tests will catch an illegal move but not a wrong legal one, so
 compare the final position with the source). The Classic games page groups games into eras by `year`
 (`eras.ts`: Romantic to 1880, Classical to 1945, Modern to 1990, Contemporary after) and filters by
@@ -239,7 +296,9 @@ compare the final position with the source). The Classic games page groups games
 Two arcade games draw on the classic games: Who Stands Better? uses their quiet middlegame positions
 and Fortress the ones where the side to move is clearly worse. After adding or changing games, run
 `npm run arcade:positions` (slow: one engine search per position) to regenerate
-`src/features/arcade/positions.json`; `fortress.test.ts` checks that both pools stay large enough.
+`src/features/arcade/positions.json`; the script samples both sides to move (every other game starts
+a ply later), and `fortress.test.ts` checks that both pools stay large enough and hold positions with
+either side to move.
 The Daily Opening and Engine Says games read `public/openings/lines.json`, which
 `npm run openings:import` writes next to the ECO table.
 

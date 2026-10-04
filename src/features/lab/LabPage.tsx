@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { BOARD_PALETTES, boardBackground } from '@/components/board/boardThemes';
 import { PIECE_SETS, type PieceSet } from '@/components/board/pieceSets';
@@ -30,17 +30,12 @@ import { toast } from '@/components/ui/toastStore';
 import { EngineDiagnostics } from '@/features/settings/EngineDiagnostics';
 import { SoundThemePicker, VolumeSlider } from '@/features/settings/SoundControls';
 import { hapticPattern, hapticsSupported, vibrate } from '@/lib/haptics';
-import {
-  formatBytes,
-  STORAGE_LIMIT_BYTES,
-  storageUsage,
-  useStorageHealth,
-} from '@/lib/persistStorage';
+import { formatBytes, storageUsage, useStorageHealth } from '@/lib/persistStorage';
 import { playSound, SOUND_NAMES, type SoundName } from '@/lib/sound';
 import { siteConfig } from '@/site.config';
 import { type BoardTheme, useSettings } from '@/store/settings';
 import { type PlatformCheck, platformChecks, storageEstimate } from './platform';
-import { clearFiller, fillStorage, hasFiller, probeStorage } from './storageTest';
+import { clearLabStorage, fillStorage, hasFiller, probeStorage } from './storageTest';
 import './lab.css';
 
 const SECTIONS = [
@@ -98,15 +93,18 @@ function Bomb({ armed }: { armed: boolean }) {
   return null;
 }
 
-function CheckBadge({ state }: { state: PlatformCheck['state'] }) {
-  const tone: Tone = state === 'yes' ? 'success' : state === 'no' ? 'danger' : 'neutral';
+/** A missing capability is red; a preference or circumstance that is simply off is neutral. */
+function CheckBadge({ state, kind = 'capability' }: Pick<PlatformCheck, 'state' | 'kind'>) {
+  const tone: Tone =
+    state === 'yes' ? 'success' : state === 'no' && kind === 'capability' ? 'danger' : 'neutral';
   return <Badge tone={tone}>{state === 'yes' ? 'Yes' : state === 'no' ? 'No' : 'Unknown'}</Badge>;
 }
 
 /**
  * The test lab: every sound, icon, control, board style and platform check on
  * one page, so a device can be tried by hand in a few minutes. Reachable from
- * Settings; it changes nothing unless a button says so.
+ * Settings. The palette, piece-set, sound and vibration controls are the real
+ * settings; the storage filler is removed when the page closes.
  */
 export default function LabPage() {
   const settings = useSettings();
@@ -127,7 +125,7 @@ export default function LabPage() {
     document.title = `Test lab · ${siteConfig.name}`;
   }, []);
 
-  useEffect(() => {
+  const runChecks = () => {
     setChecks(platformChecks());
     let alive = true;
     void storageEstimate().then((check) => {
@@ -136,12 +134,47 @@ export default function LabPage() {
     return () => {
       alive = false;
     };
+  };
+
+  useEffect(runChecks, []);
+
+  // Checks that change while the page is open (online, viewport, colour scheme) are re-run.
+  useEffect(() => {
+    const rerun = () => setChecks(platformChecks());
+    window.addEventListener('online', rerun);
+    window.addEventListener('offline', rerun);
+    window.addEventListener('resize', rerun);
+    const media = (
+      typeof window.matchMedia === 'function'
+        ? [
+            window.matchMedia('(prefers-color-scheme: dark)'),
+            window.matchMedia('(prefers-reduced-motion: reduce)'),
+          ]
+        : []
+    ).filter(
+      (m) =>
+        typeof m.addEventListener === 'function' && typeof m.removeEventListener === 'function',
+    );
+    for (const m of media) m.addEventListener('change', rerun);
+    return () => {
+      window.removeEventListener('online', rerun);
+      window.removeEventListener('offline', rerun);
+      window.removeEventListener('resize', rerun);
+      for (const m of media) m.removeEventListener('change', rerun);
+    };
   }, []);
 
   const refreshUsage = () => {
     setUsage(storageUsage());
     setFiller(hasFiller());
   };
+
+  // The usage meter follows the storage health (a failed or recovered write) live.
+  useEffect(refreshUsage, [health.full, health.failedKey]);
+
+  // The filler must not outlive the lab: a learner who filled storage and
+  // navigated away would otherwise lose every change from then on.
+  useEffect(() => () => void clearLabStorage(), []);
 
   const fill = () => {
     const result = fillStorage();
@@ -151,14 +184,14 @@ export default function LabPage() {
     refreshUsage();
     toast(
       result.refused
-        ? `Filled ${formatBytes(result.bytes)} before the browser refused — the warning above is what a learner sees.`
+        ? `Filled ${formatBytes(result.bytes)} before the browser refused (it allows ${formatBytes(result.limitBytes ?? 0)} in all) — the warning above is what a learner sees. Remove the filler before you leave; it is removed anyway when you do.`
         : `Wrote ${formatBytes(result.bytes)} and the browser never refused; this browser allows more than most.`,
-      { tone: 'info' },
+      { tone: 'info', duration: 10000 },
     );
   };
 
   const unfill = () => {
-    clearFiller();
+    clearLabStorage();
     probeStorage();
     refreshUsage();
     toast('Filler removed; storage is back to normal.', { tone: 'success' });
@@ -175,7 +208,8 @@ export default function LabPage() {
         <h1>Test lab</h1>
         <p>
           Every sound, icon, control, board style and platform check on one page, for trying a
-          device by hand. Nothing here changes your data unless the button says so.
+          device by hand. The palette, piece-set, sound and vibration controls here are your real
+          settings; everything else is a demonstration and touches no data.
         </p>
       </div>
 
@@ -189,9 +223,16 @@ export default function LabPage() {
 
       <div className="stack">
         <Card id="lab-platform" data-testid="lab-platform">
-          <h2>Platform</h2>
+          <div className="row row--between">
+            <h2>Platform</h2>
+            <Button size="sm" variant="ghost" onClick={runChecks} data-testid="checks-refresh">
+              Refresh
+            </Button>
+          </div>
           <p className="small muted">
             {siteConfig.name} v{__APP_VERSION__} · built {new Date(__BUILD_DATE__).toLocaleString()}
+            . A red “No” marks a capability this browser lacks; a grey one is a preference or
+            circumstance that is simply off.
           </p>
           <table className="lab__table">
             <tbody>
@@ -199,7 +240,7 @@ export default function LabPage() {
                 <tr key={check.id} data-testid={`check-${check.id}`}>
                   <th scope="row">{check.label}</th>
                   <td>
-                    <CheckBadge state={check.state} />
+                    <CheckBadge state={check.state} kind={check.kind} />
                   </td>
                   <td className="muted small">{check.detail}</td>
                 </tr>
@@ -212,18 +253,24 @@ export default function LabPage() {
         <Card id="lab-storage" data-testid="lab-storage">
           <h2>Storage</h2>
           <p className="small muted">
-            The app keeps everything in this browser's local storage, which most browsers cap at
-            about {formatBytes(STORAGE_LIMIT_BYTES)}. Filling it shows the warning a learner would
-            see; the filler is removed again with the second button.
+            The app keeps everything in this browser’s local storage, which most browsers cap at
+            about 5 MB
+            {usage.measured
+              ? ` (this one allowed ${formatBytes(usage.limit)} when it was last measured here)`
+              : ''}
+            . Filling it shows the warning a learner would see; the filler goes with the second
+            button, when you leave this page, and at every app start.
           </p>
           <ProgressBar
             value={usage.bytes}
-            max={STORAGE_LIMIT_BYTES}
-            label={`Local data: ${formatBytes(usage.bytes)} of about ${formatBytes(STORAGE_LIMIT_BYTES)}`}
+            max={usage.limit}
+            label={`Local data: ${formatBytes(usage.bytes)} of ${usage.measured ? '' : 'about '}${formatBytes(usage.limit)}`}
+            valueText={`${formatBytes(usage.bytes)} of ${formatBytes(usage.limit)}`}
           />
           {health.full ? (
             <Alert tone="danger" role="status">
               Storage is full — the last write to <code>{health.failedKey}</code> was refused.
+              {filler ? ' The lab’s filler is taking the room: remove it below.' : ''}
             </Alert>
           ) : (
             <p className="small muted" role="status" data-testid="storage-ok">
@@ -525,7 +572,11 @@ export default function LabPage() {
               label="Coordinates"
             />
           </div>
-          <div className="lab__pieces cg-wrap" aria-label="Every piece in the current set">
+          <div
+            className="lab__pieces cg-wrap"
+            role="img"
+            aria-label="Every piece in the current set"
+          >
             {(['white', 'black'] as const).map((color) =>
               (['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'] as const).map((role) => (
                 <piece

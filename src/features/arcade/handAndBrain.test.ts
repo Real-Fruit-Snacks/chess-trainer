@@ -5,7 +5,12 @@ import {
   callAccuracy,
   describeCall,
   destsForType,
+  FULL_WEIGHT_CALLS,
+  GRADE_LABEL,
   gradeLoss,
+  HAND_AND_BRAIN_SCORING,
+  handAndBrainScore,
+  MIN_SCORED_CALLS,
   movableTypes,
   movesForType,
   scoreToCp,
@@ -85,5 +90,52 @@ describe('hand and brain', () => {
     expect(describeCall({ ...call, san: 'd4', lossCp: 0, grade: 'best' }, 'brain')).toMatch(
       /engine agrees/,
     );
+  });
+
+  it('scores accuracy by the engine level and the length of the game', () => {
+    // A full game against level 4 at 90%.
+    expect(
+      handAndBrainScore({ accuracy: 90, calls: FULL_WEIGHT_CALLS, levelId: 4, resigned: false }),
+    ).toBe(360);
+    // Longer games count no more than a full one.
+    expect(handAndBrainScore({ accuracy: 90, calls: 80, levelId: 4, resigned: false })).toBe(360);
+    // Half a game counts half.
+    expect(
+      handAndBrainScore({
+        accuracy: 90,
+        calls: FULL_WEIGHT_CALLS / 2,
+        levelId: 4,
+        resigned: false,
+      }),
+    ).toBe(180);
+    // The same accuracy against a stronger engine scores more.
+    expect(handAndBrainScore({ accuracy: 80, calls: 40, levelId: 8, resigned: false })).toBe(640);
+  });
+
+  it('does not score a resignation before the tenth call: one call and resign is no 100%', () => {
+    expect(handAndBrainScore({ accuracy: 100, calls: 1, levelId: 1, resigned: true })).toBeNull();
+    expect(
+      handAndBrainScore({
+        accuracy: 100,
+        calls: MIN_SCORED_CALLS - 1,
+        levelId: 8,
+        resigned: true,
+      }),
+    ).toBeNull();
+    // From the tenth call a resignation is scored, in proportion to the game's length.
+    expect(
+      handAndBrainScore({ accuracy: 100, calls: MIN_SCORED_CALLS, levelId: 3, resigned: true }),
+    ).toBe(Math.round((100 * 3 * MIN_SCORED_CALLS) / FULL_WEIGHT_CALLS));
+    // A short game that ended on the board (a quick mate) is scored.
+    expect(handAndBrainScore({ accuracy: 100, calls: 4, levelId: 1, resigned: false })).toBe(
+      Math.round((100 * 4) / FULL_WEIGHT_CALLS),
+    );
+    expect(HAND_AND_BRAIN_SCORING).toMatch(/not scored/);
+  });
+
+  it('labels the grades for the page', () => {
+    expect(GRADE_LABEL.best).toBe('Best');
+    expect(GRADE_LABEL.inaccuracy).toBe('Inaccuracy');
+    expect(Object.keys(GRADE_LABEL)).toHaveLength(5);
   });
 });

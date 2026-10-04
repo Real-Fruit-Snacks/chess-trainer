@@ -120,3 +120,20 @@ export async function continueLesson(page: Page) {
   await page.getByRole('button', { name: /Continue/ }).click();
   await expect(current).not.toHaveAttribute('aria-label', before ?? '');
 }
+
+/**
+ * Waits until no piece on the board is moving or fading out: chessground marks
+ * those with the `anim` and `fading` classes for the length of the animation.
+ * Use it, after the app's own signal that a move was made or taken back, in
+ * place of a fixed wait before the next click on a piece.
+ */
+export async function waitForBoardIdle(page: Page) {
+  // chessground draws on the next animation frame: let a pending redraw start first.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await expect(page.locator('cg-board piece.anim, cg-board piece.fading')).toHaveCount(0);
+}

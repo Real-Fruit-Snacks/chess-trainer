@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Badge, Icon, LinkButton } from '@/components/ui';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
@@ -55,7 +55,12 @@ export default function ArcadePage() {
                 <span className="small muted" data-testid={`arcade-best-${game.id}`}>
                   {best ?? 'Not played yet'}
                 </span>
-                <LinkButton variant="primary" size="sm" to={`/arcade/${game.id}`}>
+                <LinkButton
+                  variant="primary"
+                  size="sm"
+                  to={`/arcade/${game.id}`}
+                  aria-label={`Play ${game.name}`}
+                >
                   Play
                 </LinkButton>
               </div>

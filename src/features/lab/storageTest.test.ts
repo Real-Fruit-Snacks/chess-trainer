@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStorageHealth } from '@/lib/persistStorage';
-import { clearFiller, FILLER_PREFIX, fillStorage, hasFiller, probeStorage } from './storageTest';
+import {
+  clearFiller,
+  clearLabStorage,
+  FILLER_PREFIX,
+  fillStorage,
+  hasFiller,
+  probeStorage,
+} from './storageTest';
 
 describe('storage filler', () => {
   beforeEach(() => localStorage.clear());
@@ -20,14 +27,32 @@ describe('storage filler', () => {
     });
     const result = fillStorage();
     expect(result.refused).toBe(true);
-    expect(result.chunks).toBe(3 + 1 + 0 + 0 + 0);
-    expect(result.bytes).toBe((150_000 + 10_000) * 2);
+    // Three big chunks and one medium one fitted; the two smallest written are
+    // given back so the measured limit can be stored.
+    expect(result.chunks).toBe(3 + 1 - 2);
+    expect(result.bytes).toBe((150_000 + 10_000 - 50_000 - 10_000) * 2);
+    expect(result.limitBytes).toBe((150_000 + 10_000) * 2 + 4 * `${FILLER_PREFIX}0`.length * 2);
+    expect(localStorage.getItem('chess-trainer:storage-limit')).toBe(String(result.limitBytes));
     expect(hasFiller()).toBe(true);
     expect(localStorage.getItem(`${FILLER_PREFIX}0`)?.length).toBe(50_000);
 
-    expect(clearFiller()).toBe(4);
+    expect(clearFiller()).toBe(2);
     expect(hasFiller()).toBe(false);
-    expect(localStorage.length).toBe(0);
+    expect(localStorage.length).toBe(1);
+  });
+
+  it('clears the filler and the probe together and tells the storage health', () => {
+    useStorageHealth.getState().markOk();
+    localStorage.setItem(`${FILLER_PREFIX}0`, 'x');
+    localStorage.setItem(`${FILLER_PREFIX}1`, 'x');
+    probeStorage();
+    // The last probe was refused (storage was full): clearing makes room and says so.
+    useStorageHealth.getState().markFull('chess-trainer:lab-probe');
+    expect(clearLabStorage()).toBe(2);
+    expect(hasFiller()).toBe(false);
+    expect(localStorage.getItem('chess-trainer:lab-probe')).toBeNull();
+    expect(useStorageHealth.getState().full).toBe(false);
+    expect(clearLabStorage()).toBe(0);
   });
 
   it('stops at its ceiling when a browser never refuses', () => {

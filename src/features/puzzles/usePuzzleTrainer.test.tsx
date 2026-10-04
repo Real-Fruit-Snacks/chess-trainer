@@ -150,12 +150,88 @@ describe('usePuzzleTrainer', () => {
     act(() => {
       vi.advanceTimersByTime(700);
     });
+    expect(result.current.solutionShown).toBe(false);
     act(() => result.current.showSolution());
     expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed' }), puzzle);
     act(() => {
       vi.advanceTimersByTime(2000);
     });
     expect(result.current.phase).toBe('solved');
+    expect(result.current.solutionShown).toBe(true);
     expect(result.current.position.fen).toContain('3R3k');
+    act(() => result.current.load(puzzle));
+    expect(result.current.solutionShown).toBe(false);
+  });
+
+  describe('verified alternatives (own-game puzzles)', () => {
+    // After ...Kh8 White has Rd8# (stored) but Rd7 is "another move" the verifier may accept.
+    const quiet: Puzzle = { ...puzzle, id: 'own-1', moves: 'g8h8 d1d7', themes: 'ownGame mistake' };
+
+    it('asks the verifier about a different final move and accepts it when it is as good', async () => {
+      const onOutcome = vi.fn();
+      let resolve: (ok: boolean) => void = () => undefined;
+      const verify = vi.fn(() => new Promise<boolean>((r) => (resolve = r)));
+      const { result } = renderHook(() => usePuzzleTrainer(onOutcome, { verifyMove: verify }));
+      act(() => result.current.load(quiet));
+      act(() => {
+        vi.advanceTimersByTime(700);
+      });
+      act(() => result.current.playUserMove('d1', 'd6'));
+      expect(result.current.phase).toBe('checking');
+      expect(verify).toHaveBeenCalledWith(quiet, expect.stringContaining(' w '), 'd1d7', 'd1d6');
+      expect(onOutcome).not.toHaveBeenCalled();
+      await act(async () => {
+        resolve(true);
+        await Promise.resolve();
+      });
+      expect(result.current.phase).toBe('solved');
+      expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'solved' }), quiet);
+    });
+
+    it('rejects the move when the verifier says no, or returns null', async () => {
+      const onOutcome = vi.fn();
+      const verify = vi.fn(() => Promise.resolve(false));
+      const { result } = renderHook(() => usePuzzleTrainer(onOutcome, { verifyMove: verify }));
+      act(() => result.current.load(quiet));
+      act(() => {
+        vi.advanceTimersByTime(700);
+      });
+      await act(async () => {
+        result.current.playUserMove('d1', 'd6');
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(result.current.phase).toBe('failed');
+      expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed' }), quiet);
+
+      const skip = vi.fn(() => null);
+      const plain = renderHook(() => usePuzzleTrainer(vi.fn(), { verifyMove: skip }));
+      act(() => plain.result.current.load(puzzle));
+      act(() => {
+        vi.advanceTimersByTime(700);
+      });
+      act(() => plain.result.current.playUserMove('d1', 'd6'));
+      expect(skip).toHaveBeenCalled();
+      expect(plain.result.current.phase).toBe('failed');
+    });
+
+    it('drops a verdict that arrives after the next puzzle was loaded', async () => {
+      const onOutcome = vi.fn();
+      let resolve: (ok: boolean) => void = () => undefined;
+      const verify = vi.fn(() => new Promise<boolean>((r) => (resolve = r)));
+      const { result } = renderHook(() => usePuzzleTrainer(onOutcome, { verifyMove: verify }));
+      act(() => result.current.load(quiet));
+      act(() => {
+        vi.advanceTimersByTime(700);
+      });
+      act(() => result.current.playUserMove('d1', 'd6'));
+      act(() => result.current.load(twoMover));
+      await act(async () => {
+        resolve(true);
+        await Promise.resolve();
+      });
+      expect(result.current.phase).toBe('intro');
+      expect(onOutcome).not.toHaveBeenCalled();
+    });
   });
 });

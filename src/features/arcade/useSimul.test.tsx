@@ -6,22 +6,39 @@ import { useSettings } from '@/store/settings';
 import type { SimulSetup } from './simul';
 
 /**
- * A scripted engine: every search answers instantly with the first legal move,
- * and the start-up can be made to fail.
+ * A scripted engine: every search answers instantly with the first legal move
+ * (`answer`), keeps thinking until it is stopped (`hold`), or comes back
+ * stopped without a move (`interrupt`); the start-up can be made to fail.
  */
 interface FakeEngine {
   status: 'ready' | 'error' | 'loading';
   failing: boolean;
+  mode: 'answer' | 'hold' | 'interrupt';
   searches: { moves: string[]; movetime?: number }[];
+  stops: number;
+  /** Ends a held search as stopped. */
+  release: (() => void) | null;
 }
-const fake: FakeEngine = vi.hoisted(() => ({ status: 'ready', failing: false, searches: [] }));
+const fake: FakeEngine = vi.hoisted(() => ({
+  status: 'ready',
+  failing: false,
+  mode: 'answer',
+  searches: [],
+  stops: 0,
+  release: null,
+}));
 
 vi.mock('@/engine/useEngine', async () => {
   const { Chess } = await import('chess.js');
+  const stopped = { stopped: true, bestmove: { move: null }, lines: new Map() };
   const client = {
     init: () => (fake.failing ? Promise.reject(new Error('no engine')) : Promise.resolve()),
     setOption: () => Promise.resolve(),
-    stop: () => undefined,
+    stop: () => {
+      fake.stops += 1;
+      fake.release?.();
+      fake.release = null;
+    },
     search: (params: { fen: string; moves?: string[]; movetime?: number }) => {
       fake.searches.push({ moves: [...(params.moves ?? [])], movetime: params.movetime });
       const chess = new Chess(params.fen);
@@ -29,15 +46,17 @@ vi.mock('@/engine/useEngine', async () => {
         chess.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: m[4] });
       }
       const move = chess.moves({ verbose: true })[0];
-      return {
-        id: fake.searches.length,
-        stop: () => undefined,
-        result: Promise.resolve({
-          stopped: false,
-          bestmove: { move: move ? move.lan : null },
-          lines: new Map(),
-        }),
-      };
+      const result =
+        fake.mode === 'hold'
+          ? new Promise((resolve) => {
+              fake.release = () => resolve(stopped);
+            })
+          : Promise.resolve(
+              fake.mode === 'interrupt'
+                ? stopped
+                : { stopped: false, bestmove: { move: move ? move.lan : null }, lines: new Map() },
+            );
+      return { id: fake.searches.length, stop: () => undefined, result };
     },
   };
   return {
@@ -56,7 +75,7 @@ vi.mock('@/lib/sound', async (importOriginal) => {
   return { ...actual, playSound: played };
 });
 
-import { useSimul } from './useSimul';
+import { ANNOUNCE_GAP_MS, Announcer, useSimul } from './useSimul';
 
 const SETUP: SimulSetup = {
   boards: 2,
@@ -74,6 +93,9 @@ describe('useSimul', () => {
   beforeEach(() => {
     fake.status = 'ready';
     fake.failing = false;
+    fake.mode = 'answer';
+    fake.stops = 0;
+    fake.release = null;
     fake.searches.length = 0;
     played.mockClear();
     // No random moves from the weak levels: the scripted engine decides.
@@ -132,6 +154,10 @@ describe('useSimul', () => {
     expect(progress.games).toHaveLength(2);
     expect(progress.games[1]?.pgn).toContain('[Event "Chess Trainer — simul on 2 boards"]');
     expect(progress.games[1]?.pgn).toContain('1. e4 Nc6');
+    // Simul boards are kept apart from ordinary engine games (ladder, courses, Progress).
+    expect(progress.games.map((g) => g.source)).toEqual(['simul', 'simul']);
+    expect(progress.games.map((g) => g.event).sort()).toEqual(['Simul board 1', 'Simul board 2']);
+    expect(new Set(progress.games.map((g) => g.id)).size).toBe(2);
     expect(progress.arcade.simul).toMatchObject({
       best: 0,
       plays: 1,
@@ -187,5 +213,78 @@ describe('useSimul', () => {
     expect(result.current.promotion).toBeNull();
     expect(result.current.state!.boards[0]!.sans).toEqual([]);
     expect(result.current.resolvePromotion('q')).toBe(false);
+  });
+
+  it('stops the search of a board that ends while the engine thinks about it', async () => {
+    fake.mode = 'hold';
+    const { result } = renderHook(() => useSimul());
+    act(() => result.current.start(SETUP));
+    act(() => result.current.move('e2', 'e4'));
+    await settle();
+    expect(result.current.state!.boards[0]!.engine).toBe('thinking');
+    const stopsBefore = fake.stops;
+    act(() => result.current.resign(0));
+    await settle();
+    // The wasted search is stopped at once, and that is not taken for an engine in trouble.
+    expect(fake.stops).toBeGreaterThan(stopsBefore);
+    expect(result.current.state!.boards[0]!.result?.reason).toBe('resignation');
+    expect(result.current.stalled).toBe(false);
+    // The other board still gets its answer.
+    fake.mode = 'answer';
+    act(() => result.current.move('e2', 'e4'));
+    await settle();
+    expect(result.current.state!.boards[1]!.sans).toEqual(['e4', 'Nc6']);
+  });
+
+  it('says when the engine has stopped answering, and Retry carries on', async () => {
+    fake.mode = 'interrupt';
+    const { result } = renderHook(() => useSimul());
+    act(() => result.current.start({ ...SETUP, color: 'black' }));
+    await settle();
+    await settle();
+    expect(result.current.stalled).toBe(true);
+    expect(result.current.state!.boards.every((b) => b.engine === 'waiting')).toBe(true);
+    fake.mode = 'answer';
+    act(() => result.current.retry());
+    await settle();
+    expect(result.current.stalled).toBe(false);
+    expect(result.current.state!.boards.map((b) => b.sans)).toEqual([['a3'], ['a3']]);
+  });
+});
+
+describe('Announcer', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('reads messages one at a time with a gap, so none cuts off another', () => {
+    vi.useFakeTimers();
+    const shown: string[] = [];
+    const announcer = new Announcer((text) => shown.push(text));
+    announcer.say('Board 1: Nc6. Your move.');
+    announcer.say('Board 2: e5. Your move.');
+    announcer.say('Board 3: d5. Your move.');
+    expect(shown).toEqual(['Board 1: Nc6. Your move.']);
+    vi.advanceTimersByTime(ANNOUNCE_GAP_MS);
+    expect(shown).toEqual(['Board 1: Nc6. Your move.', 'Board 2: e5. Your move.']);
+    vi.advanceTimersByTime(ANNOUNCE_GAP_MS);
+    expect(shown).toHaveLength(3);
+    // Nothing waiting: the next message is read at once.
+    vi.advanceTimersByTime(ANNOUNCE_GAP_MS);
+    announcer.say('Board 1: resigned.');
+    expect(shown).toHaveLength(4);
+  });
+
+  it('puts an urgent message first and drops what was waiting', () => {
+    vi.useFakeTimers();
+    const shown: string[] = [];
+    const announcer = new Announcer((text) => shown.push(text));
+    announcer.say('one');
+    announcer.say('two');
+    announcer.say('The simul is over.', true);
+    expect(shown).toEqual(['one', 'The simul is over.']);
+    vi.advanceTimersByTime(ANNOUNCE_GAP_MS * 3);
+    expect(shown).toEqual(['one', 'The simul is over.']);
+    announcer.clear();
   });
 });

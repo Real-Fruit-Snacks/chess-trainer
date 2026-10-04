@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { completeOnboarding, expectBoard, playMove } from './helpers';
+import { completeOnboarding, expectBoard, playMove, waitForBoardIdle } from './helpers';
 
 const PROGRESS_KEY = 'chess-trainer:progress';
 const SETTINGS_KEY = 'chess-trainer:settings';
@@ -57,7 +57,7 @@ test.describe('play from any position', () => {
     await page.goto(`/play?fen=${encodeURIComponent(fen)}&level=2`);
     await expect(page.locator('.dialog .alert')).toContainText(/custom position/i);
     await expect(page.getByLabel('Your colour')).toHaveValue('black');
-    await expect(page.getByLabel('Strength')).toHaveValue('2');
+    await expect(page.getByLabel('Engine level')).toHaveValue('2');
     // The query string is consumed so a reload does not restart the setup.
     await expect(page).toHaveURL(/\/play$/);
 
@@ -70,7 +70,7 @@ test.describe('play from any position', () => {
 
   test('a solved lesson task can be played out against the engine', async ({ page }) => {
     await page.goto('/learn/how-pieces-move');
-    await expect(page.getByRole('link', { name: /Play it vs the engine/ })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: 'Play it out' })).toHaveAttribute(
       'href',
       /\/play\?fen=/,
     );
@@ -96,8 +96,8 @@ test.describe('game import', () => {
     await page.goto('/analyze');
     await page.getByRole('button', { name: 'Import FEN / PGN' }).click();
     await page
-      .getByRole('group', { name: 'Import source' })
-      .getByRole('button', { name: 'Lichess' })
+      .getByRole('radiogroup', { name: 'Import source' })
+      .getByRole('radio', { name: 'Lichess' })
       .click();
     await page.getByLabel('Lichess username').fill('alice');
     await page.getByRole('button', { name: 'Fetch recent games' }).click();
@@ -109,8 +109,8 @@ test.describe('game import', () => {
     await page.reload();
     await page.getByRole('button', { name: 'Import FEN / PGN' }).click();
     await page
-      .getByRole('group', { name: 'Import source' })
-      .getByRole('button', { name: 'Lichess' })
+      .getByRole('radiogroup', { name: 'Import source' })
+      .getByRole('radio', { name: 'Lichess' })
       .click();
     await expect(page.getByLabel('Lichess username')).toHaveValue('alice');
   });
@@ -153,8 +153,8 @@ test.describe('game import', () => {
     await page.goto('/analyze');
     await page.getByRole('button', { name: 'Import FEN / PGN' }).click();
     await page
-      .getByRole('group', { name: 'Import source' })
-      .getByRole('button', { name: 'chess.com' })
+      .getByRole('radiogroup', { name: 'Import source' })
+      .getByRole('radio', { name: 'chess.com' })
       .click();
     await page.getByLabel('chess.com username').fill('dave');
     await page.getByRole('button', { name: 'Fetch recent games' }).click();
@@ -171,8 +171,8 @@ test.describe('game import', () => {
     await page.goto('/analyze');
     await page.getByRole('button', { name: 'Import FEN / PGN' }).click();
     await page
-      .getByRole('group', { name: 'Import source' })
-      .getByRole('button', { name: 'Lichess' })
+      .getByRole('radiogroup', { name: 'Import source' })
+      .getByRole('radio', { name: 'Lichess' })
       .click();
     await page.getByLabel('Lichess username').fill('nobody');
     await page.getByRole('button', { name: 'Fetch recent games' }).click();
@@ -221,14 +221,14 @@ test.describe('puzzle review queue', () => {
     });
     await page.goto('/puzzles');
     await completeOnboarding(page);
-    await expect(page.locator('.segmented__option', { hasText: 'Review' })).toContainText('1');
+    await expect(page.locator('.segmented__option', { hasText: 'Due' })).toContainText('1');
 
     await page.goto('/puzzles/review');
     await expectBoard(page);
     await expect(page.locator('.puzzle-status')).toContainText(/Your move/i, { timeout: 20_000 });
     await page.getByRole('button', { name: /Solution/ }).click();
     // The solution plays out on screen; the queue only empties on "Next".
-    await expect(page.locator('.puzzle-status')).toContainText(/after a miss/i, {
+    await expect(page.locator('.puzzle-status')).toContainText('That is the solution.', {
       timeout: 20_000,
     });
     // Showing the solution counts as a miss: the card returns tomorrow with a lapse.
@@ -250,9 +250,9 @@ test.describe('puzzle review queue', () => {
       .toEqual({ lapses: 1, dueLater: true });
 
     await page.getByRole('button', { name: /Skip|Next puzzle/ }).click();
-    await expect(page.getByText('Nothing to review right now')).toBeVisible();
+    await expect(page.getByText('Nothing due right now')).toBeVisible();
     await page.goto('/puzzles/review');
-    await expect(page.getByText('Nothing to review right now')).toBeVisible();
+    await expect(page.getByText('Nothing due right now')).toBeVisible();
   });
 
   test('the Progress page counts due reviews', async ({ page }) => {
@@ -281,9 +281,9 @@ test.describe('puzzle review queue', () => {
       },
     });
     await page.goto('/progress');
-    const stat = page.locator('.stat', { hasText: 'Puzzles to review' });
+    const stat = page.locator('.stat', { hasText: 'Puzzles due' });
     await expect(stat).toContainText('1');
-    await expect(page.getByRole('link', { name: 'Review queue' })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: 'Due puzzles' })).toHaveAttribute(
       'href',
       /\/puzzles\/review$/,
     );
@@ -367,7 +367,7 @@ test.describe('new training content', () => {
     await expect(page.getByText('Botvinnik’s Immortal')).toBeVisible();
 
     await page.goto('/openings');
-    await expect(page.getByText("King's Indian Attack")).toBeVisible();
+    await expect(page.getByText('King’s Indian Attack')).toBeVisible();
     await expect(page.getByText('Slav Defence')).toBeVisible();
 
     await page.goto('/learn');
@@ -400,7 +400,7 @@ test.describe('new training content', () => {
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expect(page.getByText(/Win the rook/)).toBeVisible();
     // Let the pieces finish animating into the starting position before locating the queen.
-    await page.waitForTimeout(500);
+    await waitForBoardIdle(page);
     // Every starting position is White to move: selecting the queen shows its moves.
     const queen = await page.locator('cg-board piece.white.queen').first().boundingBox();
     if (!queen) throw new Error('No white queen on the board');

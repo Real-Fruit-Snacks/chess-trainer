@@ -9,6 +9,7 @@ import { chooseLevelMove, ensureSkill, type SkillCache } from '@/features/play/e
 import type { GameOver } from '@/features/play/usePlayVsEngine';
 import { gameEndSound, playSound } from '@/lib/sound';
 import { useSettings } from '@/store/settings';
+import { arcadeHeaders } from './arcadeGame';
 import {
   type CallRecord,
   destsForType,
@@ -27,8 +28,13 @@ export interface HandAndBrainSetup {
   levelId: number;
 }
 
-/** What the engine is doing right now, for the status line. */
-export type Busy = 'partner' | 'opponent' | 'grading' | null;
+/**
+ * What the engine is doing right now, for the status line: the partner
+ * studying the position (`partner`), the partner finding the best move with
+ * the piece the Brain called (`partner-move`), the opponent's move, or the
+ * grading of the Hand's move.
+ */
+export type Busy = 'partner' | 'partner-move' | 'opponent' | 'grading' | null;
 
 export interface HandCall {
   type: PieceType;
@@ -194,7 +200,7 @@ export function useHandAndBrain() {
         play(brainBest.move, 0);
         return;
       }
-      setBusy('partner');
+      setBusy('partner-move');
       void analyse(
         position.startFen,
         position.history.map((m) => toUci(m)),
@@ -310,6 +316,20 @@ export function useHandAndBrain() {
     });
   }, [started, gameOver, engine, playerColor]);
 
+  /** The game so far as PGN. */
+  const pgn = useCallback(
+    () =>
+      gameRef.current.pgn(
+        arcadeHeaders({
+          event: `Hand & Brain · ${role === 'brain' ? 'Brain' : 'Hand'}`,
+          playerColor,
+          engine: `Stockfish (level ${level.id} · ${level.name})`,
+          result: gameOver?.result ?? '*',
+        }),
+      ),
+    [role, playerColor, level, gameOver],
+  );
+
   const chess = game.chess();
   const options = useMemo(
     () =>
@@ -347,6 +367,7 @@ export function useHandAndBrain() {
     playerMove,
     resolvePromotion,
     resign,
+    pgn,
   };
 }
 

@@ -90,7 +90,7 @@ export const intermediateLessons3: Lesson[] = [
           success:
             'Kg7! and then Kh8. With the king on h8 and the bishop covering g8 and h7 — both light squares — White has no way in. Heading for a8 would be a mistake: that corner is the bishop’s colour.',
           failure:
-            'Wrong direction. The bishop is light-squared, so the drawing corner is h8 (dark): Kg7 or Kg8.',
+            'That does not lose yet, but it does not head for safety either. The bishop is light-squared, so the drawing corner is h8 (dark): Kg7 or Kg8.',
         },
       },
       {
@@ -248,7 +248,7 @@ export const intermediateLessons3: Lesson[] = [
       {
         title: 'Defending with precision',
         text:
-          'Now the black side. After Qf3+ Ke6 White brought the knight to c3, attacking d5 a second time. Black’s ' +
+          'Now the black side. After Nxf7 Kxf7 Qf3+ Ke6 White brought the knight to c3, attacking d5 a second time. Black’s ' +
           'knight on c6 must help — but it also has to keep an eye on the d5 square and give the king air.',
         fen: FRIED_DEFENCE,
         orientation: 'black',

@@ -1,6 +1,12 @@
 import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
-import { explainMove, materialSwing, MOTIF_HELP, staticExchange } from './commentary';
+import {
+  discoveredTargets,
+  explainMove,
+  materialSwing,
+  MOTIF_HELP,
+  staticExchange,
+} from './commentary';
 import { lessons } from '@/features/learn/lessons';
 
 const cp = (value: number) => ({ type: 'cp' as const, value });
@@ -15,6 +21,27 @@ describe('static exchange evaluation', () => {
     // Rook takes a defended knight, gets recaptured: nothing gained.
     expect(staticExchange('4k3/8/2p5/3n4/8/8/8/3RK3 w - - 0 1', 'd5', 'w')).toBe(0);
     expect(staticExchange('4k3/8/8/8/8/8/8/4K3 w - - 0 1', 'e5', 'w')).toBe(0);
+  });
+
+  it('counts an en passant capture as winning the pawn', () => {
+    // Black just played ...d5 next to White's e5 pawn: exd6 wins a pawn for nothing.
+    const fen = '4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 2';
+    expect(staticExchange(fen, 'd6', 'w')).toBe(1);
+    // No en passant right: an empty square is worth nothing.
+    expect(staticExchange('4k3/8/8/3pP3/8/8/8/4K3 w - - 0 2', 'd6', 'w')).toBe(0);
+  });
+});
+
+describe('discovered attacks', () => {
+  it('finds the slider whose ray runs through the vacated square', () => {
+    // White knight left d4; the bishop on b2 now looks through d4 at the rook on h8.
+    const chess = new Chess('4k2r/8/8/8/8/8/1B6/4K3 w - - 0 1');
+    const targets = discoveredTargets(chess, 'd4', 'w');
+    expect(targets.map((t) => `${t.from}>${t.square}`)).toEqual(['b2>h8']);
+    // Nothing behind an occupied square.
+    expect(discoveredTargets(new Chess('4k2r/8/8/8/3N4/8/1B6/4K3 w - - 0 1'), 'd4', 'w')).toEqual(
+      [],
+    );
   });
 });
 
@@ -90,6 +117,62 @@ describe('explaining judged moves', () => {
     });
     expect(explained?.motif).toBe('pin');
     expect(explained?.text).toMatch(/pinning the queen/);
+  });
+
+  it('names a pawn hung to en passant', () => {
+    // ...d5?? next to the e5 pawn: exd6 takes it.
+    const explained = explainMove({
+      fen: '4k3/3p4/8/4P3/8/8/8/4K3 b - - 0 1',
+      san: 'd5',
+      judgement: 'inaccuracy',
+      bestUci: 'd7d6',
+      replyUci: 'e5d6',
+      scoreBefore: cp(0),
+      scoreAfter: cp(-100),
+    });
+    expect(explained?.motif).toBe('hanging-piece');
+    expect(explained?.text).toMatch(/pawn/);
+    expect(explained?.keyMove).toBe('exd6');
+  });
+
+  it('spots a discovered attack the reply unleashes', () => {
+    // The queen stays on the d-file behind Black's knight; the knight jumps away
+    // and the rook on d8 hits the queen through the square it vacated.
+    const fen = '3rk3/8/8/3n4/8/8/8/3QK3 w - - 0 1';
+    const explained = explainMove({
+      fen,
+      san: 'Qd2',
+      judgement: 'blunder',
+      bestUci: 'd1b1',
+      replyUci: 'd5c3',
+      scoreBefore: cp(0),
+      scoreAfter: cp(-600),
+    });
+    expect(explained?.motif).toBe('discovered-attack');
+    expect(explained?.text).toMatch(/Nc3, uncovering an attack on the queen on d2/);
+  });
+
+  it('reports missed and allowed mates even for moves judged good', () => {
+    const fen = '6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1';
+    const missed = explainMove({
+      fen,
+      san: 'Kf1',
+      judgement: 'good',
+      bestUci: 'a1a8',
+      scoreBefore: mate(1),
+      scoreAfter: cp(500),
+    });
+    expect(missed?.motif).toBe('missed-mate');
+    expect(
+      explainMove({
+        fen,
+        san: 'Kf1',
+        judgement: 'good',
+        bestUci: 'a1a8',
+        scoreBefore: cp(500),
+        scoreAfter: cp(450),
+      }),
+    ).toBeNull();
   });
 
   it('reports missed and allowed mates from the scores', () => {

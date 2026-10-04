@@ -7,12 +7,11 @@ import { useProgress } from '@/store/progress';
 /** Export or share the current progress and remember that it happened. */
 export function useBackupActions() {
   const exportState = useProgress((s) => s.exportState);
-  const ratedAttempts = useProgress((s) => s.ratedAttempts);
   const [busy, setBusy] = useState(false);
 
   const download = () => {
     downloadBackup(exportState());
-    markBackedUp(ratedAttempts);
+    markBackedUp();
     toast('Backup saved.', { tone: 'success' });
   };
 
@@ -21,7 +20,7 @@ export function useBackupActions() {
     try {
       const done = await shareBackup(exportState(), siteConfig.name);
       if (done) {
-        markBackedUp(ratedAttempts);
+        markBackedUp();
         toast('Backup shared. Open it in the app on the other device to import it.', {
           tone: 'success',
         });

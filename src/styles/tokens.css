@@ -61,10 +61,21 @@
   --space-8: 64px;
 
   --content-max: 1200px;
-  --header-height: 60px;
-  --bottom-nav-height: 60px;
+  /* The fixed chrome, insets included, so paddings and sticky offsets clear the notch and home bar. */
+  --header-height: calc(60px + env(safe-area-inset-top, 0px));
+  --bottom-nav-height: calc(60px + env(safe-area-inset-bottom, 0px));
 
-  --focus-ring: 0 0 0 3px rgba(31, 111, 91, 0.45);
+  /*
+   * Focus: an opaque 2px outline (see global.css) in a colour that reads at 3:1 on
+   * every surface, with a 1px halo in the page colour so it also shows on a
+   * primary button. `--focus-ring` is the same look as a box-shadow for the few
+   * places that cannot use an outline; `--selected-ring` marks a selected swatch
+   * or strip and is deliberately different from focus (inset, accent).
+   */
+  --focus: #1f6f5b;
+  --focus-halo: #f6f4ef;
+  --focus-ring: 0 0 0 1px var(--focus-halo), 0 0 0 3px var(--focus);
+  --selected-ring: inset 0 0 0 2px var(--accent);
   --transition: 160ms ease;
 }
 
@@ -104,7 +115,8 @@
   --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
   --shadow-board: 0 10px 30px rgba(0, 0, 0, 0.55);
 
-  --focus-ring: 0 0 0 3px rgba(79, 179, 151, 0.5);
+  --focus: #8fdcc4;
+  --focus-halo: #0f1512;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -143,7 +155,8 @@
     --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
     --shadow-board: 0 10px 30px rgba(0, 0, 0, 0.55);
 
-    --focus-ring: 0 0 0 3px rgba(79, 179, 151, 0.5);
+    --focus: #8fdcc4;
+    --focus-halo: #0f1512;
   }
 }
 
@@ -156,6 +169,7 @@
   --surface-3: #1e2622;
   --border: #222b26;
   --border-strong: #35413b;
+  --focus-halo: #000000;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.6);
   --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.7);

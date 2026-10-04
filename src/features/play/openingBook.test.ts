@@ -1,5 +1,6 @@
 import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
+import { cardsFor, repertoireCardId } from '@/store/repertoire';
 import { bookReply, createBook, describeDeviation, followBook } from './openingBook';
 
 const REP = {
@@ -72,5 +73,37 @@ describe('opening book', () => {
     expect(
       bookReply(followBook(book, history('e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'c3')), {}),
     ).toBeNull();
+  });
+
+  it('weights a lapsed move below a never-studied one: it is relearning, not new', () => {
+    const book = followBook(createBook(REP), history('e4', 'e5', 'Nf3'));
+    // A forgotten Bc4: reps back to 0 after a lapse.
+    const lapsed = { ease: 2.3, interval: 0, due: 0, reps: 0, lapses: 1, lastReviewed: 5 };
+    const cards = { 'e2e4 e7e5 g1f3 b8c6 f1c4': lapsed };
+    // Weights: Nc6 → 1 + 2 (lapsed) = 3, Nf6 → 1 + 3 (never studied) = 4, out of 7.
+    expect(bookReply(book, cards, 10, () => 0.42)).toBe('Nc6');
+    expect(bookReply(book, cards, 10, () => 0.44)).toBe('Nf6');
+  });
+
+  it('the store keys cards by repertoire: the bias only works through cardsFor()', () => {
+    const book = followBook(createBook(REP), history('e4', 'e5', 'Nf3'));
+    const card = {
+      ease: 2.5,
+      interval: 30,
+      due: Number.MAX_SAFE_INTEGER,
+      reps: 6,
+      lapses: 0,
+      lastReviewed: 1,
+    };
+    const stored = {
+      [repertoireCardId(REP.id, 'e2e4 e7e5 g1f3 b8c6 f1c4')]: card,
+      // Another repertoire's progress on the same path must not count.
+      [repertoireCardId('other', 'e2e4 e7e5 g1f3 g8f6 f3e5')]: card,
+    };
+    // Raw store keys never match a path: every line looks unknown and the weighting is flat.
+    expect(bookReply(book, stored, 0, () => 0.3)).toBe('Nc6');
+    // Through cardsFor the learned Bc4 line is weighted down (Nc6 → 1, Nf6 → 4).
+    expect(bookReply(book, cardsFor(stored, REP.id), 0, () => 0.3)).toBe('Nf6');
+    expect(bookReply(book, cardsFor(stored, REP.id), 0, () => 0.1)).toBe('Nc6');
   });
 });

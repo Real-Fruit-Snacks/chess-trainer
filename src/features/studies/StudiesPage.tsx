@@ -1,12 +1,11 @@
 import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Badge } from '@/components/ui';
+import { Difficulty } from '@/features/drills/Difficulty';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { STUDIES } from './studies';
 import './studies.css';
-
-const DIFFICULTY = ['', 'Easy', 'Medium', 'Hard'] as const;
 
 export default function StudiesPage() {
   const results = useProgress((s) => s.studies);
@@ -41,18 +40,21 @@ export default function StudiesPage() {
             >
               <div className="row row--between">
                 <span className="card__title">{study.title}</span>
-                {result?.solvedAt ? (
-                  <Badge tone="success">{result.clean ? 'Solved' : 'Solved with help'}</Badge>
-                ) : (
+                <span className="row" style={{ gap: 4 }}>
+                  {result?.solvedAt ? (
+                    <Badge tone="success">{result.clean ? 'Solved' : 'Solved with help'}</Badge>
+                  ) : (
+                    <Difficulty level={study.difficulty} />
+                  )}
                   <Badge tone={study.goal === 'win' ? 'accent' : 'info'}>
                     {study.goal === 'win' ? 'Win' : 'Draw'}
                   </Badge>
-                )}
+                </span>
               </div>
               <span className="small muted">
                 {study.composer}
-                {study.year ? `, ${study.year}` : ''} · {DIFFICULTY[study.difficulty]} ·{' '}
-                {study.line.length} move{study.line.length === 1 ? '' : 's'} to find
+                {study.year ? `, ${study.year}` : ''} · {study.line.length} move
+                {study.line.length === 1 ? '' : 's'} to find
               </span>
               <span className="row" style={{ gap: 4 }}>
                 {study.themes.map((t) => (

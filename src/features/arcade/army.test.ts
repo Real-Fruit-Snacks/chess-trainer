@@ -8,6 +8,7 @@ import {
   armyProblem,
   canAdd,
   describeArmy,
+  describeBudget,
   draftFen,
   EMPTY_ARMY,
   MAX_PAWNS,
@@ -79,5 +80,15 @@ describe('army draft', () => {
   it('describes an army in words', () => {
     expect(describeArmy({ q: 1, r: 0, b: 0, n: 3, p: 1 })).toBe('1 queen, 3 knights, 1 pawn');
     expect(describeArmy(EMPTY_ARMY)).toBe('a lone king');
+  });
+
+  it('reads the budget out in words for the live budget line', () => {
+    expect(describeBudget(EMPTY_ARMY, 30)).toBe('0 of 30 points spent, 30 left.');
+    expect(describeBudget({ q: 0, r: 1, b: 1, n: 4, p: 8 }, 30)).toBe(
+      '28 of 30 points spent, 2 left.',
+    );
+    expect(describeBudget({ q: 1, r: 2, b: 2, n: 2, p: 8 }, 30)).toBe(
+      '39 of 30 points: 9 over budget.',
+    );
   });
 });

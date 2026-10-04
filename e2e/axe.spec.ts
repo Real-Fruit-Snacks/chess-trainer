@@ -2,30 +2,45 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
 
 /**
- * An automated accessibility sweep (axe-core, WCAG 2.1 A/AA) over every
- * top-level page, in both colour schemes. It catches the mechanical slips —
- * missing labels, bad contrast, invalid ARIA — that the hand-written
- * accessibility tests do not look for.
+ * An automated accessibility sweep (axe-core, WCAG 2.1 A/AA) over every page —
+ * the top-level ones and one of each parameterised route — in all three colour
+ * schemes. It catches the mechanical slips — missing labels, bad contrast,
+ * invalid ARIA — that the hand-written accessibility tests do not look for.
  */
 const PAGES = [
   '/',
   '/learn',
   '/learn/how-pieces-move',
+  '/learn/course/first-steps',
+  '/learn/recall',
+  '/placement',
   '/puzzles',
   '/puzzles/themes',
+  '/puzzles/daily',
+  '/puzzles/rush',
+  '/puzzles/openings',
+  '/puzzles/review',
+  '/puzzles/mine',
+  '/puzzles/woodpecker',
   '/drills',
   '/drills/coordinates',
+  '/drills/vision',
+  '/drills/endgame/mate-kq',
   '/openings',
+  '/openings/italian',
   '/play',
   '/analyze',
   '/games',
   '/studies',
+  '/studies/reti-1921',
   '/classics',
+  '/classics/opera-game',
   '/patterns',
   '/reference',
   '/progress',
   '/settings',
   '/settings/lab',
+  '/no-such-page',
   '/arcade',
   '/arcade/hand-and-brain',
   '/arcade/daily-opening',
@@ -38,7 +53,9 @@ const PAGES = [
   '/arcade/simul',
 ];
 
-async function seed(page: Page, scheme: 'light' | 'dark') {
+type Scheme = 'light' | 'dark' | 'black';
+
+async function seed(page: Page, scheme: Scheme) {
   await page.addInitScript(
     ([progress, settings]) => {
       if (!localStorage.getItem('chess-trainer:progress')) {
@@ -75,7 +92,7 @@ async function audit(page: Page, path: string) {
   }));
 }
 
-for (const scheme of ['light', 'dark'] as const) {
+for (const scheme of ['light', 'dark', 'black'] as const) {
   test.describe(`axe sweep (${scheme})`, () => {
     for (const path of PAGES) {
       test(`${path} has no WCAG A/AA violations`, async ({ page }) => {

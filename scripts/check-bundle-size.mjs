@@ -30,7 +30,7 @@ const BUDGETS = [
   { name: 'any other chunk', match: /./, limitBytes: 40 * KB },
 ];
 /** The code that runs before the first page: the entry and its static imports, React aside. */
-const STARTUP_LIMIT_BYTES = 56 * KB;
+const STARTUP_LIMIT_BYTES = 42 * KB;
 /** The service worker precaches this much at install: keep first loads honest. */
 const PRECACHE_LIMIT_BYTES = 6.5 * KB * KB;
 

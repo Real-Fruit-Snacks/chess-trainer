@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { completeOnboarding, expectBoard, playMove } from './helpers';
+import { completeOnboarding, expectBoard, playMove, waitForBoardIdle } from './helpers';
 
 test.describe('shell', () => {
   test('home page renders and navigation works', async ({ page }) => {
@@ -58,8 +58,9 @@ test.describe('learn', () => {
     await playMove(board, 'd4', 'd8');
     await expect(feedback).toContainText(/straight lines/i);
 
-    // The wrong move is taken back; now play the right one.
-    await page.waitForTimeout(900);
+    // The wrong move is taken back: once the task waits for a move again, play the right one.
+    await expect(page.getByRole('button', { name: 'Show answer' })).toBeEnabled();
+    await waitForBoardIdle(page);
     await playMove(board, 'd4', 'h4');
     await expect(feedback).toContainText(/Correct/i);
     await expect(page.getByRole('button', { name: /Continue/ })).toBeVisible();
@@ -91,7 +92,7 @@ test.describe('play', () => {
   test('the engine answers a move', async ({ page }) => {
     await page.goto('/play');
     // The setup dialog opens automatically.
-    await page.getByLabel('Strength').selectOption('1');
+    await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
     await playMove(board, 'e2', 'e4');
@@ -122,8 +123,8 @@ test.describe('progress', () => {
   test('settings persist across reloads', async ({ page }) => {
     await page.goto('/settings');
     await page
-      .getByRole('group', { name: 'Colour scheme' })
-      .getByRole('button', { name: 'Dark' })
+      .getByRole('radiogroup', { name: 'Colour scheme' })
+      .getByRole('radio', { name: 'Dark' })
       .click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.reload();

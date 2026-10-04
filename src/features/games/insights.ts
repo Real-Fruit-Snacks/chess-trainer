@@ -85,6 +85,12 @@ export function accuracyFromLoss(loss: number, moves: number): number | null {
   return Math.round(100 * Math.exp(-5 * (loss / moves)));
 }
 
+/** Below these the numbers are shown greyed out: too little to draw conclusions from. */
+export const MIN_MOVES_FOR_INSIGHT = 20;
+export const MIN_GAMES_FOR_INSIGHT = 3;
+/** A mistake seen fewer times than this is not yet a pattern. */
+export const MIN_MOTIF_COUNT = 3;
+
 export interface PhaseInsight {
   phase: Phase;
   moves: number;
@@ -92,6 +98,8 @@ export interface PhaseInsight {
   errors: number;
   /** Errors per 10 moves, for comparing phases of different length. */
   errorRate: number | null;
+  /** Enough moves to mean something (`MIN_MOVES_FOR_INSIGHT`). */
+  reliable: boolean;
 }
 
 export interface MotifInsight {
@@ -101,6 +109,8 @@ export interface MotifInsight {
   lessonTitle: string;
   theme: string | null;
   themeName: string | null;
+  /** Seen often enough to be a pattern (`MIN_MOTIF_COUNT`). */
+  reliable: boolean;
 }
 
 export interface ColourInsight {
@@ -110,6 +120,9 @@ export interface ColourInsight {
   draws: number;
   losses: number;
   accuracy: number | null;
+  /** Reviewed moves behind the accuracy figure. */
+  moves: number;
+  reliable: boolean;
 }
 
 export interface OpeningInsight {
@@ -117,6 +130,9 @@ export interface OpeningInsight {
   games: number;
   score: number;
   accuracy: number | null;
+  /** Reviewed moves behind the accuracy figure. */
+  moves: number;
+  reliable: boolean;
 }
 
 export interface LevelInsight {
@@ -183,8 +199,26 @@ export function buildInsights(
   const phases = emptyPhases();
   const motifs: Partial<Record<Motif, number>> = {};
   const colours: Record<LongColor, ColourInsight> = {
-    white: { color: 'white', games: 0, wins: 0, draws: 0, losses: 0, accuracy: null },
-    black: { color: 'black', games: 0, wins: 0, draws: 0, losses: 0, accuracy: null },
+    white: {
+      color: 'white',
+      games: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      accuracy: null,
+      moves: 0,
+      reliable: false,
+    },
+    black: {
+      color: 'black',
+      games: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      accuracy: null,
+      moves: 0,
+      reliable: false,
+    },
   };
   const colourLoss: Record<LongColor, { loss: number; moves: number }> = {
     white: { loss: 0, moves: 0 },
@@ -250,6 +284,7 @@ export function buildInsights(
       accuracy: accuracyFromLoss(loss, moves),
       errors,
       errorRate: moves ? Math.round((errors / moves) * 100) / 10 : null,
+      reliable: moves >= MIN_MOVES_FOR_INSIGHT,
     };
   });
 
@@ -265,11 +300,16 @@ export function buildInsights(
         lessonTitle: getLessonMeta(help.lesson)?.title ?? help.lesson,
         theme: help.theme,
         themeName: help.theme ? themeName(help.theme) : null,
+        reliable: count >= MIN_MOTIF_COUNT,
       };
     });
 
   for (const color of ['white', 'black'] as const) {
     colours[color].accuracy = accuracyFromLoss(colourLoss[color].loss, colourLoss[color].moves);
+    colours[color].moves = colourLoss[color].moves;
+    colours[color].reliable =
+      colours[color].games >= MIN_GAMES_FOR_INSIGHT &&
+      colourLoss[color].moves >= MIN_MOVES_FOR_INSIGHT;
   }
 
   const openingInsights: OpeningInsight[] = [...openings.entries()]
@@ -278,6 +318,8 @@ export function buildInsights(
       games: row.games,
       score: row.decided ? Math.round((row.points / row.decided) * 100) : 0,
       accuracy: accuracyFromLoss(row.loss, row.moves),
+      moves: row.moves,
+      reliable: row.games >= MIN_GAMES_FOR_INSIGHT && row.moves >= MIN_MOVES_FOR_INSIGHT,
     }))
     .sort((a, b) => b.games - a.games || a.name.localeCompare(b.name))
     .slice(0, 8);
@@ -309,7 +351,7 @@ export function buildInsights(
 
   const workOn: WorkItem[] = [];
   for (const motif of motifInsights.slice(0, 2)) {
-    if (motif.count < 2) continue;
+    if (!motif.reliable) continue;
     workOn.push({
       id: `motif:${motif.motif}`,
       title: motifLabel(motif.motif),
@@ -319,7 +361,7 @@ export function buildInsights(
     });
   }
   const weakest = phaseInsights
-    .filter((p) => p.moves >= 20 && p.accuracy !== null)
+    .filter((p) => p.reliable && p.accuracy !== null)
     .sort((a, b) => (a.accuracy ?? 100) - (b.accuracy ?? 100))[0];
   if (weakest && (weakest.accuracy ?? 100) < 75) {
     const lessonId =

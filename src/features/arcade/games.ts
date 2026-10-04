@@ -1,6 +1,8 @@
 import type { IconName } from '@/components/ui/Icon';
+import { localDateKey } from '@/lib/dates';
 import type { ArcadeResult, DailyOpeningState, OddsLadderState } from '@/store/progress';
-import { ODDS_RUNGS } from './odds';
+import { describeToday } from './dailyOpening';
+import { ODDS_RUNGS, oddsGamesPlayed } from './odds';
 
 export type ArcadeGameId =
   | 'hand-and-brain'
@@ -133,26 +135,27 @@ export function getArcadeGame(id: string): ArcadeGame | undefined {
   return ARCADE_GAMES.find((g) => g.id === id);
 }
 
-/** One line for the hub card: the best result so far, or null when never played. */
+/**
+ * One line for the hub card: the best result so far, or null when never
+ * played. The Daily Opening says how today stands instead (with the streak
+ * only while it is unbroken); `today` defaults to the current local day.
+ */
 export function describeArcadeBest(
   game: ArcadeGame,
   state: {
     arcade: Record<string, ArcadeResult>;
     dailyOpening: DailyOpeningState | null;
     oddsLadder: OddsLadderState;
+    today?: string;
   },
 ): string | null {
   switch (game.id) {
-    case 'daily-opening': {
-      const daily = state.dailyOpening;
-      if (!daily) return null;
-      const played = Object.keys(daily.history).length;
-      return `Streak ${daily.streak} · best ${daily.bestStreak} · ${played} day${played === 1 ? '' : 's'} played`;
-    }
+    case 'daily-opening':
+      return describeToday(state.dailyOpening, state.today ?? localDateKey());
     case 'odds-ladder': {
       const ladder = state.oddsLadder;
-      const played = Object.values(ladder.results).reduce((n, r) => n + r.wins + r.losses, 0);
-      if (played === 0) return null;
+      // Every game counts as played, draws included.
+      if (oddsGamesPlayed(ladder) === 0) return null;
       const rung = ODDS_RUNGS[Math.min(ladder.rung, ODDS_RUNGS.length - 1)];
       return `Rung ${ladder.rung + 1} of ${ODDS_RUNGS.length}: ${rung?.name ?? ''}`;
     }

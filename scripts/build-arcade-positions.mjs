@@ -8,6 +8,11 @@
  *
  * Usage:  node scripts/build-arcade-positions.mjs [--depth 16] [--step 2]
  *
+ * Both sides to move are sampled: every other game starts one ply later, so
+ * with an even step half the games give White-to-move positions and half
+ * Black-to-move ones (Fortress then has Black defending too, and Who Stands
+ * Better? is not always "White to move").
+ *
  * Slow (a few hundred engine searches); the output is committed.
  */
 import { Chess } from 'chess.js';
@@ -63,7 +68,7 @@ async function main() {
   const out = [];
   let searches = 0;
   const started = Date.now();
-  for (const game of games) {
+  for (const [index, game] of games.entries()) {
     const chess = new Chess();
     const sans = game.moves.split(/\s+/);
     const fens = [];
@@ -72,7 +77,8 @@ async function main() {
       fens.push(chess.fen());
     }
     const lastPly = fens.length - LAST_PLIES;
-    for (let ply = FIRST_PLY; ply < lastPly; ply += STEP) {
+    // Odd-numbered games start a ply later: their positions have the other side to move.
+    for (let ply = FIRST_PLY + (index % 2); ply < lastPly; ply += STEP) {
       const fen = fens[ply - 1];
       const probe = new Chess(fen);
       const turn = probe.turn();

@@ -35,7 +35,7 @@ const BE_GOOD_BAD = '8/8/1p2p2p/1Pp1k1p1/2P1P1P1/1b1BK1P1/8/8 b - - 6 41';
 const BE_TRADE = '8/p2b4/1pk5/3p1p1p/1K1P1Pp1/2PB2P1/P6P/8 w - - 8 35';
 const BE_TRADE_2 = '8/5b2/3p1kB1/2pP1P1p/1pP2K2/1P6/8/8 w - - 6 57';
 const BE_DECOY = '8/6p1/p2Pk2p/2Pb4/3K3P/8/PP6/8 w - - 1 45';
-const BE_WRONG = '7k/8/6K1/7P/8/3B4/8/8 b - - 0 1';
+const BE_WRONG = '6k1/8/5K2/7P/8/3B4/8/8 b - - 0 1';
 
 // Pawn endgames III.
 const PE_SQUARE = '8/8/8/5k2/1P6/8/8/6K1 b - - 0 1';
@@ -205,7 +205,7 @@ export const intermediateLessons6: Lesson[] = [
       {
         title: 'When it works',
         text:
-          'The Greek gift: **Bxh7+ Kxh7 Ng5+** followed by **Qh5**. It works when the attacker has all three pieces ready, the pawn on e5 keeps the f6-knight away, and the king has no safe square: g6 is met by Qd3+ or h4–h5, g8 by Qh5 and mate on h7.\n\n' +
+          'The Greek gift: **Bxh7+ Kxh7 Ng5+** followed by **Qh5**. It works when the attacker has all three pieces ready, the pawn on e5 keeps the f6-knight away, and the king has no safe square: g8 is met by Qh5 and the threat on h7, and g6 by a quiet knight move — Ne2, heading for f4 with check.\n\n' +
           'Here every condition is met. Play the sacrifice yourself before learning to defend against it.',
         fen: GG_WORKS,
         shapes: ['d3h7', 'f3g5:blue', 'd1h5:blue'],
@@ -215,8 +215,8 @@ export const intermediateLessons6: Lesson[] = [
           reply: 'Kxh7',
           hint: 'The classic sacrifice on h7.',
           success:
-            'Bxh7+! Kxh7 Ng5+ Kg8 Qh5 and mate on h7 cannot be stopped: ...Re8 Qxf7+ Kh8 Qh5+ Kg8 Qh7+ Kf8 Qh8+ Ke7 Qxg7 mate.',
-          failure: 'Bxh7+! is decisive here: Kxh7 Ng5+ Kg8 Qh5 and mate follows on h7.',
+            'Bxh7+! Kxh7 Ng5+ Kg8 Qh5 and h7 cannot be held: after ...Re8 Qh7+ Kf8 Qh8+ Ng8 Nh7+ Ke7 Bg5+ White wins decisive material.',
+          failure: 'Bxh7+! is decisive here: Kxh7 Ng5+ Kg8 Qh5 and the threat on h7 cannot be met.',
         },
       },
       {
@@ -252,7 +252,7 @@ export const intermediateLessons6: Lesson[] = [
           moves: ['Kg8'],
           hint: 'The square that keeps the king out of every check.',
           success:
-            'Kg8! and White has nothing: Qh5 Nf6 covers h7; Qd3 f5 and the king is safe. Black is a piece up.',
+            'Kg8! and White has nothing: Qh5 Nf6 (or Qg4 Nf6) covers h7, and the king is safe. Black is a piece up.',
           failure:
             'Kg8! is the only good square. On g6 or h6 the king walks into Qd3+ and Qg4/Qh4 ideas.',
         },
@@ -268,8 +268,9 @@ export const intermediateLessons6: Lesson[] = [
           moves: ['Rh6'],
           hint: 'Block the h-file with the rook.',
           success:
-            'Rh6! and the attack is over: the queen has to retreat, the knight on g5 is loose, and Black is a piece up.',
-          failure: 'Rh6! blocks the h-file; nothing else stops Qxh7 mate.',
+            'Rh6! is the only defence. White regains some material with Qf7+ Kh8 Nf3 Nc6 Bxh6 gxh6, but the mating attack is over and Black stays ahead.',
+          failure:
+            'Rh6! blocks the h-file. Otherwise Qh7+ Kf8 Qh8 mate — and if the bishop has left e7, the king is hunted across the board.',
         },
       },
       {
@@ -299,7 +300,8 @@ export const intermediateLessons6: Lesson[] = [
           moves: ['Nxh7'],
           hint: 'Recapture with the piece that keeps the king covered.',
           success:
-            'Nxh7! and the knight also guards g5. After Qxd8 Rxd8 Rxd8+ Nf8 Black is a piece up with the safer king.',
+            'Nxh7! and the knight also guards g5. After Qxd8 Rxd8 Rxd8+ Nf8 Black has queen and bishop ' +
+            'against the two rooks, with the safer king — a winning position.',
           failure: 'Nxh7! wins a piece: the knight was the second defender of h7.',
         },
       },
@@ -400,7 +402,8 @@ export const intermediateLessons6: Lesson[] = [
           moves: ['d7'],
           reply: 'Kxd7',
           hint: 'Push the pawn — where does the king have to go?',
-          success: 'd7! Kxd7 Kxd5 and White is a piece up with the pawns to prove it.',
+          success:
+            'd7! Kxd7 Kxd5 and the bishop is gone: a pawn ending a pawn up, with the c-pawn ready to run.',
           failure: 'd7! decoys the king: Kxd7 Kxd5 wins the bishop.',
         },
       },
@@ -412,12 +415,12 @@ export const intermediateLessons6: Lesson[] = [
         shapes: ['h8:green', 'g8:green', 'd3:red'],
         task: {
           prompt: 'Black to move: hold the draw.',
-          moves: ['Kg8'],
-          hint: 'Stay next to the corner.',
+          moves: ['Kh8'],
+          hint: 'Stay in the corner.',
           success:
-            'Kg8 (or any move that keeps the king on g8/h8/g7/h7). h6 Kh8 h7 and it is stalemate; the bishop can never cover h8.',
+            'Kh8! h6 Kg8 h7+ Kh8 and White must either stalemate the king or lose the pawn; the bishop can never cover h8.',
           failure:
-            'Keep the king on g8 or h8. Any attempt to leave the corner lets the pawn through.',
+            'Kf8? lets the bishop take g8 away with Bc4, and the king never gets back to the corner. Stay on h8.',
         },
       },
       {
@@ -450,12 +453,12 @@ export const intermediateLessons6: Lesson[] = [
         shapes: ['b4b8:blue', 'b8f8:blue', 'f8f4:blue', 'f4b4:blue'],
         task: {
           prompt: 'Black to move: catch the pawn.',
-          moves: ['Ke5', 'Ke6', 'Ke4'],
+          moves: ['Ke5', 'Ke6', 'Ke4', 'Kf4', 'Kf6'],
           hint: 'Stay inside the square — every move must keep you within reach of b8.',
           success:
-            'Ke5 (or Ke4/Ke6) and the king stays in the square: b5 Kd6 b6 Kc6 and the pawn falls. Remember: a pawn on its starting square counts as if it were one rank further on.',
+            'Ke5 (or any move that stays inside the square) and the pawn is caught: b5 Kd6 b6 Kc6 and it falls. Remember: a pawn on its starting square counts as if it were one rank further on.',
           failure:
-            'The king must stay inside the square: any move towards the e-file catches the pawn; a move towards the h-file loses.',
+            'A move towards the h-file leaves the square and the pawn runs. Stay inside it: towards the e-file, or straight up or down the f-file.',
         },
       },
       {
@@ -467,12 +470,12 @@ export const intermediateLessons6: Lesson[] = [
         shapes: ['c4:green', 'd4:green', 'e4:green'],
         task: {
           prompt: 'White to move: head for a key square.',
-          moves: ['Ke4', 'Kc3'],
+          moves: ['Ke4', 'Kc3', 'Ke3'],
           hint: 'Get the king in front of the pawn on the fourth rank.',
           success:
             'Ke4! Kd6 Kd4 and White has the opposition with the king on a key square: Kc6 Ke5 Kd7 Kd5 wins. Moving the pawn first would only give Black the opposition.',
           failure:
-            'Ke4! (or Kc3 and Kc4) — the king goes to the fourth rank in front of the pawn. Pushing the pawn first lets Black take the opposition.',
+            'Ke4! (or Kc3/Ke3, then Kc4/Kd4) — the king goes forward in front of the pawn. Pushing the pawn first, or stepping back, lets Black take the opposition.',
         },
       },
       {
@@ -482,12 +485,12 @@ export const intermediateLessons6: Lesson[] = [
         shapes: ['d3d4', 'b3b4:blue', 'f5:red'],
         task: {
           prompt: 'White to move.',
-          moves: ['Kd4', 'b4', 'Kc4'],
+          moves: ['Kd4', 'b4', 'Kc4', 'Kc3', 'Ke3'],
           hint: 'Centralise the king or start the outside pawn — both keep the win.',
           success:
             'Kd4! Kc6 Ke5 and the f-pawn falls while the b-pawn ties the black king to the queenside. The outside passer is worth more than the pawn it costs.',
           failure:
-            'Kd4 (or b4) wins: the black king cannot stop the b-pawn and defend f5 at the same time.',
+            'That still wins here, but it wastes time. Centralise the king (Kd4) or start the outside pawn (b4): the black king cannot stop the b-pawn and defend f5 at the same time.',
         },
       },
       {
@@ -591,7 +594,7 @@ export const intermediateLessons6: Lesson[] = [
         title: 'From the wrong corner',
         text:
           'The defender will run to the **wrong** corner — here a8, a light square, against a dark-squared bishop. The plan is to walk the king along the edge to the right corner (h8 or a1) without letting it escape to the centre. The knight makes a “W” shape: from e5 it goes to d7, then c5, then e6 … each jump taking a square from the king.\n\n' +
-          'First moves: bring the king to b6 or the knight to d7 so that the king on a8 has only b8 and a7.',
+          'First moves: the knight to d7 (or the king to b6), so that the king on a8 is left with a single square.',
         fen: BN_WRONG_CORNER,
         shapes: ['e5d7', 'd7c5:blue', 'c5e6:blue', 'a8:red', 'h8:green'],
         task: {
@@ -599,14 +602,14 @@ export const intermediateLessons6: Lesson[] = [
           moves: ['Nd7', 'Kb6', 'Nc4'],
           hint: 'The knight goes to d7 (or the king to b6): take squares away, do not give check.',
           success:
-            'Nd7! Kb7 (Ka7 Kc7) Kb5 and the net tightens: the king is walked along the eighth rank with the knight covering the squares in front of it.',
+            'Nd7! Ka7 (the only square) Nc5 Ka8 Na4 and the net tightens: the king is kept on the edge while knight and bishop take away the squares in front of it.',
           failure:
             'Nd7 (or Kb6) — take the squares away one by one. Checks that let the king out to the centre only make the job longer.',
         },
       },
       {
         title: 'Along the edge',
-        text: 'The king has been pushed to b8. Now the W begins in earnest: the knight checks from d7 to drive the king from b8 to a7? No — Nd7+ sends it to a8 or c8, and the bishop takes the squares on the other side. Keep the king on the edge at all times: **never let it step to the seventh rank** towards the centre.',
+        text: 'The king has been pushed to b8. Now the W begins in earnest: Nd7+ drives the king to a8, a7 or c8, and the bishop then takes the squares on the other side. Keep the king on the edge at all times: **never let it step to the seventh rank** towards the centre.',
         fen: BN_EDGE,
         shapes: ['e5d7', 'f4:blue', 'c8:red'],
         task: {
@@ -614,7 +617,7 @@ export const intermediateLessons6: Lesson[] = [
           moves: ['Nd7+', 'Kb6'],
           hint: 'A knight check that keeps the king on the back rank.',
           success:
-            'Nd7+ Kc8 (Ka8 Kb6 and the mating picture is near) Kd6! and the king cannot leave the eighth rank; the knight and bishop escort it to h8.',
+            'Nd7+! If Kc8, the check Nb6+ drives the king along the edge towards the h8 corner. If Ka8 or Ka7, it stays in the wrong corner a little longer while the bishop takes b8 — but never answer Ka8 with Kb6: that is stalemate.',
           failure:
             'Nd7+ (or Kb6 first). The king must stay on the edge; every white move takes another square.',
         },

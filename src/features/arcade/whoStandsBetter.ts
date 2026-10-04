@@ -4,7 +4,16 @@ import type { EvalPosition } from './positions';
 /** "Who Stands Better?": judge ten quiet positions on a ±5 pawn scale. */
 export const ROUND_SIZE = 10;
 export const SCALE_MAX = 5;
-export const SCALE_STEP = 0.5;
+/** The slider moves in tenths of a pawn. */
+export const SCALE_STEP = 0.1;
+/** Within this many pawns of the engine is spot on. */
+export const SPOT_ON = 0.3;
+/** Within this many pawns is close (and keeps a streak going). */
+export const CLOSE = 1;
+/** Points lost per pawn of error. */
+export const POINTS_PER_PAWN = 30;
+/** Evaluations closer to zero than this are equal: neither side stands better. */
+export const EQUAL_BAND = 0.3;
 
 /** Picks a round: at most two positions from any one game, in random order. */
 export function pickRound(
@@ -24,10 +33,14 @@ export function pickRound(
   return round;
 }
 
-/** Centipawns as pawns on the slider's scale. */
+/** Rounds to the slider's tenths, without floating-point dust (0.30000000000000004). */
+function tenths(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/** Centipawns as pawns on the slider's scale (tenths, at most ±SCALE_MAX). */
 export function toScale(cp: number): number {
-  const pawns = Math.round(cp / 100 / SCALE_STEP) * SCALE_STEP;
-  return Math.max(-SCALE_MAX, Math.min(SCALE_MAX, pawns));
+  return Math.max(-SCALE_MAX, Math.min(SCALE_MAX, tenths(cp / 100)));
 }
 
 export type Verdict = 'spot on' | 'close' | 'right side' | 'wrong side';
@@ -40,23 +53,24 @@ export interface Judgement {
 }
 
 function side(value: number): -1 | 0 | 1 {
-  if (value > 0.5) return 1;
-  if (value < -0.5) return -1;
+  if (value >= EQUAL_BAND) return 1;
+  if (value <= -EQUAL_BAND) return -1;
   return 0;
 }
 
 /**
- * Points for a guess: 100 when spot on, 25 fewer per pawn of error, and
- * nothing at all for calling the wrong side better.
+ * Points for a guess: 100 when exact, POINTS_PER_PAWN fewer per pawn of
+ * error, and nothing at all for calling the wrong side better. Spot on is
+ * within SPOT_ON of the engine, close within CLOSE.
  */
 export function judge(guess: number, cp: number): Judgement {
   const truth = toScale(cp);
-  const diff = Math.abs(guess - truth);
+  const diff = tenths(Math.abs(guess - truth));
   if (side(guess) !== 0 && side(truth) !== 0 && side(guess) !== side(truth)) {
     return { points: 0, verdict: 'wrong side', truth };
   }
-  const points = Math.max(0, Math.round(100 - diff * 25));
-  const verdict: Verdict = diff <= 0.5 ? 'spot on' : diff <= 1.5 ? 'close' : 'right side';
+  const points = Math.max(0, Math.round(100 - diff * POINTS_PER_PAWN));
+  const verdict: Verdict = diff <= SPOT_ON ? 'spot on' : diff <= CLOSE ? 'close' : 'right side';
   return { points, verdict, truth };
 }
 
@@ -66,13 +80,24 @@ export function streakBonus(streak: number): number {
 }
 
 export function describeScale(value: number): string {
-  if (Math.abs(value) <= 0.25) return 'Equal';
+  const size = tenths(Math.abs(value));
+  if (size < EQUAL_BAND) return 'Equal';
   const who = value > 0 ? 'White' : 'Black';
-  const size = Math.abs(value);
   if (size >= 3) return `${who} is winning (${size.toFixed(1)})`;
   if (size >= 1.5) return `${who} is clearly better (${size.toFixed(1)})`;
   if (size >= 0.75) return `${who} is better (${size.toFixed(1)})`;
   return `${who} is slightly better (${size.toFixed(1)})`;
+}
+
+/**
+ * The line under a finished round, against the best from before it (the
+ * store already holds this round's score by then).
+ */
+export function describeRoundBest(score: number, bestBefore: number | null): string {
+  if (bestBefore === null) return `Your first round: ${score} points to beat next time.`;
+  if (score > bestBefore) return `A new best — up from ${bestBefore}.`;
+  if (score === bestBefore) return `That equals your best, ${bestBefore}.`;
+  return `Your best is ${bestBefore}.`;
 }
 
 export interface RoundSummary {

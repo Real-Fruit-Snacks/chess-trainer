@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import { invertCategory, isTablebasePosition, normalizeTablebase, pieceCount } from './tablebase';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  describeDtm,
+  invertCategory,
+  isTablebasePosition,
+  lookupTablebase,
+  normalizeTablebase,
+  pieceCount,
+  tablebaseCacheKey,
+} from './tablebase';
 
 describe('tablebase', () => {
   it('counts pieces', () => {
@@ -29,5 +37,51 @@ describe('tablebase', () => {
       'Ke2:loss',
     ]);
     expect(invertCategory('cursed-win')).toBe('blessed-loss');
+  });
+});
+
+describe('tablebase lookups', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('caches by position and halfmove clock, not by move number', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(Response.json({ category: 'win', dtz: 2, dtm: 3, moves: [] })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const a = '4k3/8/8/8/8/8/8/3QK3 w - - 0 1';
+    await lookupTablebase(a);
+    await lookupTablebase('4k3/8/8/8/8/8/8/3QK3 w - - 0 40');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await lookupTablebase('4k3/8/8/8/8/8/8/3QK3 w - - 90 60');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(tablebaseCacheKey('4k3/8/8/8/8/8/8/3QK3 w - - 90 60')).toBe(
+      '4k3/8/8/8/8/8/8/3QK3 w - - 90',
+    );
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('reports failures in words the panel can show', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
+    );
+    await expect(lookupTablebase('8/8/8/8/8/8/8/K6k w - - 0 1')).rejects.toThrow(/online/);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new DOMException('x', 'TimeoutError'))),
+    );
+    await expect(lookupTablebase('8/8/8/8/8/8/8/K6k w - - 0 2')).rejects.toThrow(/too long/);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('', { status: 503 }))),
+    );
+    await expect(lookupTablebase('8/8/8/8/8/8/8/K6k w - - 1 2')).rejects.toThrow(/HTTP 503/);
+  });
+
+  it('turns DTM plies into moves', () => {
+    expect(describeDtm(10)).toBe('mate in 5');
+    expect(describeDtm(-9)).toBe('mate in 5');
+    expect(describeDtm(1)).toBe('mate in 1');
   });
 });

@@ -60,7 +60,8 @@ export const advancedLessons2: Lesson[] = [
           moves: ['Rxd7'],
           hint: 'The pinned knight is the key defender. Which piece removes it while keeping the pin on the other knight?',
           success:
-            'Rxd7! Rxd7 Rd1 and the pin is renewed with the second rook. Black is a whole exchange up and completely lost.',
+            'Rxd7! Rxd7 Rd1 and the pin is renewed with the second rook. Black is a rook up for two pawns ' +
+            'and completely lost.',
           failure:
             'Not bad, but Morphy’s Rxd7 is far stronger: it keeps every white piece attacking.',
         },
@@ -68,8 +69,8 @@ export const advancedLessons2: Lesson[] = [
       {
         title: 'And the finish',
         text:
-          'Three moves later Black has an extra rook and no hope. White’s queen and rook finish the game with one ' +
-          'of the most famous queen sacrifices ever played.',
+          'Three moves later Black has an extra knight for two pawns and still no hope. White’s queen and ' +
+          'rook finish the game with one of the most famous queen sacrifices ever played.',
         fen: OPERA_QB8,
         task: {
           prompt: 'White to move: force mate in two.',

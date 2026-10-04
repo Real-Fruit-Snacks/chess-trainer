@@ -2,7 +2,7 @@ import { Chess } from 'chess.js';
 import { GameTree, type TreeNode } from '@/chess/tree';
 import type { Fen, LongColor, San } from '@/chess/types';
 import type { ImportedGame } from '@/lib/gameImport';
-import { findOpening, type Opening } from '@/lib/openings';
+import { displayOpeningName, findOpening, type Opening } from '@/lib/openings';
 
 export type GameOutcome = 'win' | 'draw' | 'loss';
 
@@ -26,19 +26,46 @@ export function outcomeFor(result: string, color: LongColor): GameOutcome | null
   return null;
 }
 
-/** The main line of a PGN as positions (fens[0] = start) and SAN moves; null when it does not parse. */
-export function mainLineOfPgn(pgn: string): { fens: Fen[]; sans: San[]; startFen: Fen } | null {
+export interface MainLineOfPgn {
+  fens: Fen[];
+  sans: San[];
+  startFen: Fen;
+}
+
+/** Parsed main lines by PGN text: My games holds a few hundred games and re-reads them on every render. */
+const LINE_CACHE_SIZE = 512;
+const lineCache = new Map<string, MainLineOfPgn | null>();
+
+/**
+ * The main line of a PGN as positions (fens[0] = start) and SAN moves; null
+ * when it does not parse. Memoised per PGN string, so callers must not mutate
+ * the result.
+ */
+export function mainLineOfPgn(pgn: string): MainLineOfPgn | null {
+  const hit = lineCache.get(pgn);
+  if (hit !== undefined) {
+    lineCache.delete(pgn);
+    lineCache.set(pgn, hit);
+    return hit;
+  }
+  let line: MainLineOfPgn | null;
   try {
     const tree = GameTree.fromPgn(pgn);
     const nodes: TreeNode[] = tree.mainLine();
-    return {
+    line = {
       startFen: tree.startFen,
       fens: [tree.startFen, ...nodes.map((n) => n.fen)],
       sans: nodes.map((n) => n.san),
     };
   } catch {
-    return null;
+    line = null;
   }
+  lineCache.set(pgn, line);
+  if (lineCache.size > LINE_CACHE_SIZE) {
+    const oldest = lineCache.keys().next().value;
+    if (oldest !== undefined) lineCache.delete(oldest);
+  }
+  return line;
 }
 
 /** chess.js Move objects for a main line, for the game review. */
@@ -98,7 +125,7 @@ export function openingStats(
     const row = rows[color].get(key) ?? {
       key,
       eco: opening.eco,
-      name: family,
+      name: displayOpeningName(family),
       games: 0,
       wins: 0,
       draws: 0,

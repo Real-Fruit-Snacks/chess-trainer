@@ -1,5 +1,5 @@
 import type { GameTree, TreeNode } from '@/chess/tree';
-import type { LongColor } from '@/chess/types';
+import type { Fen, LongColor } from '@/chess/types';
 import { isDue, isNew, type SrsCard } from '@/lib/srs';
 
 /** Every root-to-leaf line of the tree (each entry excludes the root). */
@@ -32,6 +32,32 @@ export function cardKey(node: TreeNode): string {
     cursor = cursor.parent;
   }
   return parts.join(' ');
+}
+
+/** A position as a transposition key: the FEN without the move counters. */
+export function positionKey(fen: Fen): string {
+  return fen.split(' ').slice(0, 4).join(' ');
+}
+
+/**
+ * The same move from the same position elsewhere in the tree, reached by another move order.
+ * Cards stay keyed by path (stored progress keeps its meaning), and grading a move grades its
+ * twins too, so a transposition is learned — or forgotten — once.
+ */
+export function transpositionTwins(tree: GameTree, node: TreeNode): TreeNode[] {
+  const from = node.parent;
+  if (!from) return [];
+  const key = positionKey(from.fen);
+  const twins: TreeNode[] = [];
+  const walk = (parent: TreeNode) => {
+    const samePosition = positionKey(parent.fen) === key;
+    for (const child of parent.children) {
+      if (samePosition && child !== node && child.uci === node.uci) twins.push(child);
+      walk(child);
+    }
+  };
+  walk(tree.root);
+  return twins;
 }
 
 export interface RepertoireStats {

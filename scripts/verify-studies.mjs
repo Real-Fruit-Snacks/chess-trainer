@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Runs the engine verification of every endgame study line (slow: ~2–5 minutes).
+ * Runs the engine verification of every endgame study line and the duals check (slow:
+ * about 5–10 minutes).
  * Wraps `vitest` so the environment flag works the same on every platform.
  *
  * Usage:  node scripts/verify-studies.mjs [--depth 18]

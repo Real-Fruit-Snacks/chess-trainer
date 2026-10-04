@@ -18,7 +18,7 @@
  */
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -98,30 +98,9 @@ async function download(file) {
   process.stdout.write(`${(data.length / 1024).toFixed(0)} KiB ✓\n`);
 }
 
-async function main() {
-  await mkdir(OUT_DIR, { recursive: true });
-
-  const missing = [];
-  for (const file of ENGINE.files) {
-    if (force || !(await isValid(file))) missing.push(file);
-  }
-
-  if (missing.length === 0) {
-    console.log(`Engine v${ENGINE.version} already installed in public/engine/`);
-    return;
-  }
-
-  console.log(
-    `Installing Stockfish ${ENGINE.version} (lite: single- and multi-threaded) into public/engine/`,
-  );
-  for (const file of missing) {
-    await rm(join(OUT_DIR, file.name), { force: true });
-    await download(file);
-  }
-
-  // Record what was installed so the app and the notices file can reference it.
-  await writeFile(
-    join(OUT_DIR, 'version.json'),
+/** What `version.json` says: the pinned engine and where its source lives. */
+export function versionRecord() {
+  return (
     JSON.stringify(
       {
         name: 'Stockfish.js',
@@ -133,15 +112,63 @@ async function main() {
       },
       null,
       2,
-    ) + '\n',
+    ) + '\n'
   );
-  console.log('Done.');
 }
 
-main().catch((err) => {
-  console.error(`\nEngine setup failed: ${err.message}`);
-  console.error(
-    'If you are offline, download the files listed in public/engine/README.md manually.',
-  );
-  process.exit(1);
-});
+/**
+ * Writes `version.json` into `dir` unless it already says exactly that, so the
+ * record is right whichever way the binaries arrived (downloaded here, or put
+ * in place by hand when offline). Returns whether it wrote the file.
+ */
+export async function writeVersionFile(dir = OUT_DIR) {
+  const path = join(dir, 'version.json');
+  const wanted = versionRecord();
+  let current = null;
+  try {
+    current = await readFile(path, 'utf8');
+  } catch {
+    // Missing: written below.
+  }
+  if (current === wanted) return false;
+  await writeFile(path, wanted);
+  return true;
+}
+
+async function main() {
+  await mkdir(OUT_DIR, { recursive: true });
+
+  const missing = [];
+  for (const file of ENGINE.files) {
+    if (force || !(await isValid(file))) missing.push(file);
+  }
+
+  if (missing.length === 0) {
+    console.log(`Engine v${ENGINE.version} already installed in public/engine/`);
+  } else {
+    console.log(
+      `Installing Stockfish ${ENGINE.version} (lite: single- and multi-threaded) into public/engine/`,
+    );
+    for (const file of missing) {
+      await rm(join(OUT_DIR, file.name), { force: true });
+      await download(file);
+    }
+  }
+
+  // A record for people (and the notices): nothing in the app reads it, so it is not precached.
+  if (await writeVersionFile()) console.log('Wrote public/engine/version.json');
+  if (missing.length) console.log('Done.');
+}
+
+const invokedDirectly =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error(`\nEngine setup failed: ${err.message}`);
+    console.error(
+      'If you are offline, download the files listed in public/engine/README.md manually.',
+    );
+    process.exit(1);
+  });
+}

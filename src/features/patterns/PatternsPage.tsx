@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { Board } from '@/components/board/Board';
-import { Badge, Button, Card, Stars, LinkButton } from '@/components/ui';
+import { Badge, Button, Card, LinkButton } from '@/components/ui';
+import { Difficulty } from '@/features/drills/Difficulty';
 import { loadPuzzleIndex, type PuzzleIndex } from '@/features/puzzles/puzzleService';
 import { shuffle } from '@/lib/random';
 import { siteConfig } from '@/site.config';
@@ -147,9 +148,7 @@ export default function PatternsPage() {
                       {solved ? (
                         <Badge tone="success">Solved</Badge>
                       ) : (
-                        <Badge>
-                          <Stars count={pattern.difficulty} />
-                        </Badge>
+                        <Difficulty level={pattern.difficulty} />
                       )}
                     </div>
                     <p className="small muted" style={{ margin: '0 0 6px' }}>

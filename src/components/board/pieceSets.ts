@@ -15,7 +15,11 @@ export const PIECE_SETS: Readonly<Record<PieceSet, { label: string; hint: string
 /** Every set, in the order the pickers show them. */
 export const PIECE_SET_IDS = Object.keys(PIECE_SETS) as PieceSet[];
 
-/** Applies the piece set to <html>, where the piece CSS looks for it. */
+/**
+ * Applies the piece set to <html>, where the piece CSS looks for it. A value
+ * that is not a known set (an old or edited settings blob) falls back to the
+ * classic set, which the piece CSS also shows while the attribute is missing.
+ */
 export function applyPieceSet(set: PieceSet, root: HTMLElement = document.documentElement): void {
-  root.setAttribute('data-pieces', set);
+  root.setAttribute('data-pieces', set in PIECE_SETS ? set : 'classic');
 }

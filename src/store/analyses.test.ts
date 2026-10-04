@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { START_FEN } from '@/chess/helpers';
 import { parsePgnGames } from '@/lib/gameImport';
-import { DEFAULT_COLLECTION, groupAnalyses, studyChapters, useAnalyses } from './analyses';
+import {
+  DEFAULT_COLLECTION,
+  groupAnalyses,
+  MAX_ANALYSES,
+  repairAnalyses,
+  studyChapters,
+  useAnalyses,
+} from './analyses';
 
 const PGN = '1. e4 e5 2. Nf3 Nc6 3. Bb5 (3. Bc4 Bc5) a6 *';
 
@@ -45,15 +52,40 @@ describe('analysis library', () => {
     expect(chapters[0]?.moves).toBe(3);
   });
 
-  it('imports entries from a backup and ignores junk', () => {
+  it('replaces the library from a validated backup part, within the cap', () => {
     const saved = useAnalyses
       .getState()
       .save({ name: 'A', pgn: PGN, startFen: START_FEN, moves: 4 });
-    useAnalyses.getState().importState({
-      items: { junk: { id: 'junk' }, other: { ...saved, id: 'other', name: 'B' } },
-    });
-    expect(Object.keys(useAnalyses.getState().items).sort()).toEqual([saved.id, 'other'].sort());
-    useAnalyses.getState().importState('nope');
-    expect(Object.keys(useAnalyses.getState().items)).toHaveLength(2);
+    const many = Object.fromEntries(
+      Array.from({ length: MAX_ANALYSES + 3 }, (_, i) => [
+        `an-${i}`,
+        { ...saved, id: `an-${i}`, name: `B${i}`, updatedAt: i },
+      ]),
+    );
+    useAnalyses.getState().replaceState({ items: many });
+    const items = useAnalyses.getState().items;
+    // Replaced, not merged: the entry saved before the import is gone …
+    expect(items[saved.id]).toBeUndefined();
+    // … and the cap holds, the oldest entries going first.
+    expect(Object.keys(items)).toHaveLength(MAX_ANALYSES);
+    expect(items['an-0']).toBeUndefined();
+    expect(items[`an-${MAX_ANALYSES + 2}`]).toBeDefined();
+  });
+
+  it('repairs a stored blob: damaged entries are dropped, unknown keys kept', () => {
+    const good = {
+      id: 'ok',
+      name: 'Ok',
+      collection: 'C',
+      pgn: PGN,
+      startFen: START_FEN,
+      moves: 4,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const repaired = repairAnalyses({ items: { ok: good, bad: { id: 'bad' } }, future: 1 });
+    expect(Object.keys(repaired.items)).toEqual(['ok']);
+    expect(repaired.future).toBe(1);
+    expect(repairAnalyses('nope').items).toEqual({});
   });
 });

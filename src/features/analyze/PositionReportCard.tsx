@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import type { DrawShape } from '@/components/board/Board';
 import { Button, Card } from '@/components/ui';
 import type { Fen } from '@/chess/types';
@@ -38,6 +38,12 @@ export function PositionReportCard({
     );
   };
 
+  // Highlights belong to the position they were drawn for: a new FEN (or closing
+  // the report) clears them, so circles never outlive the findings.
+  useEffect(() => {
+    onHighlight([]);
+  }, [fen, open, onHighlight]);
+
   const groups = report
     ? (['material', 'pawns', 'king', 'files', 'pieces'] as const)
         .map((topic) => ({ topic, items: report.items.filter((i) => i.topic === topic) }))
@@ -58,7 +64,13 @@ export function PositionReportCard({
           linked to its lesson.
         </p>
       ) : report ? (
-        <div className="report" onMouseLeave={() => show(null)}>
+        <div
+          className="report"
+          onMouseLeave={() => show(null)}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) show(null);
+          }}
+        >
           <p className="small muted" style={{ margin: '6px 0 8px' }}>
             {report.phase === 'opening'
               ? 'Still the opening.'
@@ -70,7 +82,7 @@ export function PositionReportCard({
           {groups.map((group) => (
             <section key={group.topic} className="report__group">
               <h3 className="report__heading">{TOPIC_LABEL[group.topic]}</h3>
-              <ul className="report__list">
+              <ul role="list" className="report__list">
                 {group.items.map((item, i) => (
                   <ReportLine key={`${group.topic}-${i}`} item={item} onHover={show} />
                 ))}
@@ -80,7 +92,7 @@ export function PositionReportCard({
           {(['white', 'black'] as const).map((side) => (
             <section key={side} className="report__group">
               <h3 className="report__heading">Plans for {side}</h3>
-              <ul className="report__list" data-testid={`report-plans-${side}`}>
+              <ul role="list" className="report__list" data-testid={`report-plans-${side}`}>
                 {report.plans[side].map((item, i) => (
                   <ReportLine key={`${side}-${i}`} item={item} onHover={show} />
                 ))}
@@ -105,7 +117,9 @@ function ReportLine({
     <li
       className={`report__item${item.weakness ? ' report__item--weak' : ''}`}
       onMouseEnter={() => onHover(item)}
+      onMouseLeave={() => onHover(null)}
       onFocus={() => onHover(item)}
+      onBlur={() => onHover(null)}
       tabIndex={item.squares.length ? 0 : -1}
     >
       <span>

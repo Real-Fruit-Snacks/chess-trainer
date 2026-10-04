@@ -210,11 +210,10 @@ export const CLASSIC_GAMES_3: readonly ClassicGame[] = [
     guessFromPly: 20,
     difficulty: 3,
     intro:
-      'Capablanca had not lost a serious game in eight years. Réti beat him with the hypermodern opening that bears his name: bishops on the long diagonals, pawns held back, and a queen sortie punished with a rook invasion.',
+      'Capablanca had not lost a serious game in eight years. Réti beat him with the hypermodern opening that bears his name — b4 and Bb2, bishops on the long diagonals, the d- and e-pawns held back so the centre is controlled from the flanks — and a queen sortie punished with a rook invasion.',
     moves:
       'Nf3 Nf6 c4 g6 b4 Bg7 Bb2 O-O g3 b6 Bg2 Bb7 O-O d6 d3 Nbd7 Nbd2 e5 Qc2 Re8 Rfd1 a5 a3 h6 Nf1 c5 b5 Nf8 e3 Qc7 d4 Be4 Qc3 exd4 exd4 N6d7 Qd2 cxd4 Bxd4 Qxc4 Bxg7 Kxg7 Qb2+ Kg8 Rxd6 Qc5 Rad1 Ra7 Ne3 Qh5 Nd4 Bxg2 Kxg2 Qe5 Nc4 Qc5 Nc6 Rc7 Ne3 Ne5 R1d5',
     notes: {
-      5: 'b4 and Bb2: the Réti System. White controls the centre from the flanks and keeps the d- and e-pawns back.',
       21: 'Rfd1 — the rook goes to the d-file before the d-pawn moves. Réti prepares d4 slowly.',
       31: 'd4! at the right moment: Black’s pieces are tangled on the queenside and the e5-pawn becomes a target.',
       33: 'Qc3 hits e5 and pins nothing, but every white piece now looks at the centre.',
@@ -306,8 +305,7 @@ export const CLASSIC_GAMES_3: readonly ClassicGame[] = [
     moves:
       'd4 Nf6 Nf3 e6 Bg5 c5 e3 cxd4 exd4 Be7 Nbd2 d6 c3 Nbd7 Bd3 b6 Nc4 Bb7 Qe2 Qc7 O-O O-O Rfe1 Rfe8 Rad1 Nf8 Bc1 Nd5 Ng5 b5 Na3 b4 cxb4 Nxb4 Qh5 Bxg5 Bxg5 Nxd3 Rxd3 Qa5 b4 Qf5 Rg3 h6 Nc4 Qd5 Ne3 Qb5 Bf6 Qxh5 Rxg7+ Kh8 Rxf7+ Kg8 Rg7+ Kh8 Rxb7+ Kg8 Rg7+ Kh8 Rg5+ Kh7 Rxh5 Kg6 Rh3 Kxf6 Rxh6+ Kg5 Rh3 Reb8 Rg3+ Kf6 Rf3+ Kg6 a3 a5 bxa5 Rxa5 Nc4 Rd5 Rf4 Nd7 Rxe6+ Kg5 g3',
     notes: {
-      43: 'Rg3: the rook joins the attack on the g-file while the queen sits on h5.',
-      49: 'Bf6!! The queen is left hanging on h5. After ...Qxh5 the windmill starts and the queen is recovered with interest.',
+      49: 'Bf6!! With the rook already on g3 and the queen on h5, the queen is left hanging. After ...Qxh5 the windmill starts and the queen is recovered with interest.',
       51: 'Rxg7+ Kh8 — the king has to shuttle between h8 and g8 while the rook checks and captures.',
       53: 'Rxf7+ with discovered check from the bishop: the rook takes with impunity because every capture is check.',
       57: 'Rxb7+ — the third pawn or piece the rook has eaten. The bishop on f6 does all the work.',
@@ -444,12 +442,10 @@ export const CLASSIC_GAMES_3: readonly ClassicGame[] = [
     guessFromPly: 40,
     difficulty: 3,
     intro:
-      'A textbook on closed positions. Karpov shuts the queenside with a bishop on a7, doubles rooks on the a-file so that nothing can move, then opens the other side of the board at his leisure. Unzicker never gets a single active move.',
+      'A textbook on closed positions. Karpov closes the centre with d5, strikes first on the queenside with a4, shuts it with a bishop on a7 and doubles rooks on the a-file so that nothing can move, then opens the other side of the board at his leisure. Unzicker never gets a single active move.',
     moves:
       'e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O Be7 Re1 b5 Bb3 d6 c3 O-O h3 Na5 Bc2 c5 d4 Qc7 Nbd2 Nc6 d5 Nd8 a4 Rb8 axb5 axb5 b4 Nb7 Nf1 Bd7 Be3 Ra8 Qd2 Rfc8 Bd3 g6 Ng3 Bf8 Ra2 c4 Bb1 Qd8 Ba7 Ne8 Bc2 Nc7 Rea1 Qe7 Bb1 Be8 Ne2 Nd8 Nh2 Bg7 f4 f6 f5 g5 Bc2 Bf7 Ng3 Nb7 Bd1 h6 Bh5 Qe8 Qd1 Nd8 Ra3 Kf8 R1a2 Kg8 Ng4 Kf8 Ne3 Kg8 Bxf7+ Nxf7 Qh5 Nd8 Qg6 Kf8 Nh5',
     notes: {
-      25: 'd5 closes the centre. With the centre fixed, the game will be decided on the wings.',
-      27: 'a4 — the first blow on the queenside, opening the a-file before Black can.',
       43: 'Ra2 prepares to double on the open file. Black can only wait.',
       47: 'Ba7!! The bishop takes away b8 from the rooks and the whole a-file belongs to White. It cannot be attacked.',
       51: 'Rea1: doubled rooks on the file nobody else can use. Black’s pieces are tied to defending the a8-square.',

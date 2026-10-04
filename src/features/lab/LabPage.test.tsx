@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ICON_NAMES } from '@/components/ui';
 import { useToasts } from '@/components/ui/toastStore';
 import { useStorageHealth } from '@/lib/persistStorage';
@@ -56,6 +56,10 @@ describe('LabPage', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('shows every icon, every sound and every haptic cue', () => {
     renderLab();
     for (const name of ICON_NAMES) {
@@ -80,14 +84,14 @@ describe('LabPage', () => {
   it('switches the sound theme, previews it, and shows that theme’s haptic patterns', () => {
     renderLab();
     const sounds = screen.getByTestId('lab-sounds');
-    const themes = within(sounds).getByRole('group', { name: 'Sound theme' });
+    const themes = within(sounds).getByRole('radiogroup', { name: 'Sound theme' });
     expect(
       within(themes)
-        .getAllByRole('button')
+        .getAllByRole('radio')
         .map((b) => b.textContent),
     ).toEqual(['Standard', 'Soft', 'Retro']);
     expect(screen.getByTestId('haptic-capture')).toHaveTextContent('10·20·45ms');
-    fireEvent.click(within(themes).getByRole('button', { name: 'Retro' }));
+    fireEvent.click(within(themes).getByRole('radio', { name: 'Retro' }));
     expect(useSettings.getState().soundTheme).toBe('retro');
     expect(played).toHaveBeenCalledWith('move');
     expect(screen.getByTestId('haptic-capture')).toHaveTextContent('8·12·8·12·8·12·30ms');
@@ -132,12 +136,15 @@ describe('LabPage', () => {
     ) {
       if (key.startsWith('chess-trainer:lab-filler-')) {
         fillerWrites += 1;
-        if (fillerWrites > 2) throw new DOMException('full', 'QuotaExceededError');
+        if (fillerWrites > 4) throw new DOMException('full', 'QuotaExceededError');
         original.call(this, key, value);
         return;
       }
-      // Once the filler is in place, the app's own writes no longer fit.
-      if (fillerWrites > 2) throw new DOMException('full', 'QuotaExceededError');
+      // Once the filler is in place, the app's own writes no longer fit — except
+      // the small measurement the fill makes room for.
+      if (fillerWrites > 4 && key !== 'chess-trainer:storage-limit') {
+        throw new DOMException('full', 'QuotaExceededError');
+      }
       original.call(this, key, value);
     });
     renderLab();
@@ -151,11 +158,40 @@ describe('LabPage', () => {
       true,
     );
 
+    // The storage-full message names the filler as the cause.
+    expect(screen.getByText(/filler is taking the room/)).toBeInTheDocument();
+    // The measured limit is remembered for the storage meter.
+    expect(localStorage.getItem('chess-trainer:storage-limit')).toMatch(/^\d+$/);
+
     spy.mockRestore();
     fireEvent.click(screen.getByTestId('storage-clear'));
     expect(useStorageHealth.getState().full).toBe(false);
     expect(screen.getByTestId('storage-ok')).toBeInTheDocument();
     expect(localStorage.getItem('chess-trainer:lab-filler-0')).toBeNull();
+  });
+
+  it('removes the filler and the probe when the lab closes, so saves work again elsewhere', () => {
+    const { unmount } = renderLab();
+    localStorage.setItem('chess-trainer:lab-filler-0', 'x');
+    localStorage.setItem('chess-trainer:lab-filler-1', 'x');
+    localStorage.setItem('chess-trainer:lab-probe', 'p');
+    unmount();
+    expect(localStorage.getItem('chess-trainer:lab-filler-0')).toBeNull();
+    expect(localStorage.getItem('chess-trainer:lab-filler-1')).toBeNull();
+    expect(localStorage.getItem('chess-trainer:lab-probe')).toBeNull();
+  });
+
+  it('colours a missing capability red and an unset preference grey, and can refresh the checks', () => {
+    renderLab();
+    // Vibration is a device feature that desktops simply lack: not a failure.
+    const vibrate = screen.getByTestId('check-vibrate');
+    expect(within(vibrate).getByText('No')).not.toHaveClass('badge--danger');
+    expect(within(screen.getByTestId('check-coarse')).getByText('No')).not.toHaveClass(
+      'badge--danger',
+    );
+    expect(screen.getByTestId('checks-refresh')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('checks-refresh'));
+    expect(screen.getByTestId('check-vibrate')).toBeInTheDocument();
   });
 
   it('can crash the page on purpose to show the error screen', () => {

@@ -1,16 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { Badge, Button, Card, Kbd, LinkButton } from '@/components/ui';
 import { formatDate } from '@/lib/dates';
-import { dueReviews, nextReview } from '@/lib/puzzleReview';
+import { NONE } from '@/lib/format';
+import { dueReviews, nextReview, PUZZLE_REVIEW_STEPS_DAYS } from '@/lib/puzzleReview';
+import { pageShortcutKey } from '@/lib/shortcutKey';
 import { useNow } from '@/lib/useNow';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
 import { renderInline } from './inline';
 import type { LessonStep } from './model';
-import { resolveRecallCard } from './recall';
+import { gradeRecall, resolveRecallCard } from './recall';
 import { useLessonStep } from './useLessonStep';
 import './learn.css';
 
@@ -58,7 +60,7 @@ export default function RecallPage() {
             {total === 0
               ? 'Finish a lesson and its task positions will be scheduled here: after 3 days, then 7, 14 and 30.'
               : `${total} position${total === 1 ? '' : 's'} scheduled · next due ${
-                  upcoming ? formatDate(upcoming.due, siteConfig.locale) : '—'
+                  upcoming ? formatDate(upcoming.due, siteConfig.locale) : NONE
                 }.`}
             {sessionDone > 0 ? ` You recalled ${sessionDone} this session.` : ''}
           </p>
@@ -82,7 +84,12 @@ export default function RecallPage() {
             {due.length} due · from <strong>{resolved.title}</strong>
           </p>
         </div>
-        <Badge tone="accent">Step {card.step + 1} of 5</Badge>
+        <Badge tone="accent">
+          <span data-testid="recall-interval">
+            Interval {Math.min(card.step + 1, PUZZLE_REVIEW_STEPS_DAYS.length)} of{' '}
+            {PUZZLE_REVIEW_STEPS_DAYS.length}
+          </span>
+        </Badge>
       </div>
       <RecallCard
         key={card.id}
@@ -117,31 +124,25 @@ function RecallCard({
 }) {
   const record = useProgress((s) => s.recordLessonRecall);
   const autoQueen = useSettings((s) => s.autoQueen);
-  const [graded, setGraded] = useState<'solved' | 'failed' | null>(null);
-  const missedRef = useRef(false);
-  const hintRef = useRef(false);
-  const state = useLessonStep(step, () => {
+  const [graded, setGraded] = useState<{ outcome: 'solved' | 'failed'; hinted: boolean } | null>(
+    null,
+  );
+  // Graded the moment the task is finished — found, or the answer shown — from
+  // what the step reports, not from state that lands a render later.
+  const state = useLessonStep(step, (result) => {
     if (graded) return;
-    const outcome = missedRef.current ? 'failed' : 'solved';
-    record(cardId, outcome, hintRef.current);
-    setGraded(outcome);
+    const grade = gradeRecall(result);
+    record(cardId, grade.outcome, grade.hinted);
+    setGraded(grade);
   });
-
-  // A wrong move (or revealing the answer) counts as a miss for this card.
-  useEffect(() => {
-    if (state.phase === 'wrong') missedRef.current = true;
-    if (state.phase === 'revealed') missedRef.current = true;
-  }, [state.phase]);
-  useEffect(() => {
-    if (state.hintLevel > 0) hintRef.current = true;
-  }, [state.hintLevel]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-      if (e.key === 'h' && !graded) state.hint();
-      if ((e.key === 'n' || e.key === 'ArrowRight') && graded) onNext();
+      const key = pageShortcutKey(e);
+      if (key === 'h' && !graded) state.hint();
+      else if ((key === 'n' || key === 'ArrowRight') && graded) onNext();
+      else return;
+      e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -161,7 +162,9 @@ function RecallCard({
           dests={state.dests}
           lastMove={state.lastMove}
           check={state.check}
-          shapes={graded ? state.shapes : []}
+          // The lesson's own arrows would give the answer away: before the grade
+          // only the hint marks show.
+          shapes={graded ? state.shapes : state.hintShapes}
           highlights={state.highlights}
           drawable={false}
           onMove={(from, to) => state.playMove(from, to, autoQueen ? 'q' : undefined)}
@@ -196,8 +199,8 @@ function RecallCard({
           </p>
           {graded ? (
             <p className="small muted" data-testid="recall-result">
-              {graded === 'solved'
-                ? hintRef.current
+              {graded.outcome === 'solved'
+                ? graded.hinted
                   ? 'Recalled with a hint — this position keeps its current interval.'
                   : 'Recalled! It comes back later, further apart each time.'
                 : 'Missed — it comes back tomorrow.'}
@@ -209,7 +212,7 @@ function RecallCard({
                 <Button onClick={state.hint} disabled={state.phase !== 'awaiting'}>
                   Hint <Kbd>H</Kbd>
                 </Button>
-                <Button variant="ghost" onClick={state.reveal}>
+                <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
                   Show answer
                 </Button>
               </>

@@ -178,7 +178,7 @@ export function isProvisional(rating: Pick<Rating, 'rd'>): boolean {
 }
 
 /** "1,420 ± 60" — the deviation rounded to whole points. */
-export function formatRatingWithRd(rating: Rating, locale = 'en-US'): string {
+export function formatRatingWithRd(rating: Rating, locale = 'en-GB'): string {
   const fmt = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
   return `${fmt.format(Math.round(rating.rating))} ± ${fmt.format(Math.round(rating.rd))}`;
 }

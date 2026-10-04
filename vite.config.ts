@@ -1,14 +1,52 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
-import { loadEnv } from 'vite';
+import { loadEnv, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
+import {
+  fillSitePlaceholders,
+  sitePlaceholders,
+  withContentSecurityPolicy,
+} from './scripts/lib/html.ts';
 import { siteConfig } from './src/site.config.ts';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
   version: string;
 };
+
+/** What git prints for `args`, or '' outside a checkout. */
+function git(...args: string[]): string {
+  try {
+    return execFileSync('git', args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * The build date the app shows (Settings, the test lab, crash reports). It is
+ * the date of the commit being built, not the clock's, so rebuilding a commit
+ * gives byte-identical files: the same hashes, and no "new version" toast for
+ * anyone after a redeploy that changed nothing. `SOURCE_DATE_EPOCH` (the
+ * reproducible-builds convention) wins; outside a git checkout the build falls
+ * back to the current time.
+ */
+function buildDate(): string {
+  const epoch = process.env.SOURCE_DATE_EPOCH;
+  if (epoch && /^\d+$/.test(epoch)) return new Date(Number(epoch) * 1000).toISOString();
+  const committed = new Date(git('log', '-1', '--format=%cI'));
+  return (Number.isNaN(committed.getTime()) ? new Date() : committed).toISOString();
+}
+
+/** The commit being built: crash reports name it, so a stack can be read with CI's source maps. */
+function buildCommit(): string {
+  return git('rev-parse', '--short=12', 'HEAD') || (process.env.GITHUB_SHA ?? '').slice(0, 12);
+}
 
 /**
  * `VITE_BASE_PATH` is the URL prefix the site is served from.
@@ -23,6 +61,33 @@ function resolveBase(mode: string): string {
   return withLeading.endsWith('/') ? withLeading : `${withLeading}/`;
 }
 
+/**
+ * Fills the `%SITE_…%` placeholders in index.html from site.config.ts, so the
+ * title, description, social-card tags and the pre-paint theme script all say
+ * the same thing as the running app.
+ */
+function siteMetadataHtml(): Plugin {
+  const values = sitePlaceholders(siteConfig);
+  return {
+    name: 'chess-trainer:site-metadata',
+    transformIndexHtml: (html) => fillSitePlaceholders(html, values),
+  };
+}
+
+/**
+ * Adds the Content-Security-Policy meta tag to the built page (and so to
+ * 404.html), with the hash of the pre-paint theme script computed from the
+ * final HTML (scripts/lib/html.ts). Build only: the dev server injects inline
+ * scripts of its own (React refresh) that no fixed policy could list.
+ */
+function contentSecurityPolicyHtml(): Plugin {
+  return {
+    name: 'chess-trainer:content-security-policy',
+    apply: 'build',
+    transformIndexHtml: { order: 'post', handler: (html) => withContentSecurityPolicy(html) },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const base = resolveBase(mode);
 
@@ -30,10 +95,13 @@ export default defineConfig(({ mode }) => {
     base,
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
-      __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+      __BUILD_DATE__: JSON.stringify(buildDate()),
+      __BUILD_COMMIT__: JSON.stringify(buildCommit()),
     },
     plugins: [
       react(),
+      siteMetadataHtml(),
+      contentSecurityPolicyHtml(),
       VitePWA({
         // A hand-written Workbox service worker (src/sw.ts): precaching plus the
         // opt-in COOP/COEP headers for the multi-threaded engine.
@@ -42,7 +110,8 @@ export default defineConfig(({ mode }) => {
         filename: 'sw.ts',
         registerType: 'prompt',
         injectRegister: false, // we register from src/app/UpdatePrompt.tsx to control the UX
-        includeAssets: ['favicon.svg', 'icons/*.png', 'robots.txt'],
+        // No `includeAssets`: the glob below already precaches every icon and the
+        // favicon, and listing them again duplicated the manifest entries.
         manifest: {
           id: base,
           name: siteConfig.name,
@@ -53,9 +122,14 @@ export default defineConfig(({ mode }) => {
           display: 'standalone',
           display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
           orientation: 'any',
-          background_color: siteConfig.backgroundColor,
-          theme_color: siteConfig.themeColor,
-          lang: 'en',
+          // A link or shortcut opened while the app is running focuses the
+          // existing window and navigates it, instead of opening a second one.
+          launch_handler: { client_mode: 'navigate-existing' },
+          // The splash screen and the title bar take the page background, so the
+          // app's own header carries on from them without a colour change.
+          background_color: siteConfig.lightBackgroundColor,
+          theme_color: siteConfig.lightBackgroundColor,
+          lang: 'en-GB',
           dir: 'ltr',
           categories: ['education', 'games'],
           // Backups exported from the app can be opened with it from a file manager.
@@ -73,6 +147,44 @@ export default defineConfig(({ mode }) => {
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
+            },
+            {
+              src: 'icons/icon-monochrome-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'monochrome',
+            },
+          ],
+          // Shown in the install dialog (scripts/generate-screenshots.mjs renders them).
+          // Not precached: they are only ever needed online, at install time.
+          screenshots: [
+            {
+              src: 'screenshots/wide-puzzles.webp',
+              sizes: '1280x800',
+              type: 'image/webp',
+              form_factor: 'wide',
+              label: 'A puzzle at your level, with a hint and the solution a key away',
+            },
+            {
+              src: 'screenshots/wide-analyze.webp',
+              sizes: '1280x800',
+              type: 'image/webp',
+              form_factor: 'wide',
+              label: 'A game reviewed by Stockfish, with its evaluation graph',
+            },
+            {
+              src: 'screenshots/narrow-puzzles.webp',
+              sizes: '780x1688',
+              type: 'image/webp',
+              form_factor: 'narrow',
+              label: 'Puzzles on a phone',
+            },
+            {
+              src: 'screenshots/narrow-lesson.webp',
+              sizes: '780x1688',
+              type: 'image/webp',
+              form_factor: 'narrow',
+              label: 'An interactive lesson on a phone',
             },
           ],
           shortcuts: [
@@ -102,9 +214,12 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,wasm,json,webmanifest,woff2}'],
           // The threaded engine build is optional and cached on first use instead, and so
           // are the puzzle chunks beyond the first one of each rating band (b*-00.json).
+          // The engine's version.json is a record for people, not something the app reads.
           globIgnores: [
+            '**/screenshots/**',
             '**/engine/stockfish-19-lite.js',
             '**/engine/stockfish-19-lite.wasm',
+            '**/engine/version.json',
             '**/puzzles/b*-@(0[1-9]|[1-9][0-9]).json',
           ],
           // The Stockfish WASM binary is ~1.8 MB; Workbox's default cap is 2 MB.
@@ -125,17 +240,19 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: 'es2022',
-      sourcemap: false,
+      // Maps without the sourceMappingURL comment: scripts/postbuild.mjs moves them out
+      // of dist/ (never deployed, never precached) and CI keeps them as an artifact.
+      sourcemap: 'hidden',
       chunkSizeWarningLimit: 700,
       rolldownOptions: {
         output: {
           // The framework rarely changes between releases: keeping it in its own
           // chunk means an app update only re-downloads the app, not React.
-          advancedChunks: {
+          codeSplitting: {
             groups: [
               {
                 name: 'react',
-                test: /node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/,
+                test: /node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/,
               },
             ],
           },
@@ -153,7 +270,8 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       globals: false,
       setupFiles: ['./src/test/setup.ts'],
-      include: ['src/**/*.test.{ts,tsx}'],
+      // The build scripts' tests live next to them and run under Node (`@vitest-environment node`).
+      include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
       // Stylesheets are stubbed out of component tests; only their text is
       // served (`?raw`), for the stylesheet-scope test in src/styles.
       css: { include: [/\.css\?raw$/] },
@@ -161,7 +279,22 @@ export default defineConfig(({ mode }) => {
         provider: 'v8',
         reporter: ['text', 'html', 'lcov'],
         include: ['src/**/*.{ts,tsx}'],
-        exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/main.tsx', 'src/**/*.d.ts'],
+        exclude: [
+          'src/**/*.test.{ts,tsx}',
+          'src/test/**',
+          'src/main.tsx',
+          'src/**/*.d.ts',
+          // Content and fixtures are data, checked by the content tests: counting them as
+          // covered code would only pad the figures.
+          'src/features/learn/lessons/{beginner,intermediate,advanced}*.ts',
+          'src/features/learn/lessonMeta.ts',
+          'src/**/fixtures/**',
+          // Runs only in a browser's service-worker scope; its helpers in src/sw/ are tested.
+          'src/sw.ts',
+        ],
+        // The floor `npm run test:coverage` (CI) enforces: a little under the 0.12 figures
+        // (84.8 % statements, 75.7 % branches, 81.2 % functions, 87.4 % lines).
+        thresholds: { statements: 83, branches: 74, functions: 80, lines: 86 },
       },
     },
   };

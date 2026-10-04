@@ -1,7 +1,12 @@
-import { GameTree, type TreeNode } from '@/chess/tree';
+import { type GameTree, parsePgnCached, type TreeNode } from '@/chess/tree';
 import type { Fen, LongColor, San } from '@/chess/types';
 import type { ImportedGame } from '@/lib/gameImport';
 import { learnerColor, mainLineOfPgn } from './gameStats';
+
+/** The position without move counters: two transpositions reach the same EPD. */
+export function epd(fen: Fen): string {
+  return fen.split(' ').slice(0, 4).join(' ');
+}
 
 export interface RepertoireLike {
   id: string;
@@ -50,10 +55,29 @@ interface Walk {
   deviation: Deviation | null;
 }
 
-/** Follows one game through one repertoire tree until they part ways. */
+/** Every position of a tree by EPD (the main-line node wins when two reach the same one). */
+function positionIndex(tree: GameTree): Map<string, TreeNode> {
+  const index = new Map<string, TreeNode>();
+  const visit = (node: TreeNode) => {
+    for (const child of node.children) {
+      const key = epd(child.fen);
+      if (!index.has(key)) index.set(key, child);
+      visit(child);
+    }
+  };
+  visit(tree.root);
+  return index;
+}
+
+/**
+ * Follows one game through one repertoire tree until they part ways. Moves are
+ * matched by the position they reach, so a transposition into a book line
+ * counts as staying in the book.
+ */
 function walk(
   line: { fens: Fen[]; sans: San[] },
   tree: GameTree,
+  index: Map<string, TreeNode>,
   repertoire: RepertoireLike,
   gameId: string,
 ): Walk {
@@ -61,12 +85,24 @@ function walk(
   for (let i = 0; i < line.sans.length; i++) {
     const san = line.sans[i];
     const fen = line.fens[i];
-    if (san === undefined || fen === undefined) break;
+    const reached = line.fens[i + 1];
+    if (san === undefined || fen === undefined || reached === undefined) break;
     if (cursor.children.length === 0) return { status: 'in-book', depth: i, deviation: null };
     const learnerMove = (i % 2 === 0 ? 'white' : 'black') === repertoire.color;
-    const match = cursor.children.find((c) => c.san === san);
+    const target = epd(reached);
+    // The same position anywhere in the book (a transposition) keeps the game in it.
+    const match = cursor.children.find((c) => epd(c.fen) === target) ?? index.get(target);
     if (match) {
       cursor = match;
+      continue;
+    }
+    // A different move order that is back in the book within a move is a transposition too.
+    const rejoin = [i + 1, i + 2]
+      .map((j) => ({ j, node: line.fens[j + 1] ? index.get(epd(line.fens[j + 1] ?? '')) : null }))
+      .find((r) => r.node);
+    if (rejoin?.node) {
+      cursor = rejoin.node;
+      i = rejoin.j;
       continue;
     }
     if (!learnerMove) return { status: 'opponent-left', depth: i, deviation: null };
@@ -99,10 +135,11 @@ export function repertoireDeviations(
   player: string,
   repertoires: RepertoireLike[],
 ): DeviationReport {
-  const trees = new Map<string, GameTree>();
+  const trees = new Map<string, { tree: GameTree; index: Map<string, TreeNode> }>();
   for (const rep of repertoires) {
     try {
-      trees.set(rep.id, GameTree.fromPgn(rep.pgn));
+      const tree = parsePgnCached(rep.pgn);
+      trees.set(rep.id, { tree, index: positionIndex(tree) });
     } catch {
       // A broken custom repertoire is simply skipped.
     }
@@ -121,11 +158,12 @@ export function repertoireDeviations(
     let best: (Walk & { repertoire: RepertoireLike }) | null = null;
     for (const rep of repertoires) {
       if (rep.color !== color) continue;
-      const tree = trees.get(rep.id);
-      if (!tree) continue;
-      const result = walk(line, tree, rep, game.id);
-      // A repertoire that never matched the first move does not cover the game.
-      if (result.depth === 0 && result.status === 'deviated') continue;
+      const entry = trees.get(rep.id);
+      if (!entry) continue;
+      const result = walk(line, entry.tree, entry.index, rep, game.id);
+      // A repertoire that never matched the first move does not cover the game — whether
+      // the learner (as White) or the opponent (against a Black repertoire) played it.
+      if (result.depth === 0) continue;
       if (!best || result.depth > best.depth) best = { ...result, repertoire: rep };
     }
     if (!best) {

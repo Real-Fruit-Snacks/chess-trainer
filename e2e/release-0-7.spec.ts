@@ -22,15 +22,15 @@ test.describe('puzzles by opening', () => {
     await expect(repertoires.getByText('Italian Game', { exact: true })).toBeVisible();
     await expect(repertoires.getByText('Najdorf Sicilian')).toBeVisible();
     const families = page.getByTestId('opening-families');
-    await expect(families.getByText('Sicilian Defense', { exact: true })).toBeVisible();
-    await expect(families.getByText('Caro-Kann Defense', { exact: true })).toBeVisible();
+    await expect(families.getByText('Sicilian Defence', { exact: true })).toBeVisible();
+    await expect(families.getByText('Caro-Kann Defence', { exact: true })).toBeVisible();
 
-    await families.getByText('French Defense', { exact: true }).click();
+    await families.getByText('French Defence', { exact: true }).click();
     await expect(page).toHaveURL(/opening=French_Defense/);
     await expectBoard(page);
     await expect(page.getByText('Unrated practice')).toBeVisible();
-    await expect(page.getByText('French Defense', { exact: true })).toBeVisible();
-    await expect(page.getByText(/arose from the French Defense/)).toBeVisible();
+    await expect(page.getByText('French Defence', { exact: true })).toBeVisible();
+    await expect(page.getByText(/arose from the French Defence/)).toBeVisible();
     // The puzzle really comes from that opening: its source link and tags are in the About card.
     await expect(page.locator('.puzzle-status')).toContainText(/Your move|Watch/, {
       timeout: 20_000,
@@ -52,7 +52,7 @@ test.describe('opening practice', () => {
     await expect(page.getByTestId('book-select')).toHaveValue('caro-kann');
     // The repertoire fixes the colour, so there is no colour field.
     await expect(page.getByLabel('Your colour')).toHaveCount(0);
-    await page.getByLabel('Strength').selectOption('1');
+    await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
     await expect(page.getByTestId('book-status')).toContainText('Book: Caro-Kann Defence');
@@ -187,7 +187,7 @@ test.describe('insights', () => {
     await expect(page.getByTestId('insights-workon')).toContainText('4 times');
     await expect(page.getByTestId('insights-motifs')).toContainText('Forks you walked into');
     await expect(page.getByTestId('insights-phases')).toContainText('middlegame');
-    await expect(page.getByTestId('insights-openings')).toContainText('Sicilian Defense');
+    await expect(page.getByTestId('insights-openings')).toContainText('Sicilian Defence');
 
     await page.goto('/');
     await expect(page.getByText('Work on: Hanging pieces')).toBeVisible();
@@ -257,7 +257,7 @@ test.describe('woodpecker', () => {
       await expectBoard(page);
       await expect(page.locator('.puzzle-status')).toContainText(/Your move/i, { timeout: 20_000 });
       await page.getByRole('button', { name: /Solution/ }).click();
-      await expect(page.locator('.puzzle-status')).toContainText(/after a miss/i, {
+      await expect(page.locator('.puzzle-status')).toContainText('That is the solution.', {
         timeout: 20_000,
       });
       const next = page.getByRole('button', { name: /Next/ });
@@ -365,8 +365,10 @@ test.describe('engine ladder', () => {
     await page.goto('/play');
     await page.getByRole('button', { name: 'Cancel' }).click();
     const ladder = page.getByTestId('engine-ladder');
-    await expect(ladder.locator('.ladder__rung--climbed')).toHaveCount(2);
-    await expect(ladder.locator('.ladder__rung--current')).toHaveText('3');
+    await expect(ladder.locator('.engine-ladder__rung--climbed')).toHaveCount(2);
+    await expect(ladder.locator('.engine-ladder__rung--current')).toContainText(
+      'Level 3 · Casual: next to climb',
+    );
     await expect(ladder.getByTestId('ladder-reason')).toContainText('0–0–1 so far at Level 3');
     await ladder.getByRole('button', { name: /Play Level 3/ }).click();
     await expect(page.getByText('Stockfish · Casual').first()).toBeVisible();
@@ -425,11 +427,11 @@ test.describe('classic games', () => {
     await seedProgress(page, { onboarded: true });
     await page.goto('/classics');
     await expect(page.getByTestId('classics-count')).toHaveText(/^46 of 46 games/);
-    await page.getByRole('button', { name: 'Romantic' }).click();
+    await page.getByRole('radio', { name: 'Romantic' }).click();
     await expect(page.getByTestId('classics-count')).toContainText(/^\d+ of 46 games · to 1880/);
     await expect(page.getByRole('link', { name: /Légal’s mate/ })).toBeVisible();
     await expect(page.getByRole('link', { name: /Karpov’s bishop on a7/ })).toHaveCount(0);
-    await page.getByRole('button', { name: '1 star' }).click();
+    await page.getByRole('radio', { name: '1 star' }).click();
     await expect(page).toHaveURL(/era=romantic&difficulty=1/);
     await expect(page.getByRole('link', { name: /Three pawns on the seventh/ })).toHaveCount(0);
     await page.getByRole('link', { name: /Légal’s mate/ }).click();
@@ -449,7 +451,7 @@ test.describe('classic games', () => {
     await page.getByRole('button', { name: /Continue/ }).click();
     await expect(page.locator('.summary')).toContainText('9/9 points', { timeout: 10_000 });
     await page.goto('/classics');
-    await page.getByRole('button', { name: 'Played', exact: true }).click();
+    await page.getByRole('radio', { name: 'Played', exact: true }).click();
     await expect(page.getByTestId('classics-count')).toHaveText(/^1 of 46 games/);
     await expect(page.getByRole('link', { name: /Légal’s mate/ })).toContainText('9/9');
   });
@@ -509,6 +511,10 @@ test.describe('analysis library', () => {
 
     // A fresh board, then the library brings the analysis back.
     await page.getByRole('button', { name: 'Reset board' }).click();
+    await page
+      .getByRole('dialog', { name: 'Reset the board?' })
+      .getByTestId('confirm-accept')
+      .click();
     await expect(page.locator('.treemoves')).not.toContainText('Bb5');
     await page.getByTestId('open-library').click();
     const library = page.getByTestId('library');

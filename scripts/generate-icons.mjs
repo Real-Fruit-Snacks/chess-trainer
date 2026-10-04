@@ -8,6 +8,7 @@
  *   public/icons/icon-192.png       – standard launcher icon
  *   public/icons/icon-512.png       – standard launcher icon / splash
  *   public/icons/icon-maskable-512.png – full-bleed icon for adaptive masks
+ *   public/icons/icon-monochrome-512.png – one-colour silhouette for themed launcher icons
  *   public/icons/apple-touch-icon.png  – 180×180, iOS home screen
  *   public/icons/shortcut-*.png     – 96×96 manifest shortcut icons
  *
@@ -53,6 +54,19 @@ function maskableSvg(logoSvg) {
 </svg>`;
 }
 
+/**
+ * Themed launcher icons (Android 13 and later) use only the alpha channel of a
+ * `monochrome` icon and paint it in the system colour: the pawn alone, in the
+ * same safe zone as the maskable icon, on a transparent canvas.
+ */
+function monochromeSvg(logoSvg) {
+  const pawn = /<g fill="#f4efe2">([\s\S]*?)<\/g>/.exec(logoSvg)?.[1];
+  if (!pawn) throw new Error('logo.svg: the pawn group (fill="#f4efe2") was not found');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <g fill="#ffffff" transform="translate(64 64) scale(0.75)">${pawn}</g>
+</svg>`;
+}
+
 async function render(page, svg, size, file) {
   await page.setViewportSize({ width: size, height: size });
   await page.setContent(
@@ -80,6 +94,7 @@ async function main() {
   await render(page, logo, 512, 'icon-512.png');
   await render(page, logo, 180, 'apple-touch-icon.png');
   await render(page, maskableSvg(logo), 512, 'icon-maskable-512.png');
+  await render(page, monochromeSvg(logo), 512, 'icon-monochrome-512.png');
   for (const [name, glyph] of Object.entries(shortcutGlyphs)) {
     await render(page, shortcutSvg(glyph), 96, `shortcut-${name}.png`);
   }

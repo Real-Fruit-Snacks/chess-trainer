@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { localDateKey } from '@/lib/dates';
 import { DAY_MS } from '@/lib/srs';
 import { weeklySummary } from './weeklySummary';
 
@@ -31,6 +32,8 @@ describe('weeklySummary', () => {
         },
         games: [
           {
+            id: 'g1',
+            source: 'play',
             at: now - DAY_MS,
             level: 1,
             color: 'white',
@@ -69,6 +72,35 @@ describe('weeklySummary', () => {
       drills: 1,
       ratingChange: 50,
     });
+  });
+
+  it('counts seven calendar days in each window, never eight', () => {
+    // Eight days in a row ending today (2026-09-29): seven belong to this week.
+    const days = Array.from({ length: 15 }, (_, i) => {
+      const d = new Date(2026, 8, 29 - i);
+      return localDateKey(d);
+    });
+    const summary = weeklySummary(
+      { attempts: [], lessons: {}, games: [], drills: {}, trainingDays: days, ratingHistory: [] },
+      now,
+    );
+    expect(summary.thisWeek.trainingDays).toBe(7);
+    expect(summary.lastWeek.trainingDays).toBe(7);
+    // Just after midnight the window still starts six days back, at midnight.
+    const early = new Date('2026-09-29T00:05:00').getTime();
+    const eight = weeklySummary(
+      {
+        attempts: [],
+        lessons: {},
+        games: [],
+        drills: {},
+        trainingDays: days.slice(0, 8),
+        ratingHistory: [],
+      },
+      early,
+    );
+    expect(eight.thisWeek.trainingDays).toBe(7);
+    expect(eight.lastWeek.trainingDays).toBe(1);
   });
 
   it('reports nulls when there is nothing to measure', () => {

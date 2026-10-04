@@ -40,7 +40,7 @@ export const BUILT_IN_REPERTOIRES: readonly Repertoire[] = [
   },
   {
     id: 'queens-gambit',
-    name: "Queen's Gambit",
+    name: 'Queen’s Gambit',
     color: 'white',
     line: '1. d4 d5 2. c4',
     description:
@@ -69,7 +69,7 @@ export const BUILT_IN_REPERTOIRES: readonly Repertoire[] = [
   },
   {
     id: 'qgd',
-    name: "Queen's Gambit Declined",
+    name: 'Queen’s Gambit Declined',
     color: 'black',
     line: '1. d4 d5 2. c4 e6',
     description:
@@ -91,7 +91,7 @@ export const BUILT_IN_REPERTOIRES: readonly Repertoire[] = [
   },
   {
     id: 'kia',
-    name: "King's Indian Attack",
+    name: 'King’s Indian Attack',
     color: 'white',
     line: '1. Nf3 d5 2. g3',
     description:
@@ -179,7 +179,7 @@ export const BUILT_IN_REPERTOIRES: readonly Repertoire[] = [
   },
   {
     id: 'kings-indian',
-    name: "King's Indian Defence",
+    name: 'King’s Indian Defence',
     color: 'black',
     line: '1. d4 Nf6 2. c4 g6',
     description:

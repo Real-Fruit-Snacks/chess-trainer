@@ -1,5 +1,5 @@
 import type { Fen, San } from '@/chess/types';
-import type { LessonLevel } from '@/features/learn/model';
+import { type LessonLevel, levelForRating } from '@/features/learn/model';
 import { RATING_MAX, RATING_MIN, STARTING_RATINGS, type StartingRatingId } from '@/lib/rating';
 
 /**
@@ -88,7 +88,7 @@ export const TACTIC_QUESTIONS: readonly TacticQuestion[] = [
     options: ['Rh4', 'Qh8+', 'Re8+'],
     answer: 'Rh4',
     explanation:
-      'Rh4 threatens Qh7 mate and there is no defence. Qh8+ just loses the queen to Kxh8, and Re8+ Rxe8 loses the rook — the quiet move wins.',
+      'Rh4 threatens Qh7+ and Qh8+, which cost Black the queen or the rook, and there is no good defence. Qh8+ at once just loses the queen to Kxh8, and Re8+ Rxe8 loses the rook — the quiet move wins.',
     theme: 'quietMove',
     source: 'https://lichess.org/training/zGUt8',
   },
@@ -147,8 +147,8 @@ export function evaluatePlacement(answers: PlacementAnswers): PlacementResult {
   rating += ENDGAME_ADJUST[answers.endgames] + OPENING_ADJUST[answers.openings];
   rating = Math.round(Math.min(RATING_MAX, Math.max(RATING_MIN, rating)) / 10) * 10;
 
-  const level: LessonLevel =
-    rating < 1000 ? 'beginner' : rating < 1650 ? 'intermediate' : 'advanced';
+  // The same boundaries as the level labels on the Learn page (~800 and 1600).
+  const level: LessonLevel = levelForRating(rating);
   const courseId =
     level === 'beginner'
       ? 'first-steps'

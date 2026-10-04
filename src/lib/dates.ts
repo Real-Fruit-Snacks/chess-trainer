@@ -15,7 +15,7 @@ export function daysBetween(a: string, b: string): number {
   return Math.round((db - da) / 86_400_000);
 }
 
-export function formatDate(iso: string | number, locale = 'en-US'): string {
+export function formatDate(iso: string | number, locale = 'en-GB'): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(iso));
 }
 

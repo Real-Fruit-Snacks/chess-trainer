@@ -129,11 +129,11 @@ export const MATING_PATTERNS: readonly MatingPattern[] = [
     id: 'hookMate',
     name: 'Hook mate',
     pieces: 'Rook, knight and pawn',
-    before: '3rk3/R6n/8/3N4/2P5/8/8/6K1 b - - 0 1',
+    before: '3rk3/R5pn/8/3N4/2P5/8/8/6K1 b - - 0 1',
     setup: 'Nf8',
     line: ['Re7#'],
     explanation:
-      'The rook checks from next to the king, protected by the knight, which is protected in turn by the pawn — the three form a hook. The rook covers d7 and f7, and the king’s own pieces fill d8 and f8.',
+      'The rook checks from next to the king, protected by the knight, which is protected in turn by the pawn — the three form a hook. The rook covers d7 and f7, and the king’s own pieces fill d8 and f8. The pawn on g7 guards f6, so the knight check is no mate: only the hook is.',
     spot: 'A knight on d5 or f5 supported by a pawn, a rook that can reach the seventh rank next to the king, and flight squares on the back rank occupied by the defender’s own pieces.',
     difficulty: 2,
   },

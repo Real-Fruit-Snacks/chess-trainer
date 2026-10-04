@@ -59,3 +59,18 @@ export function attemptScore(attempt: AttemptForScore): number {
   );
   return Math.round(credit * speed * 1000) / 1000;
 }
+
+/**
+ * The score a rated attempt is finally worth. A correct solve, however slow
+ * or hint-assisted, never scores below what the rating system expected of the
+ * player, so solving a puzzle never costs rating points (a miss is still 0).
+ */
+export function ratedSolveScore(
+  outcome: 'solved' | 'failed',
+  score: number,
+  expected: number,
+): number {
+  if (outcome === 'failed') return 0;
+  const floor = Number.isFinite(expected) ? Math.min(1, Math.max(0, expected)) : 0;
+  return Math.max(score, floor);
+}

@@ -8,7 +8,7 @@ import { isNew, type Quality } from '@/lib/srs';
 import { playMoveSound, playSound } from '@/lib/sound';
 import { useProgress } from '@/store/progress';
 import { cardsFor, useRepertoire } from '@/store/repertoire';
-import { cardKey, isLearnerMove, pickLine, repertoireLines } from './model';
+import { cardKey, isLearnerMove, pickLine, repertoireLines, transpositionTwins } from './model';
 
 export type TrainerPhase =
   | 'idle'
@@ -219,7 +219,17 @@ export function useRepertoireTrainer(
 
   const grade = useCallback(
     (node: TreeNode, quality: Quality) => {
-      review(repertoireId, cardKey(node), quality);
+      const now = Date.now();
+      review(repertoireId, cardKey(node), quality, now);
+      // The same move in the same position by another move order: one memory, so its card moves
+      // too — unless that line already recalled it today (two successes in a day would push it
+      // further than the schedule intends). A miss always carries over.
+      const today = new Date(now).setHours(0, 0, 0, 0);
+      for (const twin of transpositionTwins(tree, node)) {
+        const card = cardsRef.current[cardKey(twin)];
+        if (quality >= 3 && card?.lastReviewed != null && card.lastReviewed >= today) continue;
+        review(repertoireId, cardKey(twin), quality, now);
+      }
       useProgress.getState().touchTraining();
       lineStatsRef.current = {
         correct: lineStatsRef.current.correct + (quality >= 3 ? 1 : 0),
@@ -227,7 +237,7 @@ export function useRepertoireTrainer(
       };
       setLineResult({ ...lineStatsRef.current });
     },
-    [review, repertoireId],
+    [review, repertoireId, tree],
   );
 
   // Auto-advance after a finished line.

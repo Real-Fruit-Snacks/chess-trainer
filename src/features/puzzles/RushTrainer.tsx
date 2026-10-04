@@ -1,17 +1,18 @@
 import { useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
-import { Alert, Badge, Button, Card, Stat, Icon } from '@/components/ui';
-import { formatDuration } from '@/lib/dates';
+import { Alert, Badge, Button, Card, Kbd, Stat, Icon } from '@/components/ui';
+import { formatDate, formatDuration } from '@/lib/dates';
+import { NONE } from '@/lib/format';
+import { shortcutKey } from '@/lib/shortcutKey';
+import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
-import { useSettings } from '@/store/settings';
 import { RUSH_STRIKES, type RushMode, useRush } from './useRush';
 
 export function RushTrainer() {
   const puzzleRating = useProgress((s) => s.puzzleRating);
   const rushRuns = useProgress((s) => s.rushRuns);
-  const autoQueen = useSettings((s) => s.autoQueen);
   const rush = useRush(puzzleRating);
   const { trainer } = rush;
 
@@ -23,11 +24,13 @@ export function RushTrainer() {
     [rushRuns],
   );
 
-  // Keyboard: Enter/space to start again after a run.
+  // Keyboard: Enter starts a run — the 3-minute one before the first run, the last mode after.
   useEffect(() => {
-    if (rush.phase !== 'finished') return;
+    if (rush.phase !== 'finished' && rush.phase !== 'idle') return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') rush.start(rush.mode);
+      if (shortcutKey(e) !== 'Enter') return;
+      e.preventDefault();
+      rush.start(rush.phase === 'finished' ? rush.mode : 'timed');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -35,9 +38,10 @@ export function RushTrainer() {
 
   const solverIsMoving = rush.phase === 'running' && trainer.phase === 'solving';
   const strikeMarks = Array.from({ length: RUSH_STRIKES }, (_, i) => i < rush.strikes);
+  const strikesText = `${rush.strikes} of ${RUSH_STRIKES} strikes`;
 
   return (
-    <div className="trainer">
+    <div className="trainer trainer--lead">
       <div className="trainer__board" style={{ position: 'relative' }}>
         <Board
           fen={trainer.position.fen}
@@ -48,7 +52,8 @@ export function RushTrainer() {
           lastMove={trainer.position.lastMove}
           check={trainer.position.check}
           highlights={trainer.highlights}
-          onMove={(from, to) => trainer.playUserMove(from, to, autoQueen ? 'q' : undefined)}
+          // Promotions always ask: some puzzles need an underpromotion.
+          onMove={(from, to) => trainer.playUserMove(from, to)}
           ariaLabel={
             trainer.puzzle ? `Rush puzzle, ${trainer.solverColor} to move` : 'Puzzle Rush board'
           }
@@ -66,7 +71,7 @@ export function RushTrainer() {
               </p>
               <div className="row">
                 <Button variant="primary" size="lg" onClick={() => rush.start('timed')}>
-                  3 minutes
+                  3 minutes <Kbd>Enter</Kbd>
                 </Button>
                 <Button size="lg" onClick={() => rush.start('survival')}>
                   Survival
@@ -88,23 +93,23 @@ export function RushTrainer() {
                   : ''}
               </h2>
               <p className="muted">
-                Peak puzzle rating {rush.summary.peakRating || '–'} · {rush.summary.strikes} strike
+                Peak puzzle rating {rush.summary.peakRating || NONE} · {rush.summary.strikes} strike
                 {rush.summary.strikes === 1 ? '' : 's'} · {formatDuration(rush.summary.durationMs)}
               </p>
-              <div className="rush__results" aria-label="Results">
+              <ol role="list" className="rush__results" aria-label="Puzzles in this run, by rating">
                 {rush.summary.results.map((r, i) => (
-                  <span
+                  <li
                     key={i}
                     className={`rush__result rush__result--${r.solved ? 'solved' : 'failed'}`}
-                    title={`${r.rating}${r.solved ? ' solved' : ' missed'}`}
                   >
+                    <span className="sr-only">{r.solved ? 'Solved' : 'Missed'}: </span>
                     {r.rating}
-                  </span>
+                  </li>
                 ))}
-              </div>
+              </ol>
               <div className="row" style={{ marginTop: 12 }}>
                 <Button variant="primary" onClick={() => rush.start(rush.summary?.mode ?? 'timed')}>
-                  Play again
+                  Play again <Kbd>Enter</Kbd>
                 </Button>
                 <Button
                   onClick={() => rush.start(rush.summary?.mode === 'timed' ? 'survival' : 'timed')}
@@ -117,66 +122,62 @@ export function RushTrainer() {
         ) : null}
       </div>
 
+      <Card className="trainer__lead">
+        <div className="rush__hud">
+          <Stat
+            value={formatDuration(rush.clockMs)}
+            label={rush.mode === 'timed' ? 'Time left' : 'Elapsed'}
+          />
+          <Stat value={rush.score} label="Solved" />
+          <div className="stat">
+            <span className="rush__strikes" role="img" aria-label={strikesText}>
+              {strikeMarks.map((hit, i) => (
+                <span
+                  key={i}
+                  className={`rush__strike${hit ? ' rush__strike--hit' : ''}`}
+                  aria-hidden="true"
+                >
+                  <Icon name="close" size={14} />
+                </span>
+              ))}
+            </span>
+            <span className="stat__label">Strikes</span>
+          </div>
+        </div>
+        <p className={`puzzle-status puzzle-status--${trainer.phase}`} role="status">
+          {rush.phase !== 'running'
+            ? ' '
+            : trainer.phase === 'solving'
+              ? trainer.position.check
+                ? 'Your move — you are in check!'
+                : 'Your move.'
+              : trainer.phase === 'solved'
+                ? 'Solved!'
+                : trainer.phase === 'failed'
+                  ? `Missed — strike ${rush.strikes} of ${RUSH_STRIKES}. Next puzzle…`
+                  : trainer.phase === 'replying'
+                    ? 'Good — opponent replies…'
+                    : 'Watch the opponent’s move…'}
+        </p>
+        {trainer.puzzle && rush.phase === 'running' ? (
+          <p className="small muted" style={{ margin: 0 }}>
+            <Badge>Rating {trainer.puzzle.rating}</Badge>{' '}
+            {trainer.position.total > 1
+              ? `${trainer.position.progress}/${trainer.position.total} moves`
+              : ''}
+          </p>
+        ) : null}
+        {rush.phase === 'running' ? (
+          <div className="puzzle-actions">
+            <Button variant="ghost" onClick={rush.stop}>
+              End run
+            </Button>
+          </div>
+        ) : null}
+      </Card>
+
       <aside className="trainer__panel stack">
         {rush.error ? <Alert tone="warning">{rush.error}</Alert> : null}
-        <Card>
-          <div className="rush__hud">
-            <Stat
-              value={
-                rush.mode === 'timed' ? formatDuration(rush.clockMs) : formatDuration(rush.clockMs)
-              }
-              label={rush.mode === 'timed' ? 'Time left' : 'Elapsed'}
-            />
-            <Stat value={rush.score} label="Solved" />
-            <div className="stat">
-              <span
-                className="rush__strikes"
-                aria-label={`${rush.strikes} of ${RUSH_STRIKES} strikes`}
-              >
-                {strikeMarks.map((hit, i) => (
-                  <span
-                    key={i}
-                    className={`rush__strike${hit ? ' rush__strike--hit' : ''}`}
-                    aria-hidden="true"
-                  >
-                    <Icon name="close" size={14} />
-                  </span>
-                ))}
-              </span>
-              <span className="stat__label">Strikes</span>
-            </div>
-          </div>
-          <p className={`puzzle-status puzzle-status--${trainer.phase}`} role="status">
-            {rush.phase !== 'running'
-              ? ' '
-              : trainer.phase === 'solving'
-                ? trainer.position.check
-                  ? 'Your move — you are in check!'
-                  : 'Your move.'
-                : trainer.phase === 'solved'
-                  ? 'Solved!'
-                  : trainer.phase === 'failed'
-                    ? 'Missed — next puzzle…'
-                    : trainer.phase === 'replying'
-                      ? 'Good — opponent replies…'
-                      : 'Watch the opponent’s move…'}
-          </p>
-          {trainer.puzzle && rush.phase === 'running' ? (
-            <p className="small muted" style={{ margin: 0 }}>
-              <Badge>Rating {trainer.puzzle.rating}</Badge>{' '}
-              {trainer.position.total > 1
-                ? `${trainer.position.progress}/${trainer.position.total} moves`
-                : ''}
-            </p>
-          ) : null}
-          {rush.phase === 'running' ? (
-            <div className="puzzle-actions">
-              <Button variant="ghost" onClick={rush.stop}>
-                End run
-              </Button>
-            </div>
-          ) : null}
-        </Card>
 
         <Card>
           <div className="puzzle-stats">
@@ -185,13 +186,13 @@ export function RushTrainer() {
             <Stat value={rushRuns.length} label="Runs" />
           </div>
           {rushRuns.length ? (
-            <ul className="rush__history">
+            <ul role="list" className="rush__history">
               {rushRuns.slice(0, 5).map((run) => (
                 <li key={run.at}>
                   <span>{run.mode === 'timed' ? '3 min' : 'Survival'}</span>
                   <strong>{run.score}</strong>
-                  <span className="muted small">peak {run.peakRating || '–'}</span>
-                  <span className="muted small">{new Date(run.at).toLocaleDateString()}</span>
+                  <span className="muted small">peak {run.peakRating || NONE}</span>
+                  <span className="muted small">{formatDate(run.at, siteConfig.locale)}</span>
                 </li>
               ))}
             </ul>

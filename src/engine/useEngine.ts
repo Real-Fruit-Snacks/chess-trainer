@@ -36,7 +36,16 @@ export function useEngine(options: UseEngineOptions = {}): UseEngine {
   const [error, setError] = useState<Error | null>(null);
 
   const engine = useCallback((): EngineClient => {
-    ref.current ??= new EngineClient(optionsRef.current);
+    if (!ref.current) {
+      const instance = new EngineClient(optionsRef.current);
+      // A worker that dies mid-game: surface the error so the page can offer Retry.
+      instance.onError((err) => {
+        if (ref.current !== instance) return;
+        setError(err);
+        setStatus('error');
+      });
+      ref.current = instance;
+    }
     return ref.current;
   }, []);
 

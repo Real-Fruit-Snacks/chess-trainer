@@ -47,3 +47,14 @@
 .insights__table td {
   font-variant-numeric: tabular-nums;
 }
+
+/* Rows resting on too small a sample. */
+.insights__thin {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.insights__count {
+  text-transform: none;
+  font-weight: 400;
+}

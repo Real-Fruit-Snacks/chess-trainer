@@ -1,8 +1,14 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { safeLocalStorage } from '@/lib/persistStorage';
+import {
+  keepCorruptBlob,
+  rehydrateOnStorageChange,
+  safeLocalStorage,
+  warnNewerSave,
+} from '@/lib/persistStorage';
 import type { LongColor } from '@/chess/types';
 import { newCard, type Quality, reviewCard, type SrsCard } from '@/lib/srs';
+import { parse, repertoireSlice } from './backupSchema';
 import { storageKeyFor } from './profiles';
 
 export interface CustomRepertoire {
@@ -36,7 +42,8 @@ export interface RepertoireState {
   removeCustom: (id: string) => void;
   recordSession: (session: Omit<RepertoireSession, 'at'>) => void;
   resetRepertoire: (repertoireId: string) => void;
-  importState: (state: unknown) => boolean;
+  /** Replaces the whole store with a validated backup part (missing fields start empty). */
+  replaceState: (state: Partial<PersistedRepertoire>) => void;
   resetAll: () => void;
 }
 
@@ -51,6 +58,19 @@ const initialState = {
 export type PersistedRepertoire = typeof initialState;
 
 export const REPERTOIRE_STORAGE_KEY = 'chess-trainer:repertoire';
+export const REPERTOIRE_VERSION = 1;
+
+/** A stored blob checked field by field; damaged entries are dropped, unknown keys kept. */
+export function repairRepertoire(stored: unknown): PersistedRepertoire & Record<string, unknown> {
+  const parsed = parse(repertoireSlice, stored, 'repair', 'repertoire');
+  const state: Record<string, unknown> = { ...initialState, ...(parsed.ok ? parsed.value : {}) };
+  if (typeof stored === 'object' && stored !== null && !Array.isArray(stored)) {
+    for (const [key, value] of Object.entries(stored as Record<string, unknown>)) {
+      if (!(key in initialState) && value !== undefined) state[key] = value;
+    }
+  }
+  return state as PersistedRepertoire & Record<string, unknown>;
+}
 
 export function repertoireCardId(repertoireId: string, key: string): string {
   return `${repertoireId}|${key}`;
@@ -70,7 +90,7 @@ export function cardsFor(
 }
 
 export const useRepertoire = create<RepertoireState>()(
-  persist(
+  persist<RepertoireState, [], [], PersistedRepertoire>(
     (set, get) => ({
       ...initialState,
 
@@ -116,25 +136,39 @@ export const useRepertoire = create<RepertoireState>()(
         });
       },
 
-      importState: (raw) => {
-        if (typeof raw !== 'object' || raw === null) return false;
-        const value = raw as Partial<PersistedRepertoire>;
-        if (typeof value.cards !== 'object' || value.cards === null) return false;
+      replaceState: (state) =>
         set({
-          cards: value.cards,
-          custom: Array.isArray(value.custom) ? value.custom : [],
-          sessions: Array.isArray(value.sessions) ? value.sessions : [],
-        });
-        return true;
-      },
+          cards: state.cards ?? {},
+          custom: state.custom ?? [],
+          sessions: (state.sessions ?? []).slice(0, MAX_SESSIONS),
+        }),
 
       resetAll: () => set({ ...initialState }),
     }),
     {
       name: storageKeyFor(REPERTOIRE_STORAGE_KEY),
-      version: 1,
+      version: REPERTOIRE_VERSION,
       storage: createJSONStorage(() => safeLocalStorage),
-      partialize: ({ cards, custom, sessions }) => ({ cards, custom, sessions }),
+      partialize: (state) => {
+        const out = {} as Record<string, unknown>;
+        for (const [key, value] of Object.entries(state)) {
+          if (typeof value !== 'function') out[key] = value;
+        }
+        return out as PersistedRepertoire;
+      },
+      migrate: (stored, version): PersistedRepertoire => {
+        if (version > REPERTOIRE_VERSION) {
+          warnNewerSave(REPERTOIRE_STORAGE_KEY, version, REPERTOIRE_VERSION);
+        }
+        return repairRepertoire(stored);
+      },
+      merge: (persistedState, current): RepertoireState => ({
+        ...current,
+        ...repairRepertoire(persistedState),
+      }),
+      onRehydrateStorage: keepCorruptBlob(storageKeyFor(REPERTOIRE_STORAGE_KEY)),
     },
   ),
 );
+
+rehydrateOnStorageChange(useRepertoire, storageKeyFor(REPERTOIRE_STORAGE_KEY));

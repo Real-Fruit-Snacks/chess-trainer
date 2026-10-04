@@ -10,7 +10,12 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* The browser's font-size preference applies: 1rem is whatever the visitor chose. */
+  font-size: 100%;
   scroll-behavior: smooth;
+  /* A focused or targeted element scrolls clear of the sticky header and the bottom bar. */
+  scroll-padding-top: calc(var(--header-height) + 8px);
+  scroll-padding-bottom: calc(var(--bottom-nav-height) + 8px);
 }
 
 body {
@@ -19,10 +24,15 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+}
+
+/* The page behind a modal dialog stays put. */
+body:has(dialog[open]) {
+  overflow: hidden;
 }
 
 img,
@@ -91,9 +101,16 @@ kbd {
   border-radius: var(--radius-sm);
 }
 
+/*
+ * Focus: an opaque 2px outline a step away from the control, with a 1px halo in
+ * the page colour between the two, so the ring reads on every surface — a
+ * primary button included — and survives Windows High Contrast, which drops
+ * box-shadows but keeps outlines.
+ */
 :focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px var(--focus-halo);
   border-radius: var(--radius-sm);
 }
 
@@ -150,6 +167,11 @@ kbd {
 .card > .row--between:first-child {
   flex-wrap: nowrap;
   align-items: flex-start;
+}
+
+/* A header with a button instead may wrap: the button then takes a line of its own. */
+.card > .row--between:first-child:has(> .btn) {
+  flex-wrap: wrap;
 }
 
 .card > .row--between:first-child > .badge {
@@ -229,11 +251,11 @@ kbd {
 
 /*
  * The eval bar stands beside the playing surface, not beside the coordinate
- * gutter below it: its bottom margin is the board's gutter, worked out from the
- * board's width (this container minus the 22px bar and the 8px gap).
+ * gutter below it: its bottom margin is the board's gutter (5.5 % of the board's
+ * width), worked out from this container minus the 28px bar and the 8px gap.
  */
 .trainer__board:has(.board--coords) > .evalbar {
-  margin-bottom: clamp(16px, calc(5.5cqw - 1.65px), 24px);
+  margin-bottom: clamp(16px, calc(5.5cqw - 1.98px), 24px);
 }
 
 .trainer__board .board {
@@ -246,6 +268,11 @@ kbd {
 }
 
 @media (min-width: 900px) {
+  /* No bottom bar on wide screens (the shell sets its height to 0 for its own children). */
+  html {
+    scroll-padding-bottom: 8px;
+  }
+
   .trainer {
     grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.85fr);
     gap: var(--space-5);
@@ -297,9 +324,10 @@ kbd {
   }
 }
 
-/* Phones held sideways: put the board and its panel side by side and keep the
-   whole board on screen, since the height is the scarce dimension. */
-@media (orientation: landscape) and (max-height: 520px) and (max-width: 899px) {
+/* Phones held sideways — large ones included, so no width cap: put the board and
+   its panel side by side and keep the whole board on screen, since the height is
+   the scarce dimension. */
+@media (orientation: landscape) and (max-height: 520px) {
   .trainer {
     grid-template-columns: minmax(0, 1fr) minmax(240px, 0.9fr);
     gap: var(--space-3);
@@ -347,6 +375,8 @@ kbd {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    /* Once, not forever: an infinite 0.01ms spin flickers instead of standing still. */
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
@@ -400,8 +430,56 @@ kbd {
   cursor: pointer;
 }
 
-.linklike:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  border-radius: var(--radius-sm);
+/* Hints that only make sense with a keyboard (see also .kbd in ui.css). */
+@media (pointer: coarse) {
+  .keyboard-only {
+    display: none;
+  }
+}
+
+/* ---------- Windows High Contrast and other forced-colour modes ---------- */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+
+  /* Decorative backgrounds are dropped by the mode; borders keep the shapes visible. */
+  .btn,
+  .card,
+  .skip-link {
+    border: 1px solid ButtonText;
+  }
+
+  .skip-link:focus {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* ---------- Print ---------- */
+@media print {
+  .shell__header,
+  .shell__bottomnav,
+  .shell__footer,
+  .skip-link,
+  .toasts,
+  .install-banner {
+    display: none !important;
+  }
+
+  .shell__main {
+    padding: 0;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  a {
+    color: inherit;
+  }
 }

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useStorageHealth } from '@/lib/persistStorage';
 import {
   DEFAULT_PROFILE_ID,
   loadProfiles,
@@ -22,10 +23,13 @@ describe('profiles', () => {
     expect(storageKeyFor('chess-trainer:progress', 'p-abc')).toBe('chess-trainer:progress:p-abc');
   });
 
-  it('adds, renames and persists profiles', () => {
+  it('adds, renames and persists profiles, refusing duplicate names', () => {
     const added = useProfiles.getState().add('  Ada  ');
-    expect(added.name).toBe('Ada');
-    useProfiles.getState().rename(added.id, 'Ada L.');
+    expect(added?.name).toBe('Ada');
+    expect(useProfiles.getState().add('ada')).toBeNull();
+    expect(useProfiles.getState().add('  ')).toBeNull();
+    expect(useProfiles.getState().rename(added!.id, 'me')).toBe(false);
+    expect(useProfiles.getState().rename(added!.id, 'Ada L.')).toBe(true);
     const stored = JSON.parse(localStorage.getItem(PROFILES_STORAGE_KEY) ?? '{}') as {
       profiles: { id: string; name: string }[];
       activeId: string;
@@ -36,7 +40,7 @@ describe('profiles', () => {
   });
 
   it('removes an inactive profile together with its stores', () => {
-    const added = useProfiles.getState().add('Guest');
+    const added = useProfiles.getState().add('Guest')!;
     for (const base of PROFILE_SCOPED_KEYS) {
       localStorage.setItem(storageKeyFor(base, added.id), '{"state":{}}');
     }
@@ -50,13 +54,61 @@ describe('profiles', () => {
     expect(useProfiles.getState().profiles).toHaveLength(1);
   });
 
-  it('falls back to the default profile when the stored list is corrupt', () => {
+  it('rebuilds the list from the store keys when the stored list is corrupt', () => {
     localStorage.setItem(PROFILES_STORAGE_KEY, '{"profiles": "nope"}');
     expect(loadProfiles().activeId).toBe(DEFAULT_PROFILE_ID);
+    // A second learner's stores exist: their profile comes back rather than being orphaned.
+    localStorage.setItem('chess-trainer:progress', '{"state":{}}');
+    localStorage.setItem('chess-trainer:progress:p-lost', '{"state":{}}');
+    localStorage.setItem('chess-trainer:progress:corrupt-1', '{');
+    const rebuilt = loadProfiles();
+    expect(rebuilt.profiles.map((p) => p.id)).toEqual([DEFAULT_PROFILE_ID, 'p-lost']);
+    expect(rebuilt.profiles[1]?.name).toMatch(/Recovered/);
+    localStorage.removeItem('chess-trainer:progress');
+    localStorage.removeItem('chess-trainer:progress:p-lost');
+    localStorage.removeItem('chess-trainer:progress:corrupt-1');
     localStorage.setItem(
       PROFILES_STORAGE_KEY,
       JSON.stringify({ profiles: [{ id: 'x', name: 'X', createdAt: 1 }], activeId: 'missing' }),
     );
     expect(loadProfiles().activeId).toBe('x');
+  });
+});
+
+describe('profiles on a full disk', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useProfiles.setState(loadProfiles());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    useStorageHealth.getState().markOk();
+  });
+
+  const quotaError = () => {
+    const error = new Error('quota');
+    error.name = 'QuotaExceededError';
+    return error;
+  };
+
+  it('does not throw, reports the failure and never reloads into an unsaved switch', () => {
+    const other = useProfiles.getState().add('Other')!;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw quotaError();
+    });
+    const reload = vi.fn();
+    vi.spyOn(window, 'location', 'get').mockReturnValue({
+      ...window.location,
+      reload,
+    });
+    expect(() => useProfiles.getState().add('Third')).not.toThrow();
+    expect(useProfiles.getState().add('Third')).toBeNull();
+    expect(useProfiles.getState().rename(other.id, 'Renamed')).toBe(false);
+    expect(useProfiles.getState().profiles.map((p) => p.name)).toEqual(['Me', 'Other']);
+    useProfiles.getState().switchTo(other.id);
+    expect(reload).not.toHaveBeenCalled();
+    expect(useProfiles.getState().activeId).toBe(DEFAULT_PROFILE_ID);
+    expect(useStorageHealth.getState().full).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { DAY_MS } from './srs';
+import { dueAt } from './srs';
 
 /**
  * Scheduling for the puzzle review queue ("mistakes come back"). Simpler
@@ -18,7 +18,7 @@ export interface PuzzleReviewCard {
   addedAt: number;
 }
 
-/** A puzzle was missed: (re)start the schedule at step 0, due tomorrow. */
+/** A puzzle was missed: (re)start the schedule at step 0, due tomorrow (04:00 local). */
 export function scheduleFailed(
   existing: PuzzleReviewCard | undefined,
   meta: { id: string; rating: number; themes: string },
@@ -29,7 +29,7 @@ export function scheduleFailed(
     rating: meta.rating,
     themes: meta.themes,
     step: 0,
-    due: now + (PUZZLE_REVIEW_STEPS_DAYS[0] ?? 1) * DAY_MS,
+    due: dueAt(now, PUZZLE_REVIEW_STEPS_DAYS[0] ?? 1),
     lapses: (existing?.lapses ?? 0) + (existing ? 1 : 0),
     addedAt: existing?.addedAt ?? now,
   };
@@ -48,7 +48,7 @@ export function scheduleSolved(
   const step = options.hintUsed ? card.step : card.step + 1;
   const days = PUZZLE_REVIEW_STEPS_DAYS[step];
   if (days === undefined) return null;
-  return { ...card, step, due: now + days * DAY_MS };
+  return { ...card, step, due: dueAt(now, days) };
 }
 
 /** Cards that are due, earliest first. */

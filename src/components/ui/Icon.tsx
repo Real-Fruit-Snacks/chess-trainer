@@ -21,6 +21,7 @@ export type IconName =
   | 'reference'
   | 'sun'
   | 'moon'
+  | 'moon-filled'
   | 'auto'
   | 'more'
   | 'chevron-down'
@@ -41,6 +42,9 @@ export type IconName =
   | 'knight'
   | 'arrow-right'
   | 'arrow-left'
+  | 'arrow-up'
+  | 'arrow-down'
+  | 'flag'
   | 'download'
   | 'gamepad'
   | 'brain'
@@ -52,7 +56,11 @@ export type IconName =
   | 'repeat'
   | 'eye-off'
   | 'boards'
-  | 'settings';
+  | 'settings'
+  | 'info'
+  | 'warning'
+  | 'alert'
+  | 'swap';
 
 /** Path data per icon; `fill` marks icons drawn as filled shapes. */
 const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
@@ -88,6 +96,8 @@ const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
     d: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
   },
   moon: { d: 'M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z' },
+  /* The black scheme: the same moon, filled in. */
+  'moon-filled': { d: 'M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z', fill: true },
   auto: { d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 3v12a6 6 0 0 0 0-12z' },
   more: {
     d: 'M5 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',
@@ -119,6 +129,10 @@ const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
   },
   'arrow-right': { d: 'M4 12h16M13 5l7 7-7 7' },
   'arrow-left': { d: 'M20 12H4M11 5l-7 7 7 7' },
+  'arrow-up': { d: 'M12 20V4M5 11l7-7 7 7' },
+  'arrow-down': { d: 'M12 4v16M5 13l7 7 7-7' },
+  // A flag on a pole: the end of a lesson that is not complete yet.
+  flag: { d: 'M5 21V4M5 4h11l-2 4 2 4H5' },
   download: { d: 'M12 4v11M7 10l5 5 5-5M4 19h16' },
   gamepad: {
     d: 'M7 6h10a4 4 0 0 1 4 4v3a4 4 0 0 1-4 4h-1.5l-2-2h-3l-2 2H7a4 4 0 0 1-4-4v-3a4 4 0 0 1 4-4zM6.5 11.5h4M8.5 9.5v4M15 10.5h.01M17.5 12.5h.01',
@@ -149,6 +163,12 @@ const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
   boards: {
     d: 'M16 6V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h2M9 8h11a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zM8 14.5h13M14.5 8v13',
   },
+  // Message tones: an "i" in a circle, a "!" in a triangle, a "!" in a circle.
+  info: { d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01' },
+  warning: { d: 'M12 4l9.5 16.5H2.5zM12 10v4.5M12 17.5h.01' },
+  alert: { d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8v5M12 16.5h.01' },
+  // Two arrows passing each other: in the line, but in another place (Daily Opening).
+  swap: { d: 'M4 8h13M14 5l3 3-3 3M20 16H7M10 13l-3 3 3 3' },
 };
 
 /** Every icon name, for the test lab and the tests. */

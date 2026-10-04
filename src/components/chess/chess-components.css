@@ -1,15 +1,22 @@
 /* ---------- Eval bar ---------- */
 .evalbar {
   position: relative;
-  width: 22px;
-  flex: 0 0 22px;
+  width: 28px;
+  flex: 0 0 28px;
   border-radius: var(--radius-sm);
   background: var(--eval-black);
+  /* Outlined so the bar stands out from a dark page background (non-text contrast). */
+  border: 1px solid var(--text-muted);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   box-shadow: var(--shadow-sm);
+}
+
+/* The last known score is kept between searches; it is shown toned down until a fresh one lands. */
+.evalbar--stale .evalbar__label {
+  opacity: 0.6;
 }
 
 .evalbar--flipped {
@@ -27,13 +34,13 @@
   left: 0;
   right: 0;
   text-align: center;
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   font-weight: 700;
   font-family: var(--font-mono);
   line-height: 1;
   padding: 4px 0;
   pointer-events: none;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.06em;
 }
 
 .evalbar__label--top {
@@ -62,7 +69,15 @@
   align-content: start;
   max-height: 320px;
   overflow-y: auto;
-  padding-right: var(--space-1);
+  /* Room for the focus ring of the first and last rows inside the scroller. */
+  padding: 3px var(--space-1) 3px 3px;
+  scroll-padding: 3px;
+}
+
+.movelist:focus-visible,
+.treemoves:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .movelist__number {
@@ -80,7 +95,7 @@
   transition: background var(--transition);
 }
 
-.movelist__move:hover {
+button.movelist__move:hover {
   background: var(--surface-2);
 }
 
@@ -177,9 +192,15 @@
   color: var(--text);
 }
 
-.line__pv button:first-child {
+.line__pv button:first-of-type {
   color: var(--text);
   font-weight: 600;
+}
+
+.line__pv button:first-of-type:not(:disabled) {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
 }
 
 .engine-status {
@@ -321,7 +342,8 @@
   line-height: 1.9;
   max-height: 360px;
   overflow-y: auto;
-  padding-right: var(--space-1);
+  padding: 3px var(--space-1) 3px 3px;
+  scroll-padding: 3px;
 }
 
 .treemoves__move {
@@ -380,7 +402,8 @@
   margin: 2px 0 2px calc(var(--depth, 1) * 10px);
   padding-left: var(--space-2);
   border-left: 2px solid var(--border);
-  font-size: 0.85em;
+  /* A fixed size: an em here would shrink with every nesting level. */
+  font-size: 0.8rem;
   line-height: 1.8;
 }
 

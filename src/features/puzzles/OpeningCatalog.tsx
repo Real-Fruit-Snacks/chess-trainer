@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Alert, Badge, Spinner } from '@/components/ui';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
 import { repertoireOpeningTags } from '@/features/openings/openingTags';
@@ -59,7 +59,7 @@ export function OpeningCatalog() {
     <div className="stack">
       <p className="muted">
         Tactics from the openings you play — the positions that actually come up in your games.
-        Practice by opening is <strong>unrated</strong>.
+        Practising by opening is <strong>unrated</strong>.
       </p>
       <section>
         <h2>From your repertoires</h2>
@@ -67,7 +67,8 @@ export function OpeningCatalog() {
           {mine.map((rep) => (
             <Link
               key={rep.id}
-              to={`/puzzles/openings?opening=${encodeURIComponent(rep.tags[0] ?? '')}`}
+              // Every tag the repertoire covers: the card's count is the sum over all of them.
+              to={`/puzzles/openings?opening=${encodeURIComponent(rep.tags.join(','))}`}
               className="card card--interactive theme-card"
             >
               <div className="row row--between">

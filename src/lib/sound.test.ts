@@ -3,8 +3,11 @@ import { useSettings } from '@/store/settings';
 import { HAPTIC_PATTERNS, hapticPattern, RETRO_HAPTIC_PATTERNS, vibrate } from './haptics';
 import {
   gameEndSound,
+  hasUserGesture,
   isNoise,
+  markUserGesture,
   playSound,
+  resetUserGesture,
   RETRO_CUES,
   SOUND_NAMES,
   type SoundName,
@@ -134,9 +137,10 @@ const tones = (layers: readonly (Tone | { noise: true })[]) =>
 
 describe('sound cues', () => {
   beforeAll(() => {
-    // Creating the context also creates the first punch chain; do it once so
-    // every test below sees only the nodes of the cue it plays.
+    // Creating the context also creates the limiter and the first punch chain;
+    // do it once so every test below sees only the nodes of the cue it plays.
     useSettings.getState().update({ sounds: true, haptics: false });
+    markUserGesture();
     SOUNDS.move();
   });
 
@@ -164,7 +168,14 @@ describe('sound cues', () => {
         SOUNDS[name]();
         expect(layerGains().length).toBeGreaterThan(0);
         for (const gain of layerGains()) {
-          expect(chainKinds(gain)).toEqual(['compressor', 'shaper', 'gain', 'destination']);
+          // Punch chain, trim, then the shared limiter in front of the speakers.
+          expect(chainKinds(gain)).toEqual([
+            'compressor',
+            'shaper',
+            'gain',
+            'compressor',
+            'destination',
+          ]);
         }
         expect(kinds('compressor')).toHaveLength(1);
       }
@@ -307,7 +318,9 @@ describe('sound cues', () => {
     expect(kinds('filter').map((f) => (f.frequency as { value: number }).value)).toEqual([
       1200, 375, 190,
     ]);
-    for (const gain of layerGains()) expect(chainKinds(gain)).toEqual(['gain', 'destination']);
+    for (const gain of layerGains()) {
+      expect(chainKinds(gain)).toEqual(['gain', 'compressor', 'destination']);
+    }
   });
 
   it('softens a tone to a lower sine', () => {
@@ -326,6 +339,43 @@ describe('sound cues', () => {
     playSound('capture');
     expect(graph.nodes).toHaveLength(0);
   });
+
+  it('plays nothing and vibrates nothing before the first tap or key press', () => {
+    const vibrateSpy = vi.fn(() => true);
+    Object.defineProperty(navigator, 'vibrate', { value: vibrateSpy, configurable: true });
+    try {
+      useSettings.getState().update({ sounds: true, haptics: true });
+      resetUserGesture();
+      expect(hasUserGesture()).toBe(false);
+      playSound('move');
+      vibrate('move');
+      expect(graph.nodes).toHaveLength(0);
+      expect(vibrateSpy).not.toHaveBeenCalled();
+      // The first gesture anywhere on the page opens the gate.
+      window.dispatchEvent(new Event('pointerdown'));
+      expect(hasUserGesture()).toBe(true);
+      playSound('move');
+      expect(graph.nodes.length).toBeGreaterThan(0);
+      expect(vibrateSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      Reflect.deleteProperty(navigator, 'vibrate');
+      useSettings.getState().update({ haptics: false });
+    }
+  });
+
+  it('every cue meets at one limiter in front of the speakers', () => {
+    SOUNDS.check();
+    SOUNDS.gameEnd();
+    const limiters = new Set<FakeNode>();
+    for (const gain of layerGains()) {
+      let n: FakeNode | undefined = gain;
+      while (n && n.kind !== 'destination') {
+        if (n.kind === 'compressor' && n.targets[0]?.kind === 'destination') limiters.add(n);
+        n = n.targets[0];
+      }
+    }
+    expect(limiters.size).toBe(1);
+  });
 });
 
 describe('haptics', () => {
@@ -336,6 +386,7 @@ describe('haptics', () => {
     Object.defineProperty(navigator, 'vibrate', { value: vibrateSpy, configurable: true });
     useSettings.getState().reset();
     useSettings.getState().update({ sounds: false, haptics: true });
+    markUserGesture();
   });
 
   afterEach(() => {

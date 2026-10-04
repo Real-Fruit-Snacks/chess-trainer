@@ -1,8 +1,15 @@
 import type { Square } from 'chess.js';
-import { type CSSProperties, memo } from 'react';
+import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  memo,
+  useRef,
+  useState,
+} from 'react';
 import type { LongColor } from '@/chess/types';
 import { useSettings } from '@/store/settings';
 import { BOARD_PALETTES } from './boardThemes';
+import { defaultCursor, isDarkSquare, moveCursor, squareFromKeys } from './keyboard';
 import './click-board.css';
 
 export type PieceRole = 'king' | 'queen' | 'rook' | 'bishop' | 'knight' | 'pawn';
@@ -29,9 +36,12 @@ export interface ClickBoardProps {
 }
 
 /**
- * A plain 8×8 grid of buttons — no drag and drop, no rules. Used where the
+ * A plain 8×8 group of buttons — no drag and drop, no rules. Used where the
  * interaction is "click a square": the board editor and the vision drills.
  * Pieces reuse the chessground piece sprites via the `cg-wrap` class.
+ *
+ * One tab stop: the arrow keys move between squares (roving tabindex), a
+ * typed square such as "e4" jumps to it, Enter or Space presses the square.
  */
 export const ClickBoard = memo(function ClickBoard({
   pieces,
@@ -47,20 +57,58 @@ export const ClickBoard = memo(function ClickBoard({
   const palette = BOARD_PALETTES[theme];
   const ranks = orientation === 'white' ? [...RANKS].reverse() : [...RANKS];
   const files = orientation === 'white' ? [...FILES] : [...FILES].reverse();
+  const [cursor, setCursor] = useState<Square>(() => defaultCursor(orientation));
+  const rootRef = useRef<HTMLDivElement>(null);
+  const pendingFile = useRef<string | null>(null);
+
+  const focusSquare = (square: Square) => {
+    setCursor(square);
+    rootRef.current
+      ?.querySelector<HTMLButtonElement>(`[data-square="${square}"]`)
+      ?.focus({ preventScroll: true });
+  };
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const target = (e.target as HTMLElement).dataset.square as Square | undefined;
+    const current = target ?? cursor;
+    const arrow = moveCursor(current, e.key, orientation);
+    if (arrow) {
+      focusSquare(arrow);
+      pendingFile.current = null;
+    } else if (e.key === 'Home') {
+      focusSquare(`${files[0]}${ranks[ranks.length - 1]}` as Square);
+    } else if (e.key === 'End') {
+      focusSquare(`${files[7]}${ranks[0]}` as Square);
+    } else if (/^[a-hA-H]$/.test(e.key)) {
+      // The first half of a typed square; swallowed so page letter shortcuts never fire.
+      pendingFile.current = e.key;
+    } else if (/^[1-8]$/.test(e.key) && pendingFile.current) {
+      const square = squareFromKeys(pendingFile.current, e.key);
+      pendingFile.current = null;
+      if (square) focusSquare(square);
+    } else {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
   return (
     <div
+      ref={rootRef}
       className={`clickboard cg-wrap${coordinates ? ' clickboard--coords' : ''}`}
-      role="grid"
+      role="group"
       aria-label={ariaLabel}
       style={{ '--light': palette.light, '--dark': palette.dark } as CSSProperties}
+      onKeyDown={onKeyDown}
     >
       {ranks.map((rank) => (
-        <div className="clickboard__row" role="row" key={rank}>
+        <div className="clickboard__row" key={rank}>
           {files.map((file) => {
             const square = `${file}${rank}` as Square;
             const piece = pieces?.get(square);
-            const dark = (FILES.indexOf(file) + Number(rank)) % 2 === 0;
+            const dark = isDarkSquare(square);
             const mark = marks?.get(square);
             const label =
               squareLabel?.(square, piece) ??
@@ -69,7 +117,6 @@ export const ClickBoard = memo(function ClickBoard({
               <button
                 type="button"
                 key={square}
-                role="gridcell"
                 className={[
                   'clickboard__square',
                   dark ? 'clickboard__square--dark' : 'clickboard__square--light',
@@ -78,8 +125,11 @@ export const ClickBoard = memo(function ClickBoard({
                   .filter(Boolean)
                   .join(' ')}
                 onClick={onSquare ? () => onSquare(square) : undefined}
+                onFocus={() => setCursor(square)}
                 disabled={disabled}
+                tabIndex={square === cursor ? 0 : -1}
                 aria-label={label}
+                aria-pressed={mark === 'selected' ? true : undefined}
                 data-square={square}
               >
                 {coordinates && file === files[0] ? (

@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
+import type { Square } from 'chess.js';
 import { InstallBanner } from '@/app/InstallPrompt';
+import { isDarkSquare } from '@/components/board/keyboard';
 import {
   Badge,
   Button,
@@ -20,7 +22,6 @@ import { useNow } from '@/lib/useNow';
 import { siteConfig } from '@/site.config';
 import { summarizeProgress, useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
-import { useSettings } from '@/store/settings';
 import { useGames } from '@/store/games';
 import { buildInsights } from '@/features/games/insights';
 import { BackupNudge } from '@/features/progress/BackupNudge';
@@ -74,7 +75,7 @@ const FEATURES = [
     to: '/arcade',
     icon: 'gamepad' as IconName,
     title: 'Arcade',
-    text: 'Hand & Brain with Stockfish as your partner, the Daily Opening, Who Stands Better?, the Odds Ladder, Army Draft, Fortress, Engine Says and blindfold games.',
+    text: 'Nine games: Hand & Brain with Stockfish as your partner, the Daily Opening, Who Stands Better?, the Odds Ladder, Army Draft, Fortress, Engine Says, Blindfold and a Simul on up to eight boards.',
     cta: 'Pick a game',
   },
   {
@@ -98,8 +99,8 @@ export default function HomePage() {
   const stats = summarizeProgress(progress);
   const repertoireCards = useRepertoire((s) => s.cards);
   const customRepertoires = useRepertoire((s) => s.custom);
-  const tourDismissed = useSettings((s) => s.tourDismissed);
-  const updateSettings = useSettings((s) => s.update);
+  const tourDismissed = progress.tourDismissed;
+  const dismissTour = progress.dismissTour;
   const now = useNow(60_000, progress.puzzleReviews);
   const course = useMemo(
     () => activeCourse(COURSES, progress, repertoireCards),
@@ -119,6 +120,8 @@ export default function HomePage() {
       progress.daily,
       progress.attempts,
       progress.puzzleReviews,
+      progress.lessonRecall,
+      progress.themeStats,
       progress.lessons,
       progress.drills,
       progress.dailyOpening,
@@ -138,35 +141,113 @@ export default function HomePage() {
     progress.attempts.length > 0 ||
     Object.keys(progress.lessons).length > 0 ||
     progress.games.length > 0;
+  // Someone who has started gets their day first; the introduction is for newcomers.
+  const returning = hasActivity || progress.onboarded;
   const nextLesson = LESSON_META.find((l) => !progress.lessons[l.id]?.completedAt);
+  const minutesLeft = plan.items.filter((i) => !i.done).reduce((sum, i) => sum + i.minutes, 0);
+  const moreThan = plan.items.some((i) => !i.done && i.moreThan);
 
   return (
     <div>
-      <section className="hero">
-        <div className="hero__text">
-          <Badge tone="accent">Free · Open source · Works offline</Badge>
-          <h1 className="hero__title">Learn chess at your own pace — whatever your level.</h1>
-          <p className="hero__lead">
-            {siteConfig.name} runs entirely in your browser: interactive lessons, rating-aware
-            puzzles, drills, an opening trainer, a scalable engine to play against and a full
-            analysis board. No account, no ads, nothing to install unless you want to.
-          </p>
-          <div className="row">
-            <LinkButton variant="primary" size="lg" to={progress.onboarded ? '/puzzles' : '/learn'}>
-              {progress.onboarded ? 'Continue training' : 'Start learning'}
-            </LinkButton>
-            <LinkButton size="lg" to="/play">
-              Play a game
-            </LinkButton>
+      {returning ? (
+        <h1 className="sr-only">{siteConfig.name}</h1>
+      ) : (
+        <section className="hero">
+          <div className="hero__text">
+            <Badge tone="accent">Free · Open source · Works offline</Badge>
+            <h1 className="hero__title">Learn chess at your own pace — whatever your level.</h1>
+            <p className="hero__lead">
+              {siteConfig.name} runs entirely in your browser: interactive lessons, rating-aware
+              puzzles, drills, an opening trainer, a scalable engine to play against and a full
+              analysis board. No account, no ads, nothing to install unless you want to.
+            </p>
+            <div className="row">
+              <LinkButton variant="primary" size="lg" to="/learn">
+                Start learning
+              </LinkButton>
+              <LinkButton size="lg" to="/play">
+                Play a game
+              </LinkButton>
+            </div>
           </div>
-        </div>
-        <div className="hero__art" aria-hidden="true">
-          <MiniBoard />
-        </div>
-      </section>
+          <div className="hero__art" aria-hidden="true">
+            <MiniBoard />
+          </div>
+        </section>
+      )}
 
-      <InstallBanner />
-      <BackupNudge compact />
+      {returning ? null : (
+        <>
+          <InstallBanner />
+          <BackupNudge compact />
+        </>
+      )}
+
+      {returning ? (
+        <section
+          className="home__today home__today--first card"
+          aria-labelledby="today-title"
+          data-testid="home-today"
+        >
+          <div className="row row--between">
+            <div>
+              <h2 id="today-title" style={{ margin: 0 }}>
+                Today
+              </h2>
+              <p className="small muted" style={{ margin: '2px 0 0' }}>
+                {plan.done} of {plan.total} done ·{' '}
+                {streak.current > 0
+                  ? `${streak.current}-day training streak${streak.best > streak.current ? ` (best ${streak.best})` : ''}`
+                  : streak.best > 0
+                    ? `Start a new streak (best ${streak.best})`
+                    : 'Train a little every day to start a streak'}
+              </p>
+            </div>
+            <span className="small muted">
+              ~{minutesLeft}
+              {moreThan ? '+' : ''} min left
+            </span>
+          </div>
+          <div style={{ margin: '8px 0 12px' }}>
+            <ProgressBar value={plan.done} max={plan.total} label="Today’s plan" />
+          </div>
+          <ul className="home__plan" role="list">
+            {plan.items.map((item) => (
+              <li key={item.id}>
+                <Link to={item.to} className={`home__plan-item${item.done ? ' is-done' : ''}`}>
+                  <span className="home__plan-check" aria-hidden="true">
+                    {item.done ? <Icon name="check" size={14} /> : null}
+                  </span>
+                  <span className="home__plan-text">
+                    <span className="home__plan-title">{item.title}</span>
+                    <span className="small muted">{item.detail}</span>
+                  </span>
+                  <span className="small faint">
+                    {item.done ? 'done' : `${item.minutes}${item.moreThan ? '+' : ''} min`}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {course?.next ? (
+            <p className="small home__course" data-testid="home-course">
+              <strong>{course.course.title}</strong> · {course.doneItems}/{course.totalItems} steps
+              ·{' '}
+              <Link to={course.next.to}>
+                {course.doneItems ? 'Continue' : 'Start'}: {course.next.title}
+              </Link>{' '}
+              · <Link to={`/learn/course/${course.course.id}`}>Course overview</Link>
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {returning ? (
+        <>
+          <InstallBanner />
+          <BackupNudge compact />
+        </>
+      ) : null}
 
       {!hasActivity && !tourDismissed ? (
         <section className="home__welcome card" aria-labelledby="welcome-title">
@@ -174,11 +255,7 @@ export default function HomePage() {
             <h2 id="welcome-title" style={{ margin: 0 }}>
               New here? Three steps to get going
             </h2>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => updateSettings({ tourDismissed: true })}
-            >
+            <Button size="sm" variant="ghost" onClick={dismissTour}>
               Dismiss
             </Button>
           </div>
@@ -202,60 +279,9 @@ export default function HomePage() {
             </li>
           </ol>
           <p className="small muted" style={{ margin: 0 }}>
-            Everything works offline after the first visit, and your progress stays on this device.
+            Lessons, the engine and a first set of puzzles at every level work offline after the
+            first visit, and your progress stays on this device.
           </p>
-        </section>
-      ) : null}
-
-      {hasActivity || progress.onboarded ? (
-        <section className="home__today card" aria-labelledby="today-title">
-          <div className="row row--between">
-            <div>
-              <h2 id="today-title" style={{ margin: 0 }}>
-                Today
-              </h2>
-              <p className="small muted" style={{ margin: '2px 0 0' }}>
-                {plan.done} of {plan.total} done ·{' '}
-                {streak.current > 0
-                  ? `${streak.current}-day training streak${streak.best > streak.current ? ` (best ${streak.best})` : ''}`
-                  : streak.best > 0
-                    ? `Start a new streak (best ${streak.best})`
-                    : 'Train a little every day to start a streak'}
-              </p>
-            </div>
-            <span className="small muted">
-              ~{plan.items.filter((i) => !i.done).reduce((sum, i) => sum + i.minutes, 0)} min left
-            </span>
-          </div>
-          <div style={{ margin: '8px 0 12px' }}>
-            <ProgressBar value={plan.done} max={plan.total} label="Today's plan" />
-          </div>
-          <ul className="home__plan">
-            {plan.items.map((item) => (
-              <li key={item.id}>
-                <Link to={item.to} className={`home__plan-item${item.done ? ' is-done' : ''}`}>
-                  <span className="home__plan-check" aria-hidden="true">
-                    {item.done ? <Icon name="check" size={14} /> : null}
-                  </span>
-                  <span className="home__plan-text">
-                    <span className="home__plan-title">{item.title}</span>
-                    <span className="small muted">{item.detail}</span>
-                  </span>
-                  <span className="small faint">{item.done ? 'done' : `${item.minutes} min`}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          {course?.next ? (
-            <p className="small home__course" data-testid="home-course">
-              <strong>{course.course.title}</strong> · {course.doneItems}/{course.totalItems} steps
-              ·{' '}
-              <Link to={course.next.to}>
-                {course.doneItems ? 'Continue' : 'Start'}: {course.next.title}
-              </Link>{' '}
-              · <Link to={`/learn/course/${course.course.id}`}>Course overview</Link>
-            </p>
-          ) : null}
         </section>
       ) : null}
 
@@ -373,15 +399,24 @@ function MiniBoard() {
   const squares = [];
   for (let rank = 8; rank >= 1; rank--) {
     for (let f = 0; f < 8; f++) {
-      const key = `${files[f]}${rank}`;
-      const dark = (f + rank) % 2 === 0;
+      const key = `${files[f]}${rank}` as Square;
+      // The same rule as the real boards: a1 is dark, h1 light.
+      const dark = isDarkSquare(key);
       const piece = pieces[key];
       squares.push(
-        <div key={key} className={`miniboard__sq${dark ? ' miniboard__sq--dark' : ''}`}>
+        <div
+          key={key}
+          data-square={key}
+          className={`miniboard__sq${dark ? ' miniboard__sq--dark' : ''}`}
+        >
           {piece ? <piece className={piece} /> : null}
         </div>,
       );
     }
   }
-  return <div className="miniboard cg-wrap">{squares}</div>;
+  return (
+    <div className="miniboard cg-wrap" data-testid="hero-board">
+      {squares}
+    </div>
+  );
 }

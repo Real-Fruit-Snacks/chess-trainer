@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Card } from '@/components/ui';
+import { Card, Icon } from '@/components/ui';
+import { NONE } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import { useProgress } from '@/store/progress';
 import { type WeekFigures, weeklySummary } from './weeklySummary';
@@ -15,7 +16,7 @@ const ROWS: { key: keyof WeekFigures; label: string; suffix?: string }[] = [
 ];
 
 function show(value: number | null, suffix = ''): string {
-  if (value === null) return '—';
+  if (value === null) return NONE;
   return `${value}${suffix}`;
 }
 
@@ -60,9 +61,24 @@ export function WeeklyCard() {
                     {row.label}
                   </th>
                   <td
-                    className={`num ${up ? 'puzzle-delta--up' : down ? 'puzzle-delta--down' : ''}`}
+                    className={`num ${up ? 'weekly__cell--up' : down ? 'weekly__cell--down' : ''}`}
+                    data-trend={up ? 'up' : down ? 'down' : undefined}
                   >
                     {show(a, row.suffix)}
+                    {/* The trend is not colour alone: an arrow, and words for screen readers. */}
+                    {up || down ? (
+                      <>
+                        {' '}
+                        <Icon
+                          name={up ? 'arrow-up' : 'arrow-down'}
+                          size={12}
+                          className="weekly__trend"
+                        />
+                        <span className="sr-only">
+                          {up ? ', up on the 7 days before' : ', down on the 7 days before'}
+                        </span>
+                      </>
+                    ) : null}
                   </td>
                   <td className="num muted">{show(b, row.suffix)}</td>
                 </tr>

@@ -99,10 +99,12 @@ function attackers(
 export function staticExchange(fen: Fen, square: Square, color: Color): number {
   const chess = new Chess(fen);
   const target = chess.get(square);
-  if (!target) return 0;
+  // An en passant capture lands on an empty square: the pawn it wins stands beside it.
+  const enPassant = !target && chess.turn() === color && fen.split(' ')[3] === square;
+  if (!target && !enPassant) return 0;
   const gains: number[] = [];
   let side = color;
-  let onSquare = VALUE[target.type];
+  let onSquare = target ? VALUE[target.type] : VALUE.p;
   for (let depth = 0; depth < 12; depth++) {
     const list = attackers(chess, square, side).filter((a) => {
       // Only pieces that can legally capture there (pins, checks).
@@ -144,6 +146,86 @@ function targetsOf(
       if (!chess.attackers(cell.square, piece.color).includes(square)) continue;
       const defended = chess.attackers(cell.square, enemy).length > 0;
       out.push({ square: cell.square, type: cell.type, defended });
+    }
+  }
+  return out;
+}
+
+const SLIDER_DIRS: Record<PieceSymbol, [number, number][]> = {
+  r: [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ],
+  b: [
+    [1, 1],
+    [1, -1],
+    [-1, 1],
+    [-1, -1],
+  ],
+  q: [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [1, 1],
+    [1, -1],
+    [-1, 1],
+    [-1, -1],
+  ],
+  p: [],
+  n: [],
+  k: [],
+};
+
+/**
+ * Attacks uncovered by a piece leaving `vacated`: for every slider of `color`
+ * whose ray runs through the now-empty square, the first enemy piece beyond it.
+ */
+export function discoveredTargets(
+  chess: Chess,
+  vacated: Square,
+  color: Color,
+): { square: Square; type: PieceSymbol; defended: boolean; from: Square }[] {
+  if (chess.get(vacated)) return [];
+  const enemy: Color = color === 'w' ? 'b' : 'w';
+  const vf = vacated.charCodeAt(0) - 97;
+  const vr = Number(vacated[1]) - 1;
+  const out: { square: Square; type: PieceSymbol; defended: boolean; from: Square }[] = [];
+  for (const row of chess.board()) {
+    for (const cell of row) {
+      if (cell?.color !== color || !SLIDER_DIRS[cell.type].length) continue;
+      const sf = cell.square.charCodeAt(0) - 97;
+      const sr = Number(cell.square[1]) - 1;
+      const df = Math.sign(vf - sf);
+      const dr = Math.sign(vr - sr);
+      const onLine =
+        (df === 0 || dr === 0 || Math.abs(vf - sf) === Math.abs(vr - sr)) &&
+        SLIDER_DIRS[cell.type].some(([a, b]) => a === df && b === dr);
+      if (!onLine) continue;
+      // Walk from the slider towards and past the vacated square.
+      let f = sf + df;
+      let r = sr + dr;
+      let passed = false;
+      while (f >= 0 && f < 8 && r >= 0 && r < 8) {
+        const sq = `${String.fromCharCode(97 + f)}${r + 1}` as Square;
+        if (sq === vacated) passed = true;
+        const piece = chess.get(sq);
+        if (piece) {
+          if (passed && piece.color === enemy) {
+            out.push({
+              square: sq,
+              type: piece.type,
+              defended: chess.attackers(sq, enemy).length > 0,
+              from: cell.square,
+            });
+          }
+          break;
+        }
+        f += df;
+        r += dr;
+      }
     }
   }
   return out;
@@ -271,11 +353,11 @@ const cp = (score: Score | null) =>
   score ? (score.type === 'mate' ? Math.sign(score.value) * 10_000 : score.value) : 0;
 
 /**
- * Explains a judged move. Returns null for good moves; otherwise one motif
- * with its text, most specific first.
+ * Explains a judged move. Good moves get an explanation only when the scores
+ * show a mate missed or allowed; otherwise one motif with its text, most
+ * specific first.
  */
 export function explainMove(ctx: MoveContext): Explanation | null {
-  if (ctx.judgement === 'best' || ctx.judgement === 'good') return null;
   const before = new Chess(ctx.fen);
   const mover = before.turn();
   const enemy: Color = mover === 'w' ? 'b' : 'w';
@@ -308,6 +390,7 @@ export function explainMove(ctx: MoveContext): Explanation | null {
       keyMove: replySan,
     };
   }
+  if (ctx.judgement === 'best' || ctx.judgement === 'good') return null;
 
   // 2. What the reply does to the position after the move.
   if (ctx.replyUci) {
@@ -321,7 +404,11 @@ export function explainMove(ctx: MoveContext): Explanation | null {
         const gain = staticExchange(after.fen(), reply.to, enemy);
         const lostType = replyMove.captured;
         if (gain >= 3 || (gain >= 1 && lostType === 'p' && ctx.judgement !== 'blunder')) {
-          const movedHere = played.to === reply.to;
+          // An en passant capture takes the pawn beside its landing square.
+          const lostSquare = replyMove.isEnPassant()
+            ? (`${reply.to[0]}${reply.from[1]}` as Square)
+            : reply.to;
+          const movedHere = played.to === lostSquare;
           const defended = after.attackers(reply.to, mover).length > 0;
           if (gain >= VALUE[lostType] - 0.5) {
             return {
@@ -329,8 +416,8 @@ export function explainMove(ctx: MoveContext): Explanation | null {
               text: movedHere
                 ? `Puts the ${NAME[lostType]} where it can simply be taken: ${replyMove.san}.`
                 : defended
-                  ? `Leaves the ${NAME[lostType]} on ${reply.to} insufficiently defended: ${replyMove.san} wins it.`
-                  : `Leaves the ${NAME[lostType]} on ${reply.to} hanging: ${replyMove.san} takes it for free.`,
+                  ? `Leaves the ${NAME[lostType]} on ${lostSquare} insufficiently defended: ${replyMove.san} wins it.`
+                  : `Leaves the ${NAME[lostType]} on ${lostSquare} hanging: ${replyMove.san} takes it for free.`,
               keyMove: replyMove.san,
             };
           }
@@ -371,17 +458,20 @@ export function explainMove(ctx: MoveContext): Explanation | null {
           keyMove: replyMove.san,
         };
       }
-      // A discovered attack: the reply moves a piece and uncovers an attack on something valuable.
-      if (!replyMove.captured) {
-        const uncovered = targetsOf(probe, reply.from);
-        const valuable = uncovered.filter((t) => VALUE[t.type] >= 5 || !t.defended);
-        if (probe.inCheck() && valuable.length > 0) {
-          return {
-            motif: 'discovered-attack',
-            text: `Allows ${replyMove.san} with check, uncovering an attack on the ${NAME[valuable[0]?.type ?? 'q']}.`,
-            keyMove: replyMove.san,
-          };
-        }
+      // A discovered attack: the reply moves a piece off a line, and a slider behind it
+      // now hits something valuable (or gives check).
+      const uncovered = discoveredTargets(probe, reply.from, enemy);
+      const valuable = uncovered.filter(
+        (t) => t.type !== 'k' && (VALUE[t.type] >= 5 || (!t.defended && t.type !== 'p')),
+      );
+      const discoveredCheck = uncovered.some((t) => t.type === 'k');
+      if (valuable.length > 0 && (discoveredCheck || probe.inCheck() || !replyMove.captured)) {
+        const target = valuable[0];
+        return {
+          motif: 'discovered-attack',
+          text: `Allows ${replyMove.san}${discoveredCheck || probe.inCheck() ? ' with check' : ''}, uncovering an attack on the ${NAME[target?.type ?? 'q']}${target ? ` on ${target.square}` : ''}.`,
+          keyMove: replyMove.san,
+        };
       }
       // The reply's line wins material over the next few plies.
       if (ctx.replyPv && ctx.replyPv.length >= 2) {

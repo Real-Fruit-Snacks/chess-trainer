@@ -17,6 +17,14 @@ describe('defaultThreadCount', () => {
     expect(defaultThreadCount(64)).toBe(MAX_ENGINE_THREADS);
     expect(defaultThreadCount(Number.NaN)).toBe(1);
   });
+
+  it('caps phones and tablets at four threads', () => {
+    expect(defaultThreadCount(8, true)).toBe(4);
+    expect(defaultThreadCount(4, true)).toBe(3);
+    expect(
+      chooseEngineBuild(true, { isolated: true, sharedMemory: true, cores: 8, mobile: true }),
+    ).toEqual({ build: 'multi', threads: 4, reason: null });
+  });
 });
 
 describe('chooseEngineBuild', () => {

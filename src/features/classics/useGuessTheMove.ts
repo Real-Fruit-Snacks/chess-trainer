@@ -110,6 +110,8 @@ export function useGuessTheMove(game: ClassicGame): UseGuessTheMove {
   const scoreRef = useRef(0);
   const timersRef = useRef<number[]>([]);
   const recordedRef = useRef(false);
+  /** Bumped on restart so a judgement still in flight cannot play into the new game. */
+  const runRef = useRef(0);
 
   const clearTimers = () => {
     for (const t of timersRef.current) window.clearTimeout(t);
@@ -186,6 +188,7 @@ export function useGuessTheMove(game: ClassicGame): UseGuessTheMove {
       fenBefore: Fen,
       userMove: Move,
       actualSan: string,
+      run: number,
     ): Promise<GuessFeedback['verdict']> => {
       const client = engine();
       // The engine may still be loading right after navigation: wait for it rather than scoring 0.
@@ -207,10 +210,14 @@ export function useGuessTheMove(game: ClassicGame): UseGuessTheMove {
         if (chess.isCheckmate()) return 10_000;
         if (chess.isGameOver()) return 0;
         const res = await client.search({ fen, depth: JUDGE_DEPTH, multipv: 1 }).result;
+        if (res.stopped) return null;
         const s = res.lines.get(1)?.score;
         return s ? moverCp(s) : null;
       };
-      const [userCp, actualCp] = await Promise.all([evaluate(userFen), evaluate(actualFen)]);
+      // One after the other: a second search would stop the first at a shallow depth. A restart
+      // meanwhile makes the answer moot, so the second search is not started.
+      const userCp = await evaluate(userFen);
+      const actualCp = userCp === null || run !== runRef.current ? null : await evaluate(actualFen);
       if (userCp === null || actualCp === null) return 'miss';
       return userCp >= actualCp - GOOD_MOVE_MARGIN_CP ? 'good' : 'miss';
     },
@@ -250,7 +257,13 @@ export function useGuessTheMove(game: ClassicGame): UseGuessTheMove {
         return;
       }
       setPhase('checking');
-      void judge(fenBefore, move, actual).then(settle);
+      const run = runRef.current;
+      void judge(fenBefore, move, actual, run)
+        .catch((): GuessFeedback['verdict'] => 'miss')
+        .then((verdict) => {
+          if (run !== runRef.current) return;
+          settle(verdict);
+        });
     },
     [phase, moves, game.notes, judge, playGameMove],
   );
@@ -300,6 +313,8 @@ export function useGuessTheMove(game: ClassicGame): UseGuessTheMove {
 
   const restart = useCallback(() => {
     clearTimers();
+    runRef.current += 1;
+    engine().stop();
     chessRef.current = new Chess();
     plyRef.current = 0;
     scoreRef.current = 0;
@@ -310,7 +325,7 @@ export function useGuessTheMove(game: ClassicGame): UseGuessTheMove {
     setNeedsPromotion(null);
     sync(null);
     step();
-  }, [sync, step]);
+  }, [sync, step, engine]);
 
   return {
     phase,

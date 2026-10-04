@@ -17,6 +17,31 @@ export interface SrsCard {
 
 export const DAY_MS = 86_400_000;
 const LEARNING_STEP_MS = 10 * 60_000;
+/** Cards due on a later day come due at this local hour, when the day starts for most people. */
+export const DUE_HOUR = 4;
+
+/**
+ * When a card reviewed at `now` is next due. Intervals shorter than a day are
+ * taken literally; whole days land at 04:00 local time on the target day, so a
+ * card reviewed at 23:00 with a one-day interval is "tomorrow", not "in an
+ * hour", and the queue does not drift later through the day with every review.
+ */
+export function dueAt(now: number, days: number): number {
+  if (days < 1) return now + days * DAY_MS;
+  const target = new Date(now);
+  target.setDate(target.getDate() + Math.round(days));
+  target.setHours(DUE_HOUR, 0, 0, 0);
+  return target.getTime();
+}
+
+/** Whole local calendar days from `now` to `due` (negative when overdue). */
+export function dayDifference(now: number, due: number): number {
+  const a = new Date(now);
+  const b = new Date(due);
+  const utcA = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const utcB = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((utcB - utcA) / DAY_MS);
+}
 
 export function newCard(now: number): SrsCard {
   return { ease: 2.5, interval: 0, due: now, reps: 0, lapses: 0, lastReviewed: null };
@@ -45,7 +70,7 @@ export function reviewCard(card: SrsCard, quality: Quality, now: number): SrsCar
     reps,
     interval,
     ease,
-    due: now + interval * DAY_MS,
+    due: dueAt(now, interval),
     lastReviewed: now,
   };
 }
@@ -54,14 +79,15 @@ export function isDue(card: SrsCard | undefined, now: number): boolean {
   return !card || card.due <= now;
 }
 
+/** Never reviewed. A lapsed card has `reps` 0 too, but it is relearning, not new. */
 export function isNew(card: SrsCard | undefined): boolean {
-  return !card || card.reps === 0;
+  return !card || (card.reps === 0 && card.lapses === 0 && card.lastReviewed === null);
 }
 
 /** Human-readable "in 3 days" / "now" for the UI. */
 export function describeDue(card: SrsCard | undefined, now: number): string {
   if (!card || card.due <= now) return 'now';
-  const days = Math.round((card.due - now) / DAY_MS);
+  const days = dayDifference(now, card.due);
   if (days <= 0) return 'later today';
   if (days === 1) return 'tomorrow';
   return `in ${days} days`;

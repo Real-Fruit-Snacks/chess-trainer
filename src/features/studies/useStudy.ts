@@ -26,8 +26,10 @@ export interface StudyState {
   shapes: DrawShape[];
   highlights: Map<Square, string>;
   hintLevel: 0 | 1 | 2;
-  /** True once a wrong move or the solution was used. */
+  /** True once a hint, a wrong move or the solution was used; "Replay" starts clean again. */
   assisted: boolean;
+  /** Whether "Show solution" can be used right now (only while the solver is to move). */
+  canReveal: boolean;
   needsPromotion: { from: Square; to: Square } | null;
   /** SAN of the whole main line played out so far (for the move list). */
   played: string[];
@@ -86,6 +88,7 @@ export function useStudy(
     setNotes([]);
     setFeedback(null);
     setHintLevel(0);
+    setAssisted(false);
     setWrongSquare(null);
     setNeedsPromotion(null);
     setPlayed([]);
@@ -209,9 +212,13 @@ export function useStudy(
     setHintLevel((l) => (l >= 2 ? 2 : ((l + 1) as 1 | 2)));
   }, [phase]);
 
-  /** Plays the rest of the main line automatically. */
+  /**
+   * Plays the rest of the main line automatically. Only while the solver is to
+   * move: during the wrong-move flash or the scripted reply the board is mid-
+   * animation, and revealing then would skip the moves it was meant to show.
+   */
   const reveal = useCallback(() => {
-    if (phase === 'solved' || phase === 'revealed') return;
+    if (phase !== 'solving') return;
     clear();
     setAssisted(true);
     const chess = chessRef.current;
@@ -293,6 +300,7 @@ export function useStudy(
     highlights,
     hintLevel,
     assisted,
+    canReveal: phase === 'solving',
     needsPromotion,
     played,
     playMove,

@@ -56,7 +56,7 @@ test.describe('coach and commentary', () => {
   test('the coach pauses after a blunder, explains it and takes it back', async ({ page }) => {
     // White to move with a queen against a lone king: Qd8+?? hangs the queen to Kxd8.
     await page.goto('/play?fen=4k3%2F8%2F8%2F8%2F8%2F8%2F8%2F3QK3%20w%20-%20-%200%201&color=white');
-    await page.getByLabel('Strength').selectOption('1');
+    await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
     await expect(page.getByText(/Coach on/)).toBeVisible();
@@ -170,7 +170,7 @@ test.describe('opening explorer', () => {
     await expect(explorer).toContainText('uses the network');
     expect(requests).toHaveLength(0);
 
-    await explorer.getByRole('button', { name: 'Turn on' }).click();
+    await explorer.getByRole('switch', { name: 'Look up positions' }).click();
     await expect(explorer).toContainText('9,000 games');
     await expect(explorer.getByRole('button', { name: 'e4' })).toBeVisible();
     await expect(explorer).toContainText('61 %'); // e4's share of 9,000 games
@@ -180,12 +180,12 @@ test.describe('opening explorer', () => {
 
     // Clicking a move plays it on the board and the explorer follows.
     await explorer.getByRole('button', { name: 'e4' }).click();
-    await expect(explorer).toContainText("B00 King's Pawn Game");
+    await expect(explorer).toContainText('B00 King’s Pawn Game');
     await expect(explorer.getByRole('button', { name: 'c5' })).toBeVisible();
     await expect(page.locator('.treemoves')).toContainText('e4');
 
     // Switching to the Lichess database asks again with that database's parameters.
-    await explorer.getByRole('button', { name: 'Lichess' }).click();
+    await explorer.getByRole('radio', { name: 'Lichess' }).click();
     await expect(explorer).toContainText('550,000 games');
     expect(requests.some((r) => r.startsWith('lichess:'))).toBe(true);
 
@@ -197,8 +197,8 @@ test.describe('opening explorer', () => {
     await expect(toggle).not.toBeChecked();
     await page.goto('/analyze');
     await expect(
-      page.getByTestId('explorer').getByRole('button', { name: 'Turn on' }),
-    ).toBeVisible();
+      page.getByTestId('explorer').getByRole('switch', { name: 'Look up positions' }),
+    ).not.toBeChecked();
   });
 
   test('a line from the analysis board can start and extend a repertoire', async ({ page }) => {
@@ -267,7 +267,7 @@ test.describe('opening explorer', () => {
     const explorer = page.getByTestId('explorer');
     await explorer.getByRole('button', { name: 'e4' }).click();
     await expect(panel.locator('.treemoves')).toContainText('e4');
-    await expect(explorer).toContainText("B00 King's Pawn Game");
+    await expect(explorer).toContainText('B00 King’s Pawn Game');
 
     // A note on the new move, saved into the repertoire.
     await panel.getByRole('button', { name: 'Add note' }).click();
@@ -293,6 +293,10 @@ test.describe('opening explorer', () => {
     await page
       .getByTestId('explore-panel')
       .getByRole('button', { name: 'Delete from here' })
+      .click();
+    await page
+      .getByRole('dialog', { name: 'Delete this line?' })
+      .getByTestId('confirm-accept')
       .click();
     await expect(page.getByTestId('explore-panel').locator('.treemoves')).not.toContainText('e4');
     await expect(page.getByTestId('explore-panel').locator('.treemoves')).toContainText('d4');
@@ -503,9 +507,7 @@ test.describe('platform', () => {
             a: {
               id: 'a',
               due: Date.now() - 600_000,
-              interval: 1,
-              ease: 2.5,
-              reps: 1,
+              step: 0,
               lapses: 0,
               rating: 1200,
               themes: 'fork',
@@ -514,9 +516,7 @@ test.describe('platform', () => {
             b: {
               id: 'b',
               due: Date.now() - 600_000,
-              interval: 1,
-              ease: 2.5,
-              reps: 1,
+              step: 0,
               lapses: 0,
               rating: 1200,
               themes: 'pin',
@@ -530,7 +530,12 @@ test.describe('platform', () => {
       return true;
     });
     expect(imported).toBe(true);
-    await expect(page.getByText('Progress imported from the backup file.')).toBeVisible();
+    // A file opened with the app is never imported unasked: it shows what it holds first.
+    const confirm = page.getByRole('dialog', { name: 'Replace your data with this backup?' });
+    await expect(confirm.getByTestId('import-summary')).toBeVisible();
+    await expect(confirm.getByTestId('import-summary')).not.toContainText('damaged');
+    await confirm.getByTestId('import-confirm').click();
+    await expect(page.getByText(/Backup imported — your data was replaced/)).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => (window as unknown as { __badges: unknown[] }).__badges))
       .toContain(2);

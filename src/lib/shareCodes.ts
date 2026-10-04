@@ -1,5 +1,5 @@
 import type { LongColor } from '@/chess/types';
-import { compressText, decompressText } from './shareLink';
+import { compressText, decompressText, type ShareLinkFailure, ShareLinkError } from './shareLink';
 
 /**
  * Compressed share links for things other than games: a repertoire
@@ -21,6 +21,13 @@ export interface SharedWoodpeckerSet {
 
 export type SharedPayload = SharedRepertoire | SharedWoodpeckerSet;
 
+/** A shared Woodpecker set carries at most this many puzzles (the app builds sets of 40–200). */
+export const MAX_SHARED_WOODPECKER_IDS = 200;
+/** A shared repertoire's name is cut here. */
+export const MAX_SHARED_NAME_LENGTH = 80;
+/** A puzzle id is a short alphanumeric token. */
+const PUZZLE_ID = /^[A-Za-z0-9_-]{1,32}$/;
+
 const KEYS: Record<SharedPayload['kind'], string> = { repertoire: 'rep', woodpecker: 'wp' };
 
 export async function encodeShare(payload: SharedPayload): Promise<string> {
@@ -28,50 +35,70 @@ export async function encodeShare(payload: SharedPayload): Promise<string> {
   return `${KEYS[kind]}=${await compressText(JSON.stringify(rest))}`;
 }
 
-function isRepertoire(value: unknown): value is Omit<SharedRepertoire, 'kind'> {
-  if (typeof value !== 'object' || value === null) return false;
+function readRepertoire(value: unknown): Omit<SharedRepertoire, 'kind'> | null {
+  if (typeof value !== 'object' || value === null) return null;
   const v = value as Record<string, unknown>;
-  return (
-    typeof v.name === 'string' &&
-    (v.color === 'white' || v.color === 'black') &&
-    typeof v.pgn === 'string'
-  );
+  if (
+    typeof v.name !== 'string' ||
+    (v.color !== 'white' && v.color !== 'black') ||
+    typeof v.pgn !== 'string'
+  ) {
+    return null;
+  }
+  return { name: v.name.trim().slice(0, MAX_SHARED_NAME_LENGTH), color: v.color, pgn: v.pgn };
 }
 
-function isWoodpecker(value: unknown): value is Omit<SharedWoodpeckerSet, 'kind'> {
-  if (typeof value !== 'object' || value === null) return false;
+function readWoodpecker(value: unknown): Omit<SharedWoodpeckerSet, 'kind'> | null {
+  if (typeof value !== 'object' || value === null) return null;
   const v = value as Record<string, unknown>;
-  return (
-    Array.isArray(v.puzzleIds) &&
-    v.puzzleIds.every((id) => typeof id === 'string') &&
-    typeof v.rating === 'number'
-  );
+  if (!Array.isArray(v.puzzleIds) || typeof v.rating !== 'number' || !Number.isFinite(v.rating)) {
+    return null;
+  }
+  // Ids are de-duplicated and capped; anything that is not an id is dropped.
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const id of v.puzzleIds) {
+    if (typeof id !== 'string' || !PUZZLE_ID.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+    if (ids.length >= MAX_SHARED_WOODPECKER_IDS) break;
+  }
+  if (ids.length === 0) return null;
+  return { puzzleIds: ids, rating: v.rating };
+}
+
+export type ShareDecodeResult =
+  { ok: true; payload: SharedPayload } | { ok: false; kind: ShareLinkFailure };
+
+/** Reads a share fragment (with or without the leading `#`), saying why when it cannot. */
+export async function readShare(fragment: string): Promise<ShareDecodeResult> {
+  const raw = fragment.startsWith('#') ? fragment.slice(1) : fragment;
+  if (!raw) return { ok: false, kind: 'empty' };
+  const params = new URLSearchParams(raw);
+  const rep = params.get(KEYS.repertoire);
+  const wp = params.get(KEYS.woodpecker);
+  if (!rep && !wp) return { ok: false, kind: 'empty' };
+  try {
+    const value: unknown = JSON.parse(await decompressText(rep ?? wp ?? ''));
+    if (rep) {
+      const payload = readRepertoire(value);
+      return payload
+        ? { ok: true, payload: { kind: 'repertoire', ...payload } }
+        : { ok: false, kind: 'invalid' };
+    }
+    const payload = readWoodpecker(value);
+    return payload
+      ? { ok: true, payload: { kind: 'woodpecker', ...payload } }
+      : { ok: false, kind: 'invalid' };
+  } catch (error) {
+    return { ok: false, kind: error instanceof ShareLinkError ? error.kind : 'invalid' };
+  }
 }
 
 /** Reads a share fragment (with or without the leading `#`); null when it carries none. */
 export async function decodeShare(fragment: string): Promise<SharedPayload | null> {
-  const raw = fragment.startsWith('#') ? fragment.slice(1) : fragment;
-  if (!raw) return null;
-  const params = new URLSearchParams(raw);
-  try {
-    const rep = params.get(KEYS.repertoire);
-    if (rep) {
-      const value: unknown = JSON.parse(await decompressText(rep));
-      return isRepertoire(value)
-        ? { kind: 'repertoire', name: value.name, color: value.color, pgn: value.pgn }
-        : null;
-    }
-    const wp = params.get(KEYS.woodpecker);
-    if (wp) {
-      const value: unknown = JSON.parse(await decompressText(wp));
-      return isWoodpecker(value)
-        ? { kind: 'woodpecker', puzzleIds: value.puzzleIds, rating: value.rating }
-        : null;
-    }
-  } catch {
-    return null;
-  }
-  return null;
+  const result = await readShare(fragment);
+  return result.ok ? result.payload : null;
 }
 
 /** A full link to `path` (app-relative, e.g. `/openings`) carrying the payload. */

@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
 import { COURSES } from '@/features/learn/courses';
+import { LEVEL_LABELS, LEVEL_START_RATING, levelForRating } from '@/features/learn/model';
 import { evaluatePlacement, shuffledOptions, TACTIC_QUESTIONS } from './placement';
 
 const solveAll = TACTIC_QUESTIONS.map((q) => q.answer);
@@ -86,6 +87,35 @@ describe('placement quiz', () => {
         openings: 'none',
       });
       expect(ids.has(result.courseId)).toBe(true);
+    }
+  });
+
+  it('places by the same rating boundaries the level labels print', () => {
+    expect(levelForRating(LEVEL_START_RATING.intermediate - 10)).toBe('beginner');
+    expect(levelForRating(LEVEL_START_RATING.intermediate)).toBe('intermediate');
+    expect(levelForRating(LEVEL_START_RATING.advanced - 10)).toBe('intermediate');
+    expect(levelForRating(LEVEL_START_RATING.advanced)).toBe('advanced');
+    expect(LEVEL_LABELS.beginner.ratingHint).toBe('up to ~800');
+    expect(LEVEL_LABELS.intermediate.ratingHint).toBe('~800–1600');
+    expect(LEVEL_LABELS.advanced.ratingHint).toBe('1600+');
+    // Every combination of answers lands in the course of the level its rating reads as.
+    const courseOf = { beginner: 'first-steps', intermediate: 'club-player' } as const;
+    for (const experience of ['new', 'beginner', 'casual', 'club', 'strong'] as const) {
+      for (const endgames of ['none', 'queen', 'rook', 'lucena'] as const) {
+        for (const tactics of [[null, null, null], solveAll, missAll]) {
+          const result = evaluatePlacement({
+            experience,
+            rules: ['castling', 'stalemate'],
+            tactics,
+            endgames,
+            openings: 'some',
+          });
+          expect(result.level).toBe(levelForRating(result.rating));
+          expect(result.courseId).toBe(
+            courseOf[result.level as keyof typeof courseOf] ?? 'strategy-and-calculation',
+          );
+        }
+      }
     }
   });
 

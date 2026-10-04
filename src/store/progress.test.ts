@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { EXPORT_VERSION } from './backupSchema';
 import { summarizeProgress, useProgress, withRatingDefaults } from './progress';
+import { dueAt } from '@/lib/srs';
 import { localDateKey } from '@/lib/dates';
 import { DEFAULT_VOLATILITY, INITIAL_RD } from '@/lib/glicko';
 import { REPEAT_WEIGHT } from '@/lib/puzzleScore';
@@ -105,13 +107,13 @@ describe('progress store', () => {
     expect(useProgress.getState().puzzleRating).toBe(1000);
     expect(useProgress.getState().rushRuns).toEqual([]);
     expect(useRepertoire.getState().cards).toEqual({});
-    expect(useProgress.getState().importState(JSON.parse(json))).toBe(true);
+    expect(useProgress.getState().importState(JSON.parse(json)).ok).toBe(true);
     expect(useProgress.getState().attempts[0]?.id).toBe('x');
     expect(useProgress.getState().rushRuns[0]?.score).toBe(7);
     expect(useProgress.getState().drills.coordinates?.best).toBe(22);
     expect(useProgress.getState().themeStats.fork?.solved).toBe(1);
     expect(useRepertoire.getState().cards['italian|e2e4']?.reps).toBe(1);
-    expect(useProgress.getState().importState({ nonsense: true })).toBe(false);
+    expect(useProgress.getState().importState({ nonsense: true }).ok).toBe(false);
   });
 
   it('queues missed puzzles for review and reschedules solves', () => {
@@ -201,11 +203,13 @@ describe('progress store', () => {
       version: number;
       progress: { dailyOpening: { streak: number }; oddsLadder: { rung: number } };
     };
-    expect(exported.version).toBe(6);
+    expect(exported.version).toBe(EXPORT_VERSION);
     expect(exported.progress.dailyOpening.streak).toBe(2);
     expect(exported.progress.oddsLadder.rung).toBe(2);
     // A save from before the arcade existed gets the defaults.
-    expect(useProgress.getState().importState({ onboarded: true, puzzleRating: 1400 })).toBe(true);
+    expect(useProgress.getState().importState({ onboarded: true, puzzleRating: 1400 }).ok).toBe(
+      true,
+    );
     expect(useProgress.getState().oddsLadder).toEqual({ rung: 0, best: 0, results: {} });
     expect(useProgress.getState().dailyOpening).toBeNull();
   });
@@ -282,7 +286,7 @@ describe('own puzzles, bookmarks, recall and studies', () => {
     // First recall three days after the lesson (step 1 of the 1-3-7-14-30 schedule).
     expect(useProgress.getState().lessonRecall['forks:1']).toMatchObject({
       step: 1,
-      due: 1000 + 3 * 86_400_000,
+      due: dueAt(1000, 3),
     });
     useProgress.getState().recordLessonRecall('forks:1', 'solved');
     expect(useProgress.getState().lessonRecall['forks:1']?.step).toBe(2);
@@ -321,7 +325,7 @@ describe('own puzzles, bookmarks, recall and studies', () => {
     useProgress.getState().recordStudy('reti', 'solved', true);
     const exported = useProgress.getState().exportState();
     useProgress.getState().resetAll();
-    expect(useProgress.getState().importState(JSON.parse(exported))).toBe(true);
+    expect(useProgress.getState().importState(JSON.parse(exported)).ok).toBe(true);
     expect(useProgress.getState().ownPuzzles['own-z']).toBeDefined();
     expect(useProgress.getState().studies.reti?.clean).toBe(true);
   });
@@ -389,8 +393,10 @@ describe('Glicko-2 puzzle rating', () => {
     useProgress.setState({ puzzleRating: 1200, puzzleRd: 80 });
     const move = attempt('h2', 'solved', { ...base, hintLevel: 2 }).after - 1200;
     expect(clean).toBeGreaterThan(piece);
-    expect(piece).toBeGreaterThan(move);
-    expect(move).toBeLessThan(0); // the whole move was given away: worse than the expected 0.5
+    expect(piece).toBeGreaterThanOrEqual(move);
+    // The whole move was given away, which is worth less than the expected 0.5 —
+    // but a correct solve never costs rating points, so the floor holds it at 0.
+    expect(move).toBeCloseTo(0, 5);
     expect(useProgress.getState().attempts.find((a) => a.id === 'h1')?.hintUsed).toBe(true);
 
     useProgress.setState({ puzzleRating: 1200, puzzleRd: 80 });
@@ -446,7 +452,7 @@ describe('Glicko-2 puzzle rating', () => {
       lastRatedAt: 5,
     });
     // An old export goes through the same defaults.
-    expect(useProgress.getState().importState({ progress: old })).toBe(true);
+    expect(useProgress.getState().importState({ progress: old }).ok).toBe(true);
     expect(useProgress.getState().puzzleRd).toBe(80);
   });
 });

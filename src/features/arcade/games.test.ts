@@ -25,19 +25,22 @@ describe('arcade registry', () => {
       }),
     ).toBe('Held 3 positions · 2 plays');
     expect(describeArcadeBest(daily, empty)).toBeNull();
-    expect(
-      describeArcadeBest(daily, {
-        ...empty,
-        dailyOpening: {
-          date: '2026-10-01',
-          guesses: [],
-          result: null,
-          streak: 2,
-          bestStreak: 5,
-          history: { '2026-09-30': 3, '2026-09-29': 0 },
-        },
-      }),
-    ).toBe('Streak 2 · best 5 · 2 days played');
+    const dailyOpening = {
+      date: '2026-10-01',
+      guesses: [],
+      result: null,
+      streak: 2,
+      bestStreak: 5,
+      history: { '2026-09-30': 3, '2026-09-29': 0 },
+    };
+    // Today's state, and the streak while it is alive (solved yesterday).
+    expect(describeArcadeBest(daily, { ...empty, dailyOpening, today: '2026-10-01' })).toBe(
+      'Today: not played yet · streak 2 · best 5',
+    );
+    // A broken streak is not shown.
+    expect(describeArcadeBest(daily, { ...empty, dailyOpening, today: '2026-10-09' })).toBe(
+      'Today: not played yet · best 5',
+    );
     expect(describeArcadeBest(odds, empty)).toBeNull();
     expect(
       describeArcadeBest(odds, {
@@ -45,5 +48,12 @@ describe('arcade registry', () => {
         oddsLadder: { rung: 1, best: 1, results: { 0: { wins: 1, losses: 2 } } },
       }),
     ).toBe('Rung 2 of 6: Rook odds');
+    // A draw is a game played: the hub no longer says "Not played yet".
+    expect(
+      describeArcadeBest(odds, {
+        ...empty,
+        oddsLadder: { rung: 0, best: 0, results: { 0: { wins: 0, losses: 0, draws: 1 } } },
+      }),
+    ).toBe('Rung 1 of 6: Queen odds');
   });
 });

@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Badge, Stars, LinkButton } from '@/components/ui';
+import { Link } from 'react-router';
+import { Badge, LinkButton } from '@/components/ui';
 import { siteConfig } from '@/site.config';
 import { type DrillResult, useProgress } from '@/store/progress';
+import { Difficulty } from './Difficulty';
 import { DRILL_GROUPS } from './endgameDrills';
 import { buildEndgameLadder, describeLadder } from './endgameLadder';
 import './drills.css';
@@ -116,9 +117,7 @@ export default function DrillsPage() {
                   {best ? (
                     <Badge tone="success">{best}</Badge>
                   ) : (
-                    <Badge>
-                      <Stars count={card.difficulty} />
-                    </Badge>
+                    <Difficulty level={card.difficulty} />
                   )}
                 </div>
                 <p className="small muted" style={{ margin: 0 }}>
@@ -202,9 +201,7 @@ export default function DrillsPage() {
                       {best && result?.best ? (
                         <Badge tone="success">{best}</Badge>
                       ) : (
-                        <Badge>
-                          <Stars count={drill.difficulty} max={4} />
-                        </Badge>
+                        <Difficulty level={drill.difficulty} max={4} />
                       )}
                     </div>
                     <p className="small muted" style={{ margin: 0 }}>

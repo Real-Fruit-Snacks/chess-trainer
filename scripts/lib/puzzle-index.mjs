@@ -23,6 +23,33 @@ export function countPuzzle(counts, puzzle) {
     counts.openingVariations[variation] = (counts.openingVariations[variation] ?? 0) + 1;
 }
 
+/**
+ * Deals a bucket's puzzles into chunk files so that every chunk samples the
+ * whole rating band: the puzzles are sorted by rating (then id, for a stable
+ * order) and handed out round-robin — puzzle i goes to chunk i mod n. Only the
+ * first chunk of each band is precached, and before this it held just the
+ * lowest ~25 rating points of the band. Deterministic and idempotent: dealing
+ * the same set again gives the same files.
+ */
+export function dealChunks(puzzles, chunkSize) {
+  const sorted = [...puzzles].sort((a, b) => a.rating - b.rating || a.id.localeCompare(b.id));
+  const count = Math.ceil(sorted.length / chunkSize);
+  const chunks = Array.from({ length: count }, () => []);
+  sorted.forEach((p, i) => chunks[i % count].push(p));
+  return chunks;
+}
+
+/** The rating span of one chunk, recorded in the index so a window loads only the chunks it needs. */
+export function chunkRange(chunk) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const p of chunk) {
+    if (p.rating < min) min = p.rating;
+    if (p.rating > max) max = p.rating;
+  }
+  return chunk.length ? { min, max } : { min: 0, max: 0 };
+}
+
 export function emptyCounts() {
   return { themes: {}, openings: {}, openingVariations: {} };
 }

@@ -1,17 +1,17 @@
 # Engine binaries
 
-This directory holds the Stockfish WASM build that powers the **Play**, **Analyze**
-and **Puzzle hint** features. The files are **not committed** — they are downloaded
-and checksum-verified by `npm run engine:setup`, which also runs automatically
-before `npm run dev` and `npm run build`.
+This directory holds the Stockfish WASM build behind every feature that needs an engine: **Play**
+and its coach, **Analyze** and game review, the endgame drills, the classic games and the arcade's
+engine games. The files are **not committed** — they are downloaded and checksum-verified by
+`npm run engine:setup`, which also runs automatically before `npm run dev` and `npm run build`.
 
-| File                            | Purpose                                                    |
-| ------------------------------- | ---------------------------------------------------------- |
-| `stockfish-19-lite-single.js`   | Single-threaded worker bootstrap / Emscripten glue         |
-| `stockfish-19-lite-single.wasm` | Engine + embedded lite NNUE network (one thread)           |
-| `stockfish-19-lite.js`          | Multi-threaded (pthreads) bootstrap — experimental option  |
-| `stockfish-19-lite.wasm`        | Engine + embedded lite NNUE network (shared memory)        |
-| `version.json`                  | Written by the setup script                                |
+| File                            | Purpose                                                                     |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `stockfish-19-lite-single.js`   | Single-threaded worker bootstrap / Emscripten glue                          |
+| `stockfish-19-lite-single.wasm` | Engine + embedded lite NNUE network (one thread)                            |
+| `stockfish-19-lite.js`          | Multi-threaded (pthreads) bootstrap — experimental option                   |
+| `stockfish-19-lite.wasm`        | Engine + embedded lite NNUE network (shared memory)                         |
+| `version.json`                  | What is installed, written by the setup script (a record; nothing reads it) |
 
 Source: <https://github.com/nmrugg/stockfish.js> (GPL-3.0). Pinned version and
 SHA-256 checksums live in [`scripts/setup-engine.mjs`](../../scripts/setup-engine.mjs).

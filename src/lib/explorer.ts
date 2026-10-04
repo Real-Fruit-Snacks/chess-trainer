@@ -1,10 +1,11 @@
 import type { Fen, San, Uci } from '@/chess/types';
+import { fetchWithTimeout, isTimeoutError, retryAfterSeconds } from './fetchWithTimeout';
 
 /**
  * Optional lookups against the Lichess opening explorer: what people actually
  * play in a position and how it goes for them. Off by default
- * (settings.explorer) because it needs the network; every call is abortable
- * and results are cached per position and database.
+ * (settings.explorer) because it needs the network; every call is abortable,
+ * gives up after 15 seconds, and results are cached per position and database.
  *
  * API: https://lichess.org/api#tag/Opening-Explorer
  */
@@ -85,6 +86,22 @@ export const LICHESS_SPEEDS = ['blitz', 'rapid', 'classical'];
 
 const cache = new Map<string, ExplorerResult>();
 
+/** Milliseconds a lookup may take before it is given up on. */
+export const EXPLORER_TIMEOUT_MS = 15_000;
+
+/** A failed lookup, with a message fit for the explorer card. */
+export class ExplorerError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExplorerError';
+  }
+}
+
+/** "in 30 seconds" / "in 2 minutes" for a Retry-After delay. */
+function waitText(seconds: number): string {
+  return seconds >= 90 ? `${Math.ceil(seconds / 60)} minutes` : `${seconds} seconds`;
+}
+
 /** Turns an API answer into the shape the app uses; exported for tests. */
 export function normalizeExplorer(data: ApiResponse, database: ExplorerDatabase): ExplorerResult {
   const total = data.white + data.draws + data.black;
@@ -158,17 +175,51 @@ export async function lookupExplorer(
   const key = `${database}:${fen.split(' ').slice(0, 4).join(' ')}`;
   const cached = cache.get(key);
   if (cached) return cached;
-  const res = await fetch(explorerUrl(fen, database), {
-    signal,
-    headers: { Accept: 'application/json' },
-  });
-  if (res.status === 429) {
-    throw new Error('The explorer is rate-limiting requests — try again in a minute');
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(explorerUrl(fen, database), {
+      signal,
+      timeoutMs: EXPLORER_TIMEOUT_MS,
+      headers: { Accept: 'application/json' },
+    });
+  } catch (err) {
+    if (isTimeoutError(err)) {
+      throw new ExplorerError('The explorer took too long to answer — try again in a moment.');
+    }
+    // The caller's abort, or the network itself (described by describeExplorerError).
+    throw err;
   }
-  if (!res.ok) throw new Error(`Explorer request failed (HTTP ${res.status})`);
-  const result = scoreForMover(normalizeExplorer((await res.json()) as ApiResponse, database), fen);
+  if (res.status === 429) {
+    const wait = retryAfterSeconds(res);
+    throw new ExplorerError(
+      wait !== null && wait > 0
+        ? `The explorer is rate-limiting requests — try again in ${waitText(wait)}.`
+        : 'The explorer is rate-limiting requests — try again in a minute.',
+    );
+  }
+  if (!res.ok) {
+    throw new ExplorerError(`The explorer answered HTTP ${res.status} — try again later.`);
+  }
+  let data: ApiResponse;
+  try {
+    data = (await res.json()) as ApiResponse;
+  } catch {
+    throw new ExplorerError('The explorer sent an answer that could not be read.');
+  }
+  const result = scoreForMover(normalizeExplorer(data, database), fen);
   cache.set(key, result);
   return result;
+}
+
+/**
+ * A message for the card when a lookup fails: offline and unreachable are said
+ * plainly instead of the browser's raw "Failed to fetch".
+ */
+export function describeExplorerError(err: unknown, online = navigator.onLine): string {
+  if (!online) return 'You are offline — the explorer needs a network connection.';
+  if (err instanceof TypeError) return 'The explorer could not be reached — check your connection.';
+  if (err instanceof Error && err.message) return err.message;
+  return 'The explorer is unavailable right now.';
 }
 
 /** "62 %" style formatting of a 0–1 share. */

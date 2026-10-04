@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettings } from '@/store/settings';
-import { Board } from './Board';
+import { Board, type Key } from './Board';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
@@ -45,7 +46,7 @@ describe('Board keyboard control', () => {
     // Jump straight to e4 by typing the square, then confirm the destination.
     fireEvent.keyDown(board, { key: 'e' });
     fireEvent.keyDown(board, { key: '4' });
-    expect(screen.getByText('e4, empty')).toBeInTheDocument();
+    expect(screen.getByText('e4, empty, legal destination')).toBeInTheDocument();
     fireEvent.keyDown(board, { key: 'Enter' });
     await vi.waitFor(() => expect(onMove).toHaveBeenCalledWith('e2', 'e4', expect.anything()));
   });
@@ -65,10 +66,193 @@ describe('Board keyboard control', () => {
     expect(screen.getByText(/White to move\. White: king e1, queen d1/)).toBeInTheDocument();
   });
 
-  it('is a plain image when view-only', () => {
+  it('is a plain image with a position description when view-only', () => {
     render(<Board fen={START} viewOnly />);
-    expect(screen.getByRole('img', { name: /Chess board/ })).not.toHaveAttribute('tabindex');
+    const img = screen.getByRole('img', { name: /Chess board/ });
+    expect(img).not.toHaveAttribute('tabindex');
+    expect(img.getAttribute('aria-description')).toMatch(/^White to move\. White: king e1/);
     expect(screen.queryByRole('button', { name: 'Describe position' })).toBeNull();
+  });
+
+  it('describes the cursor square on focus and points to its instructions', () => {
+    render(<Board fen={START} movableColor="white" dests={new Map()} />);
+    const board = screen.getByRole('application', { name: /Chess board/ });
+    const instructions = document.getElementById(board.getAttribute('aria-describedby') ?? '');
+    expect(instructions?.textContent).toMatch(/arrow keys/);
+    act(() => board.focus());
+    expect(screen.getByText('e4, empty')).toBeInTheDocument();
+  });
+
+  it('swallows file letters (in either case) and Space so page shortcuts and scrolling never fire', () => {
+    const pageHandler = vi.fn();
+    render(
+      <div onKeyDown={pageHandler}>
+        <Board fen={START} movableColor="white" dests={new Map([['e2', ['e3', 'e4']]])} />
+      </div>,
+    );
+    const board = screen.getByRole('application', { name: /Chess board/ });
+    act(() => board.focus());
+    const h = fireEvent.keyDown(board, { key: 'h' });
+    expect(h).toBe(false); // default prevented
+    fireEvent.keyDown(board, { key: '7' });
+    expect(screen.getByText('h7, black pawn')).toBeInTheDocument();
+    fireEvent.keyDown(board, { key: 'E' });
+    fireEvent.keyDown(board, { key: '2' });
+    expect(screen.getByText('e2, white pawn')).toBeInTheDocument();
+    const space = fireEvent.keyDown(board, { key: ' ' });
+    expect(space).toBe(false);
+    expect(screen.getByText(/e2, white pawn selected/)).toBeInTheDocument();
+    expect(pageHandler).not.toHaveBeenCalled();
+    // Keys the board does not use still reach the page.
+    fireEvent.keyDown(board, { key: 'n' });
+    expect(pageHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('explains a refused destination, points out legal ones and does not announce the stale square after a move', async () => {
+    const onMove = vi.fn();
+    render(
+      <Board
+        fen={START}
+        movableColor="white"
+        dests={new Map([['e2', ['e3', 'e4']]])}
+        onMove={onMove}
+        animate={false}
+      />,
+    );
+    const board = screen.getByRole('application', { name: /Chess board/ });
+    act(() => board.focus());
+    fireEvent.keyDown(board, { key: 'e' });
+    fireEvent.keyDown(board, { key: '2' });
+    fireEvent.keyDown(board, { key: 'Enter' });
+    // Up twice: e3 is a legal destination, e5 is not.
+    fireEvent.keyDown(board, { key: 'ArrowUp' });
+    expect(screen.getByText('e3, empty, legal destination')).toBeInTheDocument();
+    fireEvent.keyDown(board, { key: 'ArrowUp' });
+    fireEvent.keyDown(board, { key: 'ArrowUp' });
+    fireEvent.keyDown(board, { key: 'Enter' });
+    expect(screen.getByText('Not a legal destination.')).toBeInTheDocument();
+    expect(onMove).not.toHaveBeenCalled();
+    fireEvent.keyDown(board, { key: 'ArrowDown' });
+    fireEvent.keyDown(board, { key: 'Enter' });
+    await vi.waitFor(() => expect(onMove).toHaveBeenCalledWith('e2', 'e4', expect.anything()));
+    expect(screen.queryByText(/e4, empty/)).toBeNull();
+  });
+
+  it('says when it is not the player’s move or piece', () => {
+    const { rerender } = render(
+      <Board fen={START} movableColor="white" dests={new Map([['e2', ['e4']]])} />,
+    );
+    const board = screen.getByRole('application', { name: /Chess board/ });
+    act(() => board.focus());
+    fireEvent.keyDown(board, { key: 'e' });
+    fireEvent.keyDown(board, { key: '7' });
+    fireEvent.keyDown(board, { key: 'Enter' });
+    expect(screen.getByText('e7, black pawn. Not one of your pieces.')).toBeInTheDocument();
+    rerender(<Board fen={START} movableColor="black" dests={new Map()} />);
+    fireEvent.keyDown(board, { key: 'Enter' });
+    expect(screen.getByText('It is not your move.')).toBeInTheDocument();
+  });
+
+  it('castles when the king is dropped on its own rook', async () => {
+    const fen = 'r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1';
+    const onMove = vi.fn();
+    const { container } = render(
+      <Board
+        fen={fen}
+        movableColor="white"
+        dests={new Map([['e1', ['d1', 'f1', 'g1', 'c1']]])}
+        onMove={onMove}
+        animate={false}
+      />,
+    );
+    const board = screen.getByRole('application', { name: /Chess board/ });
+    act(() => board.focus());
+    fireEvent.keyDown(board, { key: 'e' });
+    fireEvent.keyDown(board, { key: '1' });
+    fireEvent.keyDown(board, { key: 'Enter' });
+    fireEvent.keyDown(board, { key: 'h' });
+    fireEvent.keyDown(board, { key: '1' });
+    expect(screen.getByText('h1, white rook, legal destination')).toBeInTheDocument();
+    fireEvent.keyDown(board, { key: 'Enter' });
+    await vi.waitFor(() => expect(onMove).toHaveBeenCalledWith('e1', 'g1', expect.anything()));
+    expect(container.querySelector('cg-board')).not.toBeNull();
+  });
+});
+
+describe('Board self-healing', () => {
+  it('puts the piece back and stays movable when the page keeps its position (cancelled promotion, vision drill)', async () => {
+    const onMove = vi.fn();
+    const dests = new Map<Key, Key[]>([['e2', ['e3', 'e4']]]);
+    const { container } = render(
+      <Board fen={START} movableColor="white" dests={dests} onMove={onMove} animate={false} />,
+    );
+    const board = screen.getByRole('application', { name: /Chess board/ });
+    const pieceOn = (square: string) => {
+      // Chessground positions pieces with a translate; the square is on the piece element's key.
+      const cg = container.querySelector('cg-board');
+      const pieces = Array.from(
+        cg?.querySelectorAll<HTMLElement & { cgKey?: string }>('piece') ?? [],
+      );
+      return pieces.find((p) => p.cgKey === square && p.style.display !== 'none');
+    };
+    act(() => board.focus());
+    const play = () => {
+      fireEvent.keyDown(board, { key: 'e' });
+      fireEvent.keyDown(board, { key: '2' });
+      fireEvent.keyDown(board, { key: 'Enter' });
+      fireEvent.keyDown(board, { key: 'e' });
+      fireEvent.keyDown(board, { key: '4' });
+      fireEvent.keyDown(board, { key: 'Enter' });
+    };
+    play();
+    await vi.waitFor(() => expect(onMove).toHaveBeenCalledTimes(1));
+    // The props did not change, so the pawn is back on e2 after the microtask.
+    await vi.waitFor(() => expect(pieceOn('e2')).toBeDefined());
+    expect(pieceOn('e4')).toBeUndefined();
+    // And the same move can be played again.
+    play();
+    await vi.waitFor(() => expect(onMove).toHaveBeenCalledTimes(2));
+    expect(onMove).toHaveBeenLastCalledWith('e2', 'e4', expect.anything());
+  });
+
+  it('leaves a move alone when the page answers with a new position', async () => {
+    const after = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+    function Harness() {
+      const [fen, setFen] = useState(START);
+      return (
+        <Board
+          fen={fen}
+          movableColor="white"
+          dests={fen === START ? new Map([['e2', ['e3', 'e4']]]) : new Map()}
+          onMove={() => setFen(after)}
+          lastMove={fen === START ? null : ['e2', 'e4']}
+          animate={false}
+        />
+      );
+    }
+    const { container } = render(<Harness />);
+    const board = screen.getByRole('application', { name: /Chess board/ });
+    act(() => board.focus());
+    fireEvent.keyDown(board, { key: 'e' });
+    fireEvent.keyDown(board, { key: '2' });
+    fireEvent.keyDown(board, { key: 'Enter' });
+    fireEvent.keyDown(board, { key: 'e' });
+    fireEvent.keyDown(board, { key: '4' });
+    fireEvent.keyDown(board, { key: 'Enter' });
+    await vi.waitFor(() =>
+      expect(screen.getByText('White plays pawn e2 to e4.')).toBeInTheDocument(),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    const pieces = Array.from(
+      container.querySelectorAll<HTMLElement & { cgKey?: string }>('cg-board piece'),
+    );
+    expect(pieces.some((p) => p.cgKey === 'e4' && p.style.display !== 'none')).toBe(true);
+  });
+
+  it('announces a new position when the move list is left behind', () => {
+    const { rerender } = render(<Board fen={START} lastMove={['e2', 'e4']} viewOnly />);
+    rerender(<Board fen="8/8/8/8/8/8/8/K6k w - - 0 1" lastMove={null} viewOnly />);
+    expect(screen.getByText('New position.')).toBeInTheDocument();
   });
 });
 

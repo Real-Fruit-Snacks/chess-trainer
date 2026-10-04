@@ -4,6 +4,8 @@ import { siteConfig } from '@/site.config';
 export interface ReportContext {
   version: string;
   builtAt: string;
+  /** The commit built, to find the source maps CI archived for it ('' or absent when unknown). */
+  commit?: string;
   route: string;
   userAgent: string;
   standalone: boolean;
@@ -17,6 +19,7 @@ export function reportContext(): ReportContext {
   return {
     version: __APP_VERSION__,
     builtAt: __BUILD_DATE__,
+    commit: __BUILD_COMMIT__,
     route: hasWindow ? window.location.pathname + window.location.search : '',
     userAgent: nav?.userAgent ?? '',
     standalone:
@@ -28,11 +31,15 @@ export function reportContext(): ReportContext {
   };
 }
 
-/** The crash details as plain text, for the clipboard or an issue. */
+/**
+ * The crash details as plain text, for the clipboard or an issue. The stack is
+ * minified; the commit names the source maps CI archived for this build.
+ */
 export function describeCrash(error: Error, context: ReportContext = reportContext()): string {
   const stack = (error.stack ?? '').split('\n').slice(0, 8).join('\n');
+  const commit = context.commit ? `, commit ${context.commit}` : '';
   return [
-    `${siteConfig.name} ${context.version} (built ${context.builtAt})`,
+    `${siteConfig.name} ${context.version} (built ${context.builtAt}${commit})`,
     `Route: ${context.route}`,
     `Browser: ${context.userAgent}${context.standalone ? ' (installed app)' : ''}`,
     `Viewport: ${context.viewport} · Language: ${context.language}`,

@@ -1,10 +1,11 @@
 import type { Square } from 'chess.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import { Board, type DrawShape } from '@/components/board/Board';
 import { ClickBoard, type ClickBoardPiece, type PieceRole } from '@/components/board/ClickBoard';
 import { Alert, Button, Card, Segmented, Stat, Switch, LinkButton } from '@/components/ui';
 import { Chess } from 'chess.js';
+import { NONE } from '@/lib/format';
 import { playSound } from '@/lib/sound';
 import { pickRandom } from '@/lib/random';
 import { siteConfig } from '@/site.config';
@@ -146,9 +147,15 @@ export default function VisionDrill() {
     if (poolRef.current.length === 0) {
       const index = await loadPuzzleIndex();
       const buckets = index.buckets.filter((b) => b.min >= 800 && b.max <= 1999);
-      // The first chunk of each bucket (500 puzzles) is plenty for a 60-second drill.
-      const pools = await Promise.all(buckets.map((b) => loadBucketChunk(b, 0)));
-      poolRef.current = pools.flat();
+      // The first chunk of each bucket (500 puzzles, precached) is plenty for a 60-second
+      // drill; offline, whichever of them are cached will do.
+      const pools = await Promise.allSettled(buckets.map((b) => loadBucketChunk(b, 0)));
+      poolRef.current = pools.flatMap((p) => (p.status === 'fulfilled' ? p.value : []));
+      if (poolRef.current.length === 0) {
+        throw new Error(
+          'No puzzle positions could be loaded. Check your connection or download the puzzles for offline use in Settings.',
+        );
+      }
     }
     for (let i = 0; i < 50; i++) {
       const puzzle = pickRandom(poolRef.current);
@@ -391,7 +398,9 @@ export default function VisionDrill() {
                   ? `${info.prompt} ${remainingTargets} to go.`
                   : running
                     ? 'Loading position…'
-                    : info.prompt}
+                    : finished
+                      ? `Time! ${finished.score} found in ${finished.positions} position${finished.positions === 1 ? '' : 's'}.`
+                      : info.prompt}
             </p>
             {running && task?.mode === 'recall' && task.moves ? (
               <>
@@ -455,14 +464,14 @@ export default function VisionDrill() {
                 { value: 'moves', label: 'Moves' },
                 { value: 'captures', label: 'Captures' },
                 { value: 'checks', label: 'Checks' },
-                { value: 'recall', label: 'Recall' },
+                { value: 'recall', label: 'Guess' },
               ]}
             />
           </Card>
 
           <Card>
             <div className="puzzle-stats">
-              <Stat value={best?.best ?? '–'} label="Best score" />
+              <Stat value={best?.best ?? NONE} label="Best score" />
               <Stat value={best?.attempts ?? 0} label="Runs" />
             </div>
           </Card>

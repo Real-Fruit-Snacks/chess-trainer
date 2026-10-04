@@ -7,25 +7,25 @@
  * looking up positions rather than matching move orders, and lines.json keeps
  * every line's moves for the games that quiz them (Daily Opening, Engine Says).
  *
- * Usage:  node scripts/import-openings.mjs [--ref <git ref>]
+ * The dataset is read at a pinned commit (`DATASET_REF`), so re-running the
+ * script reproduces the committed files; pass `--ref` to pick up upstream
+ * additions, then move `DATASET_REF` to that commit. openings.json records the
+ * commit and the time it was generated under its `ref` and `generatedAt` keys
+ * (no EPD can collide with them; lines.json is a plain list, written from the
+ * same commit).
  *
- * The output file is committed, so this only needs re-running to pick up
- * upstream additions.
+ * Usage:  node scripts/import-openings.mjs [--ref <commit>] [--out <dir>]
  */
 import { Chess } from 'chess.js';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
-const OUT_DIR = join(ROOT, 'public', 'openings');
-const OUT_FILE = join(OUT_DIR, 'openings.json');
-const LINES_FILE = join(OUT_DIR, 'lines.json');
 
-const refIndex = process.argv.indexOf('--ref');
-const ref = refIndex >= 0 ? (process.argv[refIndex + 1] ?? 'master') : 'master';
-const BASE = `https://raw.githubusercontent.com/lichess-org/chess-openings/${ref}/`;
+/** lichess-org/chess-openings at the commit the committed files were built from (2026-09-20). */
+export const DATASET_REF = 'c67912be581f0793dbaa776be5ccf111e01f88d9';
 const FILES = ['a.tsv', 'b.tsv', 'c.tsv', 'd.tsv', 'e.tsv'];
 
 function epdOf(chess) {
@@ -33,6 +33,13 @@ function epdOf(chess) {
 }
 
 async function main() {
+  const args = process.argv.slice(2);
+  const option = (name, fallback) =>
+    args.includes(name) ? (args[args.indexOf(name) + 1] ?? fallback) : fallback;
+  const ref = option('--ref', DATASET_REF);
+  const outDir = resolve(option('--out', join(ROOT, 'public', 'openings')));
+  const base = `https://raw.githubusercontent.com/lichess-org/chess-openings/${ref}/`;
+
   /** @type {Record<string, [string, string]>} epd -> [eco, name] */
   const byEpd = {};
   /** @type {[string, string, string][]} [eco, name, moves in SAN] */
@@ -40,8 +47,8 @@ async function main() {
   let total = 0;
   let skipped = 0;
   for (const file of FILES) {
-    const res = await fetch(BASE + file);
-    if (!res.ok) throw new Error(`Failed to download ${file}: HTTP ${res.status}`);
+    const res = await fetch(base + file);
+    if (!res.ok) throw new Error(`Failed to download ${file} at ${ref}: HTTP ${res.status}`);
     const text = await res.text();
     const lines = text.split('\n').slice(1); // header row
     for (const line of lines) {
@@ -73,17 +80,27 @@ async function main() {
       if (!existing || existing[1].length < name.length) byEpd[epd] = [eco, name];
     }
   }
-  await mkdir(OUT_DIR, { recursive: true });
+  await mkdir(outDir, { recursive: true });
   const ordered = Object.fromEntries(Object.entries(byEpd).sort(([a], [b]) => a.localeCompare(b)));
-  await writeFile(OUT_FILE, JSON.stringify(ordered));
-  await writeFile(LINES_FILE, JSON.stringify(openingLines));
-  console.log(
-    `Wrote ${Object.keys(ordered).length} positions from ${total} openings (${skipped} skipped) to ${OUT_FILE}`,
+  const outFile = join(outDir, 'openings.json');
+  const linesFile = join(outDir, 'lines.json');
+  await writeFile(
+    outFile,
+    JSON.stringify({ ref, generatedAt: new Date().toISOString(), ...ordered }),
   );
-  console.log(`Wrote ${openingLines.length} opening lines to ${LINES_FILE}`);
+  await writeFile(linesFile, JSON.stringify(openingLines));
+  console.log(
+    `Wrote ${Object.keys(ordered).length} positions from ${total} openings (${skipped} skipped) to ${outFile}`,
+  );
+  console.log(`Wrote ${openingLines.length} opening lines to ${linesFile} (dataset at ${ref})`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+const invokedDirectly =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

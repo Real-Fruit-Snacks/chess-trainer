@@ -2,7 +2,7 @@ import type { Move } from 'chess.js';
 import { GameTree, type TreeNode } from '@/chess/tree';
 import type { LongColor, San } from '@/chess/types';
 import { cardKey } from '@/features/openings/model';
-import type { SrsCard } from '@/lib/srs';
+import { isNew, type SrsCard } from '@/lib/srs';
 import { pickRandom } from '@/lib/random';
 
 /**
@@ -56,6 +56,16 @@ export function createBook(rep: {
     endedAtPly: null,
     deviation: null,
   };
+}
+
+/** Whether a repertoire can be followed as a book: a damaged custom PGN cannot. */
+export function canFollowBook(pgn: string): boolean {
+  try {
+    GameTree.fromPgn(pgn);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Recomputes the book position from the whole game history. */
@@ -115,7 +125,8 @@ export function bookReply(
     let weight = 1;
     for (const reply of learnerReplies) {
       const card = cards[cardKey(reply)];
-      if (!card || card.reps === 0) weight += 3;
+      // Never studied counts most; a lapsed card (reps back to 0) is relearning, not new.
+      if (!card || isNew(card)) weight += 3;
       else if (card.lapses > 0 && card.reps < 3) weight += 2;
       else if (card.due <= now) weight += 1;
     }

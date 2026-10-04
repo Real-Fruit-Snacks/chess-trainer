@@ -57,7 +57,7 @@ export const intermediateLessons4: Lesson[] = [
           success:
             'g6! Whichever way Black captures, a white pawn breaks through: after ...hxg6 comes f6!, after ...fxg6 comes h6!',
           failure:
-            'Only g6 works. f6 or h6 is simply captured, and the remaining pawns are blocked.',
+            'Only g6 creates a passed pawn at once. f6 or h6 is simply captured, and the remaining pawns are blocked.',
         },
       },
       {
@@ -107,7 +107,7 @@ export const intermediateLessons4: Lesson[] = [
           success:
             'Kf5! Ke7 Kg6 Kd8 Kf6 Kd7 Kf7 Kd8 Ke6 and the d6 pawn falls. The king never stood opposite the black king; it went round it.',
           failure:
-            'Not this. The king must keep to the kingside: Kf5 followed by Kg6 outflanks the black king.',
+            'Kf5! — forward and round, heading for g6 and f7. A step back lets Black take the opposition and hold; Kf4 still wins, but only by coming back to the same plan.',
         },
       },
       {
@@ -269,13 +269,13 @@ export const intermediateLessons4: Lesson[] = [
       {
         title: 'Moves are not the point',
         text:
-          'Memorising twenty moves of theory does not help when the opponent leaves the book on move six — ' +
-          'which is what happens in most club games. Study openings in this order:\n\n' +
-          '1. **The ideas**: where the pieces belong, which pawn breaks each side wants, what the typical middlegame looks like.\n' +
-          '2. **A short repertoire**: one answer to everything, a few moves deep. The Openings section drills lines with spaced repetition — a line you get right comes back later, a line you miss comes back tomorrow.\n' +
-          '3. **Your own games**: import them on the My games page. The Repertoire tab shows exactly where you or your opponents left your lines, and Review turns your mistakes into puzzles.\n' +
-          '4. **The traps**: every opening has two or three you must know.\n\n' +
-          'Here is the Italian Game after 8.Nbxd2. Black has traded bishops; what is the idea now?',
+          'Memorising twenty moves of theory does not help when the opponent leaves the book on move six — as ' +
+          'happens in most club games. Study openings in this order:\n\n1. **The ideas**: where the pieces ' +
+          'belong, which pawn breaks each side wants, the typical middlegame.\n2. **A short repertoire**: one ' +
+          'answer to everything, a few moves deep, drilled with spaced repetition in the Openings section.\n3. ' +
+          '**Your own games**: import them on the My games page to see where you or your opponents left your ' +
+          'lines; Review turns your mistakes into puzzles.\n4. **The traps**: every opening has two or three you ' +
+          'must know.\n\nHere is the Italian Game after 8.Nbxd2. Black has traded bishops; what is the idea now?',
         fen: ITALIAN_D5,
         orientation: 'black',
         shapes: ['d7d5', 'e4:red'],
@@ -343,9 +343,11 @@ export const intermediateLessons4: Lesson[] = [
           moves: ['Bb4+'],
           hint: 'A check that White can only block with the queen.',
           success:
-            'Bb4+! Qd2 Bxd2+ Kxd2 Kxd8 and Black is a piece up. A trap is just an idea you know and the opponent does not.',
+            'Bb4+! Qd2 Bxd2+ Kxd2 Kxd8 and Black has won a piece for a pawn. A trap is just an idea you know ' +
+            'and the opponent does not.',
           failure:
-            'Bb4+ is the move: White must block with the queen, and after Bxd2+ Kxd2 Kxd8 Black has an extra piece.',
+            'Bb4+ is the move: White must block with Qd2, and after Bxd2+ Kxd2 Kxd8 Black has won a piece ' +
+            'for a pawn.',
         },
       },
       {

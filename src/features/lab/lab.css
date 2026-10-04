@@ -35,6 +35,9 @@
   border-bottom: 1px solid var(--border);
   vertical-align: top;
   font-weight: 500;
+  /* Storage keys and user-agent strings have no spaces to wrap at. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .lab__table td.num {

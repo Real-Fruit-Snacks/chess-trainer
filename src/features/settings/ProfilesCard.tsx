@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, Card, Icon, Input } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
-import { activeProfile, useProfiles } from '@/store/profiles';
+import { activeProfile, nameTaken, useProfiles } from '@/store/profiles';
 
 /**
  * Profiles: several learners on one device. Each profile has its own progress,
@@ -19,6 +19,7 @@ export function ProfilesCard() {
   const [draft, setDraft] = useState('');
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const current = activeProfile({ profiles, activeId });
+  const newNameTaken = nameTaken(profiles, newName);
 
   return (
     <Card id="profiles" data-testid="profiles">
@@ -28,9 +29,10 @@ export function ProfilesCard() {
         library. Appearance and other device settings are shared. You are{' '}
         <strong>{current.name}</strong>.
       </p>
-      <ul className="profiles__list">
+      <ul role="list" className="profiles__list">
         {profiles.map((profile) => {
           const active = profile.id === activeId;
+          const draftTaken = renaming === profile.id && nameTaken(profiles, draft, profile.id);
           return (
             <li key={profile.id} className="profiles__item" data-testid="profile-item">
               {renaming === profile.id ? (
@@ -38,23 +40,37 @@ export function ProfilesCard() {
                   className="row"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    rename(profile.id, draft);
-                    setRenaming(null);
+                    if (draftTaken) return;
+                    if (rename(profile.id, draft)) setRenaming(null);
+                    else toast('Could not save the new name.', { tone: 'danger' });
                   }}
                 >
                   <Input
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setRenaming(null);
+                      }
+                    }}
                     aria-label="Profile name"
+                    aria-invalid={draftTaken || undefined}
+                    aria-describedby={draftTaken ? `rename-taken-${profile.id}` : undefined}
                     autoFocus
                     maxLength={40}
                   />
-                  <Button size="sm" type="submit">
+                  <Button size="sm" type="submit" disabled={!draft.trim() || draftTaken}>
                     Save
                   </Button>
                   <Button size="sm" variant="ghost" type="button" onClick={() => setRenaming(null)}>
                     Cancel
                   </Button>
+                  {draftTaken ? (
+                    <span className="small muted" id={`rename-taken-${profile.id}`} role="status">
+                      Another profile already has that name.
+                    </span>
+                  ) : null}
                 </form>
               ) : (
                 <span className="profiles__name">
@@ -113,13 +129,22 @@ export function ProfilesCard() {
           );
         })}
       </ul>
+      {profiles.length > 1 ? (
+        <p className="small muted" style={{ margin: '8px 0 0' }}>
+          To delete the active profile, switch to another one first.
+        </p>
+      ) : null}
       <form
         className="row"
         style={{ marginTop: 12 }}
         onSubmit={(e) => {
           e.preventDefault();
-          if (!newName.trim()) return;
+          if (!newName.trim() || newNameTaken) return;
           const profile = add(newName);
+          if (!profile) {
+            toast('Could not add the profile — storage may be full.', { tone: 'danger' });
+            return;
+          }
           setNewName('');
           toast(`Added the profile “${profile.name}”. Switch to it when you are ready.`, {
             tone: 'success',
@@ -131,12 +156,19 @@ export function ProfilesCard() {
           onChange={(e) => setNewName(e.target.value)}
           placeholder="New profile name"
           aria-label="New profile name"
+          aria-invalid={newNameTaken || undefined}
+          aria-describedby={newNameTaken ? 'new-profile-taken' : undefined}
           maxLength={40}
           data-testid="new-profile-name"
         />
-        <Button size="sm" type="submit" disabled={!newName.trim()}>
+        <Button size="sm" type="submit" disabled={!newName.trim() || newNameTaken}>
           Add profile
         </Button>
+        {newNameTaken ? (
+          <span className="small muted" id="new-profile-taken" role="status">
+            A profile called “{newName.trim()}” already exists.
+          </span>
+        ) : null}
       </form>
     </Card>
   );

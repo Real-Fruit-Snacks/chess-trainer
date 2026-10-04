@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { Fen } from '@/chess/types';
-import { type ExplorerDatabase, type ExplorerResult, lookupExplorer } from './explorer';
+import {
+  describeExplorerError,
+  type ExplorerDatabase,
+  type ExplorerResult,
+  lookupExplorer,
+} from './explorer';
 
 export type ExplorerState =
   | { status: 'off' }
@@ -29,10 +34,7 @@ export function useExplorer(
         })
         .catch((err: unknown) => {
           if (controller.signal.aborted) return;
-          setState({
-            status: 'error',
-            message: err instanceof Error ? err.message : 'Explorer unavailable',
-          });
+          setState({ status: 'error', message: describeExplorerError(err) });
         });
     }, 300);
     return () => {

@@ -1,9 +1,15 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { safeLocalStorage } from '@/lib/persistStorage';
+import {
+  keepCorruptBlob,
+  rehydrateOnStorageChange,
+  safeLocalStorage,
+  warnNewerSave,
+} from '@/lib/persistStorage';
 import type { ImportedGame } from '@/lib/gameImport';
 import { hashString } from '@/lib/random';
 import type { ReviewDigest } from '@/features/games/insights';
+import { gamesSlice, parse } from './backupSchema';
 import { storageKeyFor } from './profiles';
 
 export type GameSource = 'lichess' | 'chesscom' | 'pgn';
@@ -27,30 +33,86 @@ export interface StoredGame extends ImportedGame {
   review: StoredReview | null;
 }
 
+export interface AddGamesResult {
+  /** Games that were new. */
+  added: number;
+  /** Games (old ones, or new ones past the cap) that had to go to stay within the cap. */
+  dropped: number;
+}
+
 export interface GamesState {
   games: Record<string, StoredGame>;
   /** The learner's name as it appears in the games (for colour detection). */
   player: string;
-  addGames: (games: ImportedGame[], source: GameSource) => number;
+  /**
+   * Adds games that are not stored yet. Past `MAX_STORED_GAMES`, games that were
+   * never reviewed go first (oldest first), then the oldest reviewed ones.
+   */
+  addGames: (games: ImportedGame[], source: GameSource) => AddGamesResult;
   removeGame: (id: string) => void;
   setPlayer: (player: string) => void;
   setReview: (id: string, review: StoredReview) => void;
   clear: () => void;
+  /** Replaces the store with a validated backup part (missing fields start empty). */
+  replaceState: (state: Partial<PersistedGames>) => void;
 }
 
 export const MAX_STORED_GAMES = 200;
 export const GAMES_STORAGE_KEY = 'chess-trainer:games';
+export const GAMES_VERSION = 1;
+
+export interface PersistedGames {
+  games: Record<string, StoredGame>;
+  player: string;
+}
+
+const initialState: PersistedGames = { games: {}, player: '' };
 
 /** Stable id for a game: its source URL when it has one, else a hash of the PGN. */
 export function gameKey(game: Pick<ImportedGame, 'url' | 'pgn'>): string {
   return game.url ?? `pgn-${hashString(game.pgn.replace(/\s+/g, ' ').trim()).toString(36)}`;
 }
 
+/** Newest first: by import, then by when the game was played. */
+const byRecency = (a: StoredGame, b: StoredGame) =>
+  b.importedAt - a.importedAt || (b.timestamp ?? 0) - (a.timestamp ?? 0);
+
+/**
+ * Trims the collection to the cap. Reviewed games carry work the learner did
+ * (Insights, deviations), so unreviewed games are evicted first, oldest first.
+ */
+export function capGames(
+  games: Record<string, StoredGame>,
+  max = MAX_STORED_GAMES,
+): { games: Record<string, StoredGame>; dropped: number } {
+  const all = Object.values(games);
+  if (all.length <= max) return { games, dropped: 0 };
+  const reviewed = all.filter((g) => g.review !== null).sort(byRecency);
+  const unreviewed = all.filter((g) => g.review === null).sort(byRecency);
+  const kept = [...reviewed, ...unreviewed].slice(0, max).sort(byRecency);
+  return { games: Object.fromEntries(kept.map((g) => [g.id, g])), dropped: all.length - max };
+}
+
+/** A stored blob checked game by game; damaged entries are dropped, unknown keys kept. */
+export function repairGames(stored: unknown): PersistedGames & Record<string, unknown> {
+  const parsed = parse(gamesSlice, stored, 'repair', 'games');
+  const known = parsed.ok ? parsed.value : {};
+  const state: Record<string, unknown> = {
+    games: capGames(known.games ?? {}).games,
+    player: known.player ?? '',
+  };
+  if (typeof stored === 'object' && stored !== null && !Array.isArray(stored)) {
+    for (const [key, value] of Object.entries(stored as Record<string, unknown>)) {
+      if (!(key in initialState) && value !== undefined) state[key] = value;
+    }
+  }
+  return state as PersistedGames & Record<string, unknown>;
+}
+
 export const useGames = create<GamesState>()(
-  persist(
+  persist<GamesState, [], [], PersistedGames>(
     (set, get) => ({
-      games: {},
-      player: '',
+      ...initialState,
 
       addGames: (incoming, source) => {
         const games = { ...get().games };
@@ -62,12 +124,10 @@ export const useGames = create<GamesState>()(
           games[id] = { ...game, id, source, importedAt: now, review: null };
           added++;
         }
-        if (added === 0) return 0;
-        const kept = Object.values(games)
-          .sort((a, b) => b.importedAt - a.importedAt || (b.timestamp ?? 0) - (a.timestamp ?? 0))
-          .slice(0, MAX_STORED_GAMES);
-        set({ games: Object.fromEntries(kept.map((g) => [g.id, g])) });
-        return added;
+        if (added === 0) return { added: 0, dropped: 0 };
+        const capped = capGames(games);
+        set({ games: capped.games });
+        return { added, dropped: capped.dropped };
       },
 
       removeGame: (id) => {
@@ -84,16 +144,39 @@ export const useGames = create<GamesState>()(
         set({ games: { ...get().games, [id]: { ...game, review } } });
       },
 
-      clear: () => set({ games: {} }),
+      clear: () => set({ games: {}, player: '' }),
+
+      replaceState: (state) => {
+        const games: Record<string, StoredGame> = {};
+        for (const game of Object.values(state.games ?? {})) games[game.id] = game;
+        set({ games: capGames(games).games, player: state.player ?? '' });
+      },
     }),
     {
       name: storageKeyFor(GAMES_STORAGE_KEY),
-      version: 1,
+      version: GAMES_VERSION,
       storage: createJSONStorage(() => safeLocalStorage),
-      partialize: (state) => ({ games: state.games, player: state.player }),
+      partialize: (state) => {
+        const out = {} as Record<string, unknown>;
+        for (const [key, value] of Object.entries(state)) {
+          if (typeof value !== 'function') out[key] = value;
+        }
+        return out as unknown as PersistedGames;
+      },
+      migrate: (stored, version): PersistedGames => {
+        if (version > GAMES_VERSION) warnNewerSave(GAMES_STORAGE_KEY, version, GAMES_VERSION);
+        return repairGames(stored);
+      },
+      merge: (persistedState, current): GamesState => ({
+        ...current,
+        ...repairGames(persistedState),
+      }),
+      onRehydrateStorage: keepCorruptBlob(storageKeyFor(GAMES_STORAGE_KEY)),
     },
   ),
 );
+
+rehydrateOnStorageChange(useGames, storageKeyFor(GAMES_STORAGE_KEY));
 
 /** Games sorted newest first (by when they were played, then imported). */
 export function sortedGames(games: Record<string, StoredGame>): StoredGame[] {

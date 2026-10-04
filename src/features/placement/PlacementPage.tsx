@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { Badge, Button, Card, LinkButton, ProgressBar } from '@/components/ui';
 import type { San } from '@/chess/types';
+import { San as SanText } from '@/chess/San';
 import { getCourse } from '@/features/learn/courses';
 import { LESSON_META } from '@/features/learn/lessonMeta';
+import { LEVEL_LABELS } from '@/features/learn/model';
 import { themeName } from '@/features/puzzles/themes';
 import { CALIBRATION_PUZZLES, formatRating } from '@/lib/rating';
 import { siteConfig } from '@/site.config';
@@ -43,6 +45,11 @@ const STEPS: Step[] = [
   { kind: 'openings' },
   { kind: 'result' },
 ];
+
+const NUMBER_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'];
+const inWords = (n: number) => NUMBER_WORDS[n] ?? String(n);
+/** The questions about the learner (the steps that are neither a position nor the result). */
+const QUESTIONS = STEPS.filter((s) => s.kind !== 'tactic' && s.kind !== 'result').length;
 
 export default function PlacementPage() {
   const [stepIndex, setStepIndex] = useState(0);
@@ -83,10 +90,10 @@ export default function PlacementPage() {
           <Link to="/learn">Learn</Link> / Placement quiz
         </p>
         <h1>Where should you start?</h1>
-        <p>
-          Five quick questions and three positions. At the end you get a course, your first lessons
-          and a starting point for your puzzle rating. Nothing is final — the rating adjusts as you
-          solve.
+        <p data-testid="placement-intro">
+          {inWords(QUESTIONS)} quick questions and {inWords(TACTIC_QUESTIONS.length).toLowerCase()}{' '}
+          positions. At the end you get a course, your first lessons and a starting point for your
+          puzzle rating. Nothing is final — the rating adjusts as you solve.
         </p>
       </div>
       {step.kind !== 'result' ? (
@@ -277,7 +284,7 @@ function TacticStep({
                 checked={option === value}
                 onChange={() => onChange(option)}
               />
-              <span className="mono">{option}</span>
+              <SanText san={option} className="mono" />
             </label>
           ))}
         </div>
@@ -310,6 +317,11 @@ function Result({ result, answers }: { result: PlacementResult; answers: Placeme
     completeOnboarding(result.rating, 'calibrate');
     void navigate('/puzzles');
   };
+  // Going straight to the course still seeds the puzzle rating from the quiz (as a
+  // self-assessment), so Puzzles does not ask "how much chess have you played?" again.
+  const openCourse = () => {
+    if (!onboarded) completeOnboarding(result.rating, 'self');
+  };
 
   return (
     <div data-testid="placement-result">
@@ -332,8 +344,8 @@ function Result({ result, answers }: { result: PlacementResult; answers: Placeme
           <span className="small muted">positions solved</span>
         </div>
         <div>
-          <span className="placement__stat-value">
-            <Badge tone="accent">{result.level}</Badge>
+          <span className="placement__stat-value" data-testid="placement-level">
+            <Badge tone="accent">{LEVEL_LABELS[result.level].title}</Badge>
           </span>
           <span className="small muted">lesson level</span>
         </div>
@@ -348,10 +360,19 @@ function Result({ result, answers }: { result: PlacementResult; answers: Placeme
               if (chosen === null || chosen === undefined) return null;
               return (
                 <li key={q.id}>
-                  <strong>{chosen === q.answer ? 'Solved' : `You played ${chosen}`}.</strong>{' '}
+                  <strong>
+                    {chosen === q.answer ? (
+                      'Solved'
+                    ) : (
+                      <>
+                        You played <SanText san={chosen} />
+                      </>
+                    )}
+                    .
+                  </strong>{' '}
                   <Notated text={q.explanation} />{' '}
                   <a href={q.source} target="_blank" rel="noreferrer">
-                    source
+                    source<span className="sr-only"> (opens in a new tab)</span>
                   </a>
                 </li>
               );
@@ -387,7 +408,13 @@ function Result({ result, answers }: { result: PlacementResult; answers: Placeme
           ) : null}
         </div>
         <div className="row" style={{ flexWrap: 'wrap' }}>
-          <LinkButton variant="primary" size="lg" to={`/learn/course/${result.courseId}`}>
+          <LinkButton
+            variant="primary"
+            size="lg"
+            to={`/learn/course/${result.courseId}`}
+            onClick={openCourse}
+            data-testid="placement-open-course"
+          >
             Open the course
           </LinkButton>
           {onboarded ? (

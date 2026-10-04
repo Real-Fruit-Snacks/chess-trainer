@@ -7,6 +7,7 @@ import {
   type GameStatus,
   isPromotionMove,
   legalDests,
+  normalizeFen,
   START_FEN,
   toLongColor,
   tryMove,
@@ -76,6 +77,8 @@ export function useChess(
   initialFen: Fen = START_FEN,
   options: { autoQueen?: boolean } = {},
 ): UseChess {
+  // Stale castling flags or a 4-field FEN from a diagram tool are repaired before chess.js sees them.
+  initialFen = initialFen === START_FEN ? initialFen : normalizeFen(initialFen);
   const chessRef = useRef<Chess | null>(null);
   const startFenRef = useRef(initialFen);
   chessRef.current ??= new Chess(initialFen);
@@ -134,14 +137,14 @@ export function useChess(
   const playNotation = useCallback(
     (notation: string): Move | null => {
       const chess = game();
-      const move = tryNotation(chess, notation);
+      const move = tryNotation(chess, notation, { autoQueen });
       if (move) {
         playMoveSound(move, chess);
         commit();
       }
       return move;
     },
-    [commit, game],
+    [autoQueen, commit, game],
   );
 
   const undo = useCallback((): Move | null => {
@@ -153,6 +156,7 @@ export function useChess(
 
   const reset = useCallback(
     (fen: Fen = START_FEN) => {
+      if (fen !== START_FEN) fen = normalizeFen(fen);
       chessRef.current = new Chess(fen);
       startFenRef.current = fen;
       setPendingPromotion(null);

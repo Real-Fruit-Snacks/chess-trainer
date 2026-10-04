@@ -1,35 +1,65 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Alert, Badge, Button, Card, Icon, Spinner, LinkButton } from '@/components/ui';
 import { usePlayVsEngine } from '@/features/play/usePlayVsEngine';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
+import { AnalyzeGameButton } from './arcadeControls';
+import { useArcadeFocus } from './arcadeGame';
 import { EngineGameBoard, GameMoves } from './EngineGameBoard';
-import { advanceOdds, describeRung, ODDS_RUNGS, oddsFen } from './odds';
-import '@/features/play/play.css';
+import {
+  advanceOdds,
+  describeRung,
+  describeRungResults,
+  ODDS_RUNGS,
+  oddsFen,
+  type OddsStep,
+  oddsStep,
+} from './odds';
 import './arcade.css';
 
 /** Full strength: the top engine level. */
 const ENGINE_LEVEL_ID = 8;
+
+/** What the result card says the game did to the ladder. */
+function stepText(step: OddsStep | null, rungIndex: number): string {
+  switch (step) {
+    case 'climbed':
+      return `You climb to ${describeRung(rungIndex + 1)}.`;
+    case 'reached-top':
+      return 'You have climbed the whole ladder: next, a level game with no odds at all.';
+    case 'beat-top':
+      return 'You beat full-strength Stockfish on level terms — the top of the ladder.';
+    case 'replayed':
+      return 'A win on a lower rung; the ladder stays where it is.';
+    case 'drew':
+      return 'A draw is counted on the rung, but only a win climbs.';
+    default:
+      return 'The ladder stays where it is. Try again.';
+  }
+}
 
 export default function OddsLadderPage() {
   const play = usePlayVsEngine();
   const ladder = useProgress((s) => s.oddsLadder);
   const setOddsLadder = useProgress((s) => s.setOddsLadder);
   const [rungIndex, setRungIndex] = useState(ladder.rung);
-  const [confirmResign, setConfirmResign] = useState(false);
+  /** What the last game did to the ladder (worked out before the ladder moved). */
+  const [step, setStep] = useState<OddsStep | null>(null);
   const recordedRef = useRef(false);
 
   useEffect(() => {
     document.title = `Odds Ladder · ${siteConfig.name}`;
   }, []);
 
+  useArcadeFocus(play.started && !play.gameOver);
+
   const begin = (index: number) => {
     const rung = ODDS_RUNGS[index];
     if (!rung) return;
     setRungIndex(index);
+    setStep(null);
     recordedRef.current = false;
-    setConfirmResign(false);
     play.start({
       color: 'white',
       levelId: ENGINE_LEVEL_ID,
@@ -37,6 +67,9 @@ export default function OddsLadderPage() {
       fen: oddsFen(rung),
       opponent: 'engine',
       coach: false,
+      // A handicap game: kept out of the engine ladder, the courses and the Play results.
+      source: 'arcade',
+      event: `Odds Ladder · ${rung.name}`,
     });
   };
 
@@ -44,13 +77,14 @@ export default function OddsLadderPage() {
   useEffect(() => {
     if (!play.gameOver || recordedRef.current) return;
     recordedRef.current = true;
-    setOddsLadder(advanceOdds(useProgress.getState().oddsLadder, rungIndex, play.gameOver.verdict));
+    const before = useProgress.getState().oddsLadder;
+    setStep(oddsStep(before, rungIndex, play.gameOver.verdict));
+    setOddsLadder(advanceOdds(before, rungIndex, play.gameOver.verdict));
   }, [play.gameOver, rungIndex, setOddsLadder]);
 
   const rung = ODDS_RUNGS[rungIndex];
   const over = play.gameOver;
-  const climbed = over?.verdict === 'win' && rungIndex === ladder.rung - 1;
-  const atTop = ladder.rung === ODDS_RUNGS.length - 1;
+  const climbed = step === 'climbed' || step === 'reached-top';
 
   const overlay = !play.started ? (
     <Card className="arcade__summary">
@@ -77,19 +111,24 @@ export default function OddsLadderPage() {
         {over.verdict === 'win' ? 'You win' : over.verdict === 'draw' ? 'Draw' : 'The engine wins'}
       </h2>
       <p className="muted">
-        {over.reason.charAt(0).toUpperCase() + over.reason.slice(1)}.{' '}
-        {climbed
-          ? atTop
-            ? 'You have climbed the whole ladder: the engine now plays a level game.'
-            : `You climb to ${describeRung(ladder.rung)}.`
-          : over.verdict === 'win'
-            ? 'A win on a lower rung; the ladder stays where it is.'
-            : 'The ladder stays where it is. Try again.'}
+        {over.reason.charAt(0).toUpperCase() + over.reason.slice(1)}. {stepText(step, rungIndex)}
       </p>
-      <div className="row">
-        <Button variant="primary" onClick={() => begin(ladder.rung)} data-testid="odds-next">
-          {climbed ? 'Next rung' : 'Play again'}
-        </Button>
+      <div className="row arcade__summary-actions">
+        {climbed ? (
+          <Button variant="primary" onClick={() => begin(ladder.rung)} data-testid="odds-next">
+            Next rung
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={() => begin(rungIndex)}
+            title="The same rung again"
+            data-testid="odds-next"
+          >
+            Play again
+          </Button>
+        )}
+        <AnalyzeGameButton pgn={play.pgn} orientation={play.playerColor} />
         <LinkButton to="/arcade">Arcade</LinkButton>
       </div>
     </Card>
@@ -137,9 +176,15 @@ export default function OddsLadderPage() {
                 {rung.handicap} No take-backs, no hints: a win has to be earned.
               </p>
             ) : null}
-            <ol className="ladder__rungs" data-testid="odds-rungs" style={{ marginTop: 12 }}>
+            <ol
+              className="ladder__rungs"
+              // Unstyled lists lose their list semantics in Safari unless the role is given.
+              role="list"
+              data-testid="odds-rungs"
+              aria-label="Rungs"
+            >
               {ODDS_RUNGS.map((r, i) => {
-                const results = ladder.results[i];
+                const results = describeRungResults(ladder.results[i]);
                 const state =
                   i < ladder.rung ? 'climbed' : i === ladder.rung ? 'current' : 'locked';
                 return (
@@ -148,26 +193,26 @@ export default function OddsLadderPage() {
                     className={`ladder__rung ladder__rung--${state}`}
                     data-testid={`odds-rung-${i}`}
                   >
-                    <span className="row">
-                      {state === 'climbed' ? (
-                        <Icon name="check" size={16} title="Climbed" />
-                      ) : (
-                        <Icon name="circle" size={16} />
-                      )}
-                      <span>
-                        <strong>{r.name}</strong>
-                        {results ? (
-                          <span className="small muted">
-                            {' '}
-                            · {results.wins}W {results.losses}L
-                          </span>
-                        ) : null}
+                    <span className="ladder__rung-mark" aria-hidden="true">
+                      <Icon name={state === 'climbed' ? 'check' : 'circle'} size={16} />
+                    </span>
+                    <span className="ladder__rung-text">
+                      <strong className="ladder__rung-name">{r.name}</strong>
+                      <span className="small muted">
+                        {state === 'climbed' ? 'Climbed' : state === 'locked' ? 'Locked' : null}
+                        {state !== 'current' && results ? ' · ' : null}
+                        {results}
                       </span>
                     </span>
-                    <span className="row">
+                    <span className="ladder__rung-actions">
                       {state === 'current' ? <Badge tone="accent">Current</Badge> : null}
                       {state !== 'locked' && (!play.started || play.gameOver) ? (
-                        <Button size="sm" variant="ghost" onClick={() => begin(i)}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => begin(i)}
+                          aria-label={`Play ${r.name}`}
+                        >
                           Play
                         </Button>
                       ) : null}
@@ -178,30 +223,7 @@ export default function OddsLadderPage() {
             </ol>
           </Card>
 
-          <GameMoves
-            play={play}
-            onResign={() => setConfirmResign(true)}
-            extra={
-              confirmResign && play.started && !play.gameOver ? (
-                <>
-                  <span className="small muted">Resign?</span>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    onClick={() => {
-                      play.resign();
-                      setConfirmResign(false);
-                    }}
-                  >
-                    Yes
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setConfirmResign(false)}>
-                    No
-                  </Button>
-                </>
-              ) : null
-            }
-          />
+          <GameMoves play={play} />
         </aside>
       </div>
     </div>

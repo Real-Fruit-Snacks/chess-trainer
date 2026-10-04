@@ -25,7 +25,10 @@ test.describe('arcade hub', () => {
     await seedProgress(page, { onboarded: true });
     await page.goto('/');
     await page.getByRole('button', { name: /More/ }).click();
-    await page.getByRole('menuitem', { name: /Arcade/ }).click();
+    await page
+      .getByRole('region', { name: 'More sections' })
+      .getByRole('link', { name: /Arcade/ })
+      .click();
     await expect(page).toHaveURL(/\/arcade$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Arcade');
     await expect(page.locator('[data-testid^="arcade-"].arcade-card')).toHaveCount(9);
@@ -76,6 +79,7 @@ test.describe('daily opening', () => {
       1,
     );
     await page.getByRole('button', { name: 'Give up' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Give up' }).click();
     const result = page.getByTestId('daily-opening-result');
     await expect(result).toContainText('Not this time');
     await expect(result).toContainText(/Days played/);
@@ -83,8 +87,8 @@ test.describe('daily opening', () => {
     const daily = progress.dailyOpening as { result: string; history: Record<string, number> };
     expect(daily.result).toBe('failed');
     expect(Object.values(daily.history)).toEqual([0]);
-    await page.getByRole('button', { name: 'Practice a random opening' }).click();
-    await expect(page.getByText('Practice opening')).toBeVisible();
+    await page.getByRole('button', { name: 'Practise a random opening' }).click();
+    await expect(page.getByTestId('daily-heading')).toHaveText('Practice opening');
     await expect(page.getByTestId('daily-opening-input')).toBeVisible();
   });
 });
@@ -98,13 +102,13 @@ test.describe('engine says', () => {
     const status = page.getByTestId('engine-says-status');
     await expect(status).toContainText('Move 1 of 3');
     const seen: string[] = [];
-    for (let i = 0; i < 40 && seen.length < 3; i++) {
+    for (let i = 0; i < 40 && seen.filter(Boolean).length < 3; i++) {
       const tiles = await page
         .getByTestId('engine-says-sequence')
-        .locator('span')
-        .allTextContents();
+        .locator('.arcade__sequence-move')
+        .evaluateAll((items) => items.map((item) => item.getAttribute('data-san')));
       for (const [idx, san] of tiles.entries()) {
-        if (san !== '?' && seen[idx] === undefined) seen[idx] = san;
+        if (san && seen[idx] === undefined) seen[idx] = san;
       }
       await page.waitForTimeout(150);
     }
@@ -141,9 +145,9 @@ test.describe('odds ladder', () => {
     await playMove(board, 'e2', 'e4');
     await expect(page.locator('.movelist')).toContainText('e4', { timeout: 15_000 });
     await page.getByRole('button', { name: 'Resign' }).click();
-    await page.getByRole('button', { name: 'Yes' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Resign' }).click();
     await expect(page.getByTestId('odds-result')).toContainText('The engine wins');
-    await expect(page.getByTestId('odds-rung-0')).toContainText('0W 1L');
+    await expect(page.getByTestId('odds-rung-0')).toContainText('1 loss');
     const progress = await storedProgress(page);
     expect((progress.oddsLadder as { rung: number }).rung).toBe(0);
   });
@@ -171,9 +175,9 @@ test.describe('army draft', () => {
     await expect(page.locator('cg-board piece.white.knight')).toHaveCount(5);
     await expect(page.locator('cg-board piece.white.pawn')).toHaveCount(7);
     await page.getByRole('button', { name: 'Resign' }).click();
-    await page.getByRole('button', { name: 'Yes' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Resign' }).click();
     await expect(page.getByTestId('army-result')).toContainText('The engine wins');
-    await page.getByRole('button', { name: 'Draft again' }).click();
+    await page.getByRole('button', { name: 'New game' }).click();
     await expect(page.getByTestId('army-shop')).toBeVisible();
   });
 });
@@ -189,6 +193,7 @@ test.describe('fortress', () => {
     await expect(page.getByTestId('fortress-status')).toContainText(/Your move|attacker/);
     for (let life = 3; life >= 1; life--) {
       await page.getByRole('button', { name: 'Give up this position' }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Give up', exact: true }).click();
       if (life > 1) {
         await expect(page.getByTestId('fortress-outcome')).toContainText(`${life - 1} li`);
         await page.getByTestId('fortress-next').click();
@@ -222,7 +227,7 @@ test.describe('hand and brain', () => {
     // The opponent replies and it is our call again.
     await expect(page.getByTestId('hb-call-n')).toBeEnabled({ timeout: 20_000 });
     await page.getByRole('button', { name: 'Resign' }).click();
-    await page.getByRole('button', { name: 'Resign' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Resign' }).click();
     await expect(page.getByTestId('hb-result')).toContainText('The engine wins');
     await expect(page.getByTestId('hb-result')).toContainText('accuracy');
   });
@@ -230,7 +235,7 @@ test.describe('hand and brain', () => {
   test('the hand is told the piece and must move it', async ({ page }) => {
     await seedProgress(page, { onboarded: true });
     await page.goto('/arcade/hand-and-brain');
-    await page.getByRole('button', { name: 'Hand' }).click();
+    await page.getByRole('radio', { name: 'Hand' }).click();
     await page.getByTestId('hb-level').selectOption('1');
     await page.getByTestId('hb-start').click();
     const board = await expectBoard(page);
@@ -260,14 +265,15 @@ test.describe('blindfold', () => {
       timeout: 5000,
     });
     await page.getByRole('button', { name: 'Resign' }).click();
-    await page.getByRole('button', { name: 'Yes' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Resign' }).click();
     const result = page.getByTestId('blindfold-result');
     await expect(result).toContainText('The engine wins');
     await expect(result).toContainText('Score');
     const progress = await storedProgress(page);
     const arcade = progress.arcade as Record<string, { best: number; detail?: string }>;
-    expect(arcade.blindfold?.best).toBe(30);
-    expect(arcade.blindfold?.detail).toMatch(/Lost vs Level 1 with 2 peeks to spare/);
+    // A loss scores nothing, however many peeks were left (it used to be worth 30 here).
+    expect(arcade.blindfold?.best).toBe(0);
+    expect(arcade.blindfold?.detail).toBe('Lost vs Level 1');
   });
 });
 
@@ -296,7 +302,10 @@ test.describe('settings', () => {
     await expect(page.getByRole('heading', { name: 'Appearance' })).toHaveCount(0);
 
     await page.getByRole('button', { name: /More/ }).click();
-    await page.getByRole('menuitem', { name: /Settings/ }).click();
+    await page
+      .getByRole('region', { name: 'More sections' })
+      .getByRole('link', { name: /Settings/ })
+      .click();
     await expect(page).toHaveURL(/\/settings$/);
 
     // A change is kept.
@@ -334,7 +343,7 @@ test.describe('playing on from a position on a phone', () => {
     // A puzzle's final position, handed off the way "Play it out" does.
     const fen = 'r1bqk2r/1pppbppp/p1n2n2/4p3/B3P3/5N2/PPPP1PPP/RNBQ1RK1 w kq - 2 6';
     await page.goto(`/play?fen=${encodeURIComponent(fen)}&color=white`);
-    await page.getByLabel('Strength').selectOption('1');
+    await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
     await revealBoard(board);
@@ -363,7 +372,7 @@ test.describe('small phones', () => {
   }) => {
     await seedProgress(page, { onboarded: true });
     await page.goto('/play');
-    await page.getByLabel('Strength').selectOption('1');
+    await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expectBoard(page);
     // The description is dropped and the title shrinks …
@@ -401,15 +410,16 @@ test.describe('more menu', () => {
     await seedProgress(page, { onboarded: true });
     await page.goto('/');
     await page.getByRole('button', { name: /More/ }).click();
-    const menu = page.getByRole('menu', { name: 'More sections' });
+    // A disclosure over plain lists of links, not an ARIA menu.
+    const menu = page.getByRole('region', { name: 'More sections' });
     const games = menu.getByRole('group', { name: 'Games' });
-    await expect(games.getByRole('menuitem', { name: /Arcade/ })).toBeVisible();
-    await expect(games.getByRole('menuitem', { name: /Classic games/ })).toBeVisible();
-    await expect(menu.getByRole('group', { name: 'Train' }).getByRole('menuitem')).toHaveCount(
+    await expect(games.getByRole('link', { name: /Arcade/ })).toBeVisible();
+    await expect(games.getByRole('link', { name: /Classic games/ })).toBeVisible();
+    await expect(menu.getByRole('group', { name: 'Train' }).getByRole('link')).toHaveCount(
       isMobile ? 4 : 2,
     );
-    const app = menu.getByRole('group', { name: isMobile ? 'Tools' : 'App' });
-    await expect(app.getByRole('menuitem', { name: /Settings/ })).toBeVisible();
+    const app = menu.getByRole('group', { name: 'Tools' });
+    await expect(app.getByRole('link', { name: /Settings/ })).toBeVisible();
     if (isMobile) {
       // The sheet never grows past the space between the app header and the bottom bar.
       const fits = await menu.evaluate((el) => {
@@ -420,7 +430,7 @@ test.describe('more menu', () => {
       });
       expect(fits).toBe(true);
     }
-    await app.getByRole('menuitem', { name: /Settings/ }).click();
+    await app.getByRole('link', { name: /Settings/ }).click();
     await expect(page).toHaveURL(/\/settings$/);
   });
 });

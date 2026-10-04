@@ -1,0 +1,12 @@
+# LF everywhere, on every platform: Prettier checks for it (`endOfLine: lf`), and
+# Windows checkouts would otherwise turn every file into a formatting diff.
+* text=auto eol=lf
+
+# Binary files are never touched.
+*.png binary
+*.webp binary
+*.ico binary
+*.wasm binary
+*.woff2 binary
+*.zip binary
+*.zst binary

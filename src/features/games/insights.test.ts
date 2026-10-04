@@ -162,8 +162,20 @@ describe('buildInsights', () => {
       games,
       'alice',
       [
-        { at: 1, level: 3, color: 'white', result: '1-0', reason: 'checkmate', plies: 40, pgn: '' },
         {
+          id: 'g1',
+          source: 'play',
+          at: 1,
+          level: 3,
+          color: 'white',
+          result: '1-0',
+          reason: 'checkmate',
+          plies: 40,
+          pgn: '',
+        },
+        {
+          id: 'g2',
+          source: 'play',
           at: 2,
           level: 3,
           color: 'black',
@@ -173,6 +185,8 @@ describe('buildInsights', () => {
           pgn: '',
         },
         {
+          id: 'g3',
+          source: 'book',
           at: 3,
           level: 4,
           color: 'white',
@@ -191,8 +205,16 @@ describe('buildInsights', () => {
     expect(middlegame?.errors).toBe(5);
     expect(middlegame?.accuracy).toBe(Math.round(100 * Math.exp(-5 * (3.2 / 35))));
     // The opponent's forks are not counted against the learner.
-    expect(insights.motifs[0]).toMatchObject({ motif: 'hanging-piece', count: 3 });
-    expect(insights.motifs.find((m) => m.motif === 'fork')?.count).toBe(1);
+    expect(insights.motifs[0]).toMatchObject({ motif: 'hanging-piece', count: 3, reliable: true });
+    expect(insights.motifs.find((m) => m.motif === 'fork')).toMatchObject({
+      count: 1,
+      reliable: false,
+    });
+    // Small samples are flagged: the endgame has few moves, one game as White is nothing.
+    expect(middlegame?.reliable).toBe(true);
+    expect(insights.phases.find((p) => p.phase === 'endgame')?.reliable).toBe(false);
+    expect(insights.colours[0]?.reliable).toBe(false);
+    expect(insights.openings[0]?.reliable).toBe(false);
     expect(insights.motifs[0]?.lessonId).toBe('piece-values');
     expect(insights.motifs[0]?.themeName).toBe('Hanging piece');
     expect(insights.colours[0]).toMatchObject({ color: 'white', games: 1, wins: 1 });

@@ -4,12 +4,13 @@ import { completeOnboarding, expectBoard, playMove } from './helpers';
 test.describe('navigation', () => {
   test('the More menu reaches the secondary sections', async ({ page, isMobile }) => {
     await page.goto('/');
+    const more = page.getByRole('region', { name: 'More sections' });
     await page.getByRole('button', { name: /More/ }).click();
-    await page.getByRole('menuitem', { name: /Reference/ }).click();
+    await more.getByRole('link', { name: /Reference/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Reference' })).toBeVisible();
     if (isMobile) {
       await page.getByRole('button', { name: /More/ }).click();
-      await page.getByRole('menuitem', { name: /Drills/ }).click();
+      await more.getByRole('link', { name: /Drills/ }).click();
       await expect(page.getByRole('heading', { level: 1, name: 'Drills' })).toBeVisible();
     }
   });
@@ -18,7 +19,7 @@ test.describe('navigation', () => {
 test.describe('play with a clock', () => {
   test('clocks appear and count for the side to move', async ({ page }) => {
     await page.goto('/play');
-    await page.getByLabel('Strength').selectOption('1');
+    await page.getByLabel('Engine level').selectOption('1');
     await page.getByLabel('Time control').selectOption('3+2');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
@@ -31,7 +32,7 @@ test.describe('play with a clock', () => {
 
   test('keyboard move entry plays a move', async ({ page }) => {
     await page.goto('/play');
-    await page.getByLabel('Strength').selectOption('1');
+    await page.getByLabel('Engine level').selectOption('1');
     await page.getByText('Keyboard move entry', { exact: true }).click();
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expectBoard(page);
@@ -55,8 +56,9 @@ test.describe('analysis board', () => {
     await page.getByRole('button', { name: 'Load', exact: true }).click();
     await expect(page.locator('.analyze__opening')).toContainText('Ruy Lopez');
     await expect(page.locator('.treemoves')).toContainText('Bc4');
-    await page.getByRole('button', { name: /2\. Bc4/ }).click();
-    await expect(page.locator('.analyze__opening')).toContainText("Bishop's Opening");
+    // Moves are buttons with spoken names ("2. bishop to c4"); find this one by its notation.
+    await page.locator('.treemoves__move').filter({ hasText: 'Bc4' }).click();
+    await expect(page.locator('.analyze__opening')).toContainText('Bishop’s Opening');
     await page.getByRole('button', { name: 'Make main line' }).click();
     await expect(page.locator('.treemoves__move').nth(2)).toContainText('Bc4');
   });
@@ -68,11 +70,11 @@ test.describe('analysis board', () => {
     await page.getByRole('button', { name: 'Clear board' }).click();
     await expect(page.getByText(/exactly one king/)).toBeVisible();
     await page.getByRole('button', { name: 'White king' }).click();
-    await page.getByRole('gridcell', { name: 'e1, empty' }).click();
+    await page.getByRole('button', { name: 'e1, empty', exact: true }).click();
     await page.getByRole('button', { name: 'Black king' }).click();
-    await page.getByRole('gridcell', { name: 'e8, empty' }).click();
+    await page.getByRole('button', { name: 'e8, empty', exact: true }).click();
     await page.getByRole('button', { name: 'White queen' }).click();
-    await page.getByRole('gridcell', { name: 'd1, empty' }).click();
+    await page.getByRole('button', { name: 'd1, empty', exact: true }).click();
     await expect(page.locator('.editor__fen')).toHaveText('4k3/8/8/8/8/8/8/3QK3 w - - 0 1');
     await page.getByRole('button', { name: 'Analyze this position' }).click();
     const board = await expectBoard(page);
@@ -102,7 +104,7 @@ test.describe('drills', () => {
     await page.getByRole('button', { name: /Start · 30/ }).click();
     const target = (await page.locator('.drill__prompt').textContent())?.trim() ?? '';
     expect(target).toMatch(/^[a-h][1-8]$/);
-    await page.getByRole('gridcell', { name: target, exact: true }).click();
+    await page.getByRole('button', { name: target, exact: true }).click();
     await expect(page.locator('.drill__hud')).toContainText('1');
   });
 

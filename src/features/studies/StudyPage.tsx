@@ -1,8 +1,9 @@
 import { useCallback, useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
-import { Badge, Button, Card, Kbd, LinkButton } from '@/components/ui';
+import { Badge, Button, Card, Kbd, LinkButton, NotFound } from '@/components/ui';
+import { shortcutKey } from '@/lib/shortcutKey';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
@@ -16,10 +17,12 @@ export default function StudyPage() {
   const study = getStudy(studyId);
   if (!study) {
     return (
-      <Card className="narrow">
-        <h2>Study not found</h2>
-        <LinkButton to="/studies">All studies</LinkButton>
-      </Card>
+      <NotFound title="Study not found" backTo="/studies" backLabel="All studies">
+        <p className="muted">
+          There is no endgame study called <code>{studyId}</code>. The collection lists every study
+          by composer.
+        </p>
+      </NotFound>
     );
   }
   return <StudyView key={study.id} study={study} />;
@@ -28,7 +31,6 @@ export default function StudyPage() {
 function StudyView({ study }: { study: Study }) {
   const recordStudy = useProgress((s) => s.recordStudy);
   const result = useProgress((s) => s.studies[study.id]);
-  const autoQueen = useSettings((s) => s.autoQueen);
   const onDone = useCallback(
     (outcome: 'solved' | 'revealed', assisted: boolean) => {
       recordStudy(study.id, outcome === 'solved' ? 'solved' : 'failed', !assisted);
@@ -36,6 +38,7 @@ function StudyView({ study }: { study: Study }) {
     [recordStudy, study.id],
   );
   const state = useStudy(study, onDone);
+  const shortcutsOn = useSettings((s) => s.keyboardShortcuts);
   const index = STUDIES.findIndex((s) => s.id === study.id);
   const following = STUDIES[index + 1];
 
@@ -43,16 +46,18 @@ function StudyView({ study }: { study: Study }) {
     document.title = `${study.title} · ${siteConfig.name}`;
   }, [study.title]);
 
+  // Keyboard shortcuts: letters in either case, never with modifiers, never from the board,
+  // and not at all when single-key shortcuts are switched off in Settings.
   useEffect(() => {
+    if (!shortcutsOn) return;
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-      if (e.key === 'h') state.hint();
-      if (e.key === 's') state.reveal();
+      const key = shortcutKey(e);
+      if (key === 'h') state.hint();
+      if (key === 's') state.reveal();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [state]);
+  }, [state, shortcutsOn]);
 
   const finished = state.phase === 'solved' || state.phase === 'revealed';
   const goalText = `${state.solver === 'white' ? 'White' : 'Black'} to play and ${study.goal}`;
@@ -81,7 +86,8 @@ function StudyView({ study }: { study: Study }) {
             shapes={state.shapes}
             highlights={state.highlights}
             drawable={false}
-            onMove={(from, to) => state.playMove(from, to, autoQueen ? 'q' : undefined)}
+            // Promotions always ask: an underpromotion may be the study's point.
+            onMove={(from, to) => state.playMove(from, to)}
             ariaLabel={`Study: ${study.title}, ${goalText}`}
           />
           {state.needsPromotion ? (
@@ -112,7 +118,8 @@ function StudyView({ study }: { study: Study }) {
                   : (state.feedback ?? 'Find the move on the board.')}
             </p>
             {state.played.length > 0 ? (
-              <p className="small mono study__moves" aria-label="Moves played">
+              <p className="small mono study__moves">
+                <span className="sr-only">Moves played: </span>
                 {state.played.join(' ')}
               </p>
             ) : null}
@@ -120,10 +127,10 @@ function StudyView({ study }: { study: Study }) {
               {!finished ? (
                 <>
                   <Button onClick={state.hint} disabled={state.phase !== 'solving'}>
-                    Hint <Kbd>H</Kbd>
+                    Hint {shortcutsOn ? <Kbd>H</Kbd> : null}
                   </Button>
-                  <Button variant="ghost" onClick={state.reveal}>
-                    Show solution <Kbd>S</Kbd>
+                  <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
+                    Show solution {shortcutsOn ? <Kbd>S</Kbd> : null}
                   </Button>
                 </>
               ) : (

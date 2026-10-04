@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { describePosition, describeSquare, moveCursor, squareOffset } from './keyboard';
+import {
+  describePosition,
+  describeSquare,
+  moveCursor,
+  squareFromKeys,
+  squareOffset,
+} from './keyboard';
 
 describe('keyboard board control', () => {
   it('moves the cursor from the viewer’s perspective and stops at the edge', () => {
@@ -28,5 +34,22 @@ describe('keyboard board control', () => {
     );
     expect(describePosition('7k/6Q1/6K1/8/8/8/8/8 b - - 0 1')).toContain('Checkmate.');
     expect(describePosition('not a fen')).toBe('The position could not be read.');
+  });
+
+  it('points out legal destinations while a piece is selected', () => {
+    const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const dests = new Map([['e2', ['e3', 'e4']]]);
+    expect(describeSquare(start, 'e4', { selected: 'e2', dests })).toBe(
+      'e4, empty, legal destination',
+    );
+    expect(describeSquare(start, 'e5', { selected: 'e2', dests })).toBe('e5, empty');
+    expect(describeSquare(start, 'e4', { selected: null, dests })).toBe('e4, empty');
+  });
+
+  it('reads a typed square in either case', () => {
+    expect(squareFromKeys('e', '4')).toBe('e4');
+    expect(squareFromKeys('E', '4')).toBe('e4');
+    expect(squareFromKeys('i', '4')).toBeNull();
+    expect(squareFromKeys('e', '9')).toBeNull();
   });
 });

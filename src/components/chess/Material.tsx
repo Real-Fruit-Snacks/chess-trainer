@@ -19,8 +19,17 @@ export function Material({ fen, color }: { fen: Fen; color: LongColor }) {
   );
   if (mode === 'off') return null;
 
+  const parts = MATERIAL_ORDER.flatMap((role) => {
+    const n = captured.filter((r) => r === role).length;
+    return n ? [`${n} ${n === 1 ? role : `${role}s`}`] : [];
+  });
+  const summary = parts.length
+    ? `${mode === 'difference' ? 'Material up for' : 'Captured by'} ${color}: ${parts.join(', ')}`
+    : `No material ${mode === 'difference' ? 'advantage for' : 'captured by'} ${color}`;
+  const label = diff > 0 ? `${summary}, ${diff} ${diff === 1 ? 'pawn' : 'pawns'} ahead` : summary;
+
   return (
-    <div className="material cg-wrap" role="group" aria-label={`Material captured by ${color}`}>
+    <div className="material cg-wrap" role="img" aria-label={label}>
       {MATERIAL_ORDER.map((role) => {
         const n = captured.filter((r) => r === role).length;
         if (n === 0) return null;

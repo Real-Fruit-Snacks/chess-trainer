@@ -64,6 +64,83 @@
   margin: var(--space-3) 0;
 }
 
+/* The buttons of a result card (Play again, New game, Analyze game…) wrap as a group. */
+.arcade__summary-actions {
+  flex-wrap: wrap;
+}
+
+/* Copy PGN, Analyze game, Focus and Resign under a move list. */
+.arcade__game-actions {
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+
+/* ---------- Odds Ladder rungs: one readable row per rung ---------- */
+.ladder__rungs {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.ladder__rung {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.ladder__rung-mark {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.ladder__rung-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.ladder__rung-name {
+  font-weight: 600;
+}
+
+.ladder__rung-actions {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ladder__rung--climbed .ladder__rung-mark {
+  color: var(--success);
+}
+
+/* The rung being climbed: the accent, in its border and its mark (the badge says it too). */
+.ladder__rung--current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ladder__rung--current .ladder__rung-mark {
+  color: var(--accent);
+}
+
+/* Locked rungs: plainer, never faded (the text keeps its contrast). */
+.ladder__rung--locked {
+  background: transparent;
+  border-style: dashed;
+}
+
 /* Piece-type calls (Hand & Brain) */
 .arcade__pieces {
   display: flex;
@@ -74,6 +151,15 @@
 .arcade__piece {
   min-width: 64px;
   flex: 1 1 64px;
+}
+
+/* On a phone the Brain's calls sit right under the board, not a scroll away in the panel. */
+.arcade__calls-under {
+  margin-top: var(--space-1);
+}
+
+.arcade__calls-under .arcade__status {
+  margin-top: 0;
 }
 
 /* Health bar (Fortress) */
@@ -121,8 +207,30 @@
   margin: var(--space-2) 0;
 }
 
+/* A small piece-coloured disc beside "White to move" / "Black to move". */
+.arcade__to-move {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: 0.35em;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  vertical-align: -0.05em;
+}
+
+.arcade__to-move--white {
+  background: var(--eval-white);
+}
+
+.arcade__to-move--black {
+  background: var(--eval-black);
+}
+
 /* Guess grid (Daily Opening) */
 .arcade__guesses {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -130,39 +238,84 @@
 
 .arcade__guess {
   display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.arcade__guess-name {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.arcade__guess-moves {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
   flex-wrap: wrap;
   gap: 4px;
   align-items: center;
 }
 
-.arcade__guess-name {
-  flex-basis: 100%;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
+/*
+ * A tile says what it means three ways: a soft tint, a glyph (check, swap,
+ * cross, plus) and words for screen readers. The move itself stays in the
+ * text colour, so it reads at full contrast on every tint and scheme.
+ */
 .arcade__tile {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-family: var(--font-mono);
   font-size: 0.85rem;
   font-weight: 600;
-  padding: 4px 8px;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-3);
+  color: var(--text);
+}
+
+.arcade__tile-mark {
+  flex: none;
   color: var(--text-muted);
 }
 
 .arcade__tile--hit {
-  background: var(--success);
-  color: #fff;
+  background: var(--success-soft);
+  border-color: var(--success);
+}
+
+.arcade__tile--hit .arcade__tile-mark {
+  color: var(--success);
 }
 
 .arcade__tile--near {
-  background: var(--warning);
-  color: #fff;
+  background: var(--warning-soft);
+  border-color: var(--warning);
+}
+
+.arcade__tile--near .arcade__tile-mark {
+  color: var(--warning);
 }
 
 .arcade__tile--extra {
-  opacity: 0.6;
+  background: transparent;
+  border-style: dashed;
+}
+
+.arcade__legend {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) 0 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+
+.arcade__legend .arcade__tile {
+  padding: 1px 4px;
 }
 
 .arcade__results {
@@ -244,6 +397,9 @@
 
 /* Sequence display (Engine Says) */
 .arcade__sequence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -253,15 +409,19 @@
 
 .arcade__sequence-move {
   padding: 2px 8px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-3);
+  color: var(--text);
 }
 
+/* Shown or replayed: a soft tint and border, the move in the text colour (AA in every scheme). */
 .arcade__sequence-move--done {
-  background: var(--success);
-  color: #fff;
+  background: var(--success-soft);
+  border-color: var(--success);
 }
 
 .arcade__sequence-move--current {
   outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }

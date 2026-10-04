@@ -83,13 +83,10 @@ test.describe('sound theme and volume', () => {
   test('Retro and the volume slider persist, and the lab follows them', async ({ page }) => {
     await seedProgress(page, { onboarded: true });
     await page.goto('/settings');
-    const themes = page.getByRole('group', { name: 'Sound theme' });
-    await expect(themes.getByRole('button')).toHaveText(['Standard', 'Soft', 'Retro']);
-    await themes.getByRole('button', { name: 'Retro' }).click();
-    await expect(themes.getByRole('button', { name: 'Retro' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    const themes = page.getByRole('radiogroup', { name: 'Sound theme' });
+    await expect(themes.getByRole('radio')).toHaveText(['Standard', 'Soft', 'Retro']);
+    await themes.getByRole('radio', { name: 'Retro' }).click();
+    await expect(themes.getByRole('radio', { name: 'Retro' })).toBeChecked();
 
     // The slider moves in steps of 5 % from the keyboard and shows its value.
     const slider = page.getByRole('slider', { name: 'Volume' });
@@ -103,8 +100,8 @@ test.describe('sound theme and volume', () => {
     await page.reload();
     await expect(page.getByRole('slider', { name: 'Volume' })).toHaveValue('70');
     await expect(
-      page.getByRole('group', { name: 'Sound theme' }).getByRole('button', { name: 'Retro' }),
-    ).toHaveAttribute('aria-pressed', 'true');
+      page.getByRole('radiogroup', { name: 'Sound theme' }).getByRole('radio', { name: 'Retro' }),
+    ).toBeChecked();
     const settings = await page.evaluate(() => {
       const raw = localStorage.getItem('chess-trainer:settings');
       return raw
@@ -121,11 +118,18 @@ test.describe('sound theme and volume', () => {
     await page.getByTestId('sound-gameLost').click();
     await page.getByTestId('sound-capture').click();
 
-    // Turning sounds off hides the theme and volume in Settings.
+    // Turning sounds off hides the volume in Settings; the theme stays only while it
+    // still picks the vibration patterns, and goes with vibration too.
     await page.goto('/settings');
     await page.getByText('Sound effects', { exact: true }).click();
     await expect(page.getByRole('switch', { name: /^Sound effects/ })).not.toBeChecked();
     await expect(page.getByRole('slider', { name: 'Volume' })).toHaveCount(0);
-    await expect(page.getByRole('group', { name: 'Sound theme' })).toHaveCount(0);
+    const canVibrate = await page.evaluate(() => typeof navigator.vibrate === 'function');
+    await expect(page.getByRole('radiogroup', { name: 'Sound theme' })).toHaveCount(
+      canVibrate ? 1 : 0,
+    );
+    await page.getByText('Vibration', { exact: true }).click();
+    await expect(page.getByRole('switch', { name: /^Vibration/ })).not.toBeChecked();
+    await expect(page.getByRole('radiogroup', { name: 'Sound theme' })).toHaveCount(0);
   });
 });

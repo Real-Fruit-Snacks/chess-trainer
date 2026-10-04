@@ -14,7 +14,7 @@ describe('engine diagnostics', () => {
   it('describes a healthy single-threaded environment', () => {
     const rows = diagnosticRows(base);
     const byLabel = Object.fromEntries(rows.map((r) => [r.label, r]));
-    expect(byLabel['Engine build in use']?.value).toBe('Stockfish 19 lite');
+    expect(byLabel['Build selected']?.value).toBe('Stockfish 19 lite');
     expect(byLabel.WebAssembly?.tone).toBe('good');
     expect(byLabel['Cross-origin isolated']?.tone).toBe('neutral');
     expect(rows.some((r) => r.label === 'Why single-threaded')).toBe(false);
@@ -30,7 +30,7 @@ describe('engine diagnostics', () => {
       wantThreads: true,
       env: { isolated: true, sharedMemory: true, cores: 8 },
     });
-    expect(active.find((r) => r.label === 'Engine build in use')?.value).toBe(
+    expect(active.find((r) => r.label === 'Build selected')?.value).toBe(
       'Stockfish 19 · 7 threads',
     );
   });

@@ -26,6 +26,8 @@ export function EngineDiagnostics() {
   const [result, setResult] = useState<Benchmark | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // The flag row is re-read whenever the threads switch moves (the setting
+  // writes the flag right after), so it never shows a stale value.
   useEffect(() => {
     let cancelled = false;
     void readIsolationFlag().then((stored) => {
@@ -38,7 +40,7 @@ export function EngineDiagnostics() {
       cancelled = true;
       sw?.removeEventListener('controllerchange', onChange);
     };
-  }, []);
+  }, [wantThreads]);
 
   const rows = diagnosticRows({
     env: detectThreadEnvironment(),

@@ -10,9 +10,26 @@ export type TrainerPhase =
   | 'idle'
   | 'intro' // opponent's setup move is being played
   | 'solving' // waiting for the user's move
+  | 'checking' // the engine is judging a move that differs from the stored solution
   | 'replying' // opponent's automatic reply is being played
   | 'solved'
   | 'failed';
+
+/**
+ * Judges a move that is not the stored solution; resolves true when it is just
+ * as good. Returning null (synchronously) means the puzzle has one answer and
+ * the move is simply wrong. Own-game puzzles use this with the engine.
+ */
+export type VerifyMove = (
+  puzzle: Puzzle,
+  fenBefore: Fen,
+  expected: string,
+  played: string,
+) => Promise<boolean> | null;
+
+export interface PuzzleTrainerOptions {
+  verifyMove?: VerifyMove;
+}
 
 export interface TrainerSnapshot {
   fen: Fen;
@@ -56,6 +73,8 @@ export interface UsePuzzleTrainer {
   retry: () => void;
   /** Whether the user is playing on after failing; further results don't count. */
   practiceAfterFail: boolean;
+  /** True once "Show solution" played the line out (pages leave it on screen). */
+  solutionShown: boolean;
   needsPromotion: { from: Square; to: Square } | null;
   resolvePromotion: (piece: PromotionPiece | null) => void;
 }
@@ -89,7 +108,12 @@ function snapshot(
  */
 export function usePuzzleTrainer(
   onOutcome: (event: PuzzleOutcomeEvent, puzzle: Puzzle) => void,
+  options: PuzzleTrainerOptions = {},
 ): UsePuzzleTrainer {
+  const verifyRef = useRef(options.verifyMove);
+  verifyRef.current = options.verifyMove;
+  /** Bumped on every load so a late verification never lands on the next puzzle. */
+  const loadSeqRef = useRef(0);
   const chessRef = useRef(new Chess());
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [phase, setPhase] = useState<TrainerPhase>('idle');
@@ -99,6 +123,7 @@ export function usePuzzleTrainer(
   const [hintLevel, setHintLevel] = useState<0 | 1 | 2>(0);
   const [wrongMove, setWrongMove] = useState<[Square, Square] | null>(null);
   const [practiceAfterFail, setPracticeAfterFail] = useState(false);
+  const [solutionShown, setSolutionShown] = useState(false);
   const [needsPromotion, setNeedsPromotion] = useState<{ from: Square; to: Square } | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -128,7 +153,7 @@ export function usePuzzleTrainer(
 
   // Elapsed timer while solving.
   useEffect(() => {
-    if (phase !== 'solving' && phase !== 'replying' && phase !== 'intro') return;
+    if (!['solving', 'checking', 'replying', 'intro'].includes(phase)) return;
     const id = window.setInterval(() => {
       if (startedAtRef.current !== null) setElapsedMs(Date.now() - startedAtRef.current);
     }, 250);
@@ -176,6 +201,7 @@ export function usePuzzleTrainer(
   const load = useCallback(
     (next: Puzzle) => {
       clearTimers();
+      loadSeqRef.current += 1;
       const { moves } = puzzleMeta(next);
       chessRef.current = new Chess(next.fen);
       movesRef.current = moves;
@@ -188,6 +214,7 @@ export function usePuzzleTrainer(
       setHintLevel(0);
       setWrongMove(null);
       setPracticeAfterFail(false);
+      setSolutionShown(false);
       setNeedsPromotion(null);
       setElapsedMs(0);
       setPhase('intro');
@@ -207,6 +234,7 @@ export function usePuzzleTrainer(
       const expected = movesRef.current[stepRef.current];
       if (!expected) return;
 
+      const fenBefore = chess.fen();
       let move;
       try {
         move = chess.move(promotion ? { from, to, promotion } : { from, to });
@@ -218,7 +246,7 @@ export function usePuzzleTrainer(
       const isLastSolverMove = stepRef.current >= movesRef.current.length - 1;
       const correct = played === expected || (isLastSolverMove && chess.isCheckmate());
 
-      if (!correct) {
+      const reject = () => {
         playSound('failed');
         setWrongMove([from, to]);
         setPhase('failed');
@@ -229,24 +257,54 @@ export function usePuzzleTrainer(
           setWrongMove(null);
           commit(position.lastMove);
         }, 700);
+      };
+
+      const accept = () => {
+        stepRef.current += 1;
+        setHintLevel(0);
+        commit([move.from, move.to]);
+
+        if (stepRef.current >= movesRef.current.length) {
+          playSound('solved');
+          setPhase('solved');
+          if (!practiceAfterFail) report('solved');
+          return;
+        }
+        playMoveSound(move, chess);
+        setPhase('replying');
+        later(() => playOpponentMove(stepRef.current, 'solving'), REPLY_DELAY);
+      };
+
+      if (correct) {
+        accept();
         return;
       }
 
-      stepRef.current += 1;
-      setHintLevel(0);
+      // Another move may be just as good (own-game puzzles): let the engine judge it.
+      // Only a final solver move can be accepted this way — after it the stored
+      // line no longer applies.
+      const verdict =
+        isLastSolverMove && puzzle
+          ? verifyRef.current?.(puzzle, fenBefore, expected, played)
+          : null;
+      if (!verdict) {
+        reject();
+        return;
+      }
+      const seq = loadSeqRef.current;
+      setPhase('checking');
       commit([move.from, move.to]);
-
-      if (stepRef.current >= movesRef.current.length) {
-        playSound('solved');
-        setPhase('solved');
-        if (!practiceAfterFail) report('solved');
-        return;
-      }
-      playMoveSound(move, chess);
-      setPhase('replying');
-      later(() => playOpponentMove(stepRef.current, 'solving'), REPLY_DELAY);
+      verdict
+        .then((ok) => {
+          if (seq !== loadSeqRef.current) return;
+          if (ok) accept();
+          else reject();
+        })
+        .catch(() => {
+          if (seq === loadSeqRef.current) reject();
+        });
     },
-    [phase, commit, position.lastMove, practiceAfterFail, report, playOpponentMove],
+    [phase, puzzle, commit, position.lastMove, practiceAfterFail, report, playOpponentMove],
   );
 
   const playUserMove = useCallback(
@@ -300,8 +358,10 @@ export function usePuzzleTrainer(
   const showSolution = useCallback(() => {
     if (phase === 'solved' || phase === 'idle' || phase === 'intro') return;
     clearTimers();
+    loadSeqRef.current += 1; // a verdict still pending on a checked move is dropped
     if (!reportedRef.current) report('failed');
     setPracticeAfterFail(true);
+    setSolutionShown(true);
     setWrongMove(null);
     const chess = chessRef.current;
     while (chess.history().length > stepRef.current) chess.undo();
@@ -352,6 +412,7 @@ export function usePuzzleTrainer(
     showSolution,
     retry,
     practiceAfterFail,
+    solutionShown,
     needsPromotion,
     resolvePromotion,
   };

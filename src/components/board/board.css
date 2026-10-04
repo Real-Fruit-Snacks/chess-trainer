@@ -178,19 +178,27 @@
   outline-offset: -3px;
 }
 
+/* A white ring edged in near-black: at least 3:1 against light and dark squares in every theme. */
 .board__cursor {
   position: absolute;
   width: 12.5%;
   height: 12.5%;
   box-sizing: border-box;
-  border: 3px solid var(--accent);
+  border: 3px solid #fff;
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.9),
+    0 0 0 2px rgba(0, 0, 0, 0.9);
   border-radius: 4px;
   pointer-events: none;
   z-index: 3;
 }
 
-.board--theme-contrast .board__cursor {
-  border-color: #e69f00;
+@media (forced-colors: active) {
+  .board__cursor {
+    border-color: Highlight;
+    box-shadow: none;
+    outline: 2px solid CanvasText;
+  }
 }
 
 /* The "Describe position" button is for screen-reader and keyboard users. */

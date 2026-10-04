@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { dueReviews, nextReview } from '@/lib/puzzleReview';
 import { useNow } from '@/lib/useNow';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import {
@@ -9,6 +9,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   Kbd,
   LinkButton,
   ProgressBar,
@@ -18,31 +19,72 @@ import {
   Switch,
 } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
+import { useEngine } from '@/engine/useEngine';
 import { formatDate, formatDuration, localDateKey } from '@/lib/dates';
+import { NONE } from '@/lib/format';
+import { safeSourceUrl } from '@/lib/gameImport';
 import { formatRatingWithRd, isProvisional } from '@/lib/glicko';
 import { CALIBRATION_PUZZLES, formatRating, STARTING_RATINGS } from '@/lib/rating';
+import { shortcutKey } from '@/lib/shortcutKey';
 import { siteConfig } from '@/site.config';
-import { useProgress } from '@/store/progress';
+import { puzzleStreak, useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
-import { isOwnPuzzleId, type OwnPuzzle } from './ownPuzzles';
+import { isOwnPuzzleId, type OwnPuzzle, verifyOwnPuzzleMove } from './ownPuzzles';
 import {
   dailyPuzzle,
   findPuzzleById,
   loadPuzzleIndex,
+  matchesOpening,
   openingTagName,
   type Puzzle,
   type PuzzleIndex,
+  PuzzleLoadError,
   selectPuzzle,
 } from './puzzleService';
 import { OpeningCatalog } from './OpeningCatalog';
 import { WoodpeckerPanel } from './WoodpeckerPanel';
+import { WOODPECKER_NEAR } from './woodpecker';
 import { RushTrainer } from './RushTrainer';
 import { PRACTICE_GROUPS, THEMES, themeDescription, themeName } from './themes';
-import { type PuzzleOutcomeEvent, usePuzzleTrainer } from './usePuzzleTrainer';
+import { type PuzzleOutcomeEvent, usePuzzleTrainer, type VerifyMove } from './usePuzzleTrainer';
 import './puzzles.css';
 import { Icon } from '@/components/ui';
 
 type Mode = 'rated' | 'daily' | 'themes' | 'openings' | 'rush' | 'review' | 'mine' | 'woodpecker';
+
+const MODES: readonly Mode[] = [
+  'rated',
+  'daily',
+  'themes',
+  'openings',
+  'rush',
+  'review',
+  'mine',
+  'woodpecker',
+];
+
+/** The tab title of each mode ("Daily puzzle · Chess Trainer"). */
+const MODE_TITLES: Record<Mode, string> = {
+  rated: 'Rated puzzles',
+  daily: 'Daily puzzle',
+  themes: 'Puzzles by theme',
+  openings: 'Puzzles by opening',
+  rush: 'Puzzle Rush',
+  review: 'Due puzzles',
+  mine: 'My puzzles',
+  woodpecker: 'Woodpecker',
+};
+
+/** Due puzzles tried in turn when the first cannot be loaded (offline) or is gone. */
+const REVIEW_TRIES = 5;
+
+/** Reads `?opening=a,b` — every tag a repertoire card covers. */
+function openingTags(param: string | null): string[] {
+  return (param ?? '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
 
 export default function PuzzlesPage() {
   const params = useParams<{ mode?: string }>();
@@ -63,31 +105,46 @@ export default function PuzzlesPage() {
     setReviewQueueEmpty(dueReviews(useProgress.getState().puzzleReviews, Date.now()).length === 0);
   }, [params.mode]);
 
-  const mode: Mode =
-    params.mode === 'daily'
-      ? 'daily'
-      : params.mode === 'themes'
-        ? 'themes'
-        : params.mode === 'rush'
-          ? 'rush'
-          : params.mode === 'review'
-            ? 'review'
-            : params.mode === 'mine'
-              ? 'mine'
-              : params.mode === 'openings'
-                ? 'openings'
-                : params.mode === 'woodpecker'
-                  ? 'woodpecker'
-                  : 'rated';
+  const knownMode = params.mode === undefined || (MODES as readonly string[]).includes(params.mode);
+  const mode: Mode = knownMode && params.mode ? (params.mode as Mode) : 'rated';
   const themeFilter = searchParams.get('theme');
   const openingFilter = searchParams.get('opening');
   const puzzleId = searchParams.get('id');
+  // `?id=…&rating=…` (Progress links): the rating says which band to look in first.
+  const ratingParam = searchParams.get('rating');
+  const ratingHint =
+    ratingParam !== null && ratingParam.trim() !== '' && Number.isFinite(Number(ratingParam))
+      ? Number(ratingParam)
+      : undefined;
+  // One array per filter: the trainer loads a puzzle whenever its inputs change identity, and
+  // this page re-renders on every review-queue change (a miss schedules a card).
+  const openings = useMemo(
+    () => (mode === 'openings' ? openingTags(openingFilter) : []),
+    [mode, openingFilter],
+  );
 
   useEffect(() => {
-    document.title = `Puzzles · ${siteConfig.name}`;
-  }, []);
+    document.title = `${MODE_TITLES[mode]} · ${siteConfig.name}`;
+  }, [mode]);
 
-  if (!onboarded) return <Onboarding />;
+  // Changing mode is a navigation, after which the app moves focus to the page; a keyboard
+  // user who was choosing on the mode strip gets the strip back, on the mode just chosen.
+  const stripRef = useRef<HTMLDivElement>(null);
+  const refocusStripRef = useRef(false);
+  useEffect(() => {
+    if (!refocusStripRef.current) return;
+    refocusStripRef.current = false;
+    const frame = requestAnimationFrame(() => {
+      stripRef.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [mode]);
+
+  // `/puzzles/anything-else` is not a mode: back to rated puzzles, like other unknown routes.
+  if (!knownMode) return <Navigate to="/puzzles" replace />;
+
+  // Only rated solving needs a starting rating; every other mode is open from the start.
+  const needsOnboarding = !onboarded && mode === 'rated' && !puzzleId;
 
   return (
     <div>
@@ -96,29 +153,44 @@ export default function PuzzlesPage() {
           <h1>Puzzles</h1>
           <p>Engine-verified tactics from real games, picked to match your level.</p>
         </div>
-        <Segmented
-          ariaLabel="Puzzle mode"
-          value={mode}
-          onChange={(m) => navigate(m === 'rated' ? '/puzzles' : `/puzzles/${m}`)}
-          options={[
-            { value: 'rated', label: 'Rated' },
-            { value: 'daily', label: 'Daily' },
-            { value: 'themes', label: 'By theme' },
-            { value: 'openings', label: 'By opening' },
-            { value: 'rush', label: 'Rush' },
-            {
-              value: 'review',
-              label: (
-                <>Review{dueCount ? <span className="segmented__count">{dueCount}</span> : null}</>
-              ),
-            },
-            { value: 'mine', label: 'Mine' },
-            { value: 'woodpecker', label: 'Woodpecker' },
-          ]}
-        />
+        <div className="puzzle-modes" ref={stripRef}>
+          <Segmented
+            ariaLabel="Puzzle mode"
+            value={mode}
+            onChange={(m) => {
+              refocusStripRef.current = !!stripRef.current?.contains(document.activeElement);
+              void navigate(m === 'rated' ? '/puzzles' : `/puzzles/${m}`);
+            }}
+            options={[
+              { value: 'rated', label: 'Rated' },
+              { value: 'daily', label: 'Daily' },
+              { value: 'themes', label: 'By theme' },
+              { value: 'openings', label: 'By opening' },
+              { value: 'rush', label: 'Rush' },
+              {
+                value: 'review',
+                label: (
+                  <>
+                    Due
+                    {dueCount ? (
+                      <span className="segmented__count">
+                        {dueCount}
+                        <span className="sr-only"> due</span>
+                      </span>
+                    ) : null}
+                  </>
+                ),
+              },
+              { value: 'mine', label: 'Mine' },
+              { value: 'woodpecker', label: 'Woodpecker' },
+            ]}
+          />
+        </div>
       </div>
 
-      {mode === 'rush' ? (
+      {needsOnboarding ? (
+        <Onboarding />
+      ) : mode === 'rush' ? (
         <RushTrainer />
       ) : mode === 'review' && reviewQueueEmpty ? (
         <ReviewEmpty />
@@ -135,8 +207,9 @@ export default function PuzzlesPage() {
           key={`${mode}:${themeFilter ?? ''}:${openingFilter ?? ''}:${puzzleId ?? ''}`}
           mode={mode}
           theme={themeFilter}
-          opening={mode === 'openings' ? openingFilter : null}
+          openings={openings}
           puzzleId={puzzleId}
+          ratingHint={ratingHint}
           onQueueEmpty={() =>
             mode === 'woodpecker' ? setWoodpeckerSolving(false) : setReviewQueueEmpty(true)
           }
@@ -157,7 +230,7 @@ function MineEmpty() {
       <p className="muted">
         Review one of your games on the analysis board and every mistake becomes a puzzle: the
         position where you went wrong, with the engine’s better move as the solution. They come back
-        here — and in the review queue — until you find the right move without thinking.
+        here — and among the due puzzles — until you find the right move without thinking.
       </p>
       <div className="row">
         <LinkButton variant="primary" to="/analyze">
@@ -170,7 +243,7 @@ function MineEmpty() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Review queue: nothing due                                          */
+/* Due puzzles: nothing due                                            */
 /* ------------------------------------------------------------------ */
 function ReviewEmpty() {
   const queue = useProgress((s) => s.puzzleReviews);
@@ -179,8 +252,8 @@ function ReviewEmpty() {
   const total = Object.keys(queue).length;
   return (
     <Card className="narrow">
-      <p className="card__eyebrow">Review queue</p>
-      <h2>Nothing to review right now</h2>
+      <p className="card__eyebrow">Redo missed puzzles</p>
+      <h2>Nothing due right now</h2>
       <p className="muted">
         Puzzles you miss — in rated, theme or rush mode — come back here after a day. Solve them
         cleanly and they return after 3, 7, 14 and 30 days before graduating.
@@ -189,14 +262,14 @@ function ReviewEmpty() {
         {total === 0
           ? 'Your queue is empty. Go solve some puzzles!'
           : `${total} puzzle${total === 1 ? '' : 's'} scheduled · next due ${
-              upcoming ? formatDate(upcoming.due, siteConfig.locale) : '—'
+              upcoming ? formatDate(upcoming.due, siteConfig.locale) : NONE
             }${upcoming && upcoming.due - now < 3_600_000 ? ' (soon)' : ''}.`}
       </p>
       <div className="row">
         <LinkButton variant="primary" to="/puzzles">
           Rated puzzles
         </LinkButton>
-        <LinkButton to="/puzzles/themes">Practice by theme</LinkButton>
+        <LinkButton to="/puzzles/themes">Practise by theme</LinkButton>
       </div>
     </Card>
   );
@@ -263,6 +336,11 @@ function Onboarding() {
             {selected ? `Start solving at ${selected.rating}` : 'Start the calibration'}
           </Button>
         </div>
+        <p className="small muted" style={{ margin: '12px 0 0' }}>
+          Not ready to be rated? <Link to="/puzzles/daily">Today’s puzzle</Link>,{' '}
+          <Link to="/puzzles/themes">puzzles by theme</Link> and{' '}
+          <Link to="/puzzles/rush">Puzzle Rush</Link> are open right away.
+        </p>
       </Card>
     </div>
   );
@@ -330,32 +408,56 @@ function ThemeCatalog() {
 function Trainer({
   mode,
   theme,
-  opening,
+  openings,
   puzzleId,
+  ratingHint,
   onQueueEmpty,
 }: {
   mode: Mode;
   theme: string | null;
-  /** Lichess opening tag to draw puzzles from (by-opening practice). */
-  opening: string | null;
+  /** Lichess opening tags to draw puzzles from (by-opening practice; a repertoire has several). */
+  openings: string[];
   puzzleId: string | null;
+  /** With `puzzleId`: the puzzle's rating, so only the band around it is searched. */
+  ratingHint?: number;
   /** Review mode: called when "Next" finds nothing due any more. */
   onQueueEmpty?: () => void;
 }) {
   const progress = useProgress();
   const autoNext = useSettings((s) => s.puzzleAutoNext);
+  const shortcutsOn = useSettings((s) => s.keyboardShortcuts);
   const updateSettings = useSettings((s) => s.update);
-  const autoQueen = useSettings((s) => s.autoQueen);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastDelta, setLastDelta] = useState<number | null>(null);
   const [sessionSolved, setSessionSolved] = useState(0);
   const [sessionFailed, setSessionFailed] = useState(0);
   const rated = mode === 'rated' && !puzzleId;
+  const opening = openings[0] ?? null;
+  const trainerRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  // "Next" hands focus to the board once the new puzzle is ready for a move.
+  const focusBoardRef = useRef(false);
+
+  // Own-game puzzles whose review did not show a clear best move: the engine judges a
+  // different answer before it is called wrong. The engine loads only for those puzzles.
+  const ownPuzzles = mode === 'mine' || (puzzleId !== null && isOwnPuzzleId(puzzleId));
+  const { engine, start: startEngine, status: engineStatus } = useEngine({ autoStart: false });
+  useEffect(() => {
+    if (ownPuzzles) void startEngine();
+  }, [ownPuzzles, startEngine]);
+  const verifyMove = useCallback<VerifyMove>(
+    (puzzle, fen, expected, played) => {
+      if (!isOwnPuzzleId(puzzle.id) || (puzzle as OwnPuzzle).verified) return null;
+      return verifyOwnPuzzleMove(engine(), fen, expected, played);
+    },
+    [engine],
+  );
 
   const onOutcome = useCallback(
     (event: PuzzleOutcomeEvent, puzzle: Puzzle) => {
-      const { before, after, calibrationDone } = progress.recordPuzzle({
+      const state = useProgress.getState();
+      const { before, after, calibrationDone } = state.recordPuzzle({
         id: puzzle.id,
         puzzleRating: puzzle.rating,
         puzzleRd: puzzle.rd,
@@ -367,7 +469,10 @@ function Trainer({
         durationMs: event.durationMs,
         rated,
         review: mode === 'review',
-        ...(opening ? { opening } : {}),
+        mode,
+        ...(opening
+          ? { opening: openings.find((tag) => matchesOpening(puzzle, [tag])) ?? opening }
+          : {}),
       });
       setLastDelta(rated ? Math.round(after) - Math.round(before) : null);
       if (calibrationDone) {
@@ -379,17 +484,18 @@ function Trainer({
       }
       if (event.outcome === 'solved') setSessionSolved((n) => n + 1);
       else setSessionFailed((n) => n + 1);
-      if (mode === 'woodpecker') progress.recordWoodpeckerAttempt(event.outcome, event.durationMs);
+      if (mode === 'woodpecker') state.recordWoodpeckerAttempt(event.outcome, event.durationMs);
       if (mode === 'daily') {
-        progress.setDaily({ date: localDateKey(), id: puzzle.id, outcome: event.outcome });
+        // The first result of the day stands; replaying the puzzle is unrated practice.
+        const today = localDateKey();
+        const done = state.daily?.date === today && state.daily.outcome !== null;
+        if (!done) state.setDaily({ date: today, id: puzzle.id, outcome: event.outcome });
       }
     },
-    // progress actions are stable; recordPuzzle reads fresh state internally
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rated, mode, opening],
+    [rated, mode, opening, openings],
   );
 
-  const trainer = usePuzzleTrainer(onOutcome);
+  const trainer = usePuzzleTrainer(onOutcome, { verifyMove });
   const { load } = trainer;
   const currentIdRef = useRef<string | null>(null);
   const queueEmptyRef = useRef(onQueueEmpty);
@@ -402,7 +508,7 @@ function Trainer({
     try {
       let puzzle: Puzzle | null = null;
       if (puzzleId) {
-        puzzle = await findPuzzleById(puzzleId);
+        puzzle = await findPuzzleById(puzzleId, ratingHint);
         if (!puzzle) throw new Error(`Puzzle "${puzzleId}" is not in the bundled set.`);
       } else if (mode === 'daily') {
         puzzle = await dailyPuzzle(localDateKey());
@@ -426,27 +532,54 @@ function Trainer({
           queueEmptyRef.current?.();
           return;
         }
-        puzzle = await findPuzzleById(id, set.rating);
+        // The set's rating, not the puzzle's: its puzzles lie around it, in more than one band.
+        puzzle = await findPuzzleById(id, set.rating, { near: WOODPECKER_NEAR });
         if (!puzzle) {
-          // The bundled set changed since the Woodpecker set was made: skip the puzzle.
-          useProgress.getState().recordWoodpeckerAttempt('solved', 0);
-          throw new Error('That puzzle is no longer in the bundled set — skipped.');
+          // The bundled set changed since the Woodpecker set was made: drop the puzzle
+          // from the set without counting it as solved.
+          useProgress.getState().skipWoodpeckerPuzzle(id);
+          throw new Error('That puzzle is no longer in the bundled set — it was skipped.');
         }
       } else if (mode === 'review') {
-        const due = dueReviews(useProgress.getState().puzzleReviews, Date.now()).filter(
-          (c) => c.id !== currentIdRef.current,
-        );
-        const card = due[0] ?? dueReviews(useProgress.getState().puzzleReviews, Date.now())[0];
-        if (!card) {
+        const due = dueReviews(useProgress.getState().puzzleReviews, Date.now());
+        // The card just shown goes last, so "Next" moves on while others are due.
+        const ordered = [
+          ...due.filter((c) => c.id !== currentIdRef.current),
+          ...due.filter((c) => c.id === currentIdRef.current),
+        ];
+        if (ordered.length === 0) {
           queueEmptyRef.current?.();
           return;
         }
-        puzzle = await findPuzzleById(card.id, card.rating);
-        if (!puzzle) {
+        // Offline, a due puzzle whose file is not stored is passed over for one that is.
+        let unreachable: PuzzleLoadError | null = null;
+        for (const card of ordered.slice(0, REVIEW_TRIES)) {
+          let found: Puzzle | null;
+          try {
+            found = await findPuzzleById(card.id, card.rating);
+          } catch (err) {
+            if (!(err instanceof PuzzleLoadError)) throw err;
+            unreachable ??= err;
+            continue;
+          }
+          if (found) {
+            puzzle = found;
+            break;
+          }
           // The bundled set changed since it was queued; drop it and move on.
           useProgress.getState().dismissReview(card.id);
+          toast('A due puzzle is no longer in the bundled set — it was removed from the list.', {
+            tone: 'info',
+          });
+        }
+        if (!puzzle) {
+          if (unreachable) throw unreachable;
+          if (dueReviews(useProgress.getState().puzzleReviews, Date.now()).length === 0) {
+            queueEmptyRef.current?.();
+            return;
+          }
           throw new Error(
-            'That puzzle is no longer in the bundled set — it was removed from the queue.',
+            'Those due puzzles were no longer in the bundled set. Retry for the next.',
           );
         }
       } else {
@@ -455,7 +588,7 @@ function Trainer({
           rating: state.puzzleRating,
           seen: state.seen,
           themes: theme ? [theme] : undefined,
-          openings: opening ? [opening] : undefined,
+          openings: openings.length ? openings : undefined,
           excludeId: currentIdRef.current,
         });
       }
@@ -473,31 +606,53 @@ function Trainer({
     } finally {
       setLoading(false);
     }
-  }, [mode, theme, opening, puzzleId, load]);
+  }, [mode, theme, opening, openings, puzzleId, ratingHint, load]);
 
   useEffect(() => {
     void next();
   }, [next]);
 
-  // Auto-advance after a solve.
+  /** "Next" / "Skip": loads a puzzle and puts the keyboard on the board for it. */
+  const nextAndFocus = useCallback(() => {
+    focusBoardRef.current = true;
+    void next();
+  }, [next]);
+
+  useEffect(() => {
+    if (trainer.phase !== 'solving' || !focusBoardRef.current) return;
+    focusBoardRef.current = false;
+    boardRef.current?.querySelector<HTMLElement>('[role="application"]')?.focus();
+  }, [trainer.phase]);
+
+  // Auto-advance after a solve — but never after "Show solution": the line would vanish
+  // before it could be studied. Focus that was on the trainer (the board, or the Next button
+  // a solve focuses) goes to the board of the new puzzle rather than being lost with the button.
   useEffect(() => {
     if (!autoNext || trainer.phase !== 'solved' || mode === 'daily' || puzzleId) return;
-    const id = window.setTimeout(() => void next(), 1200);
+    if (trainer.solutionShown) return;
+    const id = window.setTimeout(() => {
+      focusBoardRef.current = !!trainerRef.current?.contains(document.activeElement);
+      void next();
+    }, 1200);
     return () => window.clearTimeout(id);
-  }, [autoNext, trainer.phase, next, mode, puzzleId]);
+  }, [autoNext, trainer.phase, trainer.solutionShown, next, mode, puzzleId]);
 
-  // Keyboard shortcuts.
+  // Keyboard shortcuts: letters in either case, never with modifiers, never from the board,
+  // and not at all when single-key shortcuts are switched off in Settings.
   useEffect(() => {
+    if (!shortcutsOn) return;
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-      if (e.key === 'n' && (trainer.phase === 'solved' || trainer.phase === 'failed')) void next();
-      if (e.key === 'h') trainer.hint();
-      if (e.key === 's') trainer.showSolution();
+      const key = shortcutKey(e);
+      if (!key) return;
+      if (key === 'n' && (trainer.phase === 'solved' || trainer.phase === 'failed')) {
+        if (!puzzleId && mode !== 'daily') nextAndFocus();
+      }
+      if (key === 'h') trainer.hint();
+      if (key === 's') trainer.showSolution();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [trainer, next]);
+  }, [trainer, nextAndFocus, puzzleId, mode, shortcutsOn]);
 
   const dailyDone =
     mode === 'daily' && progress.daily?.date === localDateKey() && progress.daily.outcome !== null;
@@ -508,23 +663,30 @@ function Trainer({
         return 'Watch the opponent’s move…';
       case 'solving':
         return trainer.position.check ? 'Your move — you are in check!' : 'Your move.';
+      case 'checking':
+        return 'Not the stored move — asking the engine whether it is as good…';
       case 'replying':
         return 'Good move! Opponent replies…';
       case 'solved':
-        return trainer.practiceAfterFail ? 'Solved (after a miss).' : 'Puzzle solved!';
+        return trainer.solutionShown
+          ? 'That is the solution.'
+          : trainer.practiceAfterFail
+            ? 'Solved (after a miss).'
+            : 'Puzzle solved!';
       case 'failed':
         return 'Not the best move.';
       default:
         return '';
     }
-  }, [trainer.phase, trainer.position.check, trainer.practiceAfterFail]);
+  }, [trainer.phase, trainer.position.check, trainer.practiceAfterFail, trainer.solutionShown]);
 
   const puzzle = trainer.puzzle;
   const solverIsMoving = trainer.phase === 'solving';
+  const streak = puzzleStreak(progress);
 
   return (
-    <div className="trainer">
-      <div className="trainer__board" style={{ position: 'relative' }}>
+    <div className="trainer" ref={trainerRef}>
+      <div className="trainer__board" style={{ position: 'relative' }} ref={boardRef}>
         <Board
           fen={trainer.position.fen}
           orientation={trainer.solverColor}
@@ -535,7 +697,8 @@ function Trainer({
           check={trainer.position.check}
           highlights={trainer.highlights}
           shapes={trainer.shapes}
-          onMove={(from, to) => trainer.playUserMove(from, to, autoQueen ? 'q' : undefined)}
+          // Promotions always ask: eighteen bundled puzzles need an underpromotion.
+          onMove={(from, to) => trainer.playUserMove(from, to)}
           ariaLabel={
             puzzle ? `Puzzle ${puzzle.id}, ${trainer.solverColor} to move` : 'Loading puzzle'
           }
@@ -557,6 +720,11 @@ function Trainer({
             <Button size="sm" onClick={() => void next()}>
               Retry
             </Button>
+          </Alert>
+        ) : null}
+        {ownPuzzles && engineStatus === 'error' ? (
+          <Alert tone="warning">
+            The engine could not start, so a move other than the stored solution counts as a miss.
           </Alert>
         ) : null}
 
@@ -583,7 +751,9 @@ function Trainer({
           ) : null}
 
           <div className="puzzle-actions">
-            {trainer.phase === 'solving' || trainer.phase === 'replying' ? (
+            {trainer.phase === 'solving' ||
+            trainer.phase === 'checking' ||
+            trainer.phase === 'replying' ? (
               <>
                 <Button onClick={trainer.hint} disabled={trainer.phase !== 'solving'}>
                   {trainer.hintLevel === 0
@@ -591,10 +761,14 @@ function Trainer({
                     : trainer.hintLevel === 1
                       ? 'Show move'
                       : 'Hint shown'}{' '}
-                  <Kbd>H</Kbd>
+                  {shortcutsOn ? <Kbd>H</Kbd> : null}
                 </Button>
-                <Button variant="ghost" onClick={trainer.showSolution}>
-                  Solution <Kbd>S</Kbd>
+                <Button
+                  variant="ghost"
+                  onClick={trainer.showSolution}
+                  disabled={trainer.phase === 'checking'}
+                >
+                  Solution {shortcutsOn ? <Kbd>S</Kbd> : null}
                 </Button>
               </>
             ) : null}
@@ -605,15 +779,15 @@ function Trainer({
                 </Button>
                 <Button onClick={trainer.showSolution}>Show solution</Button>
                 {!puzzleId && mode !== 'daily' ? (
-                  <Button variant="ghost" onClick={() => void next()}>
-                    Skip <Kbd>N</Kbd>
+                  <Button variant="ghost" onClick={nextAndFocus}>
+                    Skip {shortcutsOn ? <Kbd>N</Kbd> : null}
                   </Button>
                 ) : null}
               </>
             ) : null}
             {trainer.phase === 'solved' && !puzzleId && mode !== 'daily' ? (
-              <Button variant="primary" onClick={() => void next()} autoFocus>
-                Next puzzle <Kbd>N</Kbd>
+              <Button variant="primary" onClick={nextAndFocus} autoFocus>
+                Next puzzle {shortcutsOn ? <Kbd>N</Kbd> : null}
               </Button>
             ) : null}
             {trainer.phase === 'solved' ? (
@@ -669,7 +843,7 @@ function Trainer({
           ) : null}
           {dailyDone && trainer.phase !== 'solved' && trainer.phase !== 'failed' ? (
             <p className="small muted">
-              You already did today’s puzzle; playing it again is unrated.
+              You already did today’s puzzle; playing it again is unrated and keeps today’s result.
             </p>
           ) : null}
         </Card>
@@ -692,13 +866,15 @@ function Trainer({
                   theme
                     ? themeName(theme)
                     : opening
-                      ? openingTagName(opening)
+                      ? openings.length > 1
+                        ? `${openingTagName(opening)} +${openings.length - 1}`
+                        : openingTagName(opening)
                       : mode === 'woodpecker'
                         ? 'Woodpecker'
                         : mode === 'daily'
                           ? 'Daily'
                           : mode === 'review'
-                            ? 'Review'
+                            ? 'Due'
                             : mode === 'mine'
                               ? 'My puzzles'
                               : 'Practice'
@@ -710,10 +886,7 @@ function Trainer({
               value={`${sessionSolved} / ${sessionSolved + sessionFailed}`}
               label="Solved this session"
             />
-            <Stat
-              value={progress.streak.current}
-              label={`Day streak (best ${progress.streak.best})`}
-            />
+            <Stat value={streak.current} label={`Day streak (best ${streak.best})`} />
           </div>
           {theme ? (
             <p className="small muted" style={{ marginTop: 12, marginBottom: 0 }}>
@@ -721,8 +894,11 @@ function Trainer({
             </p>
           ) : opening ? (
             <p className="small muted" style={{ marginTop: 12, marginBottom: 0 }}>
-              Tactics that arose from the {openingTagName(opening)} in real games.{' '}
-              <Link to="/puzzles/openings">All openings</Link>
+              Tactics that arose from{' '}
+              {openings.length > 1
+                ? `these openings in real games: ${openings.map(openingTagName).join(', ')}`
+                : `the ${openingTagName(opening)} in real games`}
+              . <Link to="/puzzles/openings">All openings</Link>
             </p>
           ) : null}
         </Card>
@@ -749,9 +925,9 @@ function Trainer({
         {mode === 'rated' && !puzzleId ? (
           <p className="small faint">
             Rated mode adjusts your puzzle rating after each puzzle (Glicko-2, as on Lichess). A
-            hint costs part of the credit, a very slow solve a little, and a puzzle you have seen
-            before counts less. <Link to="/puzzles/daily">Today’s puzzle</Link> ·{' '}
-            <Link to="/puzzles/themes">Practice by theme</Link> ·{' '}
+            solve never costs points: a hint or a very slow solve only earns less, and a puzzle you
+            have seen before counts less. <Link to="/puzzles/daily">Today’s puzzle</Link> ·{' '}
+            <Link to="/puzzles/themes">Practise by theme</Link> ·{' '}
             <Link to="/progress">What the rating means</Link>
           </p>
         ) : null}
@@ -778,7 +954,10 @@ function PuzzleAbout({
   const bookmark = useProgress((s) => s.bookmarkPuzzle);
   const dismiss = useProgress((s) => s.dismissReview);
   const remove = useProgress((s) => s.removeOwnPuzzle);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const own = isOwnPuzzleId(puzzle.id) ? (puzzle as OwnPuzzle) : null;
+  // Only a real https link to the game's site becomes a link (imported data is not trusted).
+  const sourceUrl = safeSourceUrl(puzzle.url);
   const themes = puzzle.themes
     .split(' ')
     .filter((t) => t && !['ownGame', 'inaccuracy', 'mistake', 'blunder'].includes(t));
@@ -786,7 +965,7 @@ function PuzzleAbout({
   return (
     <div className="stack-sm small">
       <div className="row row--between">
-        <div className="row">
+        <div className="row puzzle-themes">
           {own ? (
             <Badge tone={own.source.judgement === 'blunder' ? 'danger' : 'warning'}>
               {own.source.judgement === 'inaccuracy'
@@ -800,7 +979,12 @@ function PuzzleAbout({
             <Badge tone="accent">Rating {puzzle.rating}</Badge>
           )}
           {themes.map((t) => (
-            <Link key={t} to={`/puzzles/themes?theme=${encodeURIComponent(t)}`} className="badge">
+            <Link
+              key={t}
+              to={`/puzzles/themes?theme=${encodeURIComponent(t)}`}
+              className="badge puzzle-themes__link"
+              title={`Practise ${themeName(t)} puzzles`}
+            >
               {themeName(t)}
             </Link>
           ))}
@@ -811,8 +995,8 @@ function PuzzleAbout({
           aria-pressed={bookmarked}
           title={
             bookmarked
-              ? 'In your review queue — click to remove'
-              : 'Add to your review queue to practise again later'
+              ? 'Among your due puzzles — click to remove'
+              : 'Add to your due puzzles to practise again later'
           }
           onClick={() =>
             bookmarked
@@ -829,9 +1013,9 @@ function PuzzleAbout({
           From <strong>{own.source.title}</strong>, move {Math.ceil(own.source.ply / 2)}
           {own.source.ply % 2 === 0 ? '…' : '.'} — you played <strong>{own.source.played}</strong>{' '}
           (−{Math.round(own.source.loss * 100)}%).{' '}
-          {own.url ? (
+          {sourceUrl ? (
             <>
-              <a href={own.url} target="_blank" rel="noreferrer">
+              <a href={sourceUrl} target="_blank" rel="noreferrer">
                 Source game
               </a>{' '}
               ·{' '}
@@ -839,29 +1023,38 @@ function PuzzleAbout({
           ) : null}
           <Link to={`/analyze?fen=${encodeURIComponent(fen)}`}>Analyze position</Link>
           {mode === 'mine' ? (
-            <>
-              {' '}
-              ·{' '}
-              <button
-                type="button"
-                className="linklike"
-                onClick={() => {
+            <div className="row" style={{ marginTop: 8 }}>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmRemove(true)}>
+                Remove from my puzzles
+              </Button>
+              <ConfirmDialog
+                open={confirmRemove}
+                title="Remove this puzzle?"
+                confirmLabel="Remove"
+                danger
+                onConfirm={() => {
                   remove(puzzle.id);
                   onRemoved?.();
                 }}
+                onClose={() => setConfirmRemove(false)}
               >
-                Remove from my puzzles
-              </button>
-            </>
+                It leaves your puzzles and your due list. Reviewing the game again brings it back.
+              </ConfirmDialog>
+            </div>
           ) : null}
         </div>
       ) : (
         <div className="muted">
           Puzzle <code>{puzzle.id}</code> from the Lichess database (CC0).{' '}
-          <a href={puzzle.url} target="_blank" rel="noreferrer">
-            Source game
-          </a>{' '}
-          · <Link to={`/analyze?fen=${encodeURIComponent(fen)}`}>Analyze position</Link>
+          {sourceUrl ? (
+            <>
+              <a href={sourceUrl} target="_blank" rel="noreferrer">
+                Source game
+              </a>{' '}
+              ·{' '}
+            </>
+          ) : null}
+          <Link to={`/analyze?fen=${encodeURIComponent(fen)}`}>Analyze position</Link>
         </div>
       )}
     </div>

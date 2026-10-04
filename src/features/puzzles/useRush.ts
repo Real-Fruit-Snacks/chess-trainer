@@ -64,6 +64,15 @@ export function useRush(startRating: number): UseRush {
   const modeRef = useRef<RushMode>('timed');
   const finishedRef = useRef(false);
   const timerRef = useRef<number | null>(null);
+  // The clock stops while a puzzle downloads: time spent waiting for the network is not solving time.
+  const pausedMsRef = useRef(0);
+  const pausedSinceRef = useRef<number | null>(null);
+  const elapsed = useCallback(() => {
+    const paused =
+      pausedMsRef.current +
+      (pausedSinceRef.current !== null ? Date.now() - pausedSinceRef.current : 0);
+    return Date.now() - startedAtRef.current - paused;
+  }, []);
 
   const baseRating = Math.max(400, Math.min(startRating - 500, 1500));
 
@@ -71,7 +80,8 @@ export function useRush(startRating: number): UseRush {
     if (finishedRef.current) return;
     finishedRef.current = true;
     if (timerRef.current) window.clearTimeout(timerRef.current);
-    const durationMs = Date.now() - startedAtRef.current;
+    const durationMs = elapsed();
+    pausedSinceRef.current = null;
     const solvedRatings = resultsRef.current.filter((r) => r.solved).map((r) => r.rating);
     const run: RushSummary = {
       mode: modeRef.current,
@@ -90,7 +100,7 @@ export function useRush(startRating: number): UseRush {
       peakRating: run.peakRating,
       durationMs: run.durationMs,
     });
-  }, [recordRush]);
+  }, [recordRush, elapsed]);
 
   const onOutcome = useCallback(
     (event: PuzzleOutcomeEvent, puzzle: Puzzle) => {
@@ -114,8 +124,16 @@ export function useRush(startRating: number): UseRush {
   const loadNext = useCallback(
     async (run: number) => {
       const target = baseRating + scoreRef.current * STEP_PER_SOLVE;
+      pausedSinceRef.current = Date.now();
+      // A late answer for an earlier run leaves the current run's clock alone.
+      const resume = () => {
+        if (run !== runRef.current || pausedSinceRef.current === null) return;
+        pausedMsRef.current += Date.now() - pausedSinceRef.current;
+        pausedSinceRef.current = null;
+      };
       try {
         const puzzle = await selectRushPuzzle(target, usedRef.current);
+        resume();
         if (run !== runRef.current || finishedRef.current) return;
         if (!puzzle) {
           setError('Ran out of puzzles — impressive!');
@@ -125,6 +143,7 @@ export function useRush(startRating: number): UseRush {
         usedRef.current.add(puzzle.id);
         load(puzzle);
       } catch (err) {
+        resume();
         if (run !== runRef.current) return;
         setError(err instanceof Error ? err.message : String(err));
         finish();
@@ -144,6 +163,8 @@ export function useRush(startRating: number): UseRush {
       modeRef.current = nextMode;
       finishedRef.current = false;
       startedAtRef.current = Date.now();
+      pausedMsRef.current = 0;
+      pausedSinceRef.current = null;
       setMode(nextMode);
       setScore(0);
       setStrikes(0);
@@ -182,17 +203,17 @@ export function useRush(startRating: number): UseRush {
   useEffect(() => {
     if (phase !== 'running') return;
     const id = window.setInterval(() => {
-      const elapsed = Date.now() - startedAtRef.current;
+      const spent = elapsed();
       if (modeRef.current === 'timed') {
-        const left = Math.max(0, RUSH_DURATION_MS - elapsed);
+        const left = Math.max(0, RUSH_DURATION_MS - spent);
         setClockMs(left);
         if (left === 0) finish();
       } else {
-        setClockMs(elapsed);
+        setClockMs(spent);
       }
     }, 100);
     return () => window.clearInterval(id);
-  }, [phase, finish]);
+  }, [phase, finish, elapsed]);
 
   useEffect(
     () => () => {

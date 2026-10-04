@@ -1,29 +1,45 @@
 #!/usr/bin/env node
 /**
- * Prints the CHANGELOG.md section for one version, for the GitHub release of its tag.
+ * Prints the CHANGELOG.md section for one version, for the GitHub release of its tag,
+ * with a link to the live app (read from src/site.config.ts).
  *
  * Usage:  node scripts/release-notes.mjs 0.7.0
+ *         node scripts/release-notes.mjs --check v0.12.0
+ *
+ * `--check` (the release workflow) also fails unless package.json carries the
+ * tag's version, so a tag can never publish a build that calls itself something else.
  */
 import { readFileSync } from 'node:fs';
+import {
+  changelogSection,
+  releaseNotes,
+  siteUrlFrom,
+  tagVersion,
+  versionMismatch,
+} from './lib/release.mjs';
 
-const version = (process.argv[2] ?? '').replace(/^v/, '');
-if (!version) {
-  console.error('Usage: node scripts/release-notes.mjs <version>');
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+
+const args = process.argv.slice(2);
+const check = args.includes('--check');
+const tag = args.find((arg) => !arg.startsWith('--')) ?? '';
+if (!tag) {
+  console.error('Usage: node scripts/release-notes.mjs [--check] <version or tag>');
   process.exit(1);
 }
 
-const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
-const lines = changelog.split('\n');
-const start = lines.findIndex((line) => line.startsWith(`## [${version}]`));
-if (start < 0) {
+if (check) {
+  const mismatch = versionMismatch(tag, JSON.parse(read('package.json')).version);
+  if (mismatch) {
+    console.error(mismatch);
+    process.exit(1);
+  }
+}
+
+const version = tagVersion(tag);
+const section = changelogSection(read('CHANGELOG.md'), version);
+if (section === null) {
   console.error(`No "## [${version}]" section in CHANGELOG.md`);
   process.exit(1);
 }
-let end = lines.findIndex((line, i) => i > start && line.startsWith('## ['));
-if (end < 0) end = lines.length;
-
-const body = lines
-  .slice(start + 1, end)
-  .join('\n')
-  .trim();
-process.stdout.write(`${body}\n\nLive app: https://real-fruit-snacks.github.io/chess-trainer/\n`);
+process.stdout.write(releaseNotes(section, siteUrlFrom(read('src/site.config.ts'))));

@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode, useEffect, useRef } from 'react';
 import { NAG_GLYPHS } from '@/chess/pgn';
 import type { GameTree, TreeNode } from '@/chess/tree';
+import { describeSan } from '@/components/board/announce';
 import { Button, Kbd, Icon } from '@/components/ui';
 import type { MoveJudgement } from './MoveList';
 import './chess-components.css';
@@ -13,6 +14,16 @@ const JUDGEMENT_GLYPH: Record<NonNullable<MoveJudgement>, string> = {
   inaccuracy: '?!',
   best: '',
   good: '',
+};
+
+/** The spoken form of an annotation glyph. */
+const GLYPH_WORDS: Record<string, string> = {
+  '!': 'good move',
+  '?': 'mistake',
+  '!!': 'brilliant move',
+  '??': 'blunder',
+  '!?': 'interesting move',
+  '?!': 'dubious move',
 };
 
 export interface TreeMoveListProps {
@@ -52,6 +63,14 @@ export function TreeMoveList({ tree, version, current, onSelect, judgements }: T
     const glyphs = node.nags.map((n) => NAG_GLYPHS[n] ?? '').join('');
     const judgementGlyph = judgement && !glyphs ? JUDGEMENT_GLYPH[judgement] : '';
     const number = moveNumberFor(node, forceNumber);
+    const shownGlyph = glyphs || judgementGlyph;
+    // Spoken: "12. Knight g1 to f3, check, blunder" rather than the raw "12. Nf3+??".
+    const parentFen = node.parent?.fen ?? '';
+    const fenParts = parentFen.split(' ');
+    const prefix = fenParts[1] === 'b' ? `${fenParts[5] ?? '1'} Black` : `${fenParts[5] ?? '1'}.`;
+    const words = describeSan(parentFen, node.san) ?? node.san;
+    const glyphWords = shownGlyph ? `, ${GLYPH_WORDS[shownGlyph] ?? shownGlyph}` : '';
+    const spoken = `${prefix} ${words}${glyphWords}`;
     return (
       <button
         type="button"
@@ -68,7 +87,7 @@ export function TreeMoveList({ tree, version, current, onSelect, judgements }: T
           .join(' ')}
         onClick={() => onSelect(node)}
         aria-current={node === current ? 'true' : undefined}
-        aria-label={`${number} ${node.san}${glyphs || judgementGlyph}`}
+        aria-label={spoken}
       >
         {number ? <span className="treemoves__number">{number}</span> : null}
         <San san={node.san} />
@@ -160,7 +179,7 @@ export function TreeNavigation({
         size="sm"
         onClick={onStart}
         disabled={!canBack}
-        aria-label="First move"
+        aria-label="Start of game"
         title="Start (Home)"
       >
         <Icon name="skip-back" size={16} />
@@ -187,7 +206,7 @@ export function TreeNavigation({
         size="sm"
         onClick={onEnd}
         disabled={!canForward}
-        aria-label="Last move"
+        aria-label="End of game"
         title="End (End)"
       >
         <Icon name="skip-forward" size={16} />

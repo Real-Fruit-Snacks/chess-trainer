@@ -1,5 +1,6 @@
 import { type SoundTheme, useSettings } from '@/store/settings';
 import type { SoundName } from './sound';
+import { hasUserGesture, watchUserGesture } from './userGesture';
 
 /**
  * Haptic feedback through the Vibration API: short buzzes on moves, solves and
@@ -48,8 +49,14 @@ export function hapticsSupported(): boolean {
   return typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
 }
 
-/** Vibrates for a named cue in the current theme if haptics are enabled. Never throws. */
+/**
+ * Vibrates for a named cue in the current theme if haptics are enabled. Not
+ * before the first tap or key press (browsers block it and log a warning).
+ * Never throws.
+ */
 export function vibrate(name: SoundName): void {
+  watchUserGesture();
+  if (!hasUserGesture()) return;
   const { haptics, soundTheme } = useSettings.getState();
   if (!haptics || !hapticsSupported()) return;
   try {

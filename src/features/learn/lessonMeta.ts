@@ -238,7 +238,7 @@ export const LESSON_META: readonly LessonMeta[] = [
       'A queen beats a pawn on the seventh — except two stalemate tricks every player must know.',
     minutes: 7,
     steps: 5,
-    tasks: 3,
+    tasks: 2,
   },
   {
     id: 'rook-endgames-2',

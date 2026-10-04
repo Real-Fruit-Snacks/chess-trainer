@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Badge, ProgressBar } from '@/components/ui';
 import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';

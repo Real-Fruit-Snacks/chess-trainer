@@ -347,12 +347,13 @@ export const advancedLessons3: Lesson[] = [
         orientation: 'black',
         task: {
           prompt: 'Black to move: reach the fortress.',
-          moves: ['Kg7', 'Kg8'],
+          moves: ['Kg7', 'Kg8', 'Kf8'],
           hint: 'Head for h8, the square the bishop cannot control.',
           success:
             'Kg7! Now the king shuffles between g7, g8 and h8 for ever. White can give stalemate but never mate, and the pawn never promotes.',
           failure:
-            'Ke7? Bc4! and the king is cut off from the corner: the h-pawn runs to h8 unopposed. Only Kg7 (or Kg8) reaches the fortress.',
+            'Ke7? Bc4! and the king is cut off from the corner: the h-pawn runs to h8 unopposed. Head for h8 ' +
+            'instead — Kg7, Kg8 or Kf8 all reach the fortress.',
         },
       },
       {

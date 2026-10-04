@@ -6,6 +6,7 @@ import {
   isPromotionMove,
   legalDests,
   parseUci,
+  sanitizeFen,
   START_FEN,
   toLongColor,
   tryMove,
@@ -83,8 +84,13 @@ export interface UseAnalysis {
   setComment: (text: string, node?: TreeNode) => void;
   setGlyph: (nag: number | null, node?: TreeNode) => void;
   loadFen: (fen: Fen) => boolean;
-  /** Loads a PGN, opened at its last move or at `atPly` (1-based main-line ply). */
-  loadPgn: (pgn: string, atPly?: number) => boolean;
+  /**
+   * Loads a PGN, opened at its last move, at `atPly` (1-based main-line ply) or,
+   * with `line`, at the node reached by following those UCI moves from the start.
+   */
+  loadPgn: (pgn: string, atPly?: number, line?: Uci[]) => boolean;
+  /** The reviewed move for `node`, when the review still describes it (same main-line move). */
+  reviewFor: (node: TreeNode) => ReviewSummary['moves'][number] | undefined;
   reset: () => void;
   pgn: () => string;
   review: ReviewSummary | null;
@@ -155,6 +161,10 @@ export function useAnalysis(): UseAnalysis {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const path = useMemo(() => tree.pathTo(current), [tree, current, version]);
   const viewed = useMemo(() => viewedPosition(current), [current]);
+  // The moves that led to the viewed position, so the engine sees repetitions (a string: the
+  // search restarts only when the line changes, not on every edit of the tree).
+  const startFen = tree.startFen;
+  const history = useMemo(() => path.map((n) => n.uci).join(' '), [path]);
 
   // Opening name for the current line.
   useEffect(() => {
@@ -202,6 +212,8 @@ export function useAnalysis(): UseAnalysis {
   // Continuous evaluation of the viewed position.
   useEffect(() => {
     if (!engineOn || engineStatus !== 'ready' || reviewProgress !== null) {
+      // Lines from an earlier position would show the wrong sign for this one.
+      setLines(new Map());
       setThinking(false);
       return;
     }
@@ -215,33 +227,48 @@ export function useAnalysis(): UseAnalysis {
     setThinking(true);
     const collected = new Map<number, SearchInfo>();
     let frame = 0;
+    // A stopped search can still deliver a late `info`; once this position is gone, ignore it.
+    let cancelled = false;
     const handle = client.search(
-      { fen: viewed.fen, depth: analysisDepth, multipv: analysisLines },
+      {
+        fen: startFen,
+        moves: history ? history.split(' ') : [],
+        depth: analysisDepth,
+        multipv: analysisLines,
+      },
       (info) => {
+        if (cancelled) return;
         collected.set(info.multipv, info);
         // Throttle React updates to animation frames.
         if (!frame) {
           frame = requestAnimationFrame(() => {
             frame = 0;
-            setLines(new Map(collected));
+            if (!cancelled) setLines(new Map(collected));
           });
         }
       },
     );
-    void handle.result.then((result) => {
-      if (!result.stopped) {
-        setLines(new Map(result.lines));
-        setThinking(false);
-      }
-    });
+    handle.result
+      .then((result) => {
+        if (!cancelled && !result.stopped) {
+          setLines(new Map(result.lines));
+          setThinking(false);
+        }
+      })
+      .catch(() => {
+        // The engine failed mid-search; its status (and the Retry) says so.
+        if (!cancelled) setThinking(false);
+      });
     return () => {
+      cancelled = true;
       handle.stop();
       if (frame) cancelAnimationFrame(frame);
     };
   }, [
     engineOn,
     engineStatus,
-    viewed.fen,
+    startFen,
+    history,
     viewed.gameOver,
     analysisDepth,
     analysisLines,
@@ -301,9 +328,9 @@ export function useAnalysis(): UseAnalysis {
   const playNotation = useCallback(
     (notation: string): boolean => {
       const chess = new Chess(tree.current.fen);
-      return commit(tryNotation(chess, notation));
+      return commit(tryNotation(chess, notation, { autoQueen }));
     },
-    [tree, commit],
+    [tree, autoQueen, commit],
   );
 
   const resolvePromotion = useCallback(
@@ -347,35 +374,48 @@ export function useAnalysis(): UseAnalysis {
     [tree, bump],
   );
 
-  const promoteVariation = useCallback(
-    (node: TreeNode = tree.current) => {
-      tree.promote(node);
+  /**
+   * Runs a tree edit and drops the review only when the main line it describes
+   * has changed (a side variation can be reordered or deleted freely).
+   */
+  const editTree = useCallback(
+    (edit: () => void) => {
+      const before = tree
+        .mainLine()
+        .map((n) => n.san)
+        .join(' ');
+      edit();
+      if (
+        tree
+          .mainLine()
+          .map((n) => n.san)
+          .join(' ') !== before
+      ) {
+        setReview(null);
+      }
       bump();
     },
     [tree, bump],
   );
+  const promoteVariation = useCallback(
+    (node: TreeNode = tree.current) => editTree(() => tree.promote(node)),
+    [tree, editTree],
+  );
   const makeMainLine = useCallback(
-    (node: TreeNode = tree.current) => {
-      tree.promoteToMain(node);
-      setReview(null);
-      bump();
-    },
-    [tree, bump],
+    (node: TreeNode = tree.current) => editTree(() => tree.promoteToMain(node)),
+    [tree, editTree],
   );
   const deleteVariation = useCallback(
     (node: TreeNode = tree.current) => {
       if (!node.parent) return;
-      tree.deleteNode(node);
-      setReview(null);
-      bump();
+      editTree(() => tree.deleteNode(node));
     },
-    [tree, bump],
+    [tree, editTree],
   );
-  const deleteFromHere = useCallback(() => {
-    tree.truncateAfterCurrent();
-    setReview(null);
-    bump();
-  }, [tree, bump]);
+  const deleteFromHere = useCallback(
+    () => editTree(() => tree.truncateAfterCurrent()),
+    [tree, editTree],
+  );
   const setComment = useCallback(
     (text: string, node: TreeNode = tree.current) => {
       tree.setComment(node, text);
@@ -403,26 +443,38 @@ export function useAnalysis(): UseAnalysis {
 
   const loadFen = useCallback(
     (fen: Fen) => {
+      // Repairs stale castling flags and en passant squares; rejects non-positions.
+      const clean = sanitizeFen(fen);
+      if (!clean) return false;
       try {
-        new Chess(fen);
+        new Chess(clean);
       } catch {
         return false;
       }
-      replaceTree(new GameTree(fen));
+      replaceTree(new GameTree(clean));
       return true;
     },
     [replaceTree],
   );
 
   const loadPgn = useCallback(
-    (pgn: string, atPly?: number) => {
+    (pgn: string, atPly?: number, line?: Uci[]) => {
       try {
         const next = GameTree.fromPgn(pgn);
         next.goEnd();
-        if (atPly !== undefined && atPly >= 0) {
-          const line = next.mainLine();
+        if (line && line.length > 0) {
+          // Follow the shared path as far as it exists in the tree.
+          let node: TreeNode = next.root;
+          for (const uci of line) {
+            const child = node.children.find((c) => c.uci === uci);
+            if (!child) break;
+            node = child;
+          }
+          next.goTo(node);
+        } else if (atPly !== undefined && atPly >= 0) {
+          const main = next.mainLine();
           next.goTo(
-            atPly === 0 ? next.root : (line[Math.min(atPly, line.length) - 1] ?? next.root),
+            atPly === 0 ? next.root : (main[Math.min(atPly, main.length) - 1] ?? next.root),
           );
         }
         replaceTree(next);
@@ -489,6 +541,15 @@ export function useAnalysis(): UseAnalysis {
 
   useEffect(() => () => reviewAbort.current?.abort(), []);
 
+  const reviewFor = useCallback(
+    (node: TreeNode) => {
+      if (!review || node.ply === 0 || !tree.isMainLine(node)) return undefined;
+      const move = review.moves[node.ply - 1];
+      return move?.san === node.san ? move : undefined;
+    },
+    [review, tree],
+  );
+
   const judgements = useMemo(() => {
     const map = new Map<number, MoveJudgement>();
     if (!review) return map;
@@ -537,6 +598,7 @@ export function useAnalysis(): UseAnalysis {
     setGlyph,
     loadFen,
     loadPgn,
+    reviewFor,
     reset,
     pgn,
     review,

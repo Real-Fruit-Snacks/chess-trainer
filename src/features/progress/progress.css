@@ -58,6 +58,19 @@
   }
 }
 
+/* Weekly summary: a rise or a fall is shown by an arrow as well as the colour. */
+.weekly__cell--up {
+  color: var(--success);
+}
+
+.weekly__cell--down {
+  color: var(--danger);
+}
+
+.weekly__trend {
+  vertical-align: -1px;
+}
+
 /* Theme strengths / weaknesses */
 .themes-report {
   display: grid;

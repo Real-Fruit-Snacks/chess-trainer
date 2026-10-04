@@ -43,10 +43,59 @@ import {
 /** The arcade id the simul's best score is kept under. */
 export const SIMUL_ARCADE_ID = 'simul';
 
+/** The pause between two announcements, so a screen reader can finish the first. */
+export const ANNOUNCE_GAP_MS = 1200;
+
+/**
+ * Screen-reader announcements one at a time: several boards can answer within
+ * a few milliseconds, and each new text in a live region would cut off the
+ * one before it. Messages wait their turn with a short gap between them; an
+ * urgent one (the simul is over) goes first and drops what was waiting.
+ */
+export class Announcer {
+  private queue: string[] = [];
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    private readonly show: (text: string) => void,
+    private readonly gapMs: number = ANNOUNCE_GAP_MS,
+  ) {}
+
+  say(text: string, urgent = false): void {
+    if (urgent) {
+      this.clear();
+      this.queue.push(text);
+    } else {
+      this.queue.push(text);
+      if (this.timer !== null) return;
+    }
+    this.next();
+  }
+
+  /** Forgets everything waiting (a new simul, or the page closing). */
+  clear(): void {
+    this.queue = [];
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  private next(): void {
+    const text = this.queue.shift();
+    if (text === undefined) {
+      this.timer = null;
+      return;
+    }
+    this.show(text);
+    this.timer = setTimeout(() => this.next(), this.gapMs);
+  }
+}
+
 interface RunnerDeps {
   engine: () => EngineClient;
   onState: (state: SimulState | null) => void;
-  onAnnounce: (text: string) => void;
+  onAnnounce: (text: string, urgent?: boolean) => void;
+  /** The engine stopped answering (or answers again): the page offers a Retry. */
+  onStall: (stalled: boolean) => void;
 }
 
 /**
@@ -67,11 +116,18 @@ class SimulRunner {
 
   constructor(private readonly deps: RunnerDeps) {}
 
+  private setStalled(stalled: boolean): void {
+    if (this.stalled === stalled) return;
+    this.stalled = stalled;
+    this.deps.onStall(stalled);
+  }
+
   start(setup: SimulSetup): void {
     this.deps.engine().stop();
     this.queue = [];
     this.warned.clear();
     this.interruptions = 0;
+    this.setStalled(false);
     const now = Date.now();
     this.commit(createSimul(setup, now, Math.max(now, (this.state?.id ?? 0) + 1)));
   }
@@ -140,9 +196,9 @@ class SimulRunner {
     }
   }
 
-  /** The engine is back (or was reloaded): carry on with the queue. */
+  /** The engine is back (or was reloaded), or the player asked to try again: carry on. */
   retry(): void {
-    this.stalled = false;
+    this.setStalled(false);
     this.interruptions = 0;
     void this.pump();
   }
@@ -165,6 +221,7 @@ class SimulRunner {
     if (!next) return;
     const same = prev?.id === next.id ? prev : null;
     const ended: SimulBoard[] = [];
+    let searchEnded = false;
     for (const board of next.boards) {
       const before = same?.boards[board.index];
       if (
@@ -174,8 +231,16 @@ class SimulRunner {
       ) {
         this.queue.push(board.index);
       }
-      if (board.result && !before?.result) ended.push(board);
+      if (board.result && !before?.result) {
+        ended.push(board);
+        // Resigned or flagged (no new move) while the engine was thinking about it: that
+        // search is wasted, and the other boards should not wait for it.
+        if (before?.engine === 'thinking' && board.ucis.length === before.ucis.length) {
+          searchEnded = true;
+        }
+      }
     }
+    if (searchEnded) this.deps.engine().stop();
     if (ended.length) this.ended(next, ended, same ? isFinished(same) : false);
     void this.pump();
   }
@@ -192,6 +257,9 @@ class SimulRunner {
         reason: board.result.reason,
         plies: board.ucis.length,
         pgn: boardPgn(state, board),
+        // A simul board: kept apart from ordinary engine games (ladder, courses, Progress).
+        source: 'simul',
+        event: `Simul board ${board.index + 1}`,
       });
     }
     if (isFinished(state) && !wasOver) {
@@ -201,6 +269,7 @@ class SimulRunner {
       playSound(losses > wins ? 'gameLost' : 'gameEnd');
       this.deps.onAnnounce(
         `The simul is over: ${formatPoints(points)} out of ${state.boards.length}.`,
+        true,
       );
       return;
     }
@@ -235,7 +304,7 @@ class SimulRunner {
           await client.init();
         } catch {
           this.queue.unshift(index);
-          this.stalled = true;
+          this.setStalled(true);
           return;
         }
         const ready = this.state;
@@ -258,14 +327,20 @@ class SimulRunner {
             ...engineBudget(level, board, timeControlOf(ready.setup), Date.now()),
           });
         } catch {
-          this.stalled = true;
+          this.setStalled(true);
         }
         const after = this.state;
         if (after?.id !== session || this.disposed) continue;
+        // The board ended while the engine thought (a resignation, a flag): its search was
+        // stopped on purpose, which is no sign of trouble.
+        if (after.boards[index]?.result) {
+          if (this.stalled) return;
+          continue;
+        }
         if (!uci) {
           // Stopped without a move: back in the queue, unless something keeps stopping it.
           this.interruptions += 1;
-          if (this.interruptions > 3) this.stalled = true;
+          if (this.interruptions > 3) this.setStalled(true);
           this.commit(engineInterrupted(after, index, Date.now()));
           if (this.stalled) return;
           continue;
@@ -315,6 +390,10 @@ export interface UseSimul {
   setAutoAdvance: (on: boolean) => void;
   /** The latest event on a board the player is not looking at, for screen readers. */
   announcement: string;
+  /** The engine has stopped answering: the boards wait until `retry`. */
+  stalled: boolean;
+  /** Asks the engine again for the boards waiting for it. */
+  retry: () => void;
 }
 
 /** A simul against several engines, each on its own board, with one engine serving them all. */
@@ -322,19 +401,27 @@ export function useSimul(): UseSimul {
   const { engine, status: engineStatus, error: engineError, start: retryEngine } = useEngine();
   const [state, setState] = useState<SimulState | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const [stalled, setStalled] = useState(false);
   const [promotion, setPromotion] = useState<PendingPromotion | null>(null);
+  const announcerRef = useRef<Announcer | null>(null);
+  announcerRef.current ??= new Announcer(setAnnouncement);
+  const announcer = announcerRef.current;
   const runnerRef = useRef<SimulRunner | null>(null);
   runnerRef.current ??= new SimulRunner({
     engine,
     onState: setState,
-    onAnnounce: setAnnouncement,
+    onAnnounce: (text, urgent) => announcer.say(text, urgent),
+    onStall: setStalled,
   });
   const runner = runnerRef.current;
 
   useEffect(() => {
     runner.revive();
-    return () => runner.dispose();
-  }, [runner]);
+    return () => {
+      runner.dispose();
+      announcer.clear();
+    };
+  }, [runner, announcer]);
 
   // The clocks: flags and low-time warnings, while there is a clock to watch.
   const timed = !!state && !!timeControlOf(state.setup);
@@ -354,10 +441,11 @@ export function useSimul(): UseSimul {
   const start = useCallback(
     (setup: SimulSetup) => {
       setPromotion(null);
+      announcer.clear();
       setAnnouncement('');
       runner.start(setup);
     },
-    [runner],
+    [runner, announcer],
   );
 
   const move = useCallback(
@@ -402,6 +490,7 @@ export function useSimul(): UseSimul {
   const resign = useCallback((index: number) => runner.resign(index), [runner]);
   const resignAllBoards = useCallback(() => runner.resignAll(), [runner]);
   const setAutoAdvance = useCallback((on: boolean) => runner.setAutoAdvance(on), [runner]);
+  const retry = useCallback(() => runner.retry(), [runner]);
 
   return useMemo(
     () => ({
@@ -420,6 +509,8 @@ export function useSimul(): UseSimul {
       resignAll: resignAllBoards,
       setAutoAdvance,
       announcement,
+      stalled,
+      retry,
     }),
     [
       state,
@@ -437,6 +528,8 @@ export function useSimul(): UseSimul {
       resignAllBoards,
       setAutoAdvance,
       announcement,
+      stalled,
+      retry,
     ],
   );
 }

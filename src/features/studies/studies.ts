@@ -178,22 +178,12 @@ export const STUDIES: readonly Study[] = [
         note: 'Straight in front of the pawn. Any step to the side lets the white king out.',
       },
       {
-        moves: ['Ke5', 'Kf5'],
-        reply: 'Ke3',
-        note: 'Step back and wait: the pawn cannot advance without support, and the king must stay near.',
-      },
-      {
-        moves: ['Kd5'],
-        reply: 'd4',
-        note: 'Back in front of the pawn, and ready to take the opposition when it advances.',
-      },
-      {
-        moves: ['Kd6', 'Kc6', 'Ke6'],
-        note: 'Now on Ke4 Black answers Ke6, on Kd3 comes Kd5, and White can never get the king in front of its pawn.',
+        moves: ['Ke5', 'Kd5', 'Kf5', 'Kd4', 'Kf4'],
+        note: 'Step back and wait — straight back in front of the pawn, to either side of it, or beside it on the fourth rank: the pawn cannot advance without support, and the white king cannot get in front of it.',
       },
     ],
     outro:
-      'The defending king never leaves the file of the pawn, and whenever the pawn advances the king retreats to keep the opposition. Learn this and you will never lose a pawn-down king ending by accident.',
+      'From here the method repeats itself: whenever the pawn advances, the king steps back in front of it (after 3.Ke3 Kd5 4.d4 Kd6 White can never get the king in front of its pawn), and whenever the white king comes forward, Black takes the opposition. Learn this and you will never lose a pawn-down king ending by accident.',
   },
   {
     id: 'rook-pin-on-the-file',
@@ -269,18 +259,12 @@ export const STUDIES: readonly Study[] = [
         note: 'Opposition: the kings face each other with one square between them and Black has to give way.',
       },
       {
-        moves: ['Kc3', 'Ke3'],
-        reply: 'Kd5',
-        note: 'Follow the black king sideways to keep the opposition (Kc3 is the most direct).',
-      },
-      {
-        moves: ['Kd3'],
-        reply: 'Kd6',
-        note: 'Black steps back; now the white king can advance to the key squares c4, d4 or e4 and escort the pawn.',
+        moves: ['Kc3', 'Ke3', 'Ke4'],
+        note: 'Keep the opposition by following the black king sideways (Kc3 is the most direct), or slip past it to e4 — the pawn still stays at home.',
       },
     ],
     outro:
-      'Rule of thumb: with the pawn on the second rank, the king must reach the fourth rank in front of it with the opposition. Pawn moves are for later.',
+      'After 2.Kc3 Kd5 3.Kd3 Black must step back and the white king reaches the fourth rank in front of its pawn. Rule of thumb: with the pawn on the second rank, the king must get to the fourth rank in front of it with the opposition. Pawn moves are for later.',
   },
 ];
 

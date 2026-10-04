@@ -1,17 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router';
 import { Chess, type Square } from 'chess.js';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { ExplorerPanel } from '@/components/chess/ExplorerPanel';
 import { TreeMoveList } from '@/components/chess/TreeMoveList';
-import { Alert, Button, Card, Kbd, Stat, Switch, LinkButton } from '@/components/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  ConfirmDialog,
+  Kbd,
+  LinkButton,
+  NotFound,
+  Stat,
+  Switch,
+} from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import { isPromotionMove, legalDests, parseUci, toUci, tryMove } from '@/chess/helpers';
 import { GameTree, type TreeNode } from '@/chess/tree';
 import type { MoveInput, PromotionPiece, San, Uci } from '@/chess/types';
 import { shareUrl } from '@/lib/shareCodes';
-import { describeDue } from '@/lib/srs';
+import { pageShortcutKey } from '@/lib/shortcutKey';
+import { describeDue, isNew } from '@/lib/srs';
 import { useNow } from '@/lib/useNow';
 import { siteConfig } from '@/site.config';
 import { cardsFor, useRepertoire } from '@/store/repertoire';
@@ -46,23 +57,103 @@ export default function RepertoirePage() {
     document.title = `${repertoire?.name ?? 'Repertoire'} · ${siteConfig.name}`;
   }, [repertoire]);
 
+  // A custom repertoire's PGN comes from storage (an import, a shared link, a backup): a damaged
+  // one gets a way out here instead of crashing the page on every visit.
+  const pgn = repertoire?.pgn;
+  const parsed = useMemo(() => {
+    if (pgn === undefined) return null;
+    try {
+      return { tree: GameTree.fromPgn(pgn), problem: null };
+    } catch (err) {
+      return { tree: null, problem: err instanceof Error ? err.message : String(err) };
+    }
+  }, [pgn]);
+
   if (!repertoire) {
     return (
-      <div>
-        <div className="page-header">
-          <h1>Repertoire not found</h1>
-          <p>
-            <Link to="/openings">Back to openings</Link>
-          </p>
-        </div>
-      </div>
+      <NotFound title="Repertoire not found" backTo="/openings" backLabel="Back to openings">
+        <p>This repertoire is not built in and is not one of your own.</p>
+      </NotFound>
     );
   }
-  return <RepertoireTrainer key={repertoire.id} repertoire={repertoire} />;
+  if (!parsed?.tree) {
+    return <UnreadableRepertoire repertoire={repertoire} problem={parsed?.problem ?? null} />;
+  }
+  return <RepertoireTrainer key={repertoire.id} repertoire={repertoire} tree={parsed.tree} />;
 }
 
-function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
-  const tree = useMemo(() => GameTree.fromPgn(repertoire.pgn), [repertoire.pgn]);
+/** A stored repertoire whose PGN no longer parses: say so, and offer to copy or delete it. */
+function UnreadableRepertoire({
+  repertoire,
+  problem,
+}: {
+  repertoire: Repertoire;
+  problem: string | null;
+}) {
+  const navigate = useNavigate();
+  const removeCustom = useRepertoire((s) => s.removeCustom);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const isCustom = repertoire.id.startsWith('custom-');
+  const copyText = async () => {
+    try {
+      await navigator.clipboard.writeText(repertoire.pgn);
+      toast('The repertoire’s text was copied to the clipboard.', { tone: 'success' });
+    } catch {
+      toast('Could not access the clipboard.', { tone: 'warning' });
+    }
+  };
+  return (
+    <div>
+      <div className="page-header">
+        <p className="card__eyebrow">
+          <Link to="/openings">Openings</Link> / {colorLabel(repertoire.color)}
+        </p>
+        <h1>{repertoire.name}</h1>
+      </div>
+      <Card data-testid="repertoire-unreadable">
+        <Alert tone="danger">
+          This repertoire could not be read{problem ? ` (${problem})` : ''}. Its moves cannot be
+          shown or trained.
+        </Alert>
+        <p className="small muted">
+          {isCustom
+            ? 'Copy its text to repair it elsewhere and import it again, or delete it.'
+            : 'Reload the app; if this stays, please report it.'}
+        </p>
+        <div className="row">
+          <Button onClick={() => void copyText()}>Copy its text</Button>
+          {isCustom ? (
+            <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+              Delete this repertoire
+            </Button>
+          ) : null}
+          <LinkButton variant="ghost" to="/openings">
+            Back to openings
+          </LinkButton>
+        </div>
+      </Card>
+      <ConfirmDialog
+        open={confirmDelete}
+        title={`Delete “${repertoire.name}”?`}
+        cancelLabel="Keep it"
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => {
+          removeCustom(repertoire.id);
+          toast('Repertoire deleted.');
+          void navigate('/openings');
+        }}
+        onClose={() => setConfirmDelete(false)}
+      >
+        <p className="muted">
+          Its lines and your review history for them will be removed. This cannot be undone.
+        </p>
+      </ConfirmDialog>
+    </div>
+  );
+}
+
+function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree: GameTree }) {
   const trainer = useRepertoireTrainer(repertoire.id, tree, repertoire.color);
   const allCards = useRepertoire((s) => s.cards);
   const resetRepertoire = useRepertoire((s) => s.resetRepertoire);
@@ -73,14 +164,32 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
     [tree, repertoire.color, cards, now],
   );
   const [explore, setExplore] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmForget, setConfirmForget] = useState(false);
   const isCustom = repertoire.id.startsWith('custom-');
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
   const shareRepertoire = async () => {
-    const url = await shareUrl('/openings', {
-      kind: 'repertoire',
-      name: repertoire.name,
-      color: repertoire.color,
-      pgn: repertoire.pgn,
-    });
+    let url: string;
+    try {
+      url = await shareUrl('/openings', {
+        kind: 'repertoire',
+        name: repertoire.name,
+        color: repertoire.color,
+        pgn: repertoire.pgn,
+      });
+    } catch {
+      toast('This browser cannot make a share link.', { tone: 'warning' });
+      return;
+    }
+    if (canShare) {
+      try {
+        await navigator.share({ title: repertoire.name, url });
+        return;
+      } catch (err) {
+        // Cancelled: nothing to report. Anything else falls back to the clipboard.
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      }
+    }
     try {
       await navigator.clipboard.writeText(url);
       toast('Link copied — it adds this repertoire to whoever opens it.', { tone: 'success' });
@@ -186,16 +295,17 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
     [explore, isCustom, exploreNode],
   );
 
-  // Keyboard: space/enter shows the move, n = next line.
+  // Keyboard: Space shows the move, N = next line. The shared rule: either case, never with a
+  // modifier, never from a field, a dialog or the board (role="application"), which types squares.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-      if (e.key === ' ' && trainer.phase === 'learner') {
+      // N is a single-key shortcut (off with the setting); Space keeps working.
+      const key = pageShortcutKey(e);
+      if (key === ' ' && trainer.phase === 'learner') {
         e.preventDefault();
         trainer.showMove();
       }
-      if (e.key === 'n' && trainer.phase === 'lineDone') trainer.nextLine();
+      if (key === 'n' && trainer.phase === 'lineDone') trainer.nextLine();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -208,6 +318,10 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
     currentNode && isLearnerMove(currentNode, repertoire.color)
       ? cards[cardKey(currentNode)]
       : undefined;
+  /** Moves of the current line already revealed: those played, and the one being shown. */
+  const lineMoveShown = (i: number) =>
+    i < trainer.index || phase === 'lineDone' || (i === trainer.index && trainer.showing);
+  const hiddenMoves = trainer.line.filter((_, i) => !lineMoveShown(i)).length;
   const lineSan = trainer.line.map((n, i) => {
     const number = n.parent?.fen.split(' ')[5] ?? '1';
     const white = n.parent?.fen.split(' ')[1] === 'w';
@@ -231,9 +345,9 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
         return 'Opponent plays…';
       case 'learner':
         return trainer.showing
-          ? currentCard && currentCard.reps > 0
-            ? 'Play the move shown.'
-            : 'New move — play the arrow to learn it.'
+          ? isNew(currentCard)
+            ? 'New move — play the arrow to learn it.'
+            : 'Play the move shown.'
           : 'Your move. What does the repertoire say?';
       case 'lineDone':
         return `Line complete: ${trainer.lineResult.correct}/${trainer.lineResult.total} recalled.`;
@@ -250,7 +364,7 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
     <div>
       <div className="page-header">
         <p className="card__eyebrow">
-          <Link to="/openings">Openings</Link> / {repertoire.color}
+          <Link to="/openings">Openings</Link> / {colorLabel(repertoire.color)}
         </p>
         <h1>{repertoire.name}</h1>
         <p>{repertoire.description}</p>
@@ -323,7 +437,7 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
                     Practise vs engine
                   </LinkButton>
                   <Button size="lg" variant="ghost" onClick={() => void shareRepertoire()}>
-                    Share
+                    {canShare ? 'Share' : 'Copy link'}
                   </Button>
                 </div>
                 <div style={{ marginTop: 12 }}>
@@ -374,7 +488,7 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
                           Make main line
                         </Button>
                       ) : null}
-                      <Button size="sm" variant="danger" onClick={deleteFromHere}>
+                      <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
                         Delete from here
                       </Button>
                     </div>
@@ -435,7 +549,8 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
                   ) : null}
                 </div>
                 {trainer.line.length ? (
-                  <p className="openings__line mono small" aria-label="Current line">
+                  <p className="openings__line mono small">
+                    <span className="sr-only">Current line: </span>
                     {lineSan.map((san, i) => (
                       <span
                         key={i}
@@ -447,15 +562,18 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
                               : 'openings__line-upcoming'
                         }
                       >
-                        {i < trainer.index || phase === 'lineDone' ? (
-                          <Notated text={san} />
-                        ) : i === trainer.index && trainer.showing ? (
+                        {lineMoveShown(i) ? (
                           <Notated text={san} />
                         ) : (
-                          '·'
+                          <span aria-hidden="true">·</span>
                         )}{' '}
                       </span>
                     ))}
+                    {hiddenMoves > 0 ? (
+                      <span className="sr-only">
+                        and {hiddenMoves} move{hiddenMoves === 1 ? '' : 's'} still to find
+                      </span>
+                    ) : null}
                   </p>
                 ) : null}
               </Card>
@@ -484,7 +602,7 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
                 <Button
                   size="sm"
                   variant="danger"
-                  onClick={() => resetRepertoire(repertoire.id)}
+                  onClick={() => setConfirmForget(true)}
                   style={{ marginTop: 8 }}
                 >
                   Forget all {stats.total} moves
@@ -494,8 +612,58 @@ function RepertoireTrainer({ repertoire }: { repertoire: Repertoire }) {
           )}
         </aside>
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete this line?"
+        confirmLabel="Delete from here"
+        danger
+        onConfirm={deleteFromHere}
+        onClose={() => setConfirmDelete(false)}
+      >
+        <p className="muted">
+          <Notated text={exploreNode.san} /> and every move after it
+          {countBelow(exploreNode) > 0
+            ? ` (${countBelow(exploreNode)} more move${countBelow(exploreNode) === 1 ? '' : 's'})`
+            : ''}{' '}
+          are removed from the repertoire, with their notes and review history. This cannot be
+          undone.
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmForget}
+        title={`Forget all ${stats.total} moves?`}
+        confirmLabel="Forget all moves"
+        danger
+        onConfirm={() => {
+          resetRepertoire(repertoire.id);
+          toast('Progress for this repertoire was reset.');
+        }}
+        onClose={() => setConfirmForget(false)}
+      >
+        <p className="muted">
+          The review schedule for every move in {repertoire.name} starts again from scratch. The
+          lines themselves are kept. This cannot be undone.
+        </p>
+      </ConfirmDialog>
     </div>
   );
+}
+
+function colorLabel(color: 'white' | 'black'): string {
+  return color === 'white' ? 'White' : 'Black';
+}
+
+/** Moves below a node (its whole subtree, the node itself excluded). */
+function countBelow(node: TreeNode): number {
+  let count = 0;
+  const stack = [...node.children];
+  for (let next = stack.pop(); next; next = stack.pop()) {
+    count += 1;
+    stack.push(...next.children);
+  }
+  return count;
 }
 
 /** Follows a path of SAN moves from the root as far as it exists. */

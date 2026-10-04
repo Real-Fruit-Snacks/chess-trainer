@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { Badge, Card, LinkButton, ProgressBar, Icon } from '@/components/ui';
+import { Link, useParams } from 'react-router';
+import { Badge, Card, LinkButton, NotFound, ProgressBar, Icon } from '@/components/ui';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
@@ -20,15 +20,14 @@ export default function CoursePage() {
   );
 
   useEffect(() => {
-    document.title = `${course?.title ?? 'Course'} · ${siteConfig.name}`;
+    document.title = `${course?.title ?? 'Course not found'} · ${siteConfig.name}`;
   }, [course]);
 
   if (!course || !status) {
     return (
-      <Card className="narrow">
-        <h2>Course not found</h2>
-        <LinkButton to="/learn">Back to Learn</LinkButton>
-      </Card>
+      <NotFound title="Course not found" backTo="/learn" backLabel="Back to Learn">
+        <p>There is no course at this address. The courses are listed on the Learn page.</p>
+      </NotFound>
     );
   }
 
@@ -68,7 +67,7 @@ export default function CoursePage() {
         </div>
       </Card>
 
-      <ol className="course__units">
+      <ol className="course__units" role="list">
         {status.units.map((unit, index) => (
           <li
             key={unit.unit.id}
@@ -89,13 +88,15 @@ export default function CoursePage() {
                 </Badge>
               ) : null}
             </div>
-            <ul className="course__items">
+            <ul className="course__items" role="list">
               {unit.items.map((item) => (
                 <li key={`${item.item.type}:${item.to}`}>
                   <Link
                     to={item.to}
                     className={`course__item${item.done ? ' is-done' : ''}`}
-                    aria-label={`${item.title}${item.done ? ' (done)' : ''}`}
+                    // The name carries what the row shows: the title, whether it is
+                    // done, and the detail ("3 of 5 solved", "5 min · Rules").
+                    aria-label={`${item.title}${item.done ? ' (done)' : ''}, ${item.detail}`}
                   >
                     <span className="course__check" aria-hidden="true">
                       <Icon name={item.done ? 'check' : 'circle'} size={16} />

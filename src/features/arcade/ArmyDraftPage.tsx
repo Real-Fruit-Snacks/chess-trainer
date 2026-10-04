@@ -1,22 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { Alert, Badge, Button, Card, Field, Select, Spinner, LinkButton } from '@/components/ui';
-import { ENGINE_LEVELS } from '@/engine/levels';
 import { usePlayVsEngine } from '@/features/play/usePlayVsEngine';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
+import { AnalyzeGameButton, EngineLevelField } from './arcadeControls';
+import { useArcadeFocus } from './arcadeGame';
 import {
   ARMY_PIECES,
   ARMY_PRESETS,
   type Army,
+  type ArmyPiece,
   armyCost,
   armyProblem,
   BUDGETS,
   canAdd,
   DEFAULT_BUDGET,
   describeArmy,
+  describeBudget,
   draftFen,
   EMPTY_ARMY,
   PIECE_COST,
@@ -42,12 +45,15 @@ export default function ArmyDraftPage() {
   const [engineArmy, setEngineArmy] = useState<Army>(() => randomArmy(DEFAULT_BUDGET));
   const [levelId, setLevelId] = useState(settings.playLevel);
   const [drafting, setDrafting] = useState(true);
-  const [confirmResign, setConfirmResign] = useState(false);
+  /** The last change to the army, read out with the new total (the stepper is silent otherwise). */
+  const [budgetNews, setBudgetNews] = useState('');
   const recordedRef = useRef(false);
 
   useEffect(() => {
     document.title = `Army Draft · ${siteConfig.name}`;
   }, []);
+
+  useArcadeFocus(!drafting && play.started && !play.gameOver);
 
   const problem = armyProblem(army, budget);
   const opponentArmy = engineArmyMode === 'mirror' ? army : engineArmy;
@@ -55,31 +61,55 @@ export default function ArmyDraftPage() {
 
   const changeBudget = (next: number) => {
     setBudget(next);
-    if (armyCost(army) > next) setArmy(EMPTY_ARMY);
+    const cleared = armyCost(army) > next;
+    if (cleared) setArmy(EMPTY_ARMY);
     setEngineArmy(randomArmy(next));
+    setBudgetNews(
+      cleared
+        ? `Budget ${next} points: your army no longer fit and was cleared.`
+        : `Budget ${next} points. ${describeBudget(army, next)}`,
+    );
   };
 
-  const add = (piece: (typeof ARMY_PIECES)[number], delta: 1 | -1) => {
-    setArmy((current) => {
-      const next = { ...current, [piece]: Math.max(0, current[piece] + delta) };
-      if (delta > 0 && !canAdd(current, piece, budget)) return current;
-      return next;
-    });
+  const add = (piece: ArmyPiece, delta: 1 | -1) => {
+    if (delta > 0 && !canAdd(army, piece, budget)) return;
+    const next = { ...army, [piece]: Math.max(0, army[piece] + delta) };
+    if (next[piece] === army[piece]) return;
+    setArmy(next);
+    setBudgetNews(`${PIECE_NAME[piece]}s: ${next[piece]}. ${describeBudget(next, budget)}`);
   };
 
-  const begin = () => {
+  const choose = (name: string, next: Army) => {
+    setArmy(next);
+    setBudgetNews(`${name}: ${describeArmy(next)}. ${describeBudget(next, budget)}`);
+  };
+
+  /** The same armies and level again; a random engine army is drawn afresh, as before every game. */
+  const begin = (engine: Army = opponentArmy) => {
     if (problem) return;
     recordedRef.current = false;
-    setConfirmResign(false);
     setDrafting(false);
     play.start({
       color: 'white',
       levelId,
       timeControlId: 'none',
-      fen: draftFen(army, opponentArmy),
+      fen: draftFen(army, engine),
       opponent: 'engine',
       coach: false,
+      // A drafted position: kept out of the engine ladder, the courses and the Play results.
+      source: 'arcade',
+      event: `Army Draft · ${budget} points`,
     });
+  };
+
+  const playAgain = () => {
+    if (engineArmyMode === 'mirror') {
+      begin(army);
+      return;
+    }
+    const fresh = randomArmy(budget);
+    setEngineArmy(fresh);
+    begin(fresh);
   };
 
   useEffect(() => {
@@ -119,12 +149,25 @@ export default function ArmyDraftPage() {
           <aside className="trainer__panel stack">
             <Card>
               <div className="row row--between">
-                <strong>Your army</strong>
-                <span className="arcade__budget" data-testid="army-budget">
+                <strong id="army-heading">Your army</strong>
+                <span className="arcade__budget" data-testid="army-budget" aria-hidden="true">
                   {armyCost(army)} / {budget}
                 </span>
               </div>
-              <div className="arcade__shop" style={{ marginTop: 12 }} data-testid="army-shop">
+              <p className="sr-only" role="status" data-testid="army-budget-news">
+                {budgetNews}
+              </p>
+              <div
+                className="arcade__shop"
+                style={{ marginTop: 12 }}
+                data-testid="army-shop"
+                role="group"
+                aria-labelledby="army-heading"
+                aria-describedby="army-budget-total"
+              >
+                <span id="army-budget-total" className="sr-only">
+                  {describeBudget(army, budget)}
+                </span>
                 {ARMY_PIECES.map((piece) => (
                   <div key={piece} className="arcade__shop-item">
                     <span>
@@ -142,7 +185,12 @@ export default function ArmyDraftPage() {
                       >
                         −
                       </Button>
-                      <span className="arcade__shop-count" data-testid={`army-count-${piece}`}>
+                      <span
+                        className="arcade__shop-count"
+                        data-testid={`army-count-${piece}`}
+                        aria-label={`${PIECE_NAME[piece]}s: ${army[piece]}`}
+                        role="img"
+                      >
                         {army[piece]}
                       </span>
                       <Button
@@ -161,11 +209,22 @@ export default function ArmyDraftPage() {
               </div>
               <div className="row" style={{ marginTop: 12, flexWrap: 'wrap' }}>
                 {ARMY_PRESETS.filter((p) => p.budget <= budget).map((preset) => (
-                  <Button key={preset.id} size="sm" onClick={() => setArmy(preset.army)}>
+                  <Button
+                    key={preset.id}
+                    size="sm"
+                    onClick={() => choose(preset.name, preset.army)}
+                  >
                     {preset.name}
                   </Button>
                 ))}
-                <Button size="sm" variant="ghost" onClick={() => setArmy(EMPTY_ARMY)}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setArmy(EMPTY_ARMY);
+                    setBudgetNews(`Army cleared. ${describeBudget(EMPTY_ARMY, budget)}`);
+                  }}
+                >
                   Clear
                 </Button>
               </div>
@@ -205,27 +264,17 @@ export default function ArmyDraftPage() {
                     </Select>
                   )}
                 </Field>
-                <Field label="Strength">
-                  {(id) => (
-                    <Select
-                      id={id}
-                      value={levelId}
-                      onChange={(e) => setLevelId(Number(e.target.value))}
-                      data-testid="army-level"
-                    >
-                      {ENGINE_LEVELS.map((l) => (
-                        <option key={l.id} value={l.id}>
-                          Level {l.id} · {l.name} (~{l.approxElo})
-                        </option>
-                      ))}
-                    </Select>
-                  )}
-                </Field>
+                <EngineLevelField
+                  value={levelId}
+                  onChange={setLevelId}
+                  testId="army-level"
+                  describe
+                />
                 <div className="row">
                   <Button
                     variant="primary"
                     size="lg"
-                    onClick={begin}
+                    onClick={() => begin()}
                     disabled={problem !== null || play.engineStatus === 'error'}
                     data-testid="army-start"
                   >
@@ -255,10 +304,19 @@ export default function ArmyDraftPage() {
         {over.reason.charAt(0).toUpperCase() + over.reason.slice(1)}. Your {describeArmy(army)}{' '}
         against the engine’s {describeArmy(opponentArmy)}.
       </p>
-      <div className="row">
-        <Button variant="primary" onClick={backToDraft}>
-          Draft again
+      <div className="row arcade__summary-actions">
+        <Button
+          variant="primary"
+          onClick={playAgain}
+          title="The same army, budget and engine level"
+          data-testid="army-again"
+        >
+          Play again
         </Button>
+        <Button onClick={backToDraft} title="Back to the draft" data-testid="army-new">
+          New game
+        </Button>
+        <AnalyzeGameButton pgn={play.pgn} orientation={play.playerColor} />
         <LinkButton to="/arcade">Arcade</LinkButton>
       </div>
     </Card>
@@ -293,30 +351,7 @@ export default function ArmyDraftPage() {
               You: {describeArmy(army)}. Engine: {describeArmy(opponentArmy)}.
             </p>
           </Card>
-          <GameMoves
-            play={play}
-            onResign={() => setConfirmResign(true)}
-            extra={
-              confirmResign && play.started && !over ? (
-                <>
-                  <span className="small muted">Resign?</span>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    onClick={() => {
-                      play.resign();
-                      setConfirmResign(false);
-                    }}
-                  >
-                    Yes
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setConfirmResign(false)}>
-                    No
-                  </Button>
-                </>
-              ) : null
-            }
-          />
+          <GameMoves play={play} />
         </aside>
       </div>
     </div>

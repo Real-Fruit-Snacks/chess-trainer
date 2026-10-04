@@ -1,17 +1,28 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { ClockDisplay } from '@/components/chess/ClockDisplay';
 import { MoveInput } from '@/components/chess/MoveInput';
 import { MoveList } from '@/components/chess/MoveList';
 import { PlayerBar } from '@/components/chess/PlayerBar';
-import { Alert, Button, Card, Dialog, Field, Select, Spinner, Switch } from '@/components/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  ConfirmDialog,
+  Dialog,
+  Field,
+  Select,
+  Spinner,
+  Switch,
+} from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
-import { isValidFen, START_FEN } from '@/chess/helpers';
+import { START_FEN } from '@/chess/helpers';
 import { MOTIF_HELP } from '@/features/analyze/commentary';
 import { getLessonMeta } from '@/features/learn/lessonMeta';
 import type { Fen, LongColor } from '@/chess/types';
+import { EngineCrashedError } from '@/engine/EngineClient';
 import { ENGINE_LEVELS } from '@/engine/levels';
 import { TIME_CONTROLS } from '@/lib/clock';
 import { siteConfig } from '@/site.config';
@@ -19,7 +30,8 @@ import { useSettings } from '@/store/settings';
 import { useRepertoire } from '@/store/repertoire';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
 import { LadderCard } from './LadderCard';
-import { describeDeviation } from './openingBook';
+import { checkStartPosition } from './startPosition';
+import { canFollowBook, describeDeviation } from './openingBook';
 import { type Opponent, usePlayVsEngine } from './usePlayVsEngine';
 import './play.css';
 import { Notated, San } from '@/chess/San';
@@ -51,17 +63,19 @@ export default function PlayPage() {
     return () => setFocus(false);
   }, [focusOn, setFocus]);
   // A hand-off from analysis, puzzles, lessons or drills: play out this position.
-  const [startFrom, setStartFrom] = useState<Fen | null>(() => {
-    const fen = searchParams.get('fen');
-    return fen && isValidFen(fen) ? fen : null;
-  });
+  const [handOff] = useState(() => checkStartPosition(searchParams.get('fen')));
+  const [startFrom, setStartFrom] = useState<Fen | null>(handOff.fen);
   const [color, setColor] = useState<LongColor | 'random'>(() => {
     const requested = searchParams.get('color');
     if (requested === 'white' || requested === 'black') return requested;
-    const fen = searchParams.get('fen');
-    if (fen && isValidFen(fen)) return fen.split(' ')[1] === 'b' ? 'black' : 'white';
+    if (handOff.fen) return handOff.fen.split(' ')[1] === 'b' ? 'black' : 'white';
     return settings.playColor;
   });
+  useEffect(() => {
+    if (handOff.problem) {
+      toast(`Cannot play from that position: ${handOff.problem}`, { tone: 'warning' });
+    }
+  }, [handOff.problem]);
   const [levelId, setLevelId] = useState(() => {
     const requested = Number(searchParams.get('level'));
     return ENGINE_LEVELS.some((l) => l.id === requested) ? requested : settings.playLevel;
@@ -81,11 +95,16 @@ export default function PlayPage() {
   });
   const bookChoice = repertoires.find((r) => r.id === bookId) ?? null;
   const [confirmResign, setConfirmResign] = useState(false);
-  const [gameOverDismissed, setGameOverDismissed] = useState(false);
-  // Blindfold: the pieces are hidden; "Peek" shows them for a moment.
+  // The result dialog is dismissed for one result at a time, so the next game's result opens it
+  // again (a dialog closed by a new game fires its close event after the game has restarted).
+  const [dismissedResult, setDismissedResult] = useState<typeof play.gameOver>(null);
+  const resultOpen = !!play.gameOver && dismissedResult !== play.gameOver;
+  const dismissResult = () => setDismissedResult(play.gameOver);
+  // Blindfold: the pieces are hidden; "Peek" shows them for a moment. The board is revealed once
+  // the game is over so the result can be reviewed.
   const [peeking, setPeeking] = useState(false);
   const [peeks, setPeeks] = useState(0);
-  const blindfold = settings.playBlindfold && play.started;
+  const blindfold = settings.playBlindfold && play.started && !play.gameOver;
 
   useEffect(() => {
     document.title = `Play · ${siteConfig.name}`;
@@ -118,8 +137,32 @@ export default function PlayPage() {
       <ClockDisplay ms={play.clock[c]} running={play.clock.running === c && !play.gameOver} />
     ) : null;
 
+  /** The last game's settings, so "Play again" can repeat them without the setup dialog. */
+  const lastSetupRef = useRef<Parameters<typeof play.start>[0] | null>(null);
+
+  const launch = (setup: Parameters<typeof play.start>[0]) => {
+    lastSetupRef.current = setup;
+    play.start(setup);
+    // Only games set up here become the Play defaults (arcade games go through the hook too).
+    settings.update({
+      playLevel: setup.levelId,
+      playColor: setup.color,
+      playTimeControl: setup.timeControlId,
+    });
+    setSetupOpen(false);
+    setPeeks(0);
+    setPeeking(false);
+  };
+
   const startGame = () => {
-    play.start({
+    const book = bookChoice && opponent === 'engine' && !startFrom ? bookChoice : undefined;
+    if (book && !canFollowBook(book.pgn)) {
+      toast(`“${book.name}” could not be read. Open it from Openings to copy or delete it.`, {
+        tone: 'warning',
+      });
+      return;
+    }
+    launch({
       color,
       levelId,
       timeControlId,
@@ -127,12 +170,18 @@ export default function PlayPage() {
       opponent,
       autoFlip: opponent === 'human' && autoFlip,
       coach: settings.playCoach,
-      book: bookChoice && opponent === 'engine' && !startFrom ? bookChoice : undefined,
+      book,
     });
-    setSetupOpen(false);
-    setGameOverDismissed(false);
-    setPeeks(0);
-    setPeeking(false);
+  };
+
+  /** Play again: the same settings as the last game, straight away. */
+  const playAgain = () => {
+    const last = lastSetupRef.current;
+    if (!last) {
+      openSetup();
+      return;
+    }
+    launch({ ...last, coach: settings.playCoach });
   };
 
   const peek = () => {
@@ -143,7 +192,7 @@ export default function PlayPage() {
   const customStart = play.started && play.startFen !== START_FEN;
 
   const openSetup = () => {
-    setGameOverDismissed(true);
+    dismissResult();
     setSetupOpen(true);
   };
 
@@ -153,22 +202,22 @@ export default function PlayPage() {
     setStartFrom(null);
     setOpponent('engine');
     setBookId('');
-    play.start({
+    launch({
       color,
       levelId: nextLevelId,
       timeControlId,
       opponent: 'engine',
       autoFlip: false,
       coach: settings.playCoach,
+      source: 'ladder',
+      event: `Engine ladder · Level ${nextLevelId}`,
     });
-    setSetupOpen(false);
-    setGameOverDismissed(false);
-    setPeeks(0);
-    setPeeking(false);
   };
 
   const analyze = () => {
-    void navigate(handOffToAnalysis(play.pgn()));
+    // Analysis opens from the learner's side (between two players, as the board faces now).
+    const orientation = play.opponent === 'human' ? play.orientation : play.playerColor;
+    void navigate(handOffToAnalysis(play.pgn(), { orientation }));
   };
 
   const copyPgn = async () => {
@@ -204,7 +253,9 @@ export default function PlayPage() {
 
       {play.engineStatus === 'error' ? (
         <Alert tone="danger" role="alert">
-          The engine could not start: {play.engineError?.message}{' '}
+          {play.engineError instanceof EngineCrashedError
+            ? 'The engine stopped responding. Retry starts a fresh one and the game carries on.'
+            : `The engine could not start: ${play.engineError?.message ?? 'unknown error'}.`}{' '}
           <Button size="sm" onClick={() => void play.retryEngine()}>
             Retry
           </Button>
@@ -268,7 +319,7 @@ export default function PlayPage() {
             </div>
           ) : null}
           {settings.moveInput && play.started ? (
-            <MoveInput onMove={play.playerNotation} disabled={!playerTurn} />
+            <MoveInput onMove={play.playerNotation} disabled={!playerTurn} keepFocus />
           ) : null}
         </div>
 
@@ -311,7 +362,7 @@ export default function PlayPage() {
               </Button>
               <Button
                 onClick={play.takeBack}
-                disabled={!play.started || position.history.length === 0}
+                disabled={!play.started || !!play.gameOver || position.history.length === 0}
               >
                 Take back
               </Button>
@@ -319,7 +370,7 @@ export default function PlayPage() {
                 onClick={play.hint}
                 disabled={!playerTurn || play.hinting || play.engineStatus !== 'ready'}
                 loading={play.hinting}
-                title="Show the engine's suggested move for you"
+                title="Show the engine’s suggested move for you"
               >
                 Hint
               </Button>
@@ -349,10 +400,18 @@ export default function PlayPage() {
                 Resign
               </Button>
             </div>
+            <p className="small muted play__hint" role="status" data-testid="hint-text">
+              {play.hintMove ? (
+                <>
+                  {play.hintMove.kind === 'hint' ? 'Suggested move: ' : 'Threat: '}
+                  <San san={play.hintMove.san} />
+                </>
+              ) : null}
+            </p>
           </Card>
 
           {play.bookAlert ? (
-            <Alert tone="warning">
+            <Alert tone="warning" role="alert">
               <div data-testid="book-alert">
                 <strong>Repertoire:</strong> {describeDeviation(play.bookAlert)}{' '}
                 <Link to={`/openings/${play.book?.repertoireId ?? ''}`}>Review the line</Link>
@@ -368,7 +427,10 @@ export default function PlayPage() {
             </Alert>
           ) : null}
           {play.coachAlert ? (
-            <Alert tone={play.coachAlert.verdict.judgement === 'blunder' ? 'danger' : 'warning'}>
+            <Alert
+              tone={play.coachAlert.verdict.judgement === 'blunder' ? 'danger' : 'warning'}
+              role="alert"
+            >
               <div data-testid="coach-alert">
                 <strong>Coach:</strong> <San san={play.coachAlert.san} /> was{' '}
                 {play.coachAlert.verdict.judgement === 'blunder' ? 'a blunder' : 'a mistake'}.
@@ -410,7 +472,6 @@ export default function PlayPage() {
             <MoveList
               moves={position.history}
               currentPly={position.history.length}
-              onSelectPly={() => undefined}
               startsWithBlack={play.startFen.split(' ')[1] === 'b'}
               startMoveNumber={Number(play.startFen.split(' ')[5] ?? 1)}
             />
@@ -485,7 +546,7 @@ export default function PlayPage() {
               label="Practise an opening"
               hint={
                 bookChoice
-                  ? `You play ${bookChoice.color}. The opponent follows the repertoire's lines; when the book runs out, the engine takes over. Leaving the book pauses the game.`
+                  ? `You play ${bookChoice.color}. The opponent follows the repertoire’s lines; when the book runs out, the engine takes over. Leaving the book pauses the game.`
                   : 'Rehearse a repertoire against a live opponent.'
               }
             >
@@ -507,7 +568,10 @@ export default function PlayPage() {
             </Field>
           ) : null}
           {opponent === 'engine' ? (
-            <Field label="Strength" hint={ENGINE_LEVELS.find((l) => l.id === levelId)?.description}>
+            <Field
+              label="Engine level"
+              hint={`${ENGINE_LEVELS.find((l) => l.id === levelId)?.description ?? ''} The rating in brackets is a rough guide, not a measured strength.`}
+            >
               {(id) => (
                 <Select
                   id={id}
@@ -599,38 +663,26 @@ export default function PlayPage() {
       </Dialog>
 
       {/* Resign confirmation */}
-      <Dialog
+      <ConfirmDialog
         open={confirmResign}
-        onClose={() => setConfirmResign(false)}
         title="Resign this game?"
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmResign(false)}>
-              Keep playing
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                play.resign();
-                setConfirmResign(false);
-              }}
-            >
-              Resign
-            </Button>
-          </>
-        }
+        cancelLabel="Keep playing"
+        confirmLabel="Resign"
+        danger
+        onConfirm={play.resign}
+        onClose={() => setConfirmResign(false)}
       >
         <p className="muted">
           {hotSeat
             ? `${position.turn === 'white' ? 'White' : 'Black'} (the side to move) resigns.`
             : 'The game will be recorded as a loss.'}
         </p>
-      </Dialog>
+      </ConfirmDialog>
 
       {/* Game over */}
       <Dialog
-        open={!!play.gameOver && !gameOverDismissed}
-        onClose={() => setGameOverDismissed(true)}
+        open={resultOpen}
+        onClose={dismissResult}
         title={
           hotSeat
             ? play.gameOver?.result === '1-0'
@@ -646,11 +698,12 @@ export default function PlayPage() {
         }
         actions={
           <>
-            <Button variant="ghost" onClick={() => setGameOverDismissed(true)}>
-              Review board
+            <Button variant="ghost" onClick={dismissResult}>
+              Show the board
             </Button>
             <Button onClick={analyze}>Analyze game</Button>
-            <Button variant="primary" onClick={openSetup}>
+            <Button onClick={openSetup}>New game</Button>
+            <Button variant="primary" onClick={playAgain} title="Same opponent, colour and clock">
               Play again
             </Button>
           </>

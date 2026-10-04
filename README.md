@@ -46,8 +46,9 @@ up for. It runs entirely in your browser, installs as an app and keeps working o
   device, and a backup is a file you keep. Optional network features are off by default.
 - **Works everywhere.** Phones, tablets and desktops, light, dark or black, online and offline, with
   screen readers and the keyboard.
-- **Honest chess.** Every lesson position, drill, study and repertoire line is engine-verified, the
-  puzzle rating is Glicko-2, and the coach explains mistakes with rules, not guesswork.
+- **Honest chess.** Every lesson task, drill position, study move and repertoire move is checked with
+  Stockfish in CI, the puzzle rating is Glicko-2, and the coach explains mistakes with rules, not
+  guesswork.
 
 ## Highlights
 
@@ -107,9 +108,12 @@ npm install     # Node 22 or newer
 npm run dev     # downloads the engine on first run, then serves http://localhost:5173
 ```
 
-`npm run check` runs what CI runs: lint, dead-code and dependency check, format check, typecheck, unit
-tests, a production build and the bundle budget.
-The other scripts are listed in [CONTRIBUTING.md](CONTRIBUTING.md#scripts).
+`npm run check` runs CI's quality and build gates locally: lint, dead-code and dependency check, format
+check, typecheck, unit tests, a production build and the bundle budget. CI also runs the end-to-end
+suite in four browsers, a smoke test under the production base path, the visual snapshots and
+Lighthouse, and a separate workflow checks the chess content with Stockfish — see
+[what CI runs](CONTRIBUTING.md#what-ci-runs). The other scripts are listed in
+[CONTRIBUTING.md](CONTRIBUTING.md#scripts).
 
 ### Host your own
 
@@ -127,9 +131,9 @@ GitHub release. Custom domains and other static hosts are covered in
 | Board and chess | [Chessground](https://github.com/lichess-org/chessground), [chess.js](https://github.com/jhlywa/chess.js)      |
 | Data            | [Lichess](https://lichess.org) puzzle database and the chess-openings dataset (both CC0)                       |
 
-Any evergreen browser with WebAssembly and Web Workers works: Chrome and Edge 90+, Firefox 90+,
-Safari 16+ (iOS 16+); the test suite runs on Chromium, Firefox and WebKit. The interface is in
-English.
+Any evergreen browser with WebAssembly and Web Workers works: Chrome and Edge 111+, Firefox 121+,
+Safari 16.4+ (iOS 16.4+); the test suite runs on Chromium, Firefox and WebKit. The interface is in
+British English.
 
 ## Contributing
 
@@ -142,4 +146,7 @@ is written and verified. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 Chess Trainer is licensed under the [GNU General Public License v3.0 or later](LICENSE). It bundles
 GPL-licensed components that are inseparable from the delivered app (Chessground for the board,
 Stockfish for the engine), so a copyleft licence for the whole is the honest choice. Third-party
-components and their licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+components and their licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The
+built site ships both texts (`licence.txt` and `notices.txt`) and links them from the footer of every
+page, next to the credits the components ask for — among them the classic piece set's, by Colin M.L.
+Burnett under CC BY-SA 3.0.

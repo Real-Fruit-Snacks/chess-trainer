@@ -1,4 +1,5 @@
 dist
+sourcemaps
 coverage
 playwright-report
 test-results

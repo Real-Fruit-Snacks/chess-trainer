@@ -136,6 +136,78 @@
   box-shadow: var(--focus-ring);
 }
 
+/* ---------- The strip under the big board (phones) ---------- */
+/* Every board's number and state with Next, right under the board: the thumbnails are
+   in the panel, which sits below the board on a phone held upright. */
+.simul__strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.simul__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.simul__chip-number {
+  font-weight: 700;
+}
+
+.simul__chip-state {
+  color: var(--text-muted);
+}
+
+.simul__chip--move {
+  border-color: var(--accent);
+}
+
+.simul__chip--move .simul__chip-state {
+  color: var(--accent);
+}
+
+.simul__chip--win .simul__chip-state {
+  color: var(--success);
+}
+
+.simul__chip--loss .simul__chip-state {
+  color: var(--danger);
+}
+
+.simul__chip.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: var(--selected-ring);
+}
+
+/* On the accent tint the state colours (red on dark green above all) fall short of 4.5:1. */
+.simul__chip.is-active .simul__chip-state {
+  color: var(--text);
+}
+
+.simul__strip-next {
+  margin-left: auto;
+}
+
+/* Wherever the panel sits beside the board, its thumbnails are in view: no strip. */
+@media (min-width: 900px), (orientation: landscape) and (max-height: 520px) {
+  .simul__strip {
+    display: none;
+  }
+}
+
 /* ---------- Moves ---------- */
 .simul__moves {
   display: flex;

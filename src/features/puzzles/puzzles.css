@@ -12,6 +12,83 @@
   gap: var(--space-2);
 }
 
+/* Theme links under a puzzle: badge-sized text, a target well over 24px, and a finger-sized
+   one (40px) on touch screens. */
+.puzzle-themes {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.puzzle-themes__link {
+  min-height: 28px;
+  padding: 0 12px;
+  text-decoration: none;
+}
+
+@media (pointer: coarse) {
+  .puzzle-themes__link {
+    min-height: 40px;
+  }
+}
+
+.puzzle-themes__link:hover,
+.puzzle-themes__link:focus-visible {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* The eight puzzle modes wrap onto a second row wherever one row is too narrow for them,
+   so no mode is ever pushed out of sight. */
+.puzzle-modes {
+  max-width: 100%;
+}
+
+.puzzle-modes .segmented {
+  flex-wrap: wrap;
+}
+
+/* Phones held sideways have no height to spare for a second row: tighter options keep one. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .puzzle-modes .segmented__option {
+    padding: 4px 8px;
+    font-size: 0.8125rem;
+  }
+}
+
+/*
+ * Trainers with a clock or a prompt (Rush, Coordinates) put that card first in
+ * the grid: on a phone it sits above the board, where the eye is; on wide
+ * screens, and on phones held sideways, it heads the side panel.
+ */
+.trainer--lead .trainer__lead {
+  order: -1;
+}
+
+@media (min-width: 900px), (orientation: landscape) and (max-height: 520px) {
+  .trainer--lead {
+    grid-template-rows: auto 1fr;
+  }
+
+  .trainer--lead .trainer__board {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .trainer--lead .trainer__lead {
+    order: 0;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .trainer--lead .trainer__panel {
+    grid-column: 2;
+    grid-row: 2;
+    top: auto;
+    position: static;
+    max-height: none;
+  }
+}
+
 /* Puzzle Rush */
 .rush__start {
   max-width: 420px;
@@ -50,7 +127,9 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 4px;
-  margin-top: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
 }
 
 .rush__result {
@@ -62,9 +141,11 @@
   color: var(--success);
 }
 
+/* A miss is struck through as well as red, so it does not rest on colour alone. */
 .rush__result--failed {
   background: var(--danger-soft);
   color: var(--danger);
+  text-decoration: line-through;
 }
 
 .rush__history {
@@ -92,7 +173,7 @@
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg-subtle, var(--bg-elevated));
+  background: var(--surface-2);
   display: grid;
   gap: 8px;
 }

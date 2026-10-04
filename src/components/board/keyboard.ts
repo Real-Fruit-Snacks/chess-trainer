@@ -21,6 +21,13 @@ const PLURALS: Record<PieceSymbol, string> = {
 };
 const ORDER: PieceSymbol[] = ['k', 'q', 'r', 'b', 'n', 'p'];
 
+/** Whether a square is dark: a1 is dark, so file and rank indices of equal parity are dark. */
+export function isDarkSquare(square: Square): boolean {
+  const file = square.charCodeAt(0) - 97;
+  const rank = Number(square[1]) - 1;
+  return (file + rank) % 2 === 0;
+}
+
 /** The square the keyboard cursor starts on: the centre, from the viewer's side. */
 export function defaultCursor(orientation: LongColor): Square {
   return orientation === 'white' ? 'e4' : 'd5';
@@ -68,16 +75,37 @@ export function squareOffset(square: Square, orientation: LongColor): { x: numbe
   return { x: col / 8, y: row / 8 };
 }
 
-/** "e4, white pawn" or "e4, empty". */
-export function describeSquare(fen: string, square: Square): string {
+/** A square typed as two keys ("e" then "4", in either case), or null when it is not one. */
+export function squareFromKeys(file: string, rank: string): Square | null {
+  const name = `${file.toLowerCase()}${rank}`;
+  return /^[a-h][1-8]$/.test(name) ? (name as Square) : null;
+}
+
+export interface DescribeSquareOptions {
+  /** The square whose piece is selected, if any; its legal destinations are pointed out. */
+  selected?: Square | null;
+  dests?: ReadonlyMap<string, readonly string[]>;
+}
+
+/** "e4, white pawn" or "e4, empty" — plus ", legal destination" while a piece that can go there is selected. */
+export function describeSquare(
+  fen: string,
+  square: Square,
+  options: DescribeSquareOptions = {},
+): string {
+  let text: string;
   try {
     const piece = new Chess(fen).get(square);
-    return piece
+    text = piece
       ? `${square}, ${piece.color === 'w' ? 'white' : 'black'} ${PIECE_NAMES[piece.type]}`
       : `${square}, empty`;
   } catch {
-    return square;
+    text = square;
   }
+  if (options.selected && options.dests?.get(options.selected)?.includes(square)) {
+    text += ', legal destination';
+  }
+  return text;
 }
 
 /**

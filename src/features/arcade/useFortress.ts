@@ -16,6 +16,7 @@ import {
   pickFortressPosition,
   tierForHeld,
 } from './fortress';
+import { arcadeHeaders } from './arcadeGame';
 import { scoreToCp } from './handAndBrain';
 import { type EvalPosition, fortressPositions, moverCp, sideToMove } from './positions';
 
@@ -182,11 +183,48 @@ export function useFortress() {
     loadPosition(held);
   }, [phase, held, loadPosition]);
 
+  /**
+   * The last of the HOLD_MOVES is graded like any other before the position
+   * counts as held: a twentieth move that drops the queen still collapses it.
+   */
+  const gradeFinalMove = useCallback(() => {
+    const run = ++runRef.current;
+    const live = () => aliveRef.current && run === runRef.current;
+    setBusy('grading');
+    const client = engine();
+    const startFen = gameRef.current.position.startFen;
+    const moves: Uci[] = gameRef.current
+      .chess()
+      .history({ verbose: true })
+      .map((m) => toUci(m));
+    void (async () => {
+      await ensureSkill(client, skillCache.current, 20);
+      const result = await client.search({ fen: startFen, moves, depth: GRADE_DEPTH, multipv: 1 })
+        .result;
+      if (result.stopped) return null;
+      // The attacker is to move: its score, turned round to the defender's side.
+      return -scoreToCp(result.lines.get(1)?.score);
+    })()
+      .then((graded) => {
+        if (graded === null || !live()) return;
+        setCp(graded);
+        endPosition(graded <= FALLEN_CP ? 'collapsed' : 'survived');
+      })
+      .catch((err: unknown) => {
+        console.error('Fortress grading failed', err);
+        // The engine is gone: twenty moves were played, so the position counts.
+        if (live()) endPosition('survived');
+      })
+      .finally(() => {
+        if (live()) setBusy(null);
+      });
+  }, [engine, endPosition]);
+
   const afterPlayerMove = useCallback(() => {
     const made = movesMade + 1;
     setMovesMade(made);
-    if (made >= HOLD_MOVES && !gameRef.current.chess().isGameOver()) endPosition('survived');
-  }, [movesMade, endPosition]);
+    if (made >= HOLD_MOVES && !gameRef.current.chess().isGameOver()) gradeFinalMove();
+  }, [movesMade, gradeFinalMove]);
 
   const playerMove = useCallback(
     (from: Square, to: Square, promotion?: PromotionPiece) => {
@@ -210,6 +248,20 @@ export function useFortress() {
     endPosition('resigned');
   }, [phase, endPosition]);
 
+  /** The moves played from the current position, as PGN (with its starting FEN). */
+  const pgn = useCallback(
+    () =>
+      gameRef.current.pgn(
+        arcadeHeaders({
+          event: 'Fortress',
+          playerColor,
+          engine: `Stockfish (level ${level.id} · ${level.name})`,
+          result: '*',
+        }),
+      ),
+    [playerColor, level],
+  );
+
   return {
     game,
     pool,
@@ -231,6 +283,7 @@ export function useFortress() {
     playerMove,
     resolvePromotion,
     giveUp,
+    pgn,
   };
 }
 

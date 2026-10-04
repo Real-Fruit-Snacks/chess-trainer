@@ -2,12 +2,12 @@
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  /* Keep the header below the status bar / notch on phones (viewport-fit=cover). */
-  padding-top: env(safe-area-inset-top, 0px);
 }
 
-/* Focus mode (a game on, the setting enabled): just the page, no chrome. */
-.shell--focus {
+/* Focus mode (a game on, the setting enabled): just the page, no chrome. The
+   double class outranks the landscape and desktop rules below, which also set
+   the chrome heights. */
+.shell.shell--focus {
   --header-height: 0px;
   --bottom-nav-height: 0px;
 }
@@ -21,10 +21,12 @@
 /* ---------- Header ---------- */
 .shell__header {
   position: sticky;
-  /* Below the status bar / notch on phones (viewport-fit=cover). */
-  top: env(safe-area-inset-top, 0px);
+  top: 0;
   z-index: 50;
   height: var(--header-height);
+  /* The status bar / notch strip is part of the header, so nothing scrolls under it. */
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--bg);
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: saturate(160%) blur(10px);
   border-bottom: 1px solid var(--border);
@@ -146,6 +148,12 @@
   outline: none;
 }
 
+/* Focus lands here after navigation and the skip link; a ring round the whole page says nothing. */
+.shell__main:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 /* Taller than the screen, so the footer stays below the fold while a page
    chunk loads instead of showing at the bottom and then jumping away. */
 .shell__loading {
@@ -178,12 +186,14 @@
   left: 0;
   right: 0;
   bottom: 0;
-  height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+  /* The height already includes the home-bar inset (tokens.css). */
+  height: var(--bottom-nav-height);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  /* minmax(0, …): five items share the width even at 320px, nothing pushes the bar wider. */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   background: var(--bg-elevated);
   border-top: 1px solid var(--border);
   z-index: 50;
@@ -195,10 +205,20 @@
   align-items: center;
   justify-content: center;
   gap: 2px;
-  font-size: 0.65rem;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 0.75rem;
   font-weight: 600;
+  line-height: 1.2;
   color: var(--text-muted);
   text-decoration: none;
+}
+
+.shell__bottomlink > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shell__bottomlink.is-active {
@@ -213,6 +233,11 @@
 }
 
 @media (min-width: 900px) {
+  .shell {
+    /* The bottom bar is not shown: nothing needs to make room for it. */
+    --bottom-nav-height: 0px;
+  }
+
   .shell__nav {
     display: flex;
   }
@@ -301,7 +326,7 @@
   position: fixed;
   left: var(--space-3);
   right: var(--space-3);
-  bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-2));
+  bottom: calc(var(--bottom-nav-height) + var(--space-2));
   max-height: calc(100dvh - var(--header-height) - var(--bottom-nav-height) - var(--space-5));
   overflow-y: auto;
 }
@@ -309,19 +334,26 @@
 .more__group {
   display: flex;
   flex-direction: column;
+}
+
+.more__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
 }
 
-.more--sheet .more__group {
+.more--sheet .more__list {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-1);
 }
 
 .more__heading {
-  grid-column: 1 / -1;
   padding: var(--space-1) var(--space-3) 2px;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -373,6 +405,28 @@
   color: var(--text-muted);
 }
 
+/* ---------- Crash page ---------- */
+/* Full page when the shell itself failed; a card inside <main> (the chrome stays) otherwise. */
+.crash {
+  padding: var(--space-8) var(--space-4);
+}
+
+.crash--inline {
+  margin: var(--space-5) 0;
+  padding: var(--space-5);
+}
+
+.crash__details {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+
+.crash__actions {
+  flex-wrap: wrap;
+}
+
 /* ---------- Keyboard shortcuts dialog ---------- */
 .shortcuts {
   display: grid;
@@ -414,20 +468,50 @@
   }
 }
 
-/* Phones held sideways: a shorter bottom bar leaves room for the board. */
-@media (orientation: landscape) and (max-height: 520px) and (max-width: 899px) {
+/* Phones held sideways, large ones included (no width cap): a shorter header and
+   bottom bar leave room for the board. Focus mode's 0px heights still win
+   (.shell.shell--focus above). */
+@media (orientation: landscape) and (max-height: 520px) {
   .shell {
-    --bottom-nav-height: 44px;
-    --header-height: 48px;
+    --header-height: calc(48px + env(safe-area-inset-top, 0px));
   }
 
   .shell__bottomlink {
     flex-direction: row;
     gap: 6px;
-    font-size: 0.75rem;
   }
 
   .shell__bottomicon {
     font-size: 1rem;
+  }
+}
+
+/* The bottom bar itself is only there below the desktop breakpoint. */
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 899px) {
+  .shell {
+    --bottom-nav-height: calc(44px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---------- Windows High Contrast ---------- */
+@media (forced-colors: active) {
+  .shell__header,
+  .shell__bottomnav,
+  .more__menu {
+    border-color: CanvasText;
+  }
+
+  .shell__navlink.is-active,
+  .shell__bottomlink.is-active,
+  .more__item.is-active {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .more__item.is-active .more__label,
+  .more__item.is-active .more__blurb,
+  .more__item.is-active .more__icon {
+    color: inherit;
   }
 }

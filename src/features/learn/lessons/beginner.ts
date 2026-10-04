@@ -566,7 +566,7 @@ export const beginnerLessons: Lesson[] = [
         text:
           'The queen alone cannot mate — you need your king’s help. The method: use the queen to shrink the ' +
           '“box” around the enemy king, bring your king up, and mate on the edge.\n\nKeep the queen a **knight’s move** ' +
-          'away from the enemy king while boxing it in: it can never be attacked there, and stalemate is impossible.\n\n' +
+          'away from the enemy king while boxing it in: it can never be attacked there. Before every quiet move, check that the enemy king still has a square — a queen on c7 against a king on a8 is the classic stalemate.\n\n' +
           'Here the box is complete. Finish the job.',
         fen: '7k/8/5K2/8/8/8/8/6Q1 w - - 0 1',
         task: {

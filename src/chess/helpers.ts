@@ -1,7 +1,8 @@
-import { Chess, DEFAULT_POSITION, SQUARES, type Move, type Square, validateFen } from 'chess.js';
+import { Chess, SQUARES, type Move, type Square, validateFen } from 'chess.js';
+import { START_FEN } from './startFen';
 import type { Fen, LongColor, MoveInput, PromotionPiece, San, ShortColor, Uci } from './types';
 
-export const START_FEN: Fen = DEFAULT_POSITION;
+export { START_FEN };
 
 export function toLongColor(color: ShortColor): LongColor {
   return color === 'w' ? 'white' : 'black';
@@ -16,23 +17,160 @@ export function turnOf(fen: Fen): LongColor {
   return fen.split(' ')[1] === 'b' ? 'black' : 'white';
 }
 
+/**
+ * Whether `fen` describes a legal position once repaired by `normalizeFen`,
+ * so 4-field FENs and EPDs count as valid. Callers that load the FEN should
+ * load `sanitizeFen(fen)` (or let `GameTree`/`useChess` normalise it).
+ */
 export function isValidFen(fen: string): boolean {
-  return validateFen(fen).ok;
+  return validateFen(normalizeFen(fen)).ok;
+}
+
+/** The piece letter on `square` in a FEN placement field, or null for an empty square. */
+function pieceAt(placement: string, square: string): string | null {
+  const ranks = placement.split('/');
+  if (ranks.length !== 8) return null;
+  const file = square.charCodeAt(0) - 97;
+  const rank = ranks[8 - Number(square[1])];
+  if (!rank || file < 0 || file > 7) return null;
+  let col = 0;
+  for (const ch of rank) {
+    const empty = Number(ch);
+    if (Number.isInteger(empty)) {
+      if (file < col + empty) return null;
+      col += empty;
+    } else {
+      if (col === file) return ch;
+      col++;
+    }
+  }
+  return null;
+}
+
+/**
+ * Repairs the parts of a FEN that chess.js does not check against the board:
+ * castling rights whose king or rook has left its square (a diagram tool's
+ * `KQkq` with the king on e2 would otherwise offer phantom castling), an en
+ * passant square with no pawn that could have just made the double step, and
+ * missing move counters (4- and 5-field FENs, as in EPD). The placement and
+ * side to move are returned as given; validate the result with `isValidFen`.
+ */
+export function normalizeFen(fen: string): string {
+  const parts = fen.trim().split(/\s+/);
+  if (parts.length < 2) return fen.trim();
+  const [placement = '', turn = 'w'] = parts;
+  let castling = parts[2] ?? '-';
+  let ep = parts[3] ?? '-';
+  const halfmove = parts[4] ?? '0';
+  const fullmove = parts[5] ?? '1';
+
+  const RIGHTS: Record<
+    string,
+    [king: string, kingSquare: string, rook: string, rookSquare: string]
+  > = {
+    K: ['K', 'e1', 'R', 'h1'],
+    Q: ['K', 'e1', 'R', 'a1'],
+    k: ['k', 'e8', 'r', 'h8'],
+    q: ['k', 'e8', 'r', 'a8'],
+  };
+  const kept = [...castling]
+    .filter((flag) => {
+      const right = RIGHTS[flag];
+      if (!right) return false;
+      return pieceAt(placement, right[1]) === right[0] && pieceAt(placement, right[3]) === right[2];
+    })
+    .join('');
+  castling = kept || '-';
+
+  if (ep !== '-') {
+    const file = ep[0] ?? '';
+    const rank = ep[1] ?? '';
+    const possible =
+      /^[a-h]$/.test(file) &&
+      pieceAt(placement, ep) === null &&
+      ((rank === '3' &&
+        turn === 'b' &&
+        pieceAt(placement, `${file}4`) === 'P' &&
+        pieceAt(placement, `${file}2`) === null) ||
+        (rank === '6' &&
+          turn === 'w' &&
+          pieceAt(placement, `${file}5`) === 'p' &&
+          pieceAt(placement, `${file}7`) === null));
+    if (!possible) ep = '-';
+  }
+
+  return `${placement} ${turn} ${castling} ${ep} ${halfmove} ${fullmove}`;
+}
+
+/** A user-supplied FEN made consistent (see `normalizeFen`), or null when it is not a position. */
+export function sanitizeFen(fen: string): string | null {
+  const normalized = normalizeFen(fen);
+  return isValidFen(normalized) ? normalized : null;
+}
+
+export interface LegalDestsOptions {
+  /**
+   * Also list the rook's square as a destination of the king when castling that
+   * way is legal, so a king dropped on its rook castles (Chessground's `rookCastle`).
+   */
+  rookCastle?: boolean;
 }
 
 /** Legal destinations for every piece of the side to move, in chessground's format. */
-export function legalDests(chess: Chess): Map<Square, Square[]> {
+export function legalDests(chess: Chess, options: LegalDestsOptions = {}): Map<Square, Square[]> {
   const dests = new Map<Square, Square[]>();
   for (const square of SQUARES) {
     const moves = chess.moves({ square, verbose: true });
     if (moves.length) {
-      dests.set(
-        square,
-        moves.map((m) => m.to),
-      );
+      const targets = moves.map((m) => m.to);
+      if (options.rookCastle) {
+        for (const move of moves) {
+          if (move.isKingsideCastle()) targets.push(`h${move.to[1]}` as Square);
+          else if (move.isQueensideCastle()) targets.push(`a${move.to[1]}` as Square);
+        }
+      }
+      dests.set(square, targets);
     }
   }
   return dests;
+}
+
+/** Adds the rook squares to the king's destinations when its castling moves are among them. */
+export function withRookCastleDests(fen: Fen, dests: Map<Square, Square[]>): Map<Square, Square[]> {
+  const placement = fen.split(' ')[0] ?? '';
+  let out: Map<Square, Square[]> | null = null;
+  for (const [kingSquare, king, rank] of [
+    ['e1', 'K', '1'],
+    ['e8', 'k', '8'],
+  ] as const) {
+    const targets = dests.get(kingSquare);
+    if (!targets || pieceAt(placement, kingSquare) !== king) continue;
+    const extra: Square[] = [];
+    if (targets.includes(`g${rank}`) && !targets.includes(`h${rank}`)) extra.push(`h${rank}`);
+    if (targets.includes(`c${rank}`) && !targets.includes(`a${rank}`)) extra.push(`a${rank}`);
+    if (extra.length) {
+      out ??= new Map(dests);
+      out.set(kingSquare, [...targets, ...extra]);
+    }
+  }
+  return out ?? dests;
+}
+
+/**
+ * The destination to report when a king is dropped on its own rook to castle
+ * (`e1` → `h1` means `e1` → `g1`); any other move is returned unchanged.
+ */
+export function castlingKingDest(fen: Fen, from: Square, to: Square): Square {
+  const placement = fen.split(' ')[0] ?? '';
+  const king = pieceAt(placement, from);
+  if (king !== 'K' && king !== 'k') return to;
+  const rank = from[1] ?? '';
+  if (!from.startsWith('e') || !to.endsWith(rank)) return to;
+  const rook = pieceAt(placement, to);
+  if (rook !== (king === 'K' ? 'R' : 'r')) return to;
+  if (to.startsWith('h')) return `g${rank}` as Square;
+  if (to.startsWith('a')) return `c${rank}` as Square;
+  return to;
 }
 
 export function parseUci(uci: Uci): MoveInput {
@@ -82,13 +220,63 @@ export function uciLineToSan(fen: Fen, line: Uci[]): San[] {
   return sans;
 }
 
-const UCI_RE = /^[a-h][1-8][a-h][1-8][qrbn]?$/i;
+// Lowercase only: "B2c3" is a rank-disambiguated bishop move, not coordinates.
+const UCI_RE = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
+// A pawn reaching the last rank with no piece named: "e8", "dxe8", "e7e8".
+const PROMOTION_SAN_RE = /^(?:[a-h]x)?[a-h][18][+#]?$/;
+const PROMOTION_UCI_RE = /^[a-h][27][a-h][18]$/;
 
-/** Plays a move given either as SAN ("Nf3") or UCI ("g1f3"); null when illegal. */
-export function tryNotation(chess: Chess, notation: string): Move | null {
+/**
+ * Whether typed text is a promotion that leaves the piece out ("e8", "dxe1",
+ * "e7e8"). Such a move needs "=Q", "=R", "=B" or "=N" unless auto-queen is on.
+ */
+export function isPromotionShorthand(notation: string): boolean {
   const trimmed = notation.trim();
-  if (UCI_RE.test(trimmed)) return tryMove(chess, parseUci(trimmed.toLowerCase()));
-  return tryMove(chess, trimmed);
+  return PROMOTION_SAN_RE.test(trimmed) || PROMOTION_UCI_RE.test(trimmed);
+}
+
+export interface TryNotationOptions {
+  /** Complete a promotion typed without a piece ("e8", "e7e8") as a queen. */
+  autoQueen?: boolean;
+}
+
+/**
+ * Plays a move typed by the user, as SAN ("Nf3", "exd8=Q", "O-O") or coordinates
+ * ("g1f3", "e7e8q"); null when illegal. Forgiving about case: "nf3", "a8=q" and
+ * "o-o" are read as the moves they mean, but a pawn move such as "b3" or "bxc3"
+ * is always tried first. With `autoQueen`, "e8" and "e7e8" promote to a queen.
+ */
+export function tryNotation(
+  chess: Chess,
+  notation: string,
+  options: TryNotationOptions = {},
+): Move | null {
+  const trimmed = notation.trim();
+  if (UCI_RE.test(trimmed)) {
+    const input = parseUci(trimmed);
+    if (!input.promotion && options.autoQueen && isPromotionMove(chess, input.from, input.to)) {
+      return tryMove(chess, { ...input, promotion: 'q' });
+    }
+    return tryMove(chess, input);
+  }
+  const castled = trimmed
+    .replace(/^[oO0]-[oO0]-[oO0]/, 'O-O-O')
+    .replace(/^[oO0]-[oO0](?!-)/, 'O-O');
+  const promoted = castled.replace(
+    /=([qrbn])([+#]?)$/,
+    (_, p: string, s: string) => `=${p.toUpperCase()}${s}`,
+  );
+  const move = tryMove(chess, promoted);
+  if (move) return move;
+  // A lowercase piece letter: "nf3", "qxf7", "kd2", "bxc3" when no pawn can take on c3.
+  if (/^[kqrbn]/.test(promoted)) {
+    const upper = tryMove(chess, promoted.charAt(0).toUpperCase() + promoted.slice(1));
+    if (upper) return upper;
+  }
+  if (options.autoQueen && PROMOTION_SAN_RE.test(promoted)) {
+    return tryMove(chess, promoted.replace(/([a-h][18])([+#]?)$/, '$1=Q$2'));
+  }
+  return null;
 }
 
 export function sanToUci(fen: Fen, san: San): Uci | null {

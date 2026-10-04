@@ -1,3 +1,4 @@
+import { Chess } from 'chess.js';
 import type { MoveJudgement } from '@/components/chess/MoveList';
 import type { Fen, Uci } from '@/chess/types';
 import { cpToWinProbability, type Score } from '@/engine/uci';
@@ -44,8 +45,9 @@ export function coachVerdict(
   after: CoachEvaluation,
 ): CoachVerdict {
   const winBefore = winFor(before.score);
-  // `after` is scored for the opponent; the learner's chances are the complement.
-  const winAfter = 1 - winFor(after.score);
+  // `after` is scored for the opponent; the learner's chances are the complement. The engine prints
+  // no line for a mated position, so a missing score there is a win, not an unknown.
+  const winAfter = after.score === null && isCheckmated(after.fen) ? 1 : 1 - winFor(after.score);
   const loss = Math.max(0, winBefore - winAfter);
   const judgement: MoveJudgement = before.best === playedUci ? 'best' : judge(loss);
   const scoreAfter: Score | null = after.score
@@ -66,6 +68,14 @@ export function coachVerdict(
         })
       : null;
   return { judgement, loss, explanation, bestSan: explanation?.keyMove ?? null };
+}
+
+function isCheckmated(fen: Fen): boolean {
+  try {
+    return new Chess(fen).isCheckmate();
+  } catch {
+    return false;
+  }
 }
 
 /** Coach mode interrupts for mistakes and blunders, and for any missed or allowed mate. */

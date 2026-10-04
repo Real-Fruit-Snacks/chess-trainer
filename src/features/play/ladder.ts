@@ -30,14 +30,35 @@ export interface EngineLadder {
   complete: boolean;
 }
 
-/** Games that count: against the engine, from the initial position. */
+/** Games that count: ordinary games against the engine, from the initial position. */
 export function ladderGames(games: readonly GameRecord[]): GameRecord[] {
-  return games.filter((g) => !g.pgn.includes('[FEN "') && !g.pgn.includes('[SetUp "1"]'));
+  return games.filter(
+    (g) =>
+      (g.source === 'play' || g.source === 'ladder' || g.source === 'book') &&
+      !g.pgn.includes('[FEN "') &&
+      !g.pgn.includes('[SetUp "1"]'),
+  );
+}
+
+/** Describes a rung for assistive technology: level, name, status and the record there. */
+export function describeRung(rung: EngineRung): string {
+  const status =
+    rung.status === 'climbed' ? 'climbed' : rung.status === 'current' ? 'next to climb' : 'not yet';
+  const record =
+    rung.games === 0
+      ? 'no games yet'
+      : `${rung.wins} win${rung.wins === 1 ? '' : 's'}, ${rung.draws} draw${rung.draws === 1 ? '' : 's'}, ${rung.losses} loss${rung.losses === 1 ? '' : 'es'}`;
+  return `Level ${rung.level.id} · ${rung.level.name}: ${status}, ${record}`;
 }
 
 const SLIP_LOSSES = 3;
 
-export function buildEngineLadder(games: readonly GameRecord[]): EngineLadder {
+/**
+ * Builds the ladder from the recorded games (newest first). `knownHeight` is
+ * the highest level ever beaten as remembered by the progress store, so rungs
+ * climbed long ago survive the capped game list.
+ */
+export function buildEngineLadder(games: readonly GameRecord[], knownHeight = 0): EngineLadder {
   const counted = ladderGames(games);
   const rows = new Map<number, { games: number; wins: number; draws: number; losses: number }>();
   for (const level of ENGINE_LEVELS) rows.set(level.id, { games: 0, wins: 0, draws: 0, losses: 0 });
@@ -52,6 +73,7 @@ export function buildEngineLadder(games: readonly GameRecord[]): EngineLadder {
   }
   const height = Math.max(
     0,
+    Math.min(Math.floor(knownHeight) || 0, ENGINE_LEVELS.length),
     ...[...rows.entries()].filter(([, r]) => r.wins > 0).map(([id]) => id),
   );
   const top = ENGINE_LEVELS[ENGINE_LEVELS.length - 1] as EngineLevel;
@@ -60,7 +82,10 @@ export function buildEngineLadder(games: readonly GameRecord[]): EngineLadder {
   let reason: string;
   const nextRow = rows.get(next.id) ?? { games: 0, wins: 0, draws: 0, losses: 0 };
   // Three straight losses at the next rung: step down for a game to rebuild, then come back.
-  const recentAtNext = counted
+  // One game at the lower rung clears the slip, so only losses since then count.
+  const lowerPlayed = counted.findIndex((g) => g.level === next.id - 1);
+  const sinceLower = lowerPlayed === -1 ? counted : counted.slice(0, lowerPlayed);
+  const recentAtNext = sinceLower
     .filter((g) => g.level === next.id)
     .slice(0, SLIP_LOSSES)
     .map((g) => outcomeFor(g.result, g.color));
@@ -86,7 +111,7 @@ export function buildEngineLadder(games: readonly GameRecord[]): EngineLadder {
   const rungs: EngineRung[] = ENGINE_LEVELS.map((level) => {
     const row = rows.get(level.id) ?? { games: 0, wins: 0, draws: 0, losses: 0 };
     const status: RungStatus =
-      row.wins > 0 ? 'climbed' : level.id === next.id ? 'current' : 'above';
+      row.wins > 0 || level.id <= height ? 'climbed' : level.id === next.id ? 'current' : 'above';
     return { level, ...row, status };
   });
   return { rungs, height, next, reason, complete };

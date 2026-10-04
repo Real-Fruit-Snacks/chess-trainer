@@ -25,14 +25,26 @@
   margin-top: var(--space-3);
 }
 
-/* Engine ladder */
-.ladder__rungs {
+/* The hint or threat arrow in words: a live region that stays mounted and takes no room when empty. */
+.play__hint {
+  margin: var(--space-2) 0 0;
+}
+
+.play__hint:empty {
+  margin: 0;
+}
+
+/* Engine ladder (the Play card; the arcade's Odds Ladder has its own rung styles) */
+.engine-ladder__rungs {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.ladder__rung {
+.engine-ladder__rung {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -46,14 +58,14 @@
   background: var(--surface-2);
 }
 
-.ladder__rung--climbed {
+.engine-ladder__rung--climbed {
   background: var(--success-soft);
   border-color: var(--success);
   color: var(--success);
   font-weight: 600;
 }
 
-.ladder__rung--current {
+.engine-ladder__rung--current {
   border-color: var(--accent);
   color: var(--accent);
   font-weight: 600;

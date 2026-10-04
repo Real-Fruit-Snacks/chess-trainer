@@ -336,7 +336,7 @@ export const advancedLessons: Lesson[] = [
           moves: ['Ng5+'],
           reply: 'Kg8',
           success:
-            'Ng5+ — the king must go back (Kg6 and Kh6 lead to a quick mate or heavy losses).',
+            'Ng5+! Kg8 — the natural retreat, and the classic line this lesson follows, though it loses fastest. Kh6 walks into mate too, and Kg6, the toughest defence, still costs heavy material after Qd3+.',
           failure: 'Knight check on g5 is the follow-up.',
         },
       },
@@ -348,7 +348,7 @@ export const advancedLessons: Lesson[] = [
           prompt: 'Threaten mate.',
           moves: ['Qh5'],
           success:
-            'Qh5 threatens Qh7#. The only defence, Nf6, runs into exf6, when mate on h7 or h8 cannot be stopped without ruinous material loss.',
+            'Qh5 threatens Qh7#, and nothing saves Black any more: Nf6 is met by exf6, a rook move that frees f8 by Qxf7+, and mate follows within a few moves.',
           failure:
             'The queen wants to attack h7. Which square on the h-file does it reach in one move?',
         },

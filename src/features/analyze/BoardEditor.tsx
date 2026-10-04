@@ -6,6 +6,7 @@ import { START_FEN } from '@/chess/helpers';
 import type { Fen, LongColor } from '@/chess/types';
 import {
   availableCastling,
+  availableEnPassant,
   type EditorPosition,
   parseBoard,
   type Piece,
@@ -35,6 +36,10 @@ export function BoardEditor({
   const fen = useMemo(() => toFen(position), [position]);
   const error = useMemo(() => validatePosition(fen), [fen]);
   const allowed = useMemo(() => availableCastling(position.pieces), [position.pieces]);
+  const enPassantSquares = useMemo(
+    () => availableEnPassant(position.pieces, position.turn),
+    [position.pieces, position.turn],
+  );
 
   const update = (fn: (pieces: Map<Square, Piece>) => void) => {
     setPosition((prev) => {
@@ -194,11 +199,41 @@ export function BoardEditor({
             </label>
           ))}
         </fieldset>
+        {enPassantSquares.length > 0 ? (
+          <label className="small row" style={{ gap: 6 }}>
+            En passant possible on{' '}
+            <select
+              className="select analyze__mini"
+              value={
+                position.enPassant && enPassantSquares.includes(position.enPassant)
+                  ? position.enPassant
+                  : '-'
+              }
+              onChange={(e) =>
+                setPosition((p) => ({
+                  ...p,
+                  enPassant: e.target.value === '-' ? null : (e.target.value as Square),
+                }))
+              }
+              aria-label="En passant square"
+            >
+              <option value="-">no square</option>
+              {enPassantSquares.map((sq) => (
+                <option key={sq} value={sq}>
+                  {sq}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <div className="row">
           <Button size="sm" onClick={() => setPosition(parseBoard(START_FEN))}>
             Start position
           </Button>
-          <Button size="sm" onClick={() => setPosition((p) => ({ ...p, pieces: new Map() }))}>
+          <Button
+            size="sm"
+            onClick={() => setPosition((p) => ({ ...p, pieces: new Map(), enPassant: null }))}
+          >
             Clear board
           </Button>
           <Button

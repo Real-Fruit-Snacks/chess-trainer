@@ -1,6 +1,7 @@
-import { Button, Card, Segmented } from '@/components/ui';
+import { Card, Segmented, Switch } from '@/components/ui';
 import type { Fen, Uci } from '@/chess/types';
 import { type ExplorerDatabase, formatPercent } from '@/lib/explorer';
+import { displayOpeningName } from '@/lib/openings';
 import { useExplorer } from '@/lib/useExplorer';
 import { useSettings } from '@/store/settings';
 import './explorer.css';
@@ -8,7 +9,7 @@ import { San } from '@/chess/San';
 
 /**
  * Opening explorer card: what people play in the position and how it goes.
- * Off until the learner opts in (network), with a switch right on the card.
+ * Off until the learner opts in (network), with the switch right on the card.
  */
 export function ExplorerPanel({
   fen,
@@ -42,13 +43,13 @@ export function ExplorerPanel({
         ) : null}
       </div>
       {!enabled ? (
-        <div className="row row--between" style={{ marginTop: 8 }}>
-          <span className="small muted">
-            See what people play here and how it goes for them (Lichess data, uses the network).
-          </span>
-          <Button size="sm" onClick={() => update({ explorer: true })}>
-            Turn on
-          </Button>
+        <div style={{ marginTop: 8 }}>
+          <Switch
+            checked={false}
+            onChange={(next) => update({ explorer: next })}
+            label="Look up positions"
+            description="See what people play here and how it goes for them (Lichess data, uses the network). Also in Settings."
+          />
         </div>
       ) : state.status === 'loading' ? (
         <p className="small muted" style={{ margin: '6px 0 0' }} role="status">
@@ -56,7 +57,7 @@ export function ExplorerPanel({
         </p>
       ) : state.status === 'error' ? (
         <p className="small muted" style={{ margin: '6px 0 0' }} role="status">
-          Unavailable: {state.message}
+          {state.message}
         </p>
       ) : state.status === 'ready' ? (
         state.result.total === 0 ? (
@@ -68,7 +69,7 @@ export function ExplorerPanel({
           <>
             <p className="small muted" style={{ margin: '4px 0 8px' }}>
               {state.result.opening
-                ? `${state.result.opening.eco} ${state.result.opening.name} · `
+                ? `${state.result.opening.eco} ${displayOpeningName(state.result.opening.name)} · `
                 : ''}
               {state.result.total.toLocaleString()} games
             </p>
@@ -95,6 +96,10 @@ export function ExplorerPanel({
                           title={`${m.san}: ${formatPercent(m.score)} for the side to move`}
                         >
                           <San san={m.san} />
+                          {/* The score is otherwise only in the tooltip. */}
+                          <span className="sr-only">
+                            , scores {formatPercent(m.score)} for the side to move
+                          </span>
                         </button>
                       ) : (
                         <San san={m.san} className="mono" />
@@ -129,13 +134,14 @@ export function ExplorerPanel({
               </tbody>
             </table>
             {state.result.topGames.length > 0 ? (
-              <ul className="explorer__games-list">
+              <ul role="list" className="explorer__games-list">
                 {state.result.topGames.map((g) => (
                   <li key={g.id} className="small">
                     <a href={`https://lichess.org/${g.id}`} target="_blank" rel="noreferrer">
                       {g.white.name}
                       {g.white.rating ? ` (${g.white.rating})` : ''} – {g.black.name}
                       {g.black.rating ? ` (${g.black.rating})` : ''}
+                      <span className="sr-only"> (opens Lichess in a new tab)</span>
                     </a>
                     <span className="faint">
                       {' '}

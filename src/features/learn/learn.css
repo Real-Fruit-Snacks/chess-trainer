@@ -2,6 +2,15 @@
   margin-bottom: var(--space-6);
 }
 
+/* Once lesson positions are scheduled for recall, their card follows the summary closely. */
+.learn__summary:has(+ .learn__recall) {
+  margin-bottom: var(--space-4);
+}
+
+.learn__recall {
+  margin-bottom: var(--space-6);
+}
+
 .learn__level {
   margin-bottom: var(--space-6);
 }
@@ -113,6 +122,15 @@
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Focus lands here (and on the task prompt) when the step changes. */
+.lesson__step:focus,
+.lesson__task:focus {
+  outline-offset: 4px;
 }
 
 .lesson__stepdot {
@@ -197,8 +215,10 @@
   padding: var(--space-4);
 }
 
+/* A unit that comes later keeps full-contrast text (it can still be opened);
+   the dashed edge and the badge say it is not up yet. */
 .course__unit.is-locked {
-  opacity: 0.75;
+  border-style: dashed;
 }
 
 .course__unit-header {

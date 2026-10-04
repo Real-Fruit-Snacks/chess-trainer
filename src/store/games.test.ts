@@ -24,17 +24,56 @@ describe('games store', () => {
     expect(gameKey(make(1, 'https://lichess.org/x'))).toBe('https://lichess.org/x');
     expect(gameKey(make(1))).toMatch(/^pgn-/);
     expect(gameKey(make(1))).toBe(gameKey({ url: null, pgn: '1. e4  e5   1' }));
-    expect(useGames.getState().addGames([make(1), make(2)], 'pgn')).toBe(2);
-    expect(useGames.getState().addGames([make(1)], 'lichess')).toBe(0);
+    expect(useGames.getState().addGames([make(1), make(2)], 'pgn')).toEqual({
+      added: 2,
+      dropped: 0,
+    });
+    expect(useGames.getState().addGames([make(1)], 'lichess')).toEqual({ added: 0, dropped: 0 });
     expect(Object.keys(useGames.getState().games)).toHaveLength(2);
   });
 
-  it('caps the collection and keeps the newest', () => {
+  it('caps the collection, keeps the newest and says how many had to go', () => {
     const many = Array.from({ length: MAX_STORED_GAMES + 5 }, (_, i) => make(i));
-    useGames.getState().addGames(many, 'pgn');
+    expect(useGames.getState().addGames(many, 'pgn')).toEqual({
+      added: MAX_STORED_GAMES + 5,
+      dropped: 5,
+    });
     const games = sortedGames(useGames.getState().games);
     expect(games).toHaveLength(MAX_STORED_GAMES);
     expect(games[0]?.timestamp).toBe(MAX_STORED_GAMES + 4);
+  });
+
+  it('evicts unreviewed games before reviewed ones when the cap is reached', () => {
+    const review = {
+      accuracy: { white: 90, black: 80 },
+      counts: {
+        white: { inaccuracy: 0, mistake: 0, blunder: 0 },
+        black: { inaccuracy: 0, mistake: 0, blunder: 0 },
+      },
+      depth: 10,
+      at: 5,
+    };
+    // The oldest import of all is reviewed: it must survive the cap.
+    useGames.getState().addGames([make(0)], 'pgn');
+    useGames.getState().setReview(gameKey(make(0)), review);
+    const many = Array.from({ length: MAX_STORED_GAMES + 10 }, (_, i) => make(i + 1));
+    const result = useGames.getState().addGames(many, 'pgn');
+    expect(result.dropped).toBe(11);
+    expect(useGames.getState().games[gameKey(make(0))]?.review).not.toBeNull();
+    expect(Object.keys(useGames.getState().games)).toHaveLength(MAX_STORED_GAMES);
+  });
+
+  it('replaces the store from a backup part and clears the player on reset', () => {
+    useGames.getState().addGames([make(1)], 'pgn');
+    useGames.getState().setPlayer('me');
+    const game = useGames.getState().games[gameKey(make(1))];
+    useGames
+      .getState()
+      .replaceState({ games: { other: { ...game!, id: 'other' } }, player: 'you' });
+    expect(Object.keys(useGames.getState().games)).toEqual(['other']);
+    expect(useGames.getState().player).toBe('you');
+    useGames.getState().clear();
+    expect(useGames.getState()).toMatchObject({ games: {}, player: '' });
   });
 
   it('stores reviews and the player name', () => {

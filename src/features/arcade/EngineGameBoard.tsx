@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { MoveList } from '@/components/chess/MoveList';
@@ -6,7 +6,9 @@ import { PlayerBar } from '@/components/chess/PlayerBar';
 import { Button, Card } from '@/components/ui';
 import type { LongColor } from '@/chess/types';
 import type { UsePlayVsEngine } from '@/features/play/usePlayVsEngine';
+import { FocusToggle, GameExportButtons, ResignDialog } from './arcadeControls';
 import '@/features/play/play.css';
+import './arcade.css';
 
 /**
  * The board column of an arcade game played through `usePlayVsEngine`: player
@@ -78,39 +80,55 @@ export function EngineGameBoard({
   );
 }
 
-/** The move list with the usual buttons, for the side panel of an arcade game. */
+/**
+ * The move list with the usual buttons, for the side panel of an arcade game:
+ * Copy PGN and Analyze game (as on the Play page), focus mode, and Resign
+ * behind the arcade's one confirmation.
+ */
 export function GameMoves({
   play,
-  onResign,
+  resignNote,
   extra,
 }: {
   play: UsePlayVsEngine;
-  onResign?: () => void;
+  /** What resigning means here (defaults to "recorded as a loss"). */
+  resignNote?: ReactNode;
   extra?: ReactNode;
 }) {
   const { position } = play.game;
+  const [confirmResign, setConfirmResign] = useState(false);
   return (
     <Card>
       <MoveList
         moves={position.history}
         currentPly={position.history.length}
-        onSelectPly={() => undefined}
         startsWithBlack={play.startFen.split(' ')[1] === 'b'}
         startMoveNumber={Number(play.startFen.split(' ')[5] ?? 1)}
       />
-      <div className="row" style={{ marginTop: 12 }}>
+      <div className="row arcade__game-actions">
+        <GameExportButtons
+          pgn={play.pgn}
+          orientation={play.playerColor}
+          disabled={position.history.length === 0}
+        />
+        <FocusToggle />
         {extra}
-        {onResign ? (
-          <Button
-            size="sm"
-            variant="danger"
-            onClick={onResign}
-            disabled={!play.started || !!play.gameOver}
-          >
-            Resign
-          </Button>
-        ) : null}
+        <Button
+          size="sm"
+          variant="danger"
+          onClick={() => setConfirmResign(true)}
+          disabled={!play.started || !!play.gameOver}
+        >
+          Resign
+        </Button>
       </div>
+      <ResignDialog
+        open={confirmResign && play.started && !play.gameOver}
+        onClose={() => setConfirmResign(false)}
+        onConfirm={play.resign}
+      >
+        {resignNote}
+      </ResignDialog>
     </Card>
   );
 }

@@ -15,6 +15,7 @@ import {
   engineStarted,
   formatPoints,
   isFinished,
+  isPlayerTurn,
   nextBoard,
   paceSeconds,
   playerMove,
@@ -209,6 +210,26 @@ describe('clocks and flags', () => {
     // No clock: the level decides.
     expect(engineBudget(level, board, null, T0)).toEqual({});
   });
+
+  it('never asks for a search longer than half of what is left on the engine’s clock', () => {
+    const level = getLevel(8);
+    let state = playerMove(createSimul({ ...SETUP, levelId: 8 }, T0), 0, 'e2e4', T0).state;
+    const withEngineTime = (ms: number) => {
+      state = {
+        ...state,
+        boards: state.boards.map((b) =>
+          b.index === 0 && b.clock ? { ...b, clock: { ...b.clock, black: ms } } : b,
+        ),
+      };
+      return engineBudget(level, state.boards[0]!, timeControlOf(SETUP), T0).movetime ?? 0;
+    };
+    // 40 ms left: the 50 ms floor used to flag the engine by itself.
+    expect(withEngineTime(40)).toBe(20);
+    expect(withEngineTime(40)).toBeLessThan(40);
+    expect(withEngineTime(1)).toBeGreaterThanOrEqual(1);
+    // With time to spare the floor is the usual 50 ms.
+    expect(withEngineTime(160)).toBe(50);
+  });
 });
 
 describe('moving round the room', () => {
@@ -227,6 +248,31 @@ describe('moving round the room', () => {
     expect(nextBoard(state, 0)).toBe(2);
     expect(selectBoard(state, 3).active).toBe(3);
     expect(selectBoard(state, 9)).toBe(state);
+  });
+
+  it('stays on a board the player has just finished, so the mate can be seen', () => {
+    let state = createSimul({ ...SETUP, boards: 2, timeControlId: 'none' }, T0);
+    // Board 1: a quick mate for the player; the moves alternate with the engine's replies.
+    const script: [string, string][] = [
+      ['e2e4', 'e7e5'],
+      ['f1c4', 'b8c6'],
+      ['d1h5', 'g8f6'],
+    ];
+    for (const [mine, reply] of script) {
+      state = playerMove(state, 0, mine, T0).state;
+      state = engineReply(state, 0, reply, T0);
+    }
+    state = selectBoard(state, 0);
+    // Board 2 is waiting for a move, so an ordinary move would bring it up.
+    expect(isPlayerTurn(state.boards[1]!)).toBe(true);
+    const mate = playerMove(state, 0, 'h5f7', T0);
+    expect(mate.move?.san).toBe('Qxf7#');
+    expect(mate.state.boards[0]?.result).toEqual({
+      result: '1-0',
+      reason: 'checkmate',
+      verdict: 'win',
+    });
+    expect(mate.state.active).toBe(0);
   });
 
   it('auto-advance follows the same order', () => {

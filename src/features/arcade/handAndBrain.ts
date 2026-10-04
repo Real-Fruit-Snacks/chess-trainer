@@ -66,6 +66,15 @@ export function scoreToCp(score: Score | null | undefined): number {
 
 export type Grade = 'best' | 'good' | 'inaccuracy' | 'mistake' | 'blunder';
 
+/** A grade as a label. */
+export const GRADE_LABEL: Record<Grade, string> = {
+  best: 'Best',
+  good: 'Good',
+  inaccuracy: 'Inaccuracy',
+  mistake: 'Mistake',
+  blunder: 'Blunder',
+};
+
 /** How much the call gave away compared with the engine's best, in words. */
 export function gradeLoss(lossCp: number): Grade {
   if (lossCp <= 0) return 'best';
@@ -113,16 +122,45 @@ export function summarizeCalls(calls: readonly CallRecord[]): CallSummary {
   };
 }
 
+/** A resignation before this many calls is not scored (one good call and resign proves nothing). */
+export const MIN_SCORED_CALLS = 10;
+/** A game of this many calls counts in full; a shorter one counts in proportion. */
+export const FULL_WEIGHT_CALLS = 30;
+
+/**
+ * A game's score: the accuracy of your calls, times the engine level you
+ * played (1 to 8), times how much of a full game it was (all of it from
+ * FULL_WEIGHT_CALLS calls). Null when the game is not scored: resigned
+ * before MIN_SCORED_CALLS calls.
+ */
+export function handAndBrainScore({
+  accuracy,
+  calls,
+  levelId,
+  resigned,
+}: {
+  accuracy: number;
+  calls: number;
+  levelId: number;
+  resigned: boolean;
+}): number | null {
+  if (resigned && calls < MIN_SCORED_CALLS) return null;
+  const weight = Math.min(calls, FULL_WEIGHT_CALLS) / FULL_WEIGHT_CALLS;
+  return Math.round(accuracy * Math.max(1, levelId) * weight);
+}
+
+export const HAND_AND_BRAIN_SCORING = `Score: your accuracy × the engine level (1 to 8), in full from ${FULL_WEIGHT_CALLS} calls and in proportion for a shorter game. A game you resign before ${MIN_SCORED_CALLS} calls is not scored.`;
+
 export function describeCall(call: CallRecord, role: Role): string {
   const label = PIECE_LABEL[call.type];
   switch (call.grade) {
     case 'best':
       if (call.san !== call.bestSan) {
-        return `${call.san} is every bit as good as the engine's ${call.bestSan}.`;
+        return `${call.san} is every bit as good as the engine’s ${call.bestSan}.`;
       }
       return role === 'brain'
         ? `${label}: the engine agrees — ${call.san} was its move too.`
-        : `${call.san}: exactly the engine's move.`;
+        : `${call.san}: exactly the engine’s move.`;
     case 'good':
       return role === 'brain'
         ? `${label}: ${call.san} is nearly as good as the best, ${call.bestSan}.`

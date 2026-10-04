@@ -48,8 +48,8 @@ test.describe('notation', () => {
 
     await page.goto('/settings');
     await page
-      .getByRole('group', { name: 'Move notation' })
-      .getByRole('button', { name: 'Letters' })
+      .getByRole('radiogroup', { name: 'Move notation' })
+      .getByRole('radio', { name: 'Letters' })
       .click();
     await expect(page.getByTestId('notation-sample').locator('piece')).toHaveCount(0);
     await expect(page.getByTestId('notation-sample')).toContainText('2. Nf3 Nc6');
@@ -66,8 +66,8 @@ test.describe('colour scheme and board', () => {
     await seed(page);
     await page.goto('/settings');
     await page
-      .getByRole('group', { name: 'Colour scheme' })
-      .getByRole('button', { name: 'Black' })
+      .getByRole('radiogroup', { name: 'Colour scheme' })
+      .getByRole('radio', { name: 'Black' })
       .click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'black');
     await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#000000');
@@ -168,8 +168,8 @@ test.describe('drag feel', () => {
     // Tap only: the same drag moves nothing; two taps still do.
     await page.goto('/settings');
     await page
-      .getByRole('group', { name: 'Move pieces by' })
-      .getByRole('button', { name: 'Tap', exact: true })
+      .getByRole('radiogroup', { name: 'Move pieces by' })
+      .getByRole('radio', { name: 'Tap', exact: true })
       .click();
     await page.goto('/analyze');
     const board2 = await expectBoard(page);
@@ -197,7 +197,7 @@ test.describe('play', () => {
     await seed(page, { playFocus: true });
     await page.goto('/play');
     await expect(page.locator('header.shell__header')).toBeVisible();
-    await page.getByLabel('Strength').selectOption('1');
+    await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expectBoard(page);
     await expect(page.locator('header.shell__header')).toBeHidden();

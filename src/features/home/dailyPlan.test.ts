@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { localDateKey } from '@/lib/dates';
-import { buildDailyPlan } from './dailyPlan';
+import { buildDailyPlan, weakestTheme } from './dailyPlan';
 
 const now = new Date('2026-09-29T12:00:00').getTime();
 const today = localDateKey(new Date(now));
@@ -152,47 +152,142 @@ describe('buildDailyPlan', () => {
   });
 });
 
+const solve = (id: string, themes: string, outcome: 'solved' | 'failed', rated = false) => ({
+  id,
+  puzzleRating: 1200,
+  outcome,
+  hintUsed: false,
+  ratingBefore: 1200,
+  ratingAfter: rated ? (outcome === 'solved' ? 1208 : 1192) : 1200,
+  themes,
+  at: now - 100,
+  durationMs: 1000,
+});
+
 describe('adaptive plan', () => {
-  it('targets the weakest theme once the statistics show one', () => {
-    const themeStats = {
-      fork: { solved: 2, failed: 5 },
-      pin: { solved: 9, failed: 1 },
-      short: { solved: 0, failed: 20 }, // meta tag: ignored
-    };
+  // Overall 64% (45 of 70); fork is 25% over 20 attempts: well under 64 − 15.
+  const weakFork = {
+    fork: { solved: 5, failed: 15 },
+    pin: { solved: 40, failed: 10 },
+    short: { solved: 0, failed: 40 }, // meta tag: ignored
+  };
+
+  it('adds the weakest theme beside the rated puzzles once the statistics show one', () => {
     const plan = buildDailyPlan(
       progress({
-        themeStats,
+        themeStats: weakFork,
         attempts: [
-          {
-            id: 'q',
-            puzzleRating: 1200,
-            outcome: 'failed',
-            hintUsed: false,
-            ratingBefore: 1200,
-            ratingAfter: 1200,
-            themes: 'fork middlegame',
-            at: now - 100,
-            durationMs: 1000,
-          },
+          solve('a', 'fork middlegame', 'solved'),
+          solve('b', 'fork middlegame', 'failed'),
+          solve('c', 'fork', 'failed'),
         ],
       }),
       { cards: {}, custom: [] },
       now,
     );
-    const rated = plan.items.find((i) => i.id === 'rated');
-    expect(rated?.title).toBe('Solve 5 puzzles on Fork');
-    expect(rated?.to).toBe('/puzzles/themes?theme=fork');
-    expect(rated?.detail).toContain('29%');
-    expect(rated?.detail).toContain('1 of 5 today');
+    // The rated item stays: the rating is built from it.
+    expect(plan.items.find((i) => i.id === 'rated')?.title).toBe('Solve 5 rated puzzles');
+    const theme = plan.items.find((i) => i.id === 'weakTheme');
+    expect(theme?.title).toBe('Solve 5 puzzles on Fork');
+    expect(theme?.to).toBe('/puzzles/themes?theme=fork');
+    expect(theme?.detail).toContain('25% against 64% overall');
+    // Solves count, not attempts: one of the three fork puzzles today was solved.
+    expect(theme?.detail).toContain('1 of 5 solved today');
+    expect(theme?.done).toBe(false);
   });
 
-  it('keeps rated puzzles while every theme is fine', () => {
+  it('needs twenty attempts and a clear gap before calling a theme weak', () => {
+    const few = buildDailyPlan(
+      progress({ themeStats: { fork: { solved: 2, failed: 6 }, pin: { solved: 40, failed: 10 } } }),
+      { cards: {}, custom: [] },
+      now,
+    );
+    expect(few.items.some((i) => i.id === 'weakTheme')).toBe(false);
+    // 45% against 52% overall: below average, but within 15 points — rated puzzles pick
+    // positions around the rating, so everyone sits near the same rate.
+    const close = buildDailyPlan(
+      progress({
+        themeStats: { fork: { solved: 9, failed: 11 }, pin: { solved: 17, failed: 13 } },
+      }),
+      { cards: {}, custom: [] },
+      now,
+    );
+    expect(close.items.some((i) => i.id === 'weakTheme')).toBe(false);
+    expect(weakestTheme({ fork: { solved: 9, failed: 11 }, pin: { solved: 17, failed: 13 } })).toBe(
+      null,
+    );
+    expect(weakestTheme(weakFork)).toEqual({ tag: 'fork', accuracy: 25, expected: 64 });
+  });
+
+  it('counts rated solves, not rated attempts', () => {
+    const plan = buildDailyPlan(
+      progress({
+        attempts: [
+          solve('a', 'fork', 'solved', true),
+          solve('b', 'fork', 'failed', true),
+          solve('c', 'fork', 'failed', true),
+          solve('d', 'pin', 'solved', false), // unrated: not part of the rated target
+        ],
+      }),
+      { cards: {}, custom: [] },
+      now,
+    );
+    expect(plan.items.find((i) => i.id === 'rated')?.detail).toBe('1 of 5 today');
+  });
+
+  it('keeps rated puzzles alone while every theme is fine', () => {
     const plan = buildDailyPlan(
       progress({ themeStats: { fork: { solved: 9, failed: 1 } } }),
       { cards: {}, custom: [] },
       now,
     );
     expect(plan.items.find((i) => i.id === 'rated')?.title).toBe('Solve 5 rated puzzles');
+    expect(plan.items.some((i) => i.id === 'weakTheme')).toBe(false);
+  });
+
+  it('says what a missed daily puzzle means and marks capped estimates as "more than"', () => {
+    const reviews = Object.fromEntries(
+      Array.from({ length: 8 }, (_, i) => [
+        `m${i}`,
+        { id: `m${i}`, rating: 1300, themes: 'pin', step: 0, due: now - 1, lapses: 0, addedAt: 1 },
+      ]),
+    );
+    const plan = buildDailyPlan(
+      progress({ daily: { date: today, id: 'x', outcome: 'failed' }, puzzleReviews: reviews }),
+      { cards: {}, custom: [] },
+      now,
+    );
+    expect(plan.items.find((i) => i.id === 'daily')?.detail).toBe(
+      'Done — missed; a new puzzle tomorrow',
+    );
+    // Eight reviews at two minutes each is more than the ten minutes shown.
+    expect(plan.items.find((i) => i.id === 'review')).toMatchObject({
+      minutes: 10,
+      moreThan: true,
+    });
+  });
+
+  it('does not claim positions were remembered before any recall', () => {
+    const plan = buildDailyPlan(
+      progress({
+        lessonRecall: {
+          'forks:1': {
+            id: 'forks:1',
+            rating: 0,
+            themes: 'forks',
+            step: 1,
+            due: now + 86_400_000,
+            lapses: 0,
+            addedAt: now - 1000,
+          },
+        },
+      }),
+      { cards: {}, custom: [] },
+      now,
+    );
+    const recall = plan.items.find((i) => i.id === 'recall');
+    expect(recall?.detail).toBe('Nothing due today · 1 position scheduled');
+    expect(recall?.done).toBe(true);
   });
 
   it('rotates drills to the least recently done and lists recall when cards exist', () => {

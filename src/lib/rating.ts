@@ -31,7 +31,7 @@ export type StartingRatingId = (typeof STARTING_RATINGS)[number]['id'];
 export const DEFAULT_START_RATING = 1000;
 
 /** Rounds a rating for display ("1,247") using the site locale. */
-export function formatRating(rating: number, locale = 'en-US'): string {
+export function formatRating(rating: number, locale = 'en-GB'): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(rating);
 }
 

@@ -124,6 +124,12 @@
   margin-top: var(--space-4);
 }
 
+/* For a returning learner the day comes first, where the introduction used to be. */
+.home__today--first {
+  margin-top: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
 .home__plan {
   list-style: none;
   margin: 0;

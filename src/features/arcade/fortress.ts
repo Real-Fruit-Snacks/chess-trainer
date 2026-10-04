@@ -41,6 +41,31 @@ export function describeTier(tier: FortressTier): string {
   return tier === 1 ? 'A pawn or so down' : tier === 2 ? 'Clearly worse' : 'On the brink';
 }
 
-export function fortressScoreDetail(held: number, levelName: string): string {
-  return `Held ${held} position${held === 1 ? '' : 's'} against ${levelName}`;
+/** A run's score: every position held counts the attacker's level (1 to 8). */
+export function fortressScore(held: number, levelId: number): number {
+  return held * Math.max(1, levelId);
+}
+
+export const FORTRESS_SCORING =
+  'Every position held scores the engine level (1 to 8): three held against level 5 is 15.';
+
+export function fortressScoreDetail(held: number, levelId: number, levelName: string): string {
+  return `Held ${held} position${held === 1 ? '' : 's'} against Level ${levelId} · ${levelName}`;
+}
+
+/** Engine scores beyond this many centipawns are mates (see `scoreToCp`). */
+const MATE_CP = 9000;
+
+/**
+ * The evaluation for the scoreboard, from the defender's side: "+0.4",
+ * "−2.3", and a forced mate as "M3" (for you) or "−M3" (against you) rather
+ * than a number like 99.97.
+ */
+export function formatEval(cp: number): string {
+  const size = Math.abs(cp);
+  const sign = cp < 0 ? '−' : cp > 0 ? '+' : '';
+  if (size >= MATE_CP) return `${cp < 0 ? '−' : ''}M${Math.max(1, 10_000 - size)}`;
+  // Tenths rounded half up (toFixed alone turns 0.35 into "0.3").
+  const pawns = (Math.round(size / 10) / 10).toFixed(1);
+  return pawns === '0.0' ? '0.0' : `${sign}${pawns}`;
 }

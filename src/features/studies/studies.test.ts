@@ -39,6 +39,15 @@ describe('endgame studies', () => {
               () => probe.move(ply.reply as string),
               `${ply.reply} after ${san}`,
             ).not.toThrow();
+            // Branches converge: the next main-line move (hints show it) must be playable
+            // after every accepted alternative, or the solver gets stuck.
+            const following = study.line[index + 1];
+            if (following) {
+              expect(
+                () => probe.move(following.moves[0] as string),
+                `${following.moves[0]} after ${san} ${ply.reply}`,
+              ).not.toThrow();
+            }
           }
         }
         chess.move(ply.moves[0] as string);

@@ -110,7 +110,8 @@ export const advancedLessons6: Lesson[] = [
           hint: 'The rook goes to the seventh, threatening mate.',
           success:
             'Rf7 Re2 (Re1 Rg7 and the same story) and now the rook swings to the other wing — Rg7 — so that the checks from the black rook run out of squares.',
-          failure: 'Rf7! threatens Ra7 and Ra8#. The black rook must leave the back rank.',
+          failure:
+            'Rf7! threatens Ra7 followed by Ra8 mate. The black rook must leave the back rank.',
         },
       },
       {
@@ -137,13 +138,13 @@ export const advancedLessons6: Lesson[] = [
         orientation: 'black',
         shapes: ['e1e4', 'e4:red', 'f8:green'],
         task: {
-          prompt: 'Black to move: hold.',
+          prompt: 'Black to move: hold with a king move.',
           moves: ['Kf8', 'Kh8'],
           hint: 'A king move that keeps the pin and stays out of the corner mates.',
           success:
             'Kf8! (or Kh8) and White has nothing: Rh7 Ke8 and the king walks along the back rank while the rook keeps the pin. When the bishop moves, the black king returns to the centre.',
           failure:
-            'Kf8 or Kh8 — keep the pin on the e-file and stay away from the rook on the seventh.',
+            'Re2 or Re3 would keep the pin too, but most rook moves let go of it and some lose at once. The method is a king move: Kf8 (or Kh8), keeping the pin on the e-file and staying away from the rook on the seventh.',
         },
       },
       {
@@ -153,12 +154,13 @@ export const advancedLessons6: Lesson[] = [
         orientation: 'black',
         shapes: ['e1e4', 'e8:green'],
         task: {
-          prompt: 'Black to move: hold.',
+          prompt: 'Black to move: hold with a king move.',
           moves: ['Ke8', 'Kc8'],
           hint: 'Stay on the back rank; the pin does the work.',
           success:
             'Ke8! (Kc8 also holds) and the pin stays. White’s only try, moving the king, releases the black king to the centre and the draw is safe.',
-          failure: 'Ke8 (or Kc8) holds: the bishop stays pinned and the king cannot be mated.',
+          failure:
+            'Some rook moves hold and others lose at once; the method is simpler. Move the king: Ke8 (or Kc8) holds, the bishop stays pinned and the king cannot be mated.',
         },
       },
       {
@@ -419,7 +421,7 @@ export const advancedLessons6: Lesson[] = [
       },
       {
         title: 'The Tarrasch: open lines',
-        text: 'After 3.Nd2 c5 4.exd5 exd5 the centre opens and Black gets an isolated d-pawn — activity for a weakness (see the lesson on the isolated queen’s pawn). White blockades d4 and develops with Bd3, Bg5 and Nbd4. Pick a developing move that fits the plan.',
+        text: 'After 1.e4 e6 2.d4 d5 3.Nd2 c5 4.exd5 exd5 the centre opens and Black gets an isolated d-pawn — activity for a weakness (see the lesson on the isolated queen’s pawn). White blockades d4 and develops with Bd3, Bg5 and Nbd4. Pick a developing move that fits the plan.',
         fen: FR_TARRASCH,
         shapes: ['b5d3', 'c1g5:blue', 'd4:green'],
         task: {
@@ -464,14 +466,18 @@ export const advancedLessons6: Lesson[] = [
           reply: 'Rxc3',
           hint: 'The thematic sacrifice on c3.',
           success:
-            '...Rxc3! Rxc3 Nxe4 and the knight forks the rook and the bishop: Bd2 Nxc3 Bxc3 — Black has two pawns and a better structure for the exchange, and the white king is weak.',
+            '...Rxc3! Rxc3 Nxe4 and the knight forks the rook and the bishop: Bd2 Nxc3 Bxc3 — the exchange ' +
+            'is back and Black is a clean pawn up, with the better structure.',
           failure:
             '...Rxc3! Rxc3 Nxe4 regains the material with interest — the classic Sicilian sacrifice.',
         },
       },
       {
         title: 'Wreck the structure',
-        text: 'The same capture with a different purpose: after bxc3 White’s queenside pawns are doubled and isolated, and ...Nxe4 picks up a pawn as well. A rook is worth a knight, a pawn and a ruined structure.',
+        text:
+          'The same capture with a different purpose: the knight on c3 is the only defender of the bishop ' +
+          'on e4. After ...Rxc3 bxc3 the bishop hangs, and Black gets two minor pieces for the rook while ' +
+          'White’s pawns fall apart into islands.',
         fen: EX_STRUCTURE,
         orientation: 'black',
         shapes: ['c8c3', 'e4:red'],
@@ -481,9 +487,11 @@ export const advancedLessons6: Lesson[] = [
           reply: 'bxc3',
           hint: 'Take the knight and count the pawns afterwards.',
           success:
-            '...Rxc3 bxc3 Nxe4 and Black has a knight and a pawn for the rook, with the c-pawns doubled and the bishop pair. Structurally White is worse despite the material.',
+            '...Rxc3 bxc3 Nxe4 and Black has knight and bishop for the rook, with the bishop pair and ' +
+            'White’s pawns split into islands. Two minor pieces usually beat a rook in the middlegame.',
           failure:
-            '...Rxc3! bxc3 Nxe4 — a pawn, the structure and the initiative for the exchange.',
+            '...Rxc3! removes the only defender of the bishop on e4: bxc3 Nxe4 and Black has two pieces for ' +
+            'the rook.',
         },
       },
       {
@@ -511,14 +519,16 @@ export const advancedLessons6: Lesson[] = [
           moves: ['Rxf6'],
           hint: 'Take the pinned knight — what does the queen have to do?',
           success:
-            'Rxf6! Qxg6 Rxg6 and White has won a piece; ...gxf6 Qxf6 or ...Qxe... every recapture loses material. The exchange sacrifice was really a combination.',
+            'Rxf6! Qxg6 Rxg6 and White has won a piece. The g7 pawn is pinned, so ...gxf6 is not even legal, and the queen cannot guard f6 and g6 at once. The exchange sacrifice was really a combination.',
           failure:
             'Rxf6! — the knight is pinned against the queen’s duties. Every recapture loses.',
         },
       },
       {
         title: 'Simplify into a win',
-        text: 'In the endgame an exchange sacrifice can be a way to **simplify**: here ...Rxc3 followed by ...Ne4+ and ...Nxc3 wins the knight back with a fork, and Black ends up a pawn up in a minor-piece ending.',
+        text:
+          'In the endgame an exchange sacrifice can be a way to **simplify**: here ...Rxc3 followed by ' +
+          '...Ne4+ and ...Nxc3 wins the rook back with a fork, and Black is left a whole knight up.',
         fen: EX_ENDGAME,
         orientation: 'black',
         shapes: ['e3c3', 'f6e4:blue'],
@@ -528,8 +538,10 @@ export const advancedLessons6: Lesson[] = [
           reply: 'Rxc3',
           hint: 'A capture that sets up a knight fork.',
           success:
-            '...Rxc3! Rxc3 Ne4+ Ke3 Nxc3 — the fork wins the rook back, and the bishop-and-knight ending is a pawn up for Black.',
-          failure: '...Rxc3 Rxc3 Ne4+ and the fork on c3 regains everything with interest.',
+            '...Rxc3! Rxc3 Ne4+ Ke3 Nxc3 — the fork wins the rook back, and Black is a knight up in a ' +
+            'bishop-and-knight against bishop ending.',
+          failure:
+            '...Rxc3 Rxc3 Ne4+ and the fork on c3 regains the rook: Black comes out a knight up.',
         },
       },
       {
@@ -639,7 +651,8 @@ export const advancedLessons6: Lesson[] = [
           moves: ['Rdh1'],
           hint: 'Bring the second rook where the first one is.',
           success:
-            'Rdh1! and Rh8 is unstoppable: ...Rh8 Rxh8 Qxh8 Rxh8 Rxh8 and White is a queen up. The quiet doubling was the whole combination.',
+            'Rdh1! and Rh8 is unstoppable: ...Rh8 Rxh8 Qxh8 Rxh8 Rxh8 and White has the queen against a ' +
+            'rook, with Nxd7 to come. The quiet doubling was the whole combination.',
           failure: 'Rdh1! threatens Rh8. Black has no defence — the quiet move is the strong one.',
         },
       },

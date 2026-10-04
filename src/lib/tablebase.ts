@@ -1,9 +1,12 @@
 import type { Fen, San, Uci } from '@/chess/types';
+import { fetchWithTimeout, isTimeoutError, retryAfterSeconds } from './fetchWithTimeout';
 
 /**
  * Optional lookups against the Lichess Syzygy tablebase service for positions
  * with seven pieces or fewer. Off by default (settings.tablebase) because it
- * needs the network; every call is abortable and results are cached per EPD.
+ * needs the network; every call is abortable, times out, and results are
+ * cached per position including the halfmove clock (the 50-move categories
+ * depend on it).
  *
  * API: https://github.com/lichess-org/lila-tablebase
  */
@@ -169,14 +172,54 @@ export function normalizeTablebase(data: ApiResponse): TablebaseResult {
   };
 }
 
+/** Cache key: placement, side to move, castling, en passant and the halfmove clock (not the move number). */
+export function tablebaseCacheKey(fen: Fen): string {
+  const parts = fen.split(' ');
+  return `${parts.slice(0, 4).join(' ')} ${parts[4] ?? '0'}`;
+}
+
+/** Thrown with a message fit for the panel ("Tablebase unavailable: …"). */
+export class TablebaseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TablebaseError';
+  }
+}
+
+export const TABLEBASE_TIMEOUT_MS = 15_000;
+
 export async function lookupTablebase(fen: Fen, signal?: AbortSignal): Promise<TablebaseResult> {
-  const key = fen.split(' ').slice(0, 4).join(' ');
+  const key = tablebaseCacheKey(fen);
   const cached = cache.get(key);
   if (cached) return cached;
   const url = `${TABLEBASE_ENDPOINT}?fen=${encodeURIComponent(fen.replace(/ /g, '_'))}`;
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Tablebase request failed (HTTP ${res.status})`);
-  const result = normalizeTablebase((await res.json()) as ApiResponse);
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, { signal, timeoutMs: TABLEBASE_TIMEOUT_MS });
+  } catch (err) {
+    if (isTimeoutError(err)) throw new TablebaseError('the server took too long to answer');
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    throw new TablebaseError('could not reach the server — are you online?');
+  }
+  if (res.status === 429) {
+    const wait = retryAfterSeconds(res);
+    throw new TablebaseError(
+      wait ? `rate-limited, try again in ${wait} s` : 'rate-limited, try again in a minute',
+    );
+  }
+  if (!res.ok) throw new TablebaseError(`the server answered HTTP ${res.status}`);
+  let data: ApiResponse;
+  try {
+    data = (await res.json()) as ApiResponse;
+  } catch {
+    throw new TablebaseError('the server sent an unreadable answer');
+  }
+  const result = normalizeTablebase(data);
   cache.set(key, result);
   return result;
+}
+
+/** "mate in N" for a DTM in half-moves (the API counts plies; players count moves). */
+export function describeDtm(dtm: number): string {
+  return `mate in ${Math.ceil(Math.abs(dtm) / 2)}`;
 }

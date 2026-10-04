@@ -1,6 +1,6 @@
 import { Chess, type Move } from 'chess.js';
 import type { MoveJudgement } from '@/components/chess/MoveList';
-import { toUci } from '@/chess/helpers';
+import { START_FEN, toUci } from '@/chess/helpers';
 import type { Fen, Uci } from '@/chess/types';
 import type { EngineClient } from '@/engine/EngineClient';
 import { cpToWinProbability, type Score, scoreToWhiteCp } from '@/engine/uci';
@@ -78,6 +78,102 @@ export function judge(loss: number): MoveJudgement {
   return 'good';
 }
 
+const SEVERITY: Record<NonNullable<MoveJudgement>, number> = {
+  best: 0,
+  good: 0,
+  inaccuracy: 1,
+  mistake: 2,
+  blunder: 3,
+};
+
+/** The harsher of two judgements. */
+export function atLeast(judgement: MoveJudgement, floor: MoveJudgement): MoveJudgement {
+  return SEVERITY[floor ?? 'good'] > SEVERITY[judgement ?? 'good'] ? floor : judgement;
+}
+
+/**
+ * Win probability alone misses mates: taking the queen (+15) instead of mating
+ * in two is "good". Scores are from the mover's point of view before and after
+ * the move. Giving up a forced mate is at least an inaccuracy; allowing one
+ * from a position that was not already lost is at least a mistake.
+ */
+export function mateFloor(
+  judgement: MoveJudgement,
+  scoreBefore: Score | null,
+  scoreAfterForMover: Score | null,
+  /** The move itself delivered checkmate (there is no score after it). */
+  delivered = false,
+): MoveJudgement {
+  if (judgement === 'best' || delivered) return judgement;
+  const hadMate = scoreBefore?.type === 'mate' && scoreBefore.value > 0;
+  const keepsMate = scoreAfterForMover?.type === 'mate' && scoreAfterForMover.value > 0;
+  if (hadMate && !keepsMate) return atLeast(judgement, 'inaccuracy');
+  const wasLosing =
+    scoreBefore !== null &&
+    (scoreBefore.type === 'mate' ? scoreBefore.value < 0 : scoreBefore.value <= -300);
+  const allowsMate = scoreAfterForMover?.type === 'mate' && scoreAfterForMover.value < 0;
+  if (allowsMate && !wasLosing) return atLeast(judgement, 'mistake');
+  return judgement;
+}
+
+/** Depth to search a position with the mover's choice almost made for them. */
+export const FORCED_MOVE_DEPTH = 1;
+/** Depth used while the game is still in the opening book (first plies of a known line). */
+export const BOOK_DEPTH_CAP = 10;
+/** Plies from the standard start position treated as book for the depth cap. */
+export const BOOK_PLIES = 12;
+
+/**
+ * Adaptive depth: a position with one legal move needs no search to speak of,
+ * and the first book moves of a game from the normal start need less than the
+ * full depth. Everything else is searched at `depth`.
+ */
+export function depthFor(
+  depth: number,
+  position: { legalMoves: number; ply: number; fromStart: boolean },
+): number {
+  if (position.legalMoves <= 1) return Math.min(depth, FORCED_MOVE_DEPTH);
+  if (position.fromStart && position.ply < BOOK_PLIES) return Math.min(depth, BOOK_DEPTH_CAP);
+  return depth;
+}
+
+/**
+ * Runs one search, retrying once when it comes back stopped (another search
+ * interrupted it); a second stopped result is an error, not a review.
+ * `searchmoves` limits the search to those moves of the position.
+ */
+async function evaluate(
+  engine: EngineClient,
+  position: { startFen: Fen; moves: Uci[] },
+  depth: number,
+  signal: AbortSignal | undefined,
+  searchmoves?: Uci[],
+) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (signal?.aborted) throw new DOMException('Review cancelled', 'AbortError');
+    // The moves that led here, not just the position: the engine then sees repetitions.
+    const result = await engine.search({
+      fen: position.startFen,
+      moves: position.moves,
+      depth,
+      multipv: 1,
+      ...(searchmoves ? { searchmoves } : {}),
+    }).result;
+    if (!result.stopped) return result;
+  }
+  throw new Error('The engine was interrupted while reviewing the game.');
+}
+
+/** Win probability given away by the mover, from White's win probability before and after. */
+function moverLoss(moverIsWhite: boolean, winBefore: number, winAfter: number): number {
+  return moverIsWhite ? Math.max(0, winBefore - winAfter) : Math.max(0, winAfter - winBefore);
+}
+
+/** A score for the side to move, seen by the other side (the move just made). */
+function flipScore(score: Score | null): Score | null {
+  return score ? { type: score.type, value: -score.value } : null;
+}
+
 /**
  * Evaluates every position of a game at a fixed depth and classifies each move
  * by how much win probability it gave away compared with the engine's choice.
@@ -94,20 +190,43 @@ export async function reviewGame(
 ): Promise<ReviewSummary> {
   const depth = options.depth ?? 12;
   const total = moves.length + 1;
-  const evaluations: { win: number; score: Score | null; best: Uci | null; pv: Uci[] }[] = [];
+  const evaluations: {
+    win: number;
+    score: Score | null;
+    best: Uci | null;
+    pv: Uci[];
+    depth: number;
+  }[] = [];
+  /**
+   * The played move's own score, searched from the position before it at the same
+   * depth (mover's view), for moves the first pass flags. Two searches a ply apart
+   * can disagree by more than the move costs (the deeper one sees further), so a
+   * strong move can look like a slip; this one shares the best move's horizon.
+   */
+  const checked = new Map<number, Score>();
   const PV_PLIES = 6;
 
   const chess = new Chess(startFen);
+  const played: Uci[] = [];
   for (let ply = 0; ply <= moves.length; ply++) {
     if (options.signal?.aborted) throw new DOMException('Review cancelled', 'AbortError');
-    const fen = chess.fen();
     const moverIsWhite = chess.turn() === 'w';
 
     if (chess.isGameOver()) {
       const win = chess.isCheckmate() ? (moverIsWhite ? 0 : 1) : 0.5;
-      evaluations.push({ win, score: null, best: null, pv: [] });
+      evaluations.push({ win, score: null, best: null, pv: [], depth: 0 });
     } else {
-      const result = await engine.search({ fen, depth, multipv: 1 }).result;
+      const searchDepth = depthFor(depth, {
+        legalMoves: chess.moves().length,
+        ply,
+        fromStart: startFen === START_FEN,
+      });
+      const result = await evaluate(
+        engine,
+        { startFen, moves: [...played] },
+        searchDepth,
+        options.signal,
+      );
       const info = result.lines.get(1);
       const score = info?.score ?? null;
       const win = score ? cpToWinProbability(scoreToWhiteCp(score, moverIsWhite)) : 0.5;
@@ -116,11 +235,43 @@ export async function reviewGame(
         score,
         best: result.bestmove.move,
         pv: (info?.pv ?? []).slice(0, PV_PLIES),
+        depth: searchDepth,
       });
     }
+
+    // The move that led here: when it is not the engine's choice and looks like a slip,
+    // ask how good it is from the position before, at that position's depth.
+    const before = evaluations[ply - 1];
+    const after = evaluations[ply];
+    const last = played[ply - 1];
+    if (ply > 0 && before?.score && after && last && before.best !== last) {
+      const lastMoverIsWhite = !moverIsWhite;
+      const delivered = after.score === null && after.win === (lastMoverIsWhite ? 1 : 0);
+      const first = mateFloor(
+        judge(moverLoss(lastMoverIsWhite, before.win, after.win)),
+        before.score,
+        flipScore(after.score),
+        delivered,
+      );
+      if (first === 'inaccuracy' || first === 'mistake' || first === 'blunder') {
+        const result = await evaluate(
+          engine,
+          { startFen, moves: played.slice(0, ply - 1) },
+          before.depth,
+          options.signal,
+          [last],
+        );
+        const score = result.lines.get(1)?.score;
+        if (score) checked.set(ply - 1, score);
+      }
+    }
+
     options.onProgress?.(ply + 1, total);
     const move = moves[ply];
-    if (move) chess.move(move.san);
+    if (move) {
+      const done = chess.move(move.san);
+      played.push(toUci(done));
+    }
   }
 
   const reviewed: ReviewedMove[] = [];
@@ -137,11 +288,30 @@ export async function reviewGame(
     if (!before || !after) return;
     const mover = replay.turn() === 'w' ? 'white' : 'black';
     // Loss from the mover's point of view.
-    const loss =
-      mover === 'white' ? Math.max(0, before.win - after.win) : Math.max(0, after.win - before.win);
+    let loss = moverLoss(mover === 'white', before.win, after.win);
     const played = toUci(move);
     const isBest = before.best === played;
-    const judgement: MoveJudgement = isBest ? 'best' : judge(loss);
+    // The score after the move is reported for the side then to move: flip it to the mover's view.
+    const scoreAfter = flipScore(after.score);
+    // A flagged move searched again from the position before it: when that search, which shares
+    // the best move's horizon, finds the move costs less, it is judged by that.
+    let judgedAfter = scoreAfter;
+    const own = checked.get(i);
+    if (own) {
+      const ownLoss = moverLoss(
+        mover === 'white',
+        before.win,
+        cpToWinProbability(scoreToWhiteCp(own, mover === 'white')),
+      );
+      if (ownLoss < loss) {
+        loss = ownLoss;
+        judgedAfter = own;
+      }
+    }
+    const delivered = after.score === null && after.win === (mover === 'white' ? 1 : 0);
+    const judgement: MoveJudgement = isBest
+      ? 'best'
+      : mateFloor(judge(loss), before.score, judgedAfter, delivered);
     if (judgement === 'inaccuracy' || judgement === 'mistake' || judgement === 'blunder') {
       counts[mover][judgement]++;
     }
@@ -161,10 +331,6 @@ export async function reviewGame(
       }
     }
 
-    // The score after the move is reported for the side then to move: flip it to the mover's view.
-    const scoreAfter: Score | null = after.score
-      ? { type: after.score.type, value: -after.score.value }
-      : null;
     reviewed.push({
       ply: i + 1,
       san: move.san,

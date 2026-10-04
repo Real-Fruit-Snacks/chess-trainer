@@ -20,11 +20,17 @@ export interface EditorPosition {
   pieces: Map<Square, Piece>;
   turn: Color;
   castling: { K: boolean; Q: boolean; k: boolean; q: boolean };
+  /** Square a pawn may be captured on en passant, when the last move allows it. */
+  enPassant: Square | null;
+  /** Move counters carried over from the game the editor was opened from. */
+  halfmove: number;
+  fullmove: number;
 }
 
 /** Parses just the piece placement; tolerant of positions chess.js would reject. */
 export function parseBoard(fen: Fen): EditorPosition {
-  const [placement = '', turn = 'w', castling = '-'] = fen.split(' ');
+  const [placement = '', turn = 'w', castling = '-', ep = '-', half = '0', full = '1'] =
+    fen.split(' ');
   const pieces = new Map<Square, Piece>();
   const rows = placement.split('/');
   rows.forEach((row, rowIndex) => {
@@ -52,7 +58,31 @@ export function parseBoard(fen: Fen): EditorPosition {
       k: castling.includes('k'),
       q: castling.includes('q'),
     },
+    enPassant: /^[a-h][36]$/.test(ep) ? (ep as Square) : null,
+    halfmove: Number.isInteger(Number(half)) && Number(half) >= 0 ? Number(half) : 0,
+    fullmove: Number.isInteger(Number(full)) && Number(full) >= 1 ? Number(full) : 1,
   };
+}
+
+/**
+ * Squares an en passant capture could land on: the side to move must have a
+ * pawn able to take, and the enemy pawn must look as if it just moved two squares.
+ */
+export function availableEnPassant(pieces: Map<Square, Piece>, turn: Color): Square[] {
+  const out: Square[] = [];
+  const enemy: Color = turn === 'w' ? 'b' : 'w';
+  // White to move: a black pawn on x5 that came from x7, so x6 and x7 are empty.
+  const [pawnRank, target, origin, captureRank] = turn === 'w' ? [5, 6, 7, 5] : [4, 3, 2, 4];
+  FILES.forEach((file, i) => {
+    if (!has(pieces, `${file}${pawnRank}` as Square, enemy, 'p')) return;
+    if (pieces.has(`${file}${target}` as Square) || pieces.has(`${file}${origin}` as Square)) {
+      return;
+    }
+    const neighbours = [FILES[i - 1], FILES[i + 1]].filter((f): f is (typeof FILES)[number] => !!f);
+    if (!neighbours.some((f) => has(pieces, `${f}${captureRank}` as Square, turn, 'p'))) return;
+    out.push(`${file}${target}` as Square);
+  });
+  return out;
 }
 
 function has(pieces: Map<Square, Piece>, square: Square, color: Color, type: PieceSymbol): boolean {
@@ -95,11 +125,40 @@ export function toFen(position: EditorPosition): Fen {
     (['K', 'Q', 'k', 'q'] as const)
       .filter((right) => position.castling[right] && allowed[right])
       .join('') || '-';
-  return `${rows.join('/')} ${position.turn} ${castling} - 0 1`;
+  const ep =
+    position.enPassant &&
+    availableEnPassant(position.pieces, position.turn).includes(position.enPassant)
+      ? position.enPassant
+      : '-';
+  return `${rows.join('/')} ${position.turn} ${castling} ${ep} ${position.halfmove} ${position.fullmove}`;
+}
+
+/** Too many pawns, too many pieces, or more promoted pieces than pawns that could have promoted. */
+export function pieceCountError(pieces: Map<Square, Piece>): string | null {
+  const start: Record<PieceSymbol, number> = { k: 1, q: 1, r: 2, b: 2, n: 2, p: 8 };
+  for (const color of ['w', 'b'] as const) {
+    const counts: Record<PieceSymbol, number> = { k: 0, q: 0, r: 0, b: 0, n: 0, p: 0 };
+    for (const piece of pieces.values()) if (piece.color === color) counts[piece.type] += 1;
+    const side = color === 'w' ? 'White' : 'Black';
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    if (counts.p > 8) return `${side} has ${counts.p} pawns; eight is the most a side can have.`;
+    if (total > 16) return `${side} has ${total} pieces; sixteen is the most a side can have.`;
+    const promoted = (['q', 'r', 'b', 'n'] as const).reduce(
+      (sum, type) => sum + Math.max(0, counts[type] - start[type]),
+      0,
+    );
+    const missingPawns = 8 - counts.p;
+    if (promoted > missingPawns) {
+      return `${side} has ${promoted} promoted piece${promoted === 1 ? '' : 's'} but only ${missingPawns} pawn${missingPawns === 1 ? '' : 's'} missing.`;
+    }
+  }
+  return null;
 }
 
 /** Validates a FEN the way a human would expect, with a readable message. */
 export function validatePosition(fen: Fen): string | null {
+  const counts = pieceCountError(parseBoard(fen).pieces);
+  if (counts) return counts;
   const check = validateFen(fen);
   if (!check.ok) {
     const error = check.error ?? 'Invalid position';

@@ -41,9 +41,9 @@ const DANISH = fenAfter('1. e4 e5 2. d4 exd4 3. c3 dxc3 4. Bc4 cxb2 5. Bxb2');
 
 // Transitions into the endgame.
 const TRADE_INTO_PAWNS = '6k1/pp3ppp/2p5/8/4q3/2P2Q2/P4PKP/8 b - - 0 1';
-const FORCE_TRADE = '4r1k1/p4p1p/2p3p1/2Pp1b2/1P1Q1B2/2P5/4qPPP/5RK1 b - - 3 23';
-const FORCE_TRADE_2 = fenAfter('Bd3 Qxd3', FORCE_TRADE);
-const PIN_TRADE = '6k1/2p2p2/B5pp/2bQ4/8/2q3P1/P4PKP/8 w - - 0 28';
+const FORCE_TRADE = '5rk1/pp3ppp/2n5/8/1q6/3Q1P2/PP4PP/2R3K1 b - - 0 1';
+const FORCE_TRADE_2 = fenAfter('Qd4+ Qxd4', FORCE_TRADE);
+const PIN_TRADE = '3r2k1/p2b2pp/4q3/8/8/2NQ4/PP3PPP/3R2K1 w - - 0 1';
 const QUEENS_OFF = '8/8/6k1/1p1p1ppp/2q5/2PQ2PP/P3KP2/8 w - - 0 41';
 const OPPOSITE_TRAP = '8/5pk1/6p1/p1b4p/P1B1p3/6P1/5PKP/8 w - - 0 1';
 
@@ -98,7 +98,7 @@ export const intermediateLessons5: Lesson[] = [
           moves: ['Nd3'],
           hint: 'Head for f2 by the shortest route.',
           success:
-            'Nd3! Kg3 Ke2 h2 Nf2! and the knight guards h1: Kg2 Nh1! Kxh1 Kf1 with a bare king against a bare king. Every other move lets the pawn through.',
+            'Nd3! Kg3 Ke2 h2 Nf2! and the knight guards h1: Kg2 Nh1! Kxh1 Kf1 and Black is stalemated. Every other move lets the pawn through.',
           failure:
             'The pawn queens. Only Nd3, heading for f2 where the knight controls h1, holds the draw.',
         },
@@ -222,7 +222,7 @@ export const intermediateLessons5: Lesson[] = [
           moves: ['Kc5'],
           hint: 'Bring the king, and let the rook wait.',
           success:
-            'Kc5! c3 Kd4 c2 Kd3 and the pawn is lost: the king got there first. After Rb1+? Ka2 or Kc2 the king shields the pawn and it is a draw.',
+            'Kc5! c3 Kd4 c2 Kd3 and the pawn is lost: the king got there first. After Rb1+? Kc2! the king shields the pawn and it is a draw.',
           failure: 'A check here helps the defender. Kc5, marching to d4 and d3, wins the pawn.',
         },
       },
@@ -239,7 +239,7 @@ export const intermediateLessons5: Lesson[] = [
           moves: ['d3'],
           hint: 'The pawn or the king — which one gains a tempo?',
           success:
-            'd3! Kg1 d2 Rxd2 Kxd2 and the kings are alone. Kd3? blocks the pawn and White wins with Rd2+!, driving the king off and then taking the pawn.',
+            'd3! Kg1 d2 Rxd2 Kxd2 and the kings are alone. Kd3? blocks the pawn: Kg2 Ke3 Rh7 d3 Re7+ drives the king off and the pawn falls.',
           failure:
             'The pawn was the resource: d3! reaches d2, and White has to give the rook for it.',
         },
@@ -254,7 +254,7 @@ export const intermediateLessons5: Lesson[] = [
           moves: ['a2'],
           hint: 'Do not let the king get in the pawn’s way.',
           success:
-            'a2! Rb8 Ka3 Ra8+ Kb2 and the pawn queens, forcing Rxa1 Kxa1 — a dead draw. Ka5? or Kb5? loses the pawn to the rook and king.',
+            'a2! Rb8 Ka3 Ra8+ Kb2 and the pawn queens, so White has to give up the rook for it — a dead draw. Ka5? loses the pawn to the rook and king.',
           failure:
             'Only a2 holds. The king covers b2 and b1 from a3, and the rook must be given up for the queen.',
         },
@@ -292,8 +292,8 @@ export const intermediateLessons5: Lesson[] = [
       {
         title: 'A passer on the seventh is worth a piece',
         text:
-          'From a Lichess game. White’s d-pawn is on the sixth and only the e8 rook guards the queening square. Material is ' +
-          'equal, so the “obvious” move Qxe8 looks like a swap — but look at what happens after Qxe8 Qxe8.',
+          'From a Lichess game. White’s d-pawn is on the sixth and only the e8 rook guards the queening square. Black is ' +
+          'even a pawn up, so the “obvious” move Qxe8 looks like a mere swap — but look at what happens after Qxe8 Qxe8.',
         fen: PASSER_SEVENTH,
         shapes: ['e4e8', 'd6d7:blue'],
         task: {
@@ -379,15 +379,13 @@ export const intermediateLessons5: Lesson[] = [
       {
         title: 'Which piece is better?',
         text:
-          'Bishop and knight are worth about the same; the position decides which one is *better*:\n\n' +
-          '- The **bishop** wants an open board, pawns on both wings (it covers both sides at once) and enemy pawns ' +
-          'fixed on its colour to attack.\n' +
-          '- The **knight** wants a closed or blocked centre, an outpost it cannot be driven from, and play on one wing ' +
-          'where its short range does not matter.\n\n' +
-          'So the side with the bishop opens files and diagonals and keeps pawns on both wings; the side with the knight ' +
-          'keeps the position closed and looks for a stable square.\n\n' +
-          'Here the bishop is far stronger: pawns on both wings, an open board, and the c5 pawn cannot be attacked by ' +
-          'the knight without leaving the kingside to the white king.',
+          'Bishop and knight are worth about the same; the position decides which one is *better*:\n\n- The ' +
+          '**bishop** wants an open board, pawns on both wings (it covers both sides at once) and enemy pawns ' +
+          'fixed on its colour.\n- The **knight** wants a closed or blocked centre, an outpost it cannot be ' +
+          'driven from, and play on one wing, where its short range does not matter.\n\nSo the side with the ' +
+          'bishop opens the position and keeps pawns on both wings; the side with the knight keeps it closed ' +
+          'and looks for a stable square.\n\nHere the bishop is far stronger: pawns on both wings, an open board, ' +
+          'and the knight cannot attack the c5 pawn without leaving the kingside to the white king.',
         fen: BISHOP_BOTH_WINGS,
         shapes: ['f4c7:blue', 'f4h6:blue'],
       },
@@ -412,20 +410,23 @@ export const intermediateLessons5: Lesson[] = [
           moves: ['Kg2'],
           reply: 'Ng4',
           hint: 'Which squares does the knight have?',
-          success: 'Kg2! and the knight has only g4, where Nxg4 takes it. Play on.',
-          failure: 'Kg2! attacks the knight and covers f1 and g4: it cannot escape.',
+          success:
+            'Kg2! and the knight has only g4, where Nxg4 fxg4 trades it off — and the g4 pawn then falls to the king. Play on.',
+          failure:
+            'Kg2! attacks the knight and covers f1 and f3: it has only g4 left, where the e5 knight takes it.',
         },
       },
       {
         title: 'Take the knight',
-        text: 'The knight jumped to g4 — its only square.',
+        text: 'The knight jumped to g4 — its only square. Taking it is a trade, not a free piece, but the pawn that recaptures is lost: a won pawn ending.',
         fen: fenAfter('Kg2 Ng4', RIM_KNIGHT),
         task: {
           prompt: 'White to move.',
           moves: ['Nxg4'],
-          hint: 'Free piece.',
-          success: 'Nxg4 and White is a knight up with an easy endgame.',
-          failure: 'Just take it: Nxg4.',
+          hint: 'Trade the knights and count the pawns.',
+          success:
+            'Nxg4 fxg4 Kg3 and the g4 pawn cannot be defended: Kxg4 next, and White wins the pawn ending.',
+          failure: 'Just take it: Nxg4 fxg4 Kg3 wins the g4 pawn and the ending.',
         },
       },
       {
@@ -453,8 +454,9 @@ export const intermediateLessons5: Lesson[] = [
           prompt: 'White to move.',
           moves: ['hxg5'],
           hint: 'Recapture.',
-          success: 'hxg5 and White is a piece up.',
-          failure: 'hxg5 wins the bishop.',
+          success:
+            'hxg5 — a bishop for a pawn. Queen against rook and bishop, with the black pieces loose: a winning position.',
+          failure: 'hxg5 wins the bishop for a pawn.',
         },
       },
       {
@@ -502,7 +504,9 @@ export const intermediateLessons5: Lesson[] = [
           moves: ['Qb3'],
           hint: 'Aim at f7 with a second piece.',
           success:
-            'Qb3! attacks f7 and Black must find ...Qf6 or ...Qe7 while c3 stays alive for later (Nxc3 next). Two pawns down, White has every piece in play; Black has a bishop on a5 and a king in the centre.',
+            'Qb3! attacks f7 and Black must find ...Qf6 or ...Qe7 while c3 stays alive for later (Nxc3 ' +
+            'next). Three pawns down, White has every piece in play; Black has a bishop on a5 and a king in ' +
+            'the centre.',
           failure:
             'Nxc3 gives Black time to develop. Qb3, hitting f7, keeps the pressure — the pawn on c3 can wait.',
         },
@@ -579,7 +583,8 @@ export const intermediateLessons5: Lesson[] = [
           prompt: 'White to move.',
           moves: ['Qxc2'],
           hint: 'Simply take it.',
-          success: 'Qxc2 and White is a piece up with Black’s kingside ruined by the pawn on f6.',
+          success:
+            'Qxc2 and White has won a piece for a pawn, with Black’s kingside ruined by the pawn on f6.',
           failure: 'Qxc2 takes the pawn and ends the threats.',
         },
       },
@@ -597,9 +602,11 @@ export const intermediateLessons5: Lesson[] = [
           moves: ['d5'],
           hint: 'Return a pawn to open your own lines and trade a bishop.',
           success:
-            'd5! Bxd5 Nf6 Bxf7+ Kxf7 Qxd8 Bb4+ Qd2 Bxd2+ Nxd2 — queens and bishops come off and Black is a pawn up in a quiet ending. The initiative died with the trades.',
+            'd5! Bxd5 Nf6 Bxf7+ Kxf7 Qxd8 Bb4+ Qd2 Bxd2+ Nxd2 — queens and bishops come off, material is ' +
+            'level and Black has nothing to fear in the quiet ending. The initiative died with the trades.',
           failure:
-            'Holding on to both pawns keeps White’s bishops alive. d5! returns one pawn and forces exchanges that end the attack.',
+            'Holding on to both pawns keeps White’s bishops alive. d5! gives the material back and forces ' +
+            'exchanges that end the attack.',
         },
       },
     ],
@@ -646,61 +653,65 @@ export const intermediateLessons5: Lesson[] = [
       {
         title: 'Force the trade',
         text:
-          'From a Lichess game. Black is a piece up, but White’s queen and bishop are active. Black wants the queens off — ' +
-          'and there is a way to **force** it: put a piece where the queen must take it or lose her own.',
+          'Black is a knight up, but with the queens on the board White can still make threats against the king. ' +
+          'Black wants the queens off — and can **force** it: offer the trade *with check*, so that White has no ' +
+          'time to decline.',
         fen: FORCE_TRADE,
         orientation: 'black',
-        shapes: ['f5d3', 'e2d3:blue'],
+        shapes: ['b4d4', 'd4g1:blue', 'd4d3:red'],
         task: {
           prompt: 'Black to move: force the queen exchange.',
-          moves: ['Bd3'],
-          reply: 'Qxd3',
-          hint: 'Block the queen’s line with a piece she has to take.',
+          moves: ['Qd4+'],
+          reply: 'Qxd4',
+          hint: 'Find a protected square where your queen gives check and attacks the white queen.',
           success:
-            'Bd3! Qxd3 Qxd3 and the queens are off with Black still a piece ahead (declining with h4 loses the rook to Qxf1+). Play on.',
-          failure: 'Bd3! interposes on the queen’s only line; White must trade or lose the queen.',
+            'Qd4+! White has to take: after Kh1 or Kf1 the queen on d3 falls, and blocking with Qe3 only loses ' +
+            'more. Qxd4 Nxd4 and the queens are off with Black a knight ahead. Play on.',
+          failure:
+            'Qd4+! offers the trade with check, on a square the knight protects: White has no time to avoid it.',
         },
       },
       {
         title: 'Complete the trade',
-        text: 'White took the bishop — as intended.',
+        text: 'White took on d4 — as intended.',
         fen: FORCE_TRADE_2,
         orientation: 'black',
         task: {
           prompt: 'Black to move.',
-          moves: ['Qxd3'],
+          moves: ['Nxd4'],
           hint: 'Recapture.',
-          success: 'Qxd3 and the game is a technical win: a bishop for a pawn with no counterplay.',
-          failure: 'Qxd3 recaptures and leaves Black a piece up without queens.',
+          success: 'Nxd4 and the game is a technical win: a knight up with no counterplay.',
+          failure: 'Nxd4 recaptures and leaves Black a knight up without queens.',
         },
       },
       {
         title: 'Use a pin to trade',
         text:
-          'From a Lichess game. White is up material and the queens face each other on the long diagonal — but Black’s ' +
-          'queen is defended by the bishop on c5. Find the move that forces the exchange anyway.',
+          'White is two pawns up and would like the queens off — but a plain offer can be declined. Offer the trade ' +
+          'on a square where your queen **pins** the enemy queen against its king, and it cannot be refused.',
         fen: PIN_TRADE,
-        shapes: ['a6c4', 'c5:red'],
+        shapes: ['d3d5', 'd5g8:blue', 'e6:red'],
         task: {
           prompt: 'White to move: force the queens off.',
-          moves: ['Bc4'],
-          reply: 'Qxc4',
-          hint: 'Attack the queen with a piece that also covers the recapture.',
-          success: 'Bc4! Qxc4 Qxc4 and the queens are gone with White ahead. Play on.',
+          moves: ['Qd5'],
+          reply: 'Qxd5',
+          hint: 'Which square pins the queen on e6 to the king on g8 — and is protected twice?',
+          success:
+            'Qd5! pins the queen to g8: it may only move along the diagonal, so whatever Black does the queens come off — Qxd5 now, or Qxe6+ next move. White stays two pawns up. Play on.',
           failure:
-            'Bc4! attacks the queen; after Qxc4 Qxc4 White keeps the extra material without any counterplay.',
+            'Qd5! pins the queen against the king; after Qxd5 White recaptures and keeps the extra pawns without any counterplay.',
         },
       },
       {
         title: 'Recapture',
-        text: 'The queen took on c4.',
-        fen: fenAfter('Bc4 Qxc4', PIN_TRADE),
+        text: 'The queen took on d5.',
+        fen: fenAfter('Qd5 Qxd5', PIN_TRADE),
         task: {
           prompt: 'White to move.',
-          moves: ['Qxc4'],
+          moves: ['Nxd5', 'Rxd5'],
           hint: 'Take back.',
-          success: 'Qxc4 — and Black has nothing left to attack with.',
-          failure: 'Qxc4 completes the exchange.',
+          success: 'Recaptured — and Black has nothing left to attack with.',
+          failure: 'Nxd5 or Rxd5 completes the exchange.',
         },
       },
       {

@@ -1,4 +1,3 @@
-import { DAY_MS } from '@/lib/srs';
 import type { ProgressState } from '@/store/progress';
 
 export interface WeekFigures {
@@ -19,7 +18,17 @@ export interface WeeklySummary {
   lastWeek: WeekFigures;
 }
 
-const WEEK_MS = 7 * DAY_MS;
+/** Local midnight `days` calendar days after the day of `t` (negative: before). */
+function midnight(t: number, days = 0): number {
+  const date = new Date(t);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days).getTime();
+}
+
+/** Local midnight of a YYYY-MM-DD day key. */
+function dayStart(day: string): number {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1).getTime();
+}
 
 function figures(
   progress: Pick<
@@ -38,10 +47,10 @@ function figures(
   const drills = Object.values(progress.drills).filter(
     (d) => d.lastAt >= from && d.lastAt < to,
   ).length;
-  const trainingDays = progress.trainingDays.filter((day) => {
-    const [y, m, d] = day.split('-').map(Number);
-    const t = new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1).getTime();
-    return t >= from - DAY_MS && t < to;
+  // Calendar days that start inside the window: seven at most.
+  const trainingDays = [...new Set(progress.trainingDays)].filter((day) => {
+    const t = dayStart(day);
+    return t >= from && t < to;
   }).length;
   const inWindow = progress.ratingHistory.filter((p) => p.at >= from && p.at < to);
   const before = [...progress.ratingHistory].reverse().find((p) => p.at < from);
@@ -60,13 +69,19 @@ function figures(
   };
 }
 
-/** The last seven days against the seven before them. */
+/**
+ * The last seven calendar days (today and the six before it) against the seven
+ * days before them. Both windows start at local midnight, so each holds exactly
+ * seven training days at most.
+ */
 export function weeklySummary(
   progress: Parameters<typeof figures>[0],
   now = Date.now(),
 ): WeeklySummary {
+  const thisStart = midnight(now, -6);
+  const lastStart = midnight(now, -13);
   return {
-    thisWeek: figures(progress, now - WEEK_MS, now + 1),
-    lastWeek: figures(progress, now - 2 * WEEK_MS, now - WEEK_MS),
+    thisWeek: figures(progress, thisStart, midnight(now, 1)),
+    lastWeek: figures(progress, lastStart, thisStart),
   };
 }

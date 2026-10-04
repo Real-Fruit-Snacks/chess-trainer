@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { EngineLines, EngineStatus } from '@/components/chess/EngineLines';
@@ -12,6 +12,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   Dialog,
   LinkButton,
   ProgressBar,
@@ -20,11 +21,13 @@ import {
 } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import type { LongColor } from '@/chess/types';
-import { buildShareFragment, parseShareFragment } from '@/lib/shareLink';
-import { describeCategory, type TablebaseCategory } from '@/lib/tablebase';
+import { buildShareFragment, readShareFragment, SHARE_LINK_WARN_CHARS } from '@/lib/shareLink';
+import { describeCategory, describeDtm, type TablebaseCategory } from '@/lib/tablebase';
+import { safeSourceUrl } from '@/lib/gameImport';
+import { displayOpeningName } from '@/lib/openings';
 import { siteConfig } from '@/site.config';
 import { type ReviewDepth, useSettings } from '@/store/settings';
-import { HANDOFF_PGN_KEY } from '@/lib/handoff';
+import { clearHandoff, readHandoff } from '@/lib/handoff';
 import {
   gameTitle,
   type MainLine,
@@ -36,6 +39,7 @@ import { useProgress } from '@/store/progress';
 import { BoardEditor } from './BoardEditor';
 import { ImportPanel } from './ImportPanel';
 import { LibraryDialog, SaveAnalysisDialog } from './LibraryDialog';
+import type { SavedAnalysis } from '@/store/analyses';
 import { ExplorerPanel } from '@/components/chess/ExplorerPanel';
 import { PositionReportCard } from './PositionReportCard';
 import type { DrawShape } from '@/components/board/Board';
@@ -50,6 +54,7 @@ import { useAnalysis } from './useAnalysis';
 import './analyze.css';
 import { Icon } from '@/components/ui';
 import { Notated, San } from '@/chess/San';
+import { characterShortcutsOn } from '@/lib/shortcutKey';
 
 const GLYPH_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: '–' },
@@ -83,6 +88,11 @@ export default function AnalyzePage() {
   const [commentDraft, setCommentDraft] = useState<string | null>(null);
   const [repertoireOpen, setRepertoireOpen] = useState(false);
   const [reportShapes, setReportShapes] = useState<DrawShape[]>([]);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState<SavedAnalysis | null>(null);
+  /** The library entry the board was opened from, so "Save" can update it instead of duplicating. */
+  const [openEntry, setOpenEntry] = useState<SavedAnalysis | null>(null);
+  const dialogsOpen = saveOpen || libraryOpen || editorOpen || repertoireOpen || confirmReset;
 
   useEffect(() => {
     document.title = `Analyze · ${siteConfig.name}`;
@@ -97,10 +107,13 @@ export default function AnalyzePage() {
       if (!analysis.loadFen(fen)) toast('That FEN could not be loaded.', { tone: 'warning' });
       else setOrientation(fen.split(' ')[1] === 'b' ? 'black' : 'white');
     } else if (from === 'game') {
-      const pgn = sessionStorage.getItem(HANDOFF_PGN_KEY);
-      if (pgn && analysis.loadPgn(pgn)) {
-        const playedBlack = pgn.includes('[Black "You"]');
-        setOrientation(playedBlack ? 'black' : 'white');
+      const handoff = readHandoff();
+      if (handoff && analysis.loadPgn(handoff.pgn)) {
+        setOrientation(handoff.orientation ?? 'white');
+        // Kept until now so a reload mid-way still found the game.
+        clearHandoff();
+      } else if (!handoff) {
+        toast('No game was handed over — play a game or import one.', { tone: 'info' });
       }
     } else if (pgnParam) {
       if (!analysis.loadPgn(pgnParam)) toast('That PGN could not be loaded.', { tone: 'warning' });
@@ -116,14 +129,22 @@ export default function AnalyzePage() {
     const fragment = location.hash;
     if (!fragment || fragment.length < 3) return;
     let cancelled = false;
-    void parseShareFragment(fragment).then((shared) => {
+    void readShareFragment(fragment).then((read) => {
       if (cancelled) return;
-      if (!shared) {
-        toast('That link does not contain a game.', { tone: 'warning' });
+      if (!read.ok) {
+        toast(
+          read.kind === 'unsupported'
+            ? 'This browser cannot open compressed links. Ask for the game as a PGN instead.'
+            : read.kind === 'too-large'
+              ? 'That link is too large to be a chess game.'
+              : 'That link does not contain a game.',
+          { tone: 'warning' },
+        );
         return;
       }
+      const shared = read.params;
       if (shared.pgn) {
-        if (!analysis.loadPgn(shared.pgn, shared.ply)) {
+        if (!analysis.loadPgn(shared.pgn, shared.ply, shared.line)) {
           toast('The game in that link could not be loaded.', { tone: 'warning' });
           return;
         }
@@ -143,18 +164,25 @@ export default function AnalyzePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per link
   }, [location.hash]);
 
-  // Keyboard navigation.
+  // Keyboard navigation. Letters are case-insensitive (Caps Lock), modified keys
+  // are left to the browser, and nothing fires from form fields, the board
+  // (which has its own keys) or while a dialog is open.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (
         target &&
-        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable ||
+          target.closest('[role="application"], dialog, [role="dialog"]'))
       ) {
         return;
       }
-      if (editorOpen) return;
-      switch (event.key) {
+      if (dialogsOpen || document.querySelector('dialog[open]')) return;
+      switch (event.key.length === 1 ? event.key.toLowerCase() : event.key) {
         case 'ArrowLeft':
           analysis.back();
           break;
@@ -168,6 +196,7 @@ export default function AnalyzePage() {
           analysis.goEnd();
           break;
         case 'f':
+          if (event.shiftKey || !characterShortcutsOn()) return;
           setOrientation((o) => (o === 'white' ? 'black' : 'white'));
           break;
         default:
@@ -177,15 +206,37 @@ export default function AnalyzePage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [analysis, editorOpen]);
+  }, [analysis, dialogsOpen]);
 
   const { viewed, current, tree } = analysis;
   const score = analysis.lines.get(1)?.score ?? null;
   const mainLine = useMemo(() => tree.mainLine(), [tree, analysis.version]); // eslint-disable-line react-hooks/exhaustive-deps
+  const line = useMemo<MainLine>(
+    () => ({
+      fens: [tree.startFen, ...mainLine.map((n) => n.fen)],
+      sans: mainLine.map((n) => n.san),
+    }),
+    [tree, mainLine],
+  );
   const hasMoves = mainLine.length > 0;
+  const hasContent = hasMoves || tree.root.children.length > 0 || !!tree.root.comment;
   const isMain = useMemo(() => tree.isMainLine(current), [tree, current]);
-  const reviewedCurrent =
-    isMain && current.ply > 0 ? analysis.review?.moves[current.ply - 1] : undefined;
+  // Guarded by SAN: after "Move up" the move at this ply may be a different one.
+  const reviewedCurrent = analysis.reviewFor(current);
+  const sourceUrl = safeSourceUrl(tree.headers.Site) ?? safeSourceUrl(tree.headers.Link);
+  const onHighlight = useCallback((shapes: DrawShape[]) => setReportShapes(shapes), []);
+  const reset = () => {
+    analysis.reset();
+    setOpenEntry(null);
+  };
+  const openFromLibrary = (entry: SavedAnalysis) => {
+    if (!analysis.loadPgn(entry.pgn)) {
+      toast('That analysis could not be loaded.', { tone: 'warning' });
+      return;
+    }
+    setOpenEntry(entry);
+    toast(`Opened “${entry.name}”.`, { tone: 'success' });
+  };
   const currentGlyph = current.nags.find((n) => n >= 1 && n <= 6) ?? 0;
   const siblings = current.parent?.children ?? [];
   const siblingIndex = siblings.indexOf(current);
@@ -203,10 +254,23 @@ export default function AnalyzePage() {
 
   const copyLink = async () => {
     const fragment = await buildShareFragment(
-      hasMoves ? { pgn: analysis.pgn(), ply: isMain ? current.ply : 0 } : { fen: viewed.fen },
+      hasMoves
+        ? {
+            pgn: analysis.pgn(),
+            ply: current.ply,
+            // Off the main line the ply is not enough: send the moves that lead here.
+            line: isMain ? undefined : analysis.path.map((n) => n.uci),
+          }
+        : { fen: viewed.fen },
     );
     const url = `${window.location.origin}${window.location.pathname}#${fragment}`;
     await copy(url, 'Link');
+    if (url.length > SHARE_LINK_WARN_CHARS) {
+      toast(
+        `This link is ${url.length.toLocaleString()} characters long — some apps cut links around 2,000. If it fails to open, share the PGN instead.`,
+        { tone: 'warning' },
+      );
+    }
   };
 
   const downloadPgn = () => {
@@ -225,10 +289,10 @@ export default function AnalyzePage() {
     <div>
       <div className="page-header page-header--lean row row--between">
         <div>
-          <h1>Analysis board</h1>
+          <h1>Analyze</h1>
           <p>
-            Set up any position, paste a game, explore variations, and let Stockfish show you the
-            best lines.
+            The analysis board: set up any position, paste a game, explore variations, and let
+            Stockfish show you the best lines.
           </p>
         </div>
         <div className="row">
@@ -241,12 +305,16 @@ export default function AnalyzePage() {
             disabled={!hasMoves}
             data-testid="save-analysis"
           >
-            Save
+            {openEntry ? `Update “${openEntry.name}”` : 'Save'}
           </Button>
           <Button onClick={() => setLibraryOpen(true)} data-testid="open-library">
             Library
           </Button>
-          <Button variant="ghost" onClick={analysis.reset}>
+          <Button
+            variant="ghost"
+            onClick={() => (hasContent ? setConfirmReset(true) : reset())}
+            data-testid="reset-board"
+          >
             Reset board
           </Button>
         </div>
@@ -306,9 +374,32 @@ export default function AnalyzePage() {
             </div>
           </div>
           <div className="analyze__under">
+            <div className="analyze__strip">
+              <TreeNavigation
+                canBack={current.parent !== null}
+                canForward={current.children.length > 0}
+                onStart={analysis.goStart}
+                onBack={analysis.back}
+                onForward={analysis.forward}
+                onEnd={analysis.goEnd}
+              />
+              <span className="analyze__strip-move small" aria-live="polite" aria-atomic="true">
+                {current.parent ? (
+                  <>
+                    {moveNumberLabel(current, tree.startFen)} <San san={current.san} />
+                    {!isMain ? <span className="faint"> · variation</span> : null}
+                  </>
+                ) : hasMoves ? (
+                  'Start position'
+                ) : (
+                  ''
+                )}
+              </span>
+            </div>
             {analysis.opening ? (
               <span className="analyze__opening" aria-live="polite">
-                <Badge tone="neutral">{analysis.opening.eco}</Badge> {analysis.opening.name}
+                <Badge tone="neutral">{analysis.opening.eco}</Badge>{' '}
+                {displayOpeningName(analysis.opening.name)}
               </span>
             ) : (
               <span className="analyze__opening muted small">
@@ -371,6 +462,7 @@ export default function AnalyzePage() {
                 depth={analysis.depthReached}
                 nps={analysis.nps}
                 thinking={analysis.thinking}
+                loading={analysis.engineStatus === 'idle' || analysis.engineStatus === 'loading'}
               />
             </div>
           </Card>
@@ -395,7 +487,7 @@ export default function AnalyzePage() {
                     <strong>{describeCategory(analysis.tablebase.result.category)}</strong> for{' '}
                     {viewed.turn}
                     {analysis.tablebase.result.dtm !== null
-                      ? ` · mate in ${Math.abs(analysis.tablebase.result.dtm)}`
+                      ? ` · ${describeDtm(analysis.tablebase.result.dtm)}`
                       : analysis.tablebase.result.dtz !== null &&
                           analysis.tablebase.result.category !== 'draw'
                         ? ` · DTZ ${Math.abs(analysis.tablebase.result.dtz)}`
@@ -408,7 +500,7 @@ export default function AnalyzePage() {
                         key={m.uci}
                         className={`tablebase__move tablebase__move--${categoryClass(m.outcome)}`}
                         onClick={() => analysis.playUci(m.uci)}
-                        title={`${describeCategory(m.outcome)}${m.dtm !== null ? `, mate in ${Math.abs(m.dtm)}` : m.dtz !== null ? `, DTZ ${Math.abs(m.dtz)}` : ''}`}
+                        title={`${describeCategory(m.outcome)}${m.dtm !== null ? `, ${describeDtm(m.dtm)} (DTM ${Math.abs(m.dtm)} half-moves)` : m.dtz !== null ? `, DTZ ${Math.abs(m.dtz)}` : ''}`}
                       >
                         <San san={m.san} />
                       </button>
@@ -421,17 +513,19 @@ export default function AnalyzePage() {
 
           <ExplorerPanel fen={viewed.fen} onPlay={analysis.playUci} />
 
-          <PositionReportCard fen={viewed.fen} onHighlight={setReportShapes} />
+          <PositionReportCard fen={viewed.fen} onHighlight={onHighlight} />
 
           <Card>
-            <TreeNavigation
-              canBack={current.parent !== null}
-              canForward={current.children.length > 0}
-              onStart={analysis.goStart}
-              onBack={analysis.back}
-              onForward={analysis.forward}
-              onEnd={analysis.goEnd}
-            />
+            <div className="analyze__panelnav">
+              <TreeNavigation
+                canBack={current.parent !== null}
+                canForward={current.children.length > 0}
+                onStart={analysis.goStart}
+                onBack={analysis.back}
+                onForward={analysis.forward}
+                onEnd={analysis.goEnd}
+              />
+            </div>
             <div style={{ marginTop: 8 }}>
               <TreeMoveList
                 tree={tree}
@@ -587,7 +681,7 @@ export default function AnalyzePage() {
                 to={`/play?fen=${encodeURIComponent(viewed.fen)}&color=${viewed.turn}`}
                 title="Play this position against the engine"
               >
-                Play from here
+                Play it out
               </LinkButton>
             </div>
           </Card>
@@ -619,6 +713,13 @@ export default function AnalyzePage() {
                     variant="primary"
                     onClick={analysis.startReview}
                     disabled={!hasMoves || analysis.engineStatus !== 'ready'}
+                    title={
+                      !hasMoves
+                        ? 'Play or import some moves first'
+                        : analysis.engineStatus !== 'ready'
+                          ? 'Waiting for the engine to load'
+                          : undefined
+                    }
                   >
                     {analysis.review ? 'Review again' : 'Review game'}
                   </Button>
@@ -659,12 +760,10 @@ export default function AnalyzePage() {
                   onSelect={analysis.goToPly}
                   startMoveNumber={Number(tree.startFen.split(' ')[5] ?? 1)}
                   startsWithBlack={tree.startFen.split(' ')[1] === 'b'}
-                  line={mainLineOf(tree)}
+                  line={line}
                   meta={{
                     title: gameTitle(tree.headers),
-                    url: /^https?:\/\//.test(tree.headers.Site ?? '')
-                      ? tree.headers.Site
-                      : undefined,
+                    url: sourceUrl ?? undefined,
                     rating: ownPuzzleRating,
                   }}
                 />
@@ -675,6 +774,11 @@ export default function AnalyzePage() {
                 Finds inaccuracies, mistakes and blunders along the main line and shows the better
                 move. Play a game against the engine, then hit <Link to="/play">Analyze game</Link>,
                 or paste a PGN above.
+                {hasMoves && analysis.engineStatus !== 'ready'
+                  ? analysis.engineStatus === 'error'
+                    ? ' The engine could not start, so the review is unavailable.'
+                    : ' The review starts once the engine has loaded.'
+                  : ''}
               </p>
             ) : null}
           </Card>
@@ -695,21 +799,45 @@ export default function AnalyzePage() {
           pgn={analysis.pgn()}
           startFen={tree.startFen}
           moves={Math.ceil(mainLine.length / 2)}
-          suggestedName={analysis.opening?.name ?? 'Analysis'}
-          onSaved={() => undefined}
+          suggestedName={
+            openEntry?.name ??
+            (analysis.opening ? displayOpeningName(analysis.opening.name) : 'Analysis')
+          }
+          existing={openEntry}
+          onSaved={setOpenEntry}
         />
       ) : null}
       <LibraryDialog
         open={libraryOpen}
         onClose={() => setLibraryOpen(false)}
         onOpen={(entry) => {
-          if (!analysis.loadPgn(entry.pgn)) {
-            toast('That analysis could not be loaded.', { tone: 'warning' });
-            return;
-          }
-          toast(`Opened “${entry.name}”.`, { tone: 'success' });
+          // Opening replaces the board: ask first when there is unsaved work on it.
+          if (hasContent && entry.id !== openEntry?.id) setPendingOpen(entry);
+          else openFromLibrary(entry);
         }}
       />
+      <ConfirmDialog
+        open={confirmReset}
+        title="Reset the board?"
+        confirmLabel="Reset board"
+        danger
+        onConfirm={reset}
+        onClose={() => setConfirmReset(false)}
+      >
+        The moves, variations and comments on the board are not saved anywhere. Use “Save” first to
+        keep them in the library.
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={pendingOpen !== null}
+        title={pendingOpen ? `Open “${pendingOpen.name}”?` : 'Open analysis?'}
+        confirmLabel="Open"
+        onConfirm={() => {
+          if (pendingOpen) openFromLibrary(pendingOpen);
+        }}
+        onClose={() => setPendingOpen(null)}
+      >
+        It replaces what is on the board now, which is not saved anywhere.
+      </ConfirmDialog>
       <Dialog open={editorOpen} onClose={() => setEditorOpen(false)} title="Board editor" wide>
         {editorOpen ? (
           <BoardEditor
@@ -730,13 +858,12 @@ export default function AnalyzePage() {
   );
 }
 
-/** The main line as positions and moves, for turning mistakes into puzzles. */
-function mainLineOf(tree: {
-  startFen: string;
-  mainLine: () => { fen: string; san: string }[];
-}): MainLine {
-  const nodes = tree.mainLine();
-  return { fens: [tree.startFen, ...nodes.map((n) => n.fen)], sans: nodes.map((n) => n.san) };
+/** "12." or "12…" for the move that leads to `node`. */
+function moveNumberLabel(node: { ply: number }, startFen: string): string {
+  const startsWithBlack = startFen.split(' ')[1] === 'b';
+  const startMoveNumber = Number(startFen.split(' ')[5] ?? 1);
+  const index = node.ply - 1 + (startsWithBlack ? 1 : 0);
+  return `${startMoveNumber + Math.floor(index / 2)}${index % 2 === 0 ? '.' : '…'}`;
 }
 
 function KeyMoments({
@@ -813,7 +940,7 @@ function KeyMoments({
           </Button>
         ) : null}
       </div>
-      <ol className="moments">
+      <ol role="list" className="moments">
         {moments.map((m) => {
           const moment = review.moves.find((r) => r.ply === m.ply);
           const puzzle = moment ? ownPuzzleFromMoment(line, moment, meta) : null;

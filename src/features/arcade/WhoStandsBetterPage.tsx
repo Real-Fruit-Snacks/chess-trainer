@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Board, type DrawShape } from '@/components/board/Board';
 import { Badge, Button, Card, Stat, LinkButton } from '@/components/ui';
 import { parseUci, uciToSan } from '@/chess/helpers';
+import { San } from '@/chess/San';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { describeGame, type EvalPosition, quietPositions, sideToMove } from './positions';
 import {
+  describeRoundBest,
   describeScale,
   type Judgement,
   judge,
   pickRound,
+  POINTS_PER_PAWN,
   ROUND_SIZE,
   SCALE_MAX,
   SCALE_STEP,
+  SPOT_ON,
   streakBonus,
   summarizeRound,
 } from './whoStandsBetter';
@@ -31,13 +35,31 @@ export default function WhoStandsBetterPage() {
   const [guess, setGuess] = useState(0);
   const [phase, setPhase] = useState<Phase>('intro');
   const [judgements, setJudgements] = useState<Judgement[]>([]);
+  /** The best score before this round (the store holds this round's the moment it ends). */
+  const [bestBefore, setBestBefore] = useState<number | null>(null);
   const recordedRef = useRef(false);
+  const sliderRef = useRef<HTMLInputElement>(null);
+  /** The rows whose first button takes the focus after a verdict and at the end. */
+  const nextRowRef = useRef<HTMLDivElement>(null);
+  const againRowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     document.title = `Who Stands Better? · ${siteConfig.name}`;
   }, []);
 
+  // The keyboard follows the round: the slider for a new position, the Next
+  // button once the verdict is in, Play again at the end (the button pressed
+  // before each of those has just disappeared).
+  useEffect(() => {
+    const firstButton = (row: HTMLDivElement | null) =>
+      row?.querySelector<HTMLButtonElement>('button')?.focus();
+    if (phase === 'guess') sliderRef.current?.focus();
+    else if (phase === 'reveal') firstButton(nextRowRef.current);
+    else if (phase === 'done') firstButton(againRowRef.current);
+  }, [phase, index]);
+
   const begin = () => {
+    setBestBefore(useProgress.getState().arcade['who-stands-better']?.best ?? null);
     setRound(pickRound(pool));
     setIndex(0);
     setGuess(0);
@@ -92,6 +114,7 @@ export default function WhoStandsBetterPage() {
         ]
       : [];
   const bestSan = position ? (uciToSan(position.fen, position.best) ?? position.best) : '';
+  const toMove = position ? sideToMove(position) : 'white';
 
   return (
     <div>
@@ -111,9 +134,10 @@ export default function WhoStandsBetterPage() {
         <Card className="arcade__summary" style={{ margin: '0 auto' }}>
           <h2>Ready?</h2>
           <p className="muted">
-            A round is {ROUND_SIZE} positions from a pool of {pool.length}. Say who is better and by
-            how much: closeness scores points, calling the wrong side better scores nothing, and a
-            run of close calls earns a streak bonus.
+            A round is {ROUND_SIZE} positions from a pool of {pool.length}, with White or Black to
+            move. Say who is better and by how much: within {SPOT_ON} of a pawn is spot on, every
+            pawn of error costs {POINTS_PER_PAWN} points, calling the wrong side better scores
+            nothing, and a run of close calls earns a streak bonus.
           </p>
           {best ? <p className="small muted">Best: {best.detail}</p> : null}
           <div className="row">
@@ -130,13 +154,11 @@ export default function WhoStandsBetterPage() {
             <Stat value={summary.spotOn} label="Spot on" />
             <Stat value={summary.wrongSide} label="Wrong side" />
           </div>
-          <p className="muted">
-            {best && best.best > summary.score
-              ? `Your best is ${best.best}.`
-              : 'A new best — or your first round.'}
+          <p className="muted" data-testid="wsb-best-line">
+            {describeRoundBest(summary.score, bestBefore)}
           </p>
-          <div className="row">
-            <Button variant="primary" onClick={begin}>
+          <div className="row" ref={againRowRef}>
+            <Button variant="primary" onClick={begin} data-testid="wsb-again">
               Play again
             </Button>
             <LinkButton to="/arcade">Arcade</LinkButton>
@@ -151,7 +173,7 @@ export default function WhoStandsBetterPage() {
                 orientation="white"
                 viewOnly
                 autoShapes={bestShape}
-                ariaLabel={`Position ${index + 1}, ${sideToMove(position)} to move`}
+                ariaLabel={`Position ${index + 1}, ${toMove} to move`}
               />
             </div>
           </div>
@@ -161,7 +183,15 @@ export default function WhoStandsBetterPage() {
                 <strong data-testid="wsb-progress">
                   Position {index + 1} of {round.length}
                 </strong>
-                <Badge>{sideToMove(position) === 'white' ? 'White' : 'Black'} to move</Badge>
+                <Badge tone={toMove === 'white' ? 'neutral' : 'info'}>
+                  <span
+                    className={`arcade__to-move arcade__to-move--${toMove}`}
+                    aria-hidden="true"
+                  />
+                  <span data-testid="wsb-to-move">
+                    {toMove === 'white' ? 'White' : 'Black'} to move
+                  </span>
+                </Badge>
               </div>
               <p className="small muted" style={{ margin: '4px 0 12px' }}>
                 {describeGame(position)} · move {Math.ceil(position.ply / 2)}
@@ -171,12 +201,14 @@ export default function WhoStandsBetterPage() {
               </label>
               <input
                 id="wsb-slider"
+                ref={sliderRef}
                 className="arcade__slider"
                 type="range"
                 min={-SCALE_MAX}
                 max={SCALE_MAX}
                 step={SCALE_STEP}
                 value={guess}
+                aria-valuetext={describeScale(guess)}
                 onChange={(e) => setGuess(Number(e.target.value))}
                 disabled={phase === 'reveal'}
                 data-testid="wsb-slider"
@@ -193,7 +225,7 @@ export default function WhoStandsBetterPage() {
                   </Button>
                 </div>
               ) : current ? (
-                <div data-testid="wsb-reveal">
+                <div data-testid="wsb-reveal" role="status">
                   <p className="arcade__verdict">
                     {current.verdict.charAt(0).toUpperCase() + current.verdict.slice(1)} ·{' '}
                     {current.points}
@@ -201,16 +233,22 @@ export default function WhoStandsBetterPage() {
                   </p>
                   <p className="small" style={{ margin: 0 }}>
                     The engine says: <strong>{describeScale(current.truth)}</strong> — its move
-                    would be <strong>{bestSan}</strong>.
+                    would be{' '}
+                    <strong>
+                      <San san={bestSan} />
+                    </strong>
+                    .
                   </p>
-                  <div className="row" style={{ marginTop: 12 }}>
-                    <Button variant="primary" onClick={next} data-testid="wsb-next">
-                      {index + 1 >= round.length ? 'See the score' : 'Next position'}
-                    </Button>
-                    <LinkButton size="sm" to={`/analyze?fen=${encodeURIComponent(position.fen)}`}>
-                      Analyze
-                    </LinkButton>
-                  </div>
+                </div>
+              ) : null}
+              {phase === 'reveal' ? (
+                <div className="row" style={{ marginTop: 12 }} ref={nextRowRef}>
+                  <Button variant="primary" onClick={next} data-testid="wsb-next">
+                    {index + 1 >= round.length ? 'See the score' : 'Next position'}
+                  </Button>
+                  <LinkButton size="sm" to={`/analyze?fen=${encodeURIComponent(position.fen)}`}>
+                    Analyze position
+                  </LinkButton>
                 </div>
               ) : null}
             </Card>

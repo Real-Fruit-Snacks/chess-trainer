@@ -6,6 +6,294 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-03
+
+A full audit of every mode, and what it put right: safer backups, chess and PGN fixes, a sounder
+coach and opening practice, analysis and review fixes, corrected lessons, puzzles that work offline
+band by band, arcade fixes, accessibility, PWA and platform hardening, licence files, a Content
+Security Policy, CI-gated deploys, reproducible builds and a start-up bundle 30 % smaller.
+
+### Added
+
+- **Data and backups**
+  - **Backups include My games** (export format 7): the imported games and their reviews now move
+    with you. With several profiles on a device, the file name carries the profile’s name.
+  - **Importing a backup asks first, and can be undone.** Settings shows what the file holds, offers
+    “Export current progress first” and, after the import, “Undo import”. A backup opened with the
+    installed app gets the same question instead of being imported at once.
+  - **Reset app data** on the crash page, behind a confirmation: when a damaged save keeps the app
+    from starting, everything it stored in this browser can be cleared and the app starts afresh.
+- **Single-key shortcuts** (_Settings → Play_): letter keys such as H for a hint can be turned off
+  for speech input and switch devices (WCAG 2.1.4); Enter, Space and the arrow keys keep working.
+- **Analyze:** move buttons right under the board on phones; an en passant square in the board
+  editor; “Load the moves before it” when a PGN has an illegal move.
+- **Learn:** a recall card on Learn and a recall link at the end of each lesson; “Back to course”
+  and “Next in course”; glossary entries for Glicko-2, RD, DTZ, DTM, tablebase and Woodpecker, and
+  glossary links to the exact lesson step.
+- **Board and drills:** castling by dropping the king on its own rook; typed answers in the
+  coordinates drill.
+- **Arcade:** Analyze game and Copy PGN in every arcade engine game, opening from your side; focus
+  mode in all of them; a board strip with Next under the Simul’s board on phones; the Daily Opening
+  result through the share sheet where there is one.
+- **App:** a monochrome manifest icon for themed launcher icons (Android 13+) and four screenshots
+  for the richer install dialog, kept out of the precache (`npm run screenshots` renders them);
+  reopening the installed app reuses its window.
+- **Licensing:** the footer credits Stockfish (GPL-3.0), Chessground (GPL-3.0), the Classic pieces
+  by Colin M.L. Burnett (CC BY-SA 3.0) and the Lichess puzzles and openings (CC0), and links to the
+  licence and the third-party notices, now shipped as `licence.txt` and `notices.txt`.
+- **Engineering, CI and docs**
+  - **Content workflow:** the engine checks every lesson task and scripted reply, every study
+    (unlisted moves included), every repertoire move and every drill position, in parallel jobs,
+    when the content or its checks change, weekly and on demand; drill checks moved there from every
+    CI run.
+  - **`npm run repertoires:verify`:** all 2,624 moves of the 16 repertoires pass at depth 14 (within
+    120 cp for the learner’s moves, 300 cp for the opponent’s).
+  - A **production base path** job tests a `/chess-trainer/` build behind `scripts/serve-dist.mjs`
+    (`npm run preview:pages`); **hidden source maps** stay off the site and are kept with each
+    deploy for 90 days, and crash reports name the commit.
+
+### Changed
+
+- **Data and backups**
+  - **Compatibility.** Backups of every earlier format still import, and saved data migrates by
+    itself: settings to version 4, progress to version 7, and the repertoire, games and analysis
+    stores now migrate instead of resetting.
+  - The backup date, the welcome tour and the Lichess and chess.com usernames belong to each profile
+    rather than the device; the unused puzzle-theme setting is gone.
+  - The backup reminder waits until there is something worth keeping (lessons, repertoire cards,
+    games or a run of rated puzzles), counts attempts, not “solved” puzzles, and “Later” snoozes it
+    for a week.
+  - Reviews due a day or more away come due at 04:00 local time on that day.
+  - An imported analysis library replaces the current one within its 500-entry cap; seen puzzles
+    keep the newest 20,000 and the review queue 500; the 200-game cap drops unreviewed games first
+    and says how many went; the storage meter says “about”, or uses the limit the test lab measured.
+- **Play and repertoires:** at most four engine threads on phones; grading a repertoire move also
+  grades its transpositions; sharing a repertoire uses the share sheet where there is one.
+- **Analyze and My games:** re-saving a library entry updates it, and the library warns near its
+  500-entry cap; game review searches forced moves and the first opening plies less deeply; Insights
+  show their sample sizes and grey out thin figures; games and repertoires are parsed once.
+- **Learn and Home:** lesson steps are at most 130 words; the space and pawn breaks lesson joined
+  the Club player course; locked course units keep full-contrast text; returning learners see
+  “Today” first; the Arcade card lists all nine games.
+- **Puzzles and drills**
+  - **Puzzles load only what they need:** the chunks in memory first, then a few more per band,
+    usually stopping after the first. The daily puzzle loads one chunk, and a puzzle opened from
+    Progress searches only bands near its rating.
+  - Puzzles from your own games accept any move the engine rates within 50 cp of the stored one.
+  - Shared Woodpecker sets are checked against the bundled puzzles, even on a slow connection, and
+    offered in a dialog; a link with under ten known puzzles is refused, and a missing puzzle is
+    skipped, not counted as solved.
+  - “Due” and “Redo missed puzzles” replace “Review”; each mode has its own tab title; an unknown
+    mode opens the Puzzles page; the vision drills’ “Recall” is “Guess”; drills, studies and
+    patterns show difficulty one way.
+- **Arcade**
+  - **Fairer scores:** Hand & Brain is accuracy × engine level × the share of a full game, with no
+    score for resigning before 10 calls; Fortress is positions held × level; Blindfold is (result +
+    peek bonus) × level, the bonus only for a win or a draw.
+  - Who Stands Better? positions come with either side to move (all had White to move); the side to
+    move is shown, and answers are scored in tenths of a pawn.
+  - Daily Opening, Engine Says, Who Stands Better? and Hand & Brain follow the notation setting.
+- **Settings, lab and sound**
+  - The strength setting reads “Engine level for the next game”; in tap mode the magnifier and drag
+    target are disabled with a hint; the sound-theme picker stays where the device can vibrate;
+    vibration is “available in this browser”; Escape cancels a profile rename, and duplicate names
+    are refused.
+  - The test lab shows preferences such as reduced motion as information rather than failures,
+    re-runs its checks when things change or on Refresh, and records the measured storage limit.
+  - Sound mixes with other audio rather than interrupting it, and sleeps after a minute of silence.
+- **Wording and consistency**
+  - **One confirmation dialog**, Cancel first, for everything that cannot be undone, from resigning
+    and giving up to deleting repertoire lines, library entries, puzzles or imported games and
+    resetting the board or the rating; the browser’s confirm boxes are gone.
+  - One name for each action (“Analyze position”, “Analyze game”, “Play it out”, “Copy link”,
+    “Engine level”, “Show the board”, “Play again” beside “New game”); Elo figures are a rough guide
+    everywhere; levels, colours and outcomes are shown as words.
+  - British spelling: “Defence” and “Centre” in opening names, curly apostrophes, dates such as
+    “3 Oct 2026”, the page language en-GB and “Practise” as the verb.
+  - One tagline, from the site configuration; the More menu’s groups are Train, Games and Tools on
+    every screen; the placement quiz highlights Learn; every not-found page looks the same.
+- **App, PWA and platform**
+  - **A smaller start.** The launch-file import, the lab clean-up, the audio warm-up and the
+    repertoire due count load only when needed: start-up code is 36 KB gzipped (51.5 KB in 0.11.0),
+    and its budget drops from 56 KB to 42 KB.
+  - The service worker answers only the app’s own routes, so a root deploy on `user.github.io`
+    leaves sibling sites alone, and it keeps the threaded-engine flag in memory.
+  - The light theme colour and the manifest background match the page; supported browsers are Chrome
+    and Edge 111+, Firefox 121+ and Safari 16.4+; `react-router` replaces `react-router-dom`.
+- **Engineering, CI and docs**
+  - **Deploys wait for CI:** the Pages deploy runs only after CI passes on `main`, and ships the
+    commit CI tested.
+  - **Reproducible builds:** the build date comes from `SOURCE_DATE_EPOCH` or the last commit, so a
+    rebuild is byte-identical and prompts no update; builds record their commit.
+  - CI skips the builds for documentation-only pull requests and caches the browsers and the
+    engine; a local `npm run e2e` needs only Chromium.
+  - Releases check `package.json` against the tag; the openings import reads a pinned commit; drill
+    verification loads the drills through Vite; minor dependency updates leave `npm audit` clean.
+  - DEPLOYMENT.md is rewritten, CONTRIBUTING.md says what CI runs, ARCHITECTURE.md has measured
+    sizes and SECURITY.md matches FEATURES.md; the changelog’s 0.8.0 section is restored and its
+    0.11.0 simul note corrected.
+
+### Fixed
+
+- **Data and backups**
+  - **A damaged backup can no longer break the app.** Every field is checked first, a bad part is
+    refused by name, damaged entries are dropped and all parts are replaced together or not at all;
+    a PGN is told it is not a backup.
+  - “Reset everything” also clears imported games and the threaded-engine flag, and lists what it
+    keeps; the rating reset is a confirmed button that keeps the history.
+  - Two tabs no longer overwrite each other; after a full disk every store saves again, with one
+    warning; profiles survive a full disk and refuse duplicate names; an unreadable save is copied
+    aside; newer data keeps its unknown fields; a broken rating or unknown setting is repaired; the
+    best streak can pass 400 days; Android’s text-typed `.json` files can be picked.
+- **Chess and PGN**
+  - PGN with glued move numbers (`1.e4 e5`) imports; `[%clk]`, `[%eval]`, `[%csl]` and `[%cal]` are
+    no longer shown as comments and survive export; a bad FEN header no longer crashes Analyze.
+  - Castling rights and en passant squares are checked against the pieces, so no phantom castling;
+    four-field FENs and EPDs are accepted; evaluation symbols and stray tokens no longer abort an
+    import; header-less games stay separate; comments before the first move or a variation survive.
+  - Typed moves accept `nf3`, `a8=q` and `B2c3`, and `e8` promotes to a queen when “Always promote
+    to a queen” is on (Analyze included); otherwise the input asks for the piece.
+- **Board:** boards no longer go dead after a cancelled promotion, nor the capture and check drills
+  after one move; the click-to-answer board and the Home hero board have the right square colours;
+  drawn arrows survive updates; the drag marker no longer sticks; the eval bar is blank until there
+  is a score and holds it between searches; nested variations no longer shrink; clocked games stop
+  re-rendering the board ten times a second.
+- **Play and coach**
+  - **The coach judges at full strength**, no longer calls checkmate a blunder and no longer
+    misjudges quick moves with a search cut short.
+  - Take back is disabled once the game is over (it recorded the game twice); alerts and the
+    promotion picker close at game over and no longer stack.
+  - **Handicap, arcade and Simul games no longer count as engine games** for the ladder, courses and
+    Progress: each game records where it was played.
+  - Arcade games leave the Play setup alone; keyboard entry keeps focus; blindfold pieces return at
+    game over; analysis opens from your side; weak levels stay weak on a short clock; the engine no
+    longer flags in long games; stale hints are dropped; a crashed engine offers Retry at the same
+    level; unplayable start positions are refused; the ladder clears slips and keeps climbed rungs.
+- **Opening practice and repertoires:** the book really favours the moves you know least; leaving it
+  twice at one move alerts twice; both clocks stop during the alert; hints follow the repertoire; a
+  forgotten move is no longer treated as new; misses are said to return in ten minutes; an
+  unreadable saved repertoire can be copied or deleted instead of crashing its page.
+- **Classics:** four hidden notes appear; wrong notes in the Evergreen Game, Steinitz–von Bardeleben
+  and Bernstein–Capablanca are corrected; a restart mid-judgement no longer plays a stray move.
+- **Analyze and game review**
+  - **Missed and allowed mates are flagged** and discovered attacks recognised; a flagged move is
+    searched again from the position before it, so Morphy’s 15.Bxd7+ is no longer an inaccuracy; the
+    engine sees repetitions; searches cut short are retried, not trusted.
+  - The tablebase’s “mate in N” counts moves, not half-moves, and its errors are in words; arrow
+    keys on the evaluation graph move one ply; “Move up” drops an outdated review, and deleting a
+    side variation keeps it; copied links keep the start position and variations, and long ones
+    warn; stale engine lines no longer linger.
+  - Variant games are skipped on import; the board editor keeps move counters and refuses impossible
+    material; page keys ignore menus, dialogs and modifier keys; king safety reads the right side’s
+    files; the explorer explains when it is offline and has a real switch; a loading engine and a
+    disabled “Review game” are explained.
+- **My games:** an engine failure stops “Review all” with one message, Stop stops the search and
+  Retry is offered; filters restart paging; chess.com pages read at most six archives; the
+  repertoire check handles uncovered Black games and transpositions.
+- **Learn and courses**
+  - **Three lessons taught losing lines** (“Trade the attacker”, “Trade the defender” and the
+    Philidor “textbook draw”) and are rebuilt; about twenty more wrong statements and every material
+    count that contradicted its diagram are corrected.
+  - Endgame tasks accept moves that are just as good, and failure texts no longer call sound moves
+    losing; two lessons that judged …Nh6 differently now agree.
+  - **Recall:** “Show answer” counts as a miss, and “Hint” shows its arrows before grading.
+  - Course checkpoints no longer re-lock; “Restart lesson” keeps the completion; the placement
+    result is followed; skipped tasks end in “End of lesson” with “Go to step N”; progress is kept
+    by step id; the placement quiz counts its questions right, matches its thresholds to their
+    labels, and “Open the course” finishes onboarding.
+- **Home and Progress:** puzzle figures cover your whole history, not the last 300 attempts; a weak
+  theme must trail your own accuracy by 15 points over 20 attempts and never replaces the daily
+  plan’s rated puzzles; the weekly summary covers seven days, not eight; strengths and weaknesses no
+  longer overlap; glossary and FAQ text is formatted and corrected; Reference fits phones.
+- **Puzzles**
+  - **Puzzles work offline band by band:** each band is dealt across its chunks by rating, so the
+    precached first chunk spans the whole band, and every mode plays from whatever has loaded.
+  - H and S ignore typed squares and Ctrl/Cmd+S and work in either case; “Show solution” no longer
+    auto-advances; a replayed daily puzzle keeps the first result; underpromotions ask for the
+    piece; by-opening cards train every opening listed.
+  - A correct rated solve never lowers the rating; Woodpecker misses stay out of the review queue;
+    the day streak is current; Rush’s clock pauses during downloads and Enter starts a run; on
+    phones the Rush timer and the coordinates prompt sit above the board; stopping the offline
+    download is no failure, and leaving Settings no longer stops it.
+  - The mode strip wraps on phones, theme links are bigger, and only rated mode asks for a rating.
+- **Drills, patterns and studies:** a promotion counts once the piece is safe; hold and capture
+  drills judge material after the reply; the two-rooks drill survives a lost rook; endgame drills
+  start from a random position; the hook-mate diagram has one mate; study solutions wait for your
+  move, and Replay starts clean.
+- **Arcade**
+  - **Odds Ladder** rungs are readable rows and draws count as played; **Engine Says** keeps the
+    score after a full line and works with a screen reader.
+  - **Simul:** leaving asks first and a reload resigns the boards in play; N keeps focus; a board
+    ended by your move stays in view; resigned boards stop their search; replies are announced one
+    by one; a stalled engine offers Retry.
+  - **Daily Opening** tiles pass contrast in dark and black, with glyphs, spoken labels and a
+    legend; answers match their entries; midnight no longer changes a game under way; played days
+    stay played; broken streaks are not shown.
+  - Hand & Brain’s status messages no longer swap; Fortress grades the last move before counting it
+    and asks before “Give up”; Blindfold hides captured material.
+- **Settings, lab and sound:** the lab’s storage fill is removed when you leave the lab and at the
+  next start; the threaded-engine switch shows “Reload now” only when needed, reverts when it cannot
+  be saved and tells a browser with no service worker so; no sound or vibration before your first
+  tap; overlapping sounds no longer clip, and sound resumes after a call.
+- **Accessibility**
+  - **Visible focus:** an opaque outline replaces a ring below 3:1, focus and controls show in
+    Windows High Contrast, and focused controls no longer hide under the header or the bottom bar.
+  - **Toasts are announced**, show their tone and appear above dialogs; typed squares no longer fire
+    page shortcuts; move announcements are right after jumps; boards explain their keys; view-only
+    boards describe their position; the promotion picker is modal.
+  - Dialogs have a close button, and a confirmation opened over one leaves it open; touch screen
+    readers find switches where they are drawn; segmented controls are radio groups; the More menu
+    is a disclosure; the click-to-answer board is one tab stop; lesson step dots are proper buttons;
+    hints belong to their fields; progress bars speak words, not byte counts.
+  - Text alternatives for captured material, hint arrows, ladder rungs, the weekly trend, Rush
+    strikes and the Army Draft budget; engine lines are announced once; read-only move lists are
+    text; the evaluation graph and the Who Stands Better? slider speak their values; drill results
+    are announced, and focus is kept after Next, drills, lesson steps and mode changes; the keyboard
+    cursor and the explorer bar have more contrast, and the eval bar is wider, with a border;
+    bottom-bar labels and the eval-bar score are 12 px; reduced motion is respected; the not-found
+    page has a heading.
+- **App, PWA and platform**
+  - **Pages open at the top** and Back restores your place; the skip link keeps share links intact.
+  - Large phones held sideways get the landscape layout; the colour scheme no longer flashes at
+    start; the layout respects iPhone safe areas and 320 px screens, where a button that does not
+    fit beside its text moves to a line of its own instead of spilling out of its card; iOS no
+    longer zooms text areas.
+  - “Reload now” works on a first visit and reloads only its own tab; runtime caches check what they
+    store and expire; the crash page confirms copying and explains an out-of-date app, and a crash
+    inside a page keeps the navigation; “Not now” on the install banner lasts 30 days, and the
+    installed app is recognised in every display mode; the shortcut list matches the pages; link
+    previews have an absolute image address and Open Graph and Twitter tags.
+- **Licensing and engineering:** `package.json` says GPL-3.0-or-later, not MIT; `setup-engine.mjs`
+  keeps `version.json` current; the scripts’ engine runner is safe in parallel and never hangs;
+  `npm run e2e:visual` runs on Windows.
+
+### Security
+
+- **Content Security Policy** in a meta tag on the built app: scripts only from the site,
+  connections only to the site and four Lichess and chess.com services; the service worker adds
+  `frame-ancestors 'none'`.
+- Share links are bounded (1 MiB expanded, 200 Woodpecker puzzles, 80-character names); browsers
+  without compression support are told they cannot open compressed links; source links from imports
+  must be https links to lichess.org or chess.com; the chess.com import fetches only the player’s
+  own archives; requests time out after 15 seconds and honour Retry-After; backups over 50 MB and
+  PGN files over 20 MB are refused unread.
+- GitHub Actions are pinned to commit SHAs and installs skip package scripts; SECURITY.md links
+  private vulnerability reporting.
+
+### Testing
+
+- Unit tests for every state-machine hook (the endgame drill game and Hand & Brain included), the
+  backup schema, the migrations, the PGN parser, the board, the service worker and the build
+  scripts; CI enforces a coverage floor, and a nightly run fails on flaky tests.
+- Nine end-to-end specs for this release, run on all four browser projects (Firefox and WebKit
+  included); the accessibility sweep adds the black scheme, fourteen parameterised routes and the
+  not-found page; the manifest’s icons and screenshots are checked at their stated sizes.
+- The compatibility test covers every backup format from 2 to 7 and older saved stores.
+- Lesson tests replay every quoted line and cap steps at 130 words, and no scripted reply may throw
+  away more than 300 cp.
+- End-to-end tests wait on the app’s own signals and on the board’s animations instead of fixed
+  timeouts.
+
 ## [0.11.0] - 2026-10-02
 
 A simul: several engines at once, each on its own board.
@@ -24,8 +312,9 @@ A simul: several engines at once, each on its own board.
   for the next board waiting for you; after each move the next waiting board comes up by itself
   (a switch turns that off). One engine answers the boards in the order they started waiting, and
   replies on a board you are not looking at are announced to screen readers.
-- Every finished board is saved to My games. The summary lists each board's result with an Analyze
-  button, and the score to beat counts each win by its board's level (1 to 8) and a draw by half.
+- Every finished board is recorded in the engine game log on Progress (the last 50 games against
+  the engine), not under My games. The summary lists each board's result with an Analyze button,
+  and the score to beat counts each win by its board's level (1 to 8) and a draw by half.
 
 ### Fixed
 
@@ -221,6 +510,16 @@ by this version keeps opening.
 - **Compatibility fixtures:** real backups from the 0.3, 0.5 and 0.7 export formats and share links
   from 0.4 and 0.6 are imported and decoded in the unit suite on every run.
 
+### Changed
+
+- While a page chunk loads, the loading screen is taller than the window, so the footer no longer
+  appears at the bottom and jumps away (Lighthouse's layout shift went from 0.12 to 0).
+- The install banner's "Not now" button no longer carries a label that contradicts its text.
+
+## [0.8.0] - 2026-10-01
+
+### Added
+
 - **Arcade.** Eight games that are not puzzles, each with a score to beat, under _More → Arcade_:
   - **Hand & Brain** — full-strength Stockfish as your partner. As the Brain you call a piece type and
     the partner plays its best move with that piece; as the Hand the partner names the piece of its best
@@ -273,9 +572,6 @@ by this version keeps opening.
 - The README is a project overview with screenshots; the full feature reference moved to
   `docs/FEATURES.md`, the scripts table to `CONTRIBUTING.md` and the branding notes to
   `docs/DEPLOYMENT.md`.
-- While a page chunk loads, the loading screen is taller than the window, so the footer no longer
-  appears at the bottom and jumps away (Lighthouse's layout shift went from 0.12 to 0).
-- The install banner's "Not now" button no longer carries a label that contradicts its text.
 
 ### Testing
 

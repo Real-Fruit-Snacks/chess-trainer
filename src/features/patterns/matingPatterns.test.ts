@@ -63,6 +63,22 @@ describe('mating patterns', () => {
     }
   });
 
+  it('mate-in-one diagrams have exactly one mating move, so the named mate is the answer', () => {
+    for (const pattern of MATING_PATTERNS) {
+      if (pattern.line.length !== 1) continue;
+      const chess = new Chess(patternDiagram(pattern));
+      const mates = chess.moves().filter((san) => {
+        chess.move(san);
+        const mate = chess.isCheckmate();
+        chess.undo();
+        return mate;
+      });
+      expect(mates, `${pattern.id}: mates in one are ${mates.join(', ')}`).toEqual([
+        pattern.line[0],
+      ]);
+    }
+  });
+
   it('become puzzles with the setup move first', () => {
     for (const pattern of MATING_PATTERNS) {
       const puzzle = patternPuzzle(pattern);

@@ -9,7 +9,9 @@
  * absolute beginner to master gets appropriate material. The output is a set
  * of small JSON chunks (500 puzzles each) the app loads on demand; the first
  * chunk of every bucket is precached for offline use, the rest are cached as
- * they are fetched (or all at once from Settings).
+ * they are fetched (or all at once from Settings). Puzzles are dealt over the
+ * chunks round-robin by rating, so every chunk covers the whole band, and the
+ * index records each chunk's rating span.
  *
  * Usage:
  *   node scripts/import-lichess-puzzles.mjs [options]
@@ -36,7 +38,13 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
-import { countPuzzle, emptyCounts, sortedCounts } from './lib/puzzle-index.mjs';
+import {
+  chunkRange,
+  countPuzzle,
+  dealChunks,
+  emptyCounts,
+  sortedCounts,
+} from './lib/puzzle-index.mjs';
 import { createZstdDecompress } from 'node:zlib';
 import { Chess } from 'chess.js';
 
@@ -45,7 +53,10 @@ const ROOT = join(__dirname, '..');
 
 const DEFAULT_SOURCE = 'https://database.lichess.org/lichess_db_puzzle.csv.zst';
 
-/** Rating bands. Keep in sync with src/features/puzzles/buckets.ts. */
+/**
+ * Rating bands. The app reads them from the generated index.json (it has no
+ * list of its own), so changing them here and re-importing is all it takes.
+ */
 export const BUCKETS = [
   { id: 'b0400', min: 0, max: 799, label: 'Beginner' },
   { id: 'b0800', min: 800, max: 1099, label: 'Novice' },
@@ -438,13 +449,12 @@ async function main() {
 
     for (const p of puzzles) countPuzzle(counts, p);
 
+    // Round-robin over the chunks, so the precached first chunk spans the whole band.
+    const chunks = dealChunks(puzzles, opts.chunk);
     const files = [];
-    for (let i = 0; i * opts.chunk < puzzles.length; i++) {
+    for (const [i, chunk] of chunks.entries()) {
       const file = `${bucket.id}-${String(i).padStart(2, '0')}.json`;
-      await writeFile(
-        join(opts.out, file),
-        JSON.stringify(puzzles.slice(i * opts.chunk, (i + 1) * opts.chunk)),
-      );
+      await writeFile(join(opts.out, file), JSON.stringify(chunk));
       files.push(file);
     }
     index.buckets.push({
@@ -454,6 +464,7 @@ async function main() {
       max: bucket.max,
       count: puzzles.length,
       files,
+      ranges: chunks.map(chunkRange),
     });
     index.total += puzzles.length;
     console.log(

@@ -144,9 +144,11 @@ export const COURSES: Course[] = [
       {
         id: 'thinking',
         title: 'Thinking and planning',
-        blurb: 'Plans, visualisation and the active king; then test it against the engine.',
+        blurb:
+          'Plans, pawn breaks, visualisation and the active king; then test it against the engine.',
         items: [
           lesson('planning-basics'),
+          lesson('space-and-pawn-breaks'),
           lesson('visualisation'),
           lesson('the-active-king'),
           { type: 'classic', id: 'opera-game', title: 'The Opera Game' },
@@ -259,12 +261,12 @@ export const COURSES: Course[] = [
       {
         id: 'structures',
         title: 'Pawn structures',
-        blurb: 'The structures that decide the plans: isolani, minority attack, space and breaks.',
+        blurb:
+          'The structures that decide the plans: the isolani, the minority attack, hanging pawns and the Maróczy Bind.',
         items: [
           lesson('pawn-structures'),
           lesson('isolated-queens-pawn'),
           lesson('minority-attack'),
-          lesson('space-and-pawn-breaks'),
           lesson('hanging-pawns-and-maroczy'),
         ],
       },

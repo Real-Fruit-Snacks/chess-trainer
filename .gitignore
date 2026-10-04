@@ -1,9 +1,10 @@
 # Dependencies
 node_modules/
 
-# Build output
+# Build output (source maps are moved out of dist/ by scripts/postbuild.mjs)
 dist/
 dev-dist/
+sourcemaps/
 coverage/
 *.tsbuildinfo
 
@@ -36,9 +37,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.log
-
-# Puzzle import scratch files
-scripts/.cache/
 
 # Lighthouse report written by `npm run lighthouse -- --json`
 lighthouse.json

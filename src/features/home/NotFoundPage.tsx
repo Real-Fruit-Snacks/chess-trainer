@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { EmptyState, LinkButton, Icon } from '@/components/ui';
+import { Link } from 'react-router';
+import { NotFound } from '@/components/ui';
 import { siteConfig } from '@/site.config';
 
 export default function NotFoundPage() {
@@ -8,14 +9,11 @@ export default function NotFoundPage() {
   }, []);
 
   return (
-    <EmptyState icon={<Icon name="knight" size={40} />} title="That square is off the board">
-      <p>The page you asked for does not exist.</p>
-      <div className="row" style={{ justifyContent: 'center' }}>
-        <LinkButton variant="primary" to="/">
-          Go home
-        </LinkButton>
-        <LinkButton to="/puzzles">Solve a puzzle instead</LinkButton>
-      </div>
-    </EmptyState>
+    <NotFound>
+      <p>
+        The page you asked for does not exist. Check the address, or{' '}
+        <Link to="/puzzles">solve a puzzle instead</Link>.
+      </p>
+    </NotFound>
   );
 }

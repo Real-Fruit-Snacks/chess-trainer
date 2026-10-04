@@ -1,19 +1,23 @@
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Field, Input, Segmented } from '@/components/ui';
-import { isValidFen } from '@/chess/helpers';
+import { isValidFen, sanitizeFen } from '@/chess/helpers';
 import type { Fen } from '@/chess/types';
 import {
   fetchChessComGames,
   fetchLichessGames,
   ImportError,
   type ImportedGame,
-  parsePgnGames,
+  parsePgnGamesDetailed,
+  type PgnImportError,
 } from '@/lib/gameImport';
 import { toast } from '@/components/ui/toastStore';
 import { studyChapters, useAnalyses } from '@/store/analyses';
-import { useSettings } from '@/store/settings';
+import { useProgress } from '@/store/progress';
 
 type Source = 'paste' | 'lichess' | 'chesscom';
+
+/** A PGN file larger than this is not a game collection anyone opens on a board. */
+export const MAX_IMPORT_FILE_BYTES = 20 * 1024 * 1024;
 
 export interface ImportPanelProps {
   onLoadFen: (fen: Fen) => boolean;
@@ -27,11 +31,13 @@ export interface ImportPanelProps {
  * picker instead of guessing which game was meant.
  */
 export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) {
-  const settings = useSettings();
+  const setUsernames = useProgress((s) => s.setUsernames);
   const [source, setSource] = useState<Source>('paste');
   const [text, setText] = useState('');
   const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /** The first game that failed, with the legal moves before the problem. */
+  const [parseError, setParseError] = useState<PgnImportError | null>(null);
   const [loading, setLoading] = useState(false);
   const [games, setGames] = useState<ImportedGame[] | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -41,7 +47,7 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
 
   // Prefill the last username per site whenever the source changes.
   useEffect(() => {
-    const saved = useSettings.getState();
+    const saved = useProgress.getState();
     setUsername(
       source === 'lichess'
         ? saved.lichessUsername
@@ -51,6 +57,7 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
     );
     setGames(null);
     setError(null);
+    setParseError(null);
   }, [source]);
 
   const saveAllAsStudy = () => {
@@ -73,16 +80,25 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
     const trimmed = raw.trim();
     if (!trimmed) return;
     setError(null);
+    setParseError(null);
+    // 4-field FENs and EPDs count: the missing counters are filled in.
     if (isValidFen(trimmed)) {
-      if (onLoadFen(trimmed)) onDone();
+      const fen = sanitizeFen(trimmed);
+      if (fen && onLoadFen(fen)) onDone();
       else setError('That FEN could not be loaded.');
       return;
     }
-    const parsed = parsePgnGames(trimmed);
+    const { games: parsed, firstError } = parsePgnGamesDetailed(trimmed);
     if (parsed.length === 0) {
-      setError('Could not read that as a FEN or a PGN. Check the text and try again.');
+      if (firstError) {
+        setParseError(firstError);
+        setError(`${firstError.message}.`);
+      } else {
+        setError('Could not read that as a FEN or a PGN. Check the text and try again.');
+      }
       return;
     }
+    if (firstError) setParseError(firstError);
     if (parsed.length === 1 && parsed[0]) {
       loadGame(parsed[0]);
       return;
@@ -90,10 +106,26 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
     setGames(parsed);
   };
 
+  const loadPrefix = () => {
+    if (!parseError?.legalPrefixPgn) return;
+    if (onLoadPgn(parseError.legalPrefixPgn)) {
+      toast('Loaded the moves before the illegal one.', { tone: 'info' });
+      onDone();
+    } else {
+      setError('The moves before the problem could not be loaded either.');
+    }
+  };
+
   const openFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      setError(
+        `That file is ${Math.round(file.size / 1024 / 1024)} MB; files up to ${MAX_IMPORT_FILE_BYTES / 1024 / 1024} MB can be opened here. Split it, or open just the games you need.`,
+      );
+      return;
+    }
     try {
       loadText(await file.text());
     } catch {
@@ -114,7 +146,7 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
           ? await fetchLichessGames(username, { max: 30, signal: controller.signal })
           : await fetchChessComGames(username, { max: 30, signal: controller.signal });
       if (controller.signal.aborted) return;
-      settings.update(
+      setUsernames(
         source === 'lichess'
           ? { lichessUsername: username.trim() }
           : { chesscomUsername: username.trim() },
@@ -220,7 +252,32 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
         </p>
       ) : null}
 
-      {error ? <Alert tone="danger">{error}</Alert> : null}
+      {error ? (
+        <Alert tone="danger">
+          {error}
+          {parseError?.legalPrefixPgn ? (
+            <>
+              {' '}
+              <Button size="sm" onClick={loadPrefix} data-testid="import-load-prefix">
+                Load the moves before it
+              </Button>
+            </>
+          ) : null}
+        </Alert>
+      ) : null}
+      {!error && parseError && games ? (
+        <Alert tone="warning">
+          One game was skipped: {parseError.message}.
+          {parseError.legalPrefixPgn ? (
+            <>
+              {' '}
+              <Button size="sm" onClick={loadPrefix} data-testid="import-load-prefix">
+                Load the moves before it
+              </Button>
+            </>
+          ) : null}
+        </Alert>
+      ) : null}
 
       {games && games.length > 1 && source === 'paste' ? (
         <div className="row row--between" data-testid="import-study">
@@ -234,26 +291,22 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
       ) : null}
 
       {games ? (
-        <div className="import__games" role="list" aria-label="Games to import">
+        <ul role="list" className="import__games" aria-label="Games to import">
           {games.map((game) => (
-            <button
-              type="button"
-              key={game.id}
-              className="import__game"
-              onClick={() => loadGame(game)}
-              role="listitem"
-            >
-              <span className="import__players">
-                <strong>{game.white}</strong> – <strong>{game.black}</strong>
-              </span>
-              <span className="import__meta small muted">
-                {game.result} · {Math.ceil(game.plies / 2)} moves
-                {game.date ? ` · ${game.date}` : ''}
-                {game.event ? ` · ${game.event}` : ''}
-              </span>
-            </button>
+            <li key={game.id}>
+              <button type="button" className="import__game" onClick={() => loadGame(game)}>
+                <span className="import__players">
+                  <strong>{game.white}</strong> – <strong>{game.black}</strong>
+                </span>
+                <span className="import__meta small muted">
+                  {game.result} · {Math.ceil(game.plies / 2)} moves
+                  {game.date ? ` · ${game.date}` : ''}
+                  {game.event ? ` · ${game.event}` : ''}
+                </span>
+              </button>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : null}
     </div>
   );

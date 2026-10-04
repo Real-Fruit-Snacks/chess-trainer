@@ -39,6 +39,32 @@ describe('isolation flag', () => {
     ]);
   });
 
+  it('never lets a read that started first return the value a later write replaced', async () => {
+    // A cache whose lookups are slow: `match` sees the store as it was when called.
+    const store = new Map<string, string>([[ISOLATION_FLAG_URL, '1']]);
+    const slow = {
+      open: () =>
+        Promise.resolve({
+          match: (url: string) => {
+            const seen = store.get(url);
+            return new Promise((resolve) =>
+              setTimeout(() => resolve(seen === undefined ? undefined : new Response(seen)), 20),
+            );
+          },
+          put: async (url: string, response: Response) => {
+            store.set(url, await response.text());
+          },
+        } as unknown as Cache),
+    };
+    const read = readIsolationFlag(slow);
+    const write = writeIsolationFlag(false, slow);
+    const readAfter = readIsolationFlag(slow);
+    expect(await read).toBe(true);
+    expect(await write).toBe(true);
+    expect(await readAfter).toBe(false);
+    expect(store.get(ISOLATION_FLAG_URL)).toBe('0');
+  });
+
   it('degrades gracefully without the Cache API', async () => {
     expect(await readIsolationFlag(null)).toBe(false);
     expect(await writeIsolationFlag(true, null)).toBe(false);

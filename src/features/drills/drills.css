@@ -63,6 +63,18 @@
   background: var(--danger);
 }
 
+/* Coordinates: the typed answer beside its label, the field as wide as a square name. */
+.drill__typed {
+  margin-top: var(--space-3);
+  align-items: center;
+}
+
+.drill__typed-input {
+  width: 5em;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
 .drill__tip {
   border-left: 3px solid var(--accent);
   padding: var(--space-2) var(--space-3);

@@ -133,7 +133,7 @@ export const CLASSIC_GAMES_2: readonly ClassicGame[] = [
       52: 'Rc5 — the third rook move. It looks like Black is drifting.',
       54: 'Nxc3: Bernstein takes the pawn, believing the exchanges that follow leave him a pawn up.',
       56: 'Rxc3 — the first recapture.',
-      58: 'Qb2!! The point of everything. The queen attacks the rook on c3 and threatens Qxc1 mate: if Rxb2 then Rd1 mate on the back rank; if Qxb2 then Rxc1 mate. Bernstein resigned.',
+      58: 'Qb2!! The point of everything. The queen attacks the rook on c3 and the queen on e2 at once, and the back rank decides: Qxb2 is met by Rd1 mate and Qd1 by Rxd1 mate, so the rook is lost. Bernstein resigned.',
     },
     outro:
       'Capablanca saw 29...Qb2 when he played 22...c3. Seven moves of quiet rook shuffles were the bait.',

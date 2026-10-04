@@ -1,7 +1,12 @@
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router';
 import { InstallButton } from '@/app/InstallPrompt';
-import { useInstall } from '@/app/pwa';
+import {
+  describeInstallUnavailable,
+  installUnavailableReason,
+  type OfferState,
+  useInstall,
+} from '@/app/pwa';
 import { BOARD_PALETTES } from '@/components/board/boardThemes';
 import { PIECE_SETS } from '@/components/board/pieceSets';
 import { PieceSetPicker } from '@/components/board/PieceSetPicker';
@@ -9,6 +14,7 @@ import { San } from '@/chess/San';
 import {
   Button,
   Card,
+  ConfirmDialog,
   Dialog,
   Field,
   LinkButton,
@@ -21,9 +27,11 @@ import { ENGINE_LEVELS } from '@/engine/levels';
 import { formatDate } from '@/lib/dates';
 import { CALIBRATION_PUZZLES, STARTING_RATINGS } from '@/lib/rating';
 import { hapticsSupported } from '@/lib/haptics';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { badgingSupported } from '@/app/useAppBadge';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
+import { useProfiles } from '@/store/profiles';
 import {
   type BoardTheme,
   type ColorScheme,
@@ -36,6 +44,7 @@ import {
 } from '@/store/settings';
 import { ProfilesCard } from './ProfilesCard';
 import { useBackupActions } from './useBackupActions';
+import { useImportBackup } from './useImportBackup';
 import { EngineDiagnostics } from './EngineDiagnostics';
 import { OfflinePuzzles } from './OfflinePuzzles';
 import { EngineThreadsSetting } from './EngineThreadsSetting';
@@ -43,13 +52,30 @@ import { SoundThemePicker, VolumeSlider } from './SoundControls';
 import { StorageUsage } from './StorageUsage';
 import './settings.css';
 
+type RatingChoice = 'calibrate' | (typeof STARTING_RATINGS)[number]['id'];
+
+/** What the installed-app row says; the browser menu route when there is no install prompt. */
+function describeInstall(state: OfferState): string {
+  const reason = installUnavailableReason(state);
+  if (reason === null) return 'Install for offline use and a home-screen icon.';
+  const base = describeInstallUnavailable(reason);
+  return reason === 'no-prompt'
+    ? `${base} Some browsers can still add it from their own menu (“Install app” or “Add to Home Screen”).`
+    : base;
+}
+
 export default function SettingsPage() {
   const progress = useProgress();
   const settings = useSettings();
+  const profiles = useProfiles((s) => s.profiles);
+  const reducedMotion = useReducedMotion();
   const [confirmReset, setConfirmReset] = useState(false);
+  const [ratingChoice, setRatingChoice] = useState<RatingChoice>('calibrate');
+  const [confirmRating, setConfirmRating] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const install = useInstall();
   const backup = useBackupActions();
+  const importer = useImportBackup();
   const { hash } = useLocation();
 
   useEffect(() => {
@@ -62,15 +88,22 @@ export default function SettingsPage() {
     document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' });
   }, [hash]);
 
-  const importData = async (file: File) => {
-    try {
-      const parsed: unknown = JSON.parse(await file.text());
-      if (progress.importState(parsed)) toast('Progress imported.', { tone: 'success' });
-      else toast('That file does not look like a Chess Trainer export.', { tone: 'warning' });
-    } catch {
-      toast('Could not read that file.', { tone: 'danger' });
+  const ratingOption = STARTING_RATINGS.find((o) => o.id === ratingChoice);
+  const applyRatingReset = () => {
+    if (ratingChoice === 'calibrate') {
+      progress.completeOnboarding(0, 'calibrate');
+      toast(`Calibration started — the next ${CALIBRATION_PUZZLES} rated puzzles find your level.`);
+      return;
+    }
+    if (ratingOption) {
+      progress.completeOnboarding(ratingOption.rating);
+      toast(`Puzzle rating set to ${ratingOption.rating}.`);
     }
   };
+
+  const tapOnly = settings.moveMethod === 'tap';
+  const otherProfiles = profiles.length - 1;
+  const installText = describeInstall(install);
 
   return (
     <div>
@@ -131,16 +164,26 @@ export default function SettingsPage() {
                 label="Sound effects"
                 description="Short synthesized sounds for moves, captures, checks and results."
               />
+              {settings.sounds || (settings.haptics && hapticsSupported()) ? (
+                <div className="settings__row">
+                  <span>
+                    Sound theme
+                    {!settings.sounds ? (
+                      <>
+                        <br />
+                        <span className="small muted">
+                          Also picks the vibration patterns while sounds are off.
+                        </span>
+                      </>
+                    ) : null}
+                  </span>
+                  <SoundThemePicker />
+                </div>
+              ) : null}
               {settings.sounds ? (
-                <>
-                  <div className="settings__row">
-                    <span>Sound theme</span>
-                    <SoundThemePicker />
-                  </div>
-                  <div className="settings__row">
-                    <VolumeSlider className="settings__slider" />
-                  </div>
-                </>
+                <div className="settings__row">
+                  <VolumeSlider className="settings__slider" />
+                </div>
               ) : null}
             </div>
           </Card>
@@ -205,26 +248,12 @@ export default function SettingsPage() {
                 checked={settings.animations}
                 onChange={(v) => settings.update({ animations: v })}
                 label="Animate pieces"
+                description={
+                  reducedMotion
+                    ? 'Your device asks for less motion, so pieces move without animation whatever this says.'
+                    : undefined
+                }
               />
-              <Switch
-                checked={settings.magnifyDrag}
-                onChange={(v) => settings.update({ magnifyDrag: v })}
-                label="Magnify the dragged piece"
-                description="The piece grows under your finger so you can see it while dragging."
-              />
-              <div className="settings__row">
-                <span>Drag target</span>
-                <Segmented<DragTarget>
-                  ariaLabel="Drag target"
-                  value={settings.dragTarget}
-                  onChange={(v) => settings.update({ dragTarget: v })}
-                  options={[
-                    { value: 'circle', label: 'Circle' },
-                    { value: 'square', label: 'Square' },
-                    { value: 'none', label: 'None' },
-                  ]}
-                />
-              </div>
               <div className="settings__row">
                 <span>Move pieces by</span>
                 <Segmented<MoveMethod>
@@ -238,6 +267,39 @@ export default function SettingsPage() {
                   ]}
                 />
               </div>
+              <fieldset
+                className="settings__fieldset"
+                disabled={tapOnly}
+                aria-describedby={tapOnly ? 'drag-settings-hint' : undefined}
+                data-testid="drag-settings"
+              >
+                <legend className="sr-only">Dragging</legend>
+                <Switch
+                  checked={settings.magnifyDrag}
+                  onChange={(v) => settings.update({ magnifyDrag: v })}
+                  label="Magnify the dragged piece"
+                  description="The piece grows under your finger so you can see it while dragging."
+                />
+                <div className="settings__row">
+                  <span>Drag target</span>
+                  <Segmented<DragTarget>
+                    ariaLabel="Drag target"
+                    value={settings.dragTarget}
+                    onChange={(v) => settings.update({ dragTarget: v })}
+                    options={[
+                      { value: 'circle', label: 'Circle' },
+                      { value: 'square', label: 'Square' },
+                      { value: 'none', label: 'None' },
+                    ]}
+                  />
+                </div>
+              </fieldset>
+              {tapOnly ? (
+                <p className="small muted" id="drag-settings-hint" style={{ margin: 0 }}>
+                  These two apply to dragging only; choose “Tap or drag” or “Drag” above to use
+                  them.
+                </p>
+              ) : null}
               <div className="settings__row">
                 <span>Captured material</span>
                 <Segmented<MaterialDisplay>
@@ -283,10 +345,16 @@ export default function SettingsPage() {
                 description="Show a box under the board to type moves such as Nf3 or e2e4."
               />
               <Switch
+                checked={settings.keyboardShortcuts}
+                onChange={(v) => settings.update({ keyboardShortcuts: v })}
+                label="Single-key shortcuts"
+                description="Letters such as H for a hint, N for the next puzzle and ? for the list of keys. Turn them off if you use speech input or a switch device; Enter, Space and the arrow keys keep working."
+              />
+              <Switch
                 checked={settings.playFocus}
                 onChange={(v) => settings.update({ playFocus: v })}
                 label="Focus mode"
-                description="Hide the header and navigation while a game against the engine is on."
+                description="Hide the header and navigation while you play the engine: in Play, the simul and the arcade games."
               />
               <Switch
                 checked={settings.haptics}
@@ -294,8 +362,8 @@ export default function SettingsPage() {
                 label="Vibration"
                 description={
                   hapticsSupported()
-                    ? 'A short buzz on moves, solves and mistakes.'
-                    : 'A short buzz on moves, solves and mistakes — this device does not support it.'
+                    ? 'A short buzz on moves, solves and mistakes, on devices with a vibration motor. Available in this browser.'
+                    : 'A short buzz on moves, solves and mistakes — not available in this browser.'
                 }
               />
               <Switch
@@ -304,7 +372,10 @@ export default function SettingsPage() {
                 label="Coach mode by default"
                 description="New untimed games against the engine start with the coach on: mistakes pause the game with an explanation and a take-back."
               />
-              <Field label="Default engine strength">
+              <Field
+                label="Engine level for the next game"
+                hint="Every game you start updates this to the level you chose. The rating in brackets is a rough guide, not a measured strength."
+              >
                 {(id) => (
                   <Select
                     id={id}
@@ -321,48 +392,35 @@ export default function SettingsPage() {
               </Field>
             </div>
           </Card>
-          <Card>
+          <Card data-testid="rating-settings">
             <h2 style={{ fontSize: '1.15rem' }}>Puzzle rating</h2>
             <p className="small muted">
               Reset your puzzle rating to a level that matches you better, or let a short run of
-              puzzles find it. Your history is kept.
+              puzzles find it. Your rating history is kept: the chart shows the change.
             </p>
-            <Field label="Start again from">
-              {(id) => (
-                <Select
-                  id={id}
-                  defaultValue=""
-                  onChange={(e) => {
-                    if (e.target.value === 'calibrate') {
-                      progress.completeOnboarding(0, 'calibrate');
-                      toast(
-                        `Calibration started — the next ${CALIBRATION_PUZZLES} rated puzzles find your level.`,
-                      );
-                      e.target.value = '';
-                      return;
-                    }
-                    const option = STARTING_RATINGS.find((o) => o.id === e.target.value);
-                    if (option) {
-                      progress.completeOnboarding(option.rating);
-                      toast(`Puzzle rating set to ${option.rating}.`);
-                      e.target.value = '';
-                    }
-                  }}
-                >
-                  <option value="" disabled>
-                    Choose a level…
-                  </option>
-                  <option value="calibrate">
-                    Find my level with {CALIBRATION_PUZZLES} puzzles
-                  </option>
-                  {STARTING_RATINGS.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label} (~{o.rating})
+            <div className="row" style={{ alignItems: 'flex-end' }}>
+              <Field label="Start again from">
+                {(id) => (
+                  <Select
+                    id={id}
+                    value={ratingChoice}
+                    onChange={(e) => setRatingChoice(e.target.value as RatingChoice)}
+                  >
+                    <option value="calibrate">
+                      Find my level with {CALIBRATION_PUZZLES} puzzles
                     </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
+                    {STARTING_RATINGS.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label} (~{o.rating})
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <Button onClick={() => setConfirmRating(true)} data-testid="rating-reset">
+                Reset rating…
+              </Button>
+            </div>
           </Card>
         </div>
         <div className="stack">
@@ -422,11 +480,11 @@ export default function SettingsPage() {
             <div className="settings__group">
               {install.isStandalone ? (
                 <p className="small muted" style={{ margin: 0 }}>
-                  Installed as an app — works offline.
+                  {installText}
                 </p>
               ) : (
-                <div className="settings__row">
-                  <span className="small">Install for offline use and a home-screen icon.</span>
+                <div className="settings__row" data-testid="install-row">
+                  <span className="small">{installText}</span>
                   <InstallButton size="sm" />
                 </div>
               )}
@@ -443,10 +501,11 @@ export default function SettingsPage() {
               <OfflinePuzzles />
               <div className="settings__row">
                 <span className="small">
-                  Backup or move your progress
-                  {backup.canShare ? ' — share it straight to another device' : ''}.
-                  {settings.lastBackupAt
-                    ? ` Last backup ${formatDate(settings.lastBackupAt, siteConfig.locale)}.`
+                  Backup or move your progress — puzzles, lessons, repertoires, library and imported
+                  games
+                  {backup.canShare ? ', shared straight to another device' : ''}.
+                  {progress.lastBackupAt
+                    ? ` Last backup ${formatDate(progress.lastBackupAt, siteConfig.locale)}.`
                     : ''}
                 </span>
                 <div className="row">
@@ -469,11 +528,12 @@ export default function SettingsPage() {
                   <input
                     ref={fileInput}
                     type="file"
-                    accept="application/json"
+                    accept=".json,application/json"
                     hidden
+                    data-testid="import-file"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) void importData(file);
+                      if (file) void importer.offerFile(file);
                       e.target.value = '';
                     }}
                   />
@@ -494,7 +554,9 @@ export default function SettingsPage() {
                 </LinkButton>
               </div>
               <div className="settings__row">
-                <span className="small">Delete all progress and settings on this device.</span>
+                <span className="small">
+                  Delete this profile’s progress and imported games, and the device settings.
+                </span>
                 <Button size="sm" variant="danger" onClick={() => setConfirmReset(true)}>
                   Reset everything
                 </Button>
@@ -511,6 +573,23 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {importer.dialog}
+
+      <ConfirmDialog
+        open={confirmRating}
+        onClose={() => setConfirmRating(false)}
+        onConfirm={applyRatingReset}
+        title="Reset your puzzle rating?"
+        confirmLabel={ratingChoice === 'calibrate' ? 'Start calibration' : 'Reset rating'}
+      >
+        <p className="muted">
+          {ratingChoice === 'calibrate'
+            ? `Your rating starts uncertain again and the next ${CALIBRATION_PUZZLES} rated puzzles find your level.`
+            : `Your puzzle rating is set to about ${ratingOption?.rating ?? ''} (“${ratingOption?.label ?? ''}”) and adjusts from there.`}{' '}
+          Your attempts, statistics and rating history are kept: the chart shows the change.
+        </p>
+      </ConfirmDialog>
+
       <Dialog
         open={confirmReset}
         onClose={() => setConfirmReset(false)}
@@ -522,11 +601,12 @@ export default function SettingsPage() {
             </Button>
             <Button
               variant="danger"
+              data-testid="reset-confirm"
               onClick={() => {
                 progress.resetAll();
                 settings.reset();
                 setConfirmReset(false);
-                toast('All local data was cleared.');
+                toast('This profile’s data and the device settings were cleared.');
               }}
             >
               Yes, reset
@@ -535,8 +615,16 @@ export default function SettingsPage() {
         }
       >
         <p className="muted">
-          This deletes your puzzle rating, lesson progress, game history and settings from this
-          device. Export a backup first if you want to keep them.
+          This deletes the puzzle rating, lesson progress, repertoires, analysis library, game
+          history and imported games of this profile, and every device setting (the engine’s
+          multi-threading flag included). Export a backup first if you want to keep them.
+        </p>
+        <p className="muted">
+          Kept:{' '}
+          {otherProfiles > 0
+            ? `the profile list and the ${otherProfiles === 1 ? 'other profile' : `${otherProfiles} other profiles`} with their data`
+            : 'the profile list'}
+          , and any puzzles downloaded for offline use.
         </p>
       </Dialog>
     </div>

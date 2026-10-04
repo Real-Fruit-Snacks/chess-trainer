@@ -1,6 +1,7 @@
 import type { Chess, Move } from 'chess.js';
 import { type SoundTheme, useSettings } from '@/store/settings';
 import { vibrate } from './haptics';
+import { hasUserGesture, markUserGesture, watchUserGesture } from './userGesture';
 
 /**
  * Tiny synthesized sound effects via the Web Audio API — no audio files, no
@@ -38,6 +39,58 @@ export const SOUND_NAMES: readonly SoundName[] = [
 ];
 
 let context: AudioContext | null = null;
+/** The one node everything plays through: a brick-wall limiter in front of the speakers. */
+let master: AudioNode | null = null;
+/** Idle timer: the context is suspended when nothing has played for a while. */
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+/** Nothing plays until this long after the last cue; then the context sleeps. */
+export const IDLE_SUSPEND_MS = 60_000;
+
+/* ------------------------------------------------------------------ */
+/* The first gesture                                                  */
+/* ------------------------------------------------------------------ */
+
+export { hasUserGesture, markUserGesture, resetUserGesture, watchUserGesture } from './userGesture';
+
+/**
+ * Tells the operating system this audio is incidental ("ambient"): it mixes
+ * with music that is already playing and never interrupts it, and it follows
+ * the ringer switch (WebKit's `navigator.audioSession`; a no-op elsewhere).
+ */
+function claimAmbientSession(): void {
+  if (typeof navigator === 'undefined') return;
+  const session = (navigator as Navigator & { audioSession?: { type?: string } }).audioSession;
+  if (!session) return;
+  try {
+    session.type = 'ambient';
+  } catch {
+    // Read-only or unsupported value: nothing to do.
+  }
+}
+
+/** A limiter at the destination: several cues at once can never hard-clip. */
+function makeMaster(ctx: AudioContext): AudioNode {
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -3;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.001;
+  limiter.release.value = 0.05;
+  limiter.connect(ctx.destination);
+  return limiter;
+}
+
+/** Puts the context to sleep after a quiet minute; any cue wakes it again. */
+function scheduleIdleSuspend(): void {
+  if (idleTimer !== null) clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    const ctx = context;
+    if (ctx?.state === 'running' && typeof ctx.suspend === 'function') {
+      ctx.suspend().catch(() => undefined);
+    }
+  }, IDLE_SUSPEND_MS);
+}
 
 function getContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -46,13 +99,29 @@ function getContext(): AudioContext | null {
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return null;
   if (!context) {
+    claimAmbientSession();
     context = new Ctor();
+    master = makeMaster(context);
     // A compressor needs about 40 ms to settle after it is created; keep one
     // ready so the first hit is never the one played through a cold chain.
     spare = makePunchChain(context);
   }
-  if (context.state === 'suspended') void context.resume();
+  // 'suspended' after our own idle timer, 'interrupted' after a phone call
+  // (WebKit): anything that is not running is asked to run again.
+  if (context.state !== 'running' && typeof context.resume === 'function') {
+    try {
+      const resumed: unknown = context.resume();
+      if (resumed instanceof Promise) resumed.catch(() => undefined);
+    } catch {
+      // Resuming before a gesture throws in some browsers; the next cue tries again.
+    }
+  }
   return context;
+}
+
+/** Where a cue's chain ends: the shared limiter (the destination until the context exists). */
+function sink(ctx: AudioContext): AudioNode {
+  return master ?? ctx.destination;
 }
 
 export interface Tone {
@@ -153,7 +222,7 @@ function makePunchChain(ctx: AudioContext): PunchChain {
   shaper.curve = softClipCurve();
   shaper.oversample = '2x';
   const trim = ctx.createGain();
-  compressor.connect(shaper).connect(trim).connect(ctx.destination);
+  compressor.connect(shaper).connect(trim).connect(sink(ctx));
   return { input: compressor, trim };
 }
 
@@ -166,7 +235,7 @@ function outputFor(ctx: AudioContext, punch: boolean, level: number): AudioNode 
   if (!punch) {
     const trim = ctx.createGain();
     trim.gain.value = level;
-    trim.connect(ctx.destination);
+    trim.connect(sink(ctx));
     return trim;
   }
   const chain = spare ?? makePunchChain(ctx);
@@ -181,6 +250,7 @@ function play(cue: Cue, theme: SoundTheme, volume: number): void {
   if (gain <= 0) return;
   const ctx = getContext();
   if (!ctx) return;
+  scheduleIdleSuspend();
   const soft = theme === 'soft';
   const drive = soft ? cue.master * 0.5 : cue.master;
   // Chip sounds switch on instantly; the standard set has a hair of attack,
@@ -209,7 +279,11 @@ function play(cue: Cue, theme: SoundTheme, volume: number): void {
         head = source.connect(filter);
       }
       head.connect(envelope).connect(out);
-      source.start(start, 0, layer.duration + 0.02);
+      // A different slice of the noise buffer each time, so repeated cues do
+      // not share one identical crackle.
+      const slice = layer.duration + 0.02;
+      const offset = Math.random() * Math.max(0, 1 - slice - 0.05);
+      source.start(start, offset, slice);
       continue;
     }
     const tone = soft ? softenTone(layer) : layer;
@@ -611,9 +685,16 @@ export const SOUNDS: Record<SoundName, () => void> = Object.fromEntries(
  * needed: browsers only start audio after a gesture anyway, and it gives the
  * punch chain time to settle, so even the first hit lands at full weight.
  */
+/** Starts (or wakes) the audio context ahead of the first cue, if sounds are on. */
+export function primeAudio(): void {
+  if (useSettings.getState().sounds) getContext();
+}
+
 export function warmUpAudio(): void {
   if (typeof window === 'undefined') return;
+  watchUserGesture();
   const warm = () => {
+    markUserGesture();
     if (useSettings.getState().sounds) getContext();
   };
   window.addEventListener('pointerdown', warm, { once: true, passive: true });
@@ -622,9 +703,12 @@ export function warmUpAudio(): void {
 
 /**
  * Plays a named sound if sounds are enabled in settings, and gives the matching
- * haptic cue if haptics are. Never throws.
+ * haptic cue if haptics are. Nothing plays before the first tap or key press.
+ * Never throws.
  */
 export function playSound(name: SoundName): void {
+  watchUserGesture();
+  if (!hasUserGesture()) return;
   vibrate(name);
   if (!useSettings.getState().sounds) return;
   try {

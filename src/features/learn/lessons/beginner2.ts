@@ -22,15 +22,14 @@ export const beginnerLessons2: Lesson[] = [
       {
         title: 'Seven ways a game can end',
         text:
-          'A game of chess ends in one of these ways:\n\n' +
-          '- **Checkmate** — the king is attacked and cannot escape. The attacker wins.\n' +
-          '- **Resignation** — a player gives up a hopeless position.\n' +
-          '- **Time** — a player runs out of clock time (and the opponent has enough material to mate).\n' +
-          '- **Stalemate** — the side to move has *no legal move* but is *not* in check. Draw.\n' +
-          '- **Insufficient material** — nobody can possibly checkmate (king vs king, king and bishop vs king, king and knight vs king). Draw.\n' +
-          '- **Threefold repetition** — the same position occurs three times with the same side to move. Either player may claim a draw.\n' +
-          '- **Fifty-move rule** — fifty moves by each side without a capture or a pawn move. Draw on claim; at 75 it is automatic.\n\n' +
-          'Players can also simply **agree** a draw. Stalemate is the one that decides the most beginner games, so the next two boards are about that.',
+          'A game ends in one of these ways:\n\n- **Checkmate** — the king is attacked and cannot escape. The ' +
+          'attacker wins.\n- **Resignation** — a player gives up.\n- **Time** — a clock runs out (a draw if the ' +
+          'opponent could never mate).\n- **Stalemate** — the side to move has *no legal move* but is *not* in ' +
+          'check. Draw.\n- **Insufficient material** — nobody can mate, as with king and bishop against king. ' +
+          'Draw.\n- **Threefold repetition** — the same position three times, same side to move: a draw on a ' +
+          'claim.\n- **Fifty-move rule** — fifty moves each with no capture or pawn move: a draw on a claim.\n\nA ' +
+          'draw can also be **agreed**. The next two boards are about stalemate, the draw beginners give away ' +
+          'most.',
         fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
       },
       {
@@ -115,10 +114,10 @@ export const beginnerLessons2: Lesson[] = [
         shapes: ['h5f7:red', 'c4f7:red'],
         task: {
           prompt: 'Stop the mate on f7.',
-          moves: ['g6', 'Qe7', 'Qf6'],
-          hint: 'Block the h5–f7 diagonal with a pawn, or defend f7 with the queen.',
+          moves: ['g6', 'Qe7', 'Qf6', 'Nh6'],
+          hint: 'Block the h5–f7 diagonal with a pawn, or defend f7 with the queen or knight.',
           success:
-            'Safe. g6 is best: it blocks the diagonal, attacks the queen, and prepares ...Bg7. Qe7 and Qf6 also hold.',
+            'Safe. g6 is best: it blocks the diagonal, attacks the queen, and prepares ...Bg7. Qe7, Qf6 and Nh6 also hold.',
           failure: 'That still allows Qxf7 mate. Cover f7 or block the queen’s diagonal.',
         },
       },
@@ -249,36 +248,40 @@ export const beginnerLessons2: Lesson[] = [
       {
         title: 'Trade the attacker',
         text:
-          'White is a rook and a knight up, but Black threatens **Qxg2 mate** (the bishop on b7 supports the queen). ' +
-          'Instead of defending awkwardly, kill the attack at the root: offer a queen trade. With the queens off, ' +
+          'White is a knight and a pawn up, but Black threatens **Qxg2 mate** (the bishop on b7 supports the ' +
+          'queen). Instead of defending awkwardly, kill the attack at the root: trade queens. With the queens off, ' +
           'the extra material wins easily.',
-        fen: '5rk1/pb3ppp/1p6/8/8/2NQ3q/PP3PPP/3R2K1 w - - 0 1',
-        shapes: ['h3g2:red', 'b7g2:red', 'd3h3'],
+        fen: '4r1k1/pb3p2/1p6/7p/N5q1/2N5/PP3PPP/3QR1K1 w - - 0 1',
+        shapes: ['g4g2:red', 'b7g2:red', 'd1g4'],
         task: {
           prompt: 'Stop the mate by trading queens.',
-          moves: ['Qxh3'],
+          moves: ['Qxg4+'],
+          reply: 'hxg4',
           hint: 'Which white piece can capture the black queen?',
           success:
-            'Qxh3 gxh3 and the attack is over. Rook and knight against a bishop: the rest is technique.',
+            'Qxg4+ hxg4 and the attack is over. Two knights and a rook against a rook and bishop: the rest is technique.',
           failure:
-            'That does not solve the problem. The threat is Qxg2 mate — capture the queen and everything is simple.',
+            'The threat is Qxg2 mate. Capture the queen: with the queens off the attack is over and the extra knight decides.',
         },
       },
       {
         title: 'Trade the defender',
         text:
-          'A trade can also remove a key defender. Black’s knight on f6 is the only piece guarding h7. Take it — ' +
-          'with check — and the queen mates on h7 next move.',
-        fen: '1r4k1/p4ppp/5n2/2B5/4N3/3Q4/5PPP/6K1 w - - 0 1',
-        shapes: ['e4f6', 'd3h7:red'],
+          'A trade can also remove a key defender. Material is level, but White’s queen and knight both aim at h7, and ' +
+          'Black’s knight on f6 is its only defender. Give the bishop for that knight and h7 falls, whichever way ' +
+          'Black takes back.',
+        fen: 'r4rk1/pb2qppp/1p2pn2/6N1/2P5/1P1Q4/PB3PPP/3RR1K1 w - - 0 1',
+        shapes: ['b2f6', 'd3h7:red', 'g5h7:red'],
         task: {
           prompt: 'Remove the defender of h7.',
-          moves: ['Nxf6+'],
-          hint: 'Capture the piece that protects h7, with check so Black has no time.',
+          moves: ['Bxf6'],
+          hint: 'The bishop on b2 can capture the piece that guards h7.',
           success:
-            'Nxf6+ gxf6 Qxh7 mate (the bishop on c5 covers f8). If Black does not recapture, White is a piece up.',
+            'Bxf6! If Black takes back with the pawn or the queen, Qxh7 is mate — the knight on g5 guards the ' +
+            'queen. Stopping the mate with ...g6 leaves the queen on e7 to the bishop. Removing a defender is worth ' +
+            'more than the pieces the trade swaps.',
           failure:
-            'Look at h7: which black piece defends it, and can you capture that piece with check?',
+            'Look at h7: the queen and the knight attack it, and only the knight on f6 defends it. Which white piece can take that knight?',
         },
       },
       {
@@ -289,9 +292,10 @@ export const beginnerLessons2: Lesson[] = [
           '- Trade a **passive piece** for an active one.\n' +
           '- Keep **knights** in closed positions and **bishops** in open ones.\n' +
           '- With a **space advantage**, avoid trades — your opponent is cramped and wants them.\n\n' +
-          'Here White’s bishop on d3 is hemmed in by its own pawns; Black’s knight on e5 is a monster. Trading the ' +
-          'bishop for that knight (Bxe5, when possible) would be a good deal even though a bishop is “worth” slightly more.',
-        fen: '4k3/8/8/4n3/3PP3/3B4/8/4K3 w - - 0 1',
+          'Here White’s bishop on d3 is blocked by its own e4 pawn; Black’s knight on e5 is a monster, protected by a ' +
+          'pawn and eyeing both wings. Trading the bishop for that knight (Bxe5, when possible) would be a good deal ' +
+          'even though a bishop is “worth” slightly more.',
+        fen: '4k3/8/3p4/4n3/4P3/3B2P1/5P2/4K3 w - - 0 1',
         shapes: ['d3:red', 'e5:green'],
       },
     ],

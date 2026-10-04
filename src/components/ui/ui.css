@@ -10,8 +10,10 @@
   border: 1px solid transparent;
   font-weight: 600;
   font-size: 0.95rem;
-  line-height: 1;
-  white-space: nowrap;
+  line-height: 1.2;
+  /* A long label wraps inside its card rather than pushing the button out of it. */
+  text-align: center;
+  overflow-wrap: anywhere;
   transition:
     background var(--transition),
     border-color var(--transition),
@@ -85,6 +87,16 @@ a.btn:focus {
   color: #fff;
 }
 
+/*
+ * In a wrapping row a button keeps its label on one line and moves to the next
+ * line when it does not fit, instead of being squeezed into a two-line label;
+ * only a label wider than the whole row wraps.
+ */
+.row > .btn {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
 .btn--sm {
   min-height: 32px;
   padding: 0 var(--space-3);
@@ -142,6 +154,11 @@ a.btn:focus {
   border-radius: var(--radius-lg);
   padding: var(--space-4);
   box-shadow: var(--shadow-sm);
+}
+
+/* A card that in-page links point at (#profiles, the lab sections) lands below the sticky header. */
+.card[id] {
+  scroll-margin-top: calc(var(--header-height) + var(--space-3));
 }
 
 .card--interactive {
@@ -314,6 +331,20 @@ a.btn:focus {
   margin-bottom: var(--space-2);
 }
 
+/* Room for the close control beside the title. */
+.dialog__body--closable .dialog__title {
+  padding-right: 40px;
+}
+
+/* Last in the DOM (so the content keeps the initial focus) and outside the
+   scrolling body, pinned to the title row of the dialog. */
+.dialog__close {
+  position: absolute;
+  top: calc(var(--space-5) - 6px);
+  right: calc(var(--space-5) - 8px);
+  color: var(--text-muted);
+}
+
 .dialog__actions {
   display: flex;
   gap: var(--space-2);
@@ -359,12 +390,17 @@ a.btn:focus {
   font-size: 0.85rem;
 }
 
+/* iOS Safari zooms into any field smaller than 16px: keep text areas at 1rem on touch screens. */
+@media (pointer: coarse) {
+  .textarea {
+    font-size: 1rem;
+  }
+}
+
 .input:focus,
 .select:focus,
 .textarea:focus {
   border-color: var(--accent);
-  box-shadow: var(--focus-ring);
-  outline: none;
 }
 
 /* Switch */
@@ -399,11 +435,16 @@ a.btn:focus {
   transition: transform var(--transition);
 }
 
+/* The real input sits invisibly over the track, so it has the track's size
+   and place: touch screen readers find it where the switch is drawn. */
 .switch input {
   position: absolute;
+  z-index: 1;
+  width: 42px;
+  height: 24px;
+  margin: 0;
   opacity: 0;
-  width: 0;
-  height: 0;
+  cursor: pointer;
 }
 
 .switch input:checked + .switch__track {
@@ -415,8 +456,11 @@ a.btn:focus {
   transform: translateX(18px);
 }
 
+/* The real input is hidden, so the focus ring is drawn round the track. */
 .switch input:focus-visible + .switch__track {
-  box-shadow: var(--focus-ring);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px var(--focus-halo);
 }
 
 .switch__label {
@@ -428,7 +472,7 @@ a.btn:focus {
   color: var(--text-muted);
 }
 
-/* Segmented control */
+/* Segmented control: a radio group with one tab stop and arrow keys between the options. */
 .segmented {
   display: inline-flex;
   padding: 3px;
@@ -437,7 +481,6 @@ a.btn:focus {
   border-radius: var(--radius-md);
   gap: 2px;
   max-width: 100%;
-  overflow-x: auto;
 }
 
 .segmented__option {
@@ -449,10 +492,23 @@ a.btn:focus {
   white-space: nowrap;
 }
 
-.segmented__option[aria-pressed='true'] {
+.segmented__option[aria-checked='true'] {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-sm);
+}
+
+/* Phones: the options wrap onto a second row instead of scrolling out of sight
+   (eight puzzle modes never fit on one line). */
+@media (max-width: 599px) {
+  .segmented {
+    flex-wrap: wrap;
+  }
+
+  .segmented__option {
+    flex: 1 1 auto;
+    text-align: center;
+  }
 }
 
 /* ---------- Slider ---------- */
@@ -489,8 +545,6 @@ a.btn:focus {
 }
 
 .slider__input:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
   border-radius: var(--radius-sm);
 }
 
@@ -528,8 +582,8 @@ a.btn:focus {
 @media (min-width: 900px) {
   .toasts {
     left: auto;
-    right: var(--space-5);
-    bottom: var(--space-5);
+    right: max(var(--space-5), env(safe-area-inset-right, 0px));
+    bottom: calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
     transform: none;
   }
 }
@@ -543,6 +597,7 @@ a.btn:focus {
   background: var(--bg-elevated);
   color: var(--text);
   border: 1px solid var(--border);
+  border-left-width: 4px;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   animation: toast-in 200ms ease;
@@ -551,6 +606,44 @@ a.btn:focus {
 .toast__body {
   flex: 1;
   font-size: 0.9rem;
+}
+
+/* The tone shows twice, as a coloured edge and an icon, so it never rests on colour alone. */
+.toast__icon {
+  flex-shrink: 0;
+  display: flex;
+}
+
+.toast--success {
+  border-left-color: var(--success);
+}
+
+.toast--success .toast__icon {
+  color: var(--success);
+}
+
+.toast--info {
+  border-left-color: var(--info);
+}
+
+.toast--info .toast__icon {
+  color: var(--info);
+}
+
+.toast--warning {
+  border-left-color: var(--warning);
+}
+
+.toast--warning .toast__icon {
+  color: var(--warning);
+}
+
+.toast--danger {
+  border-left-color: var(--danger);
+}
+
+.toast--danger .toast__icon {
+  color: var(--danger);
 }
 
 @keyframes toast-in {
@@ -626,6 +719,17 @@ a.btn:focus {
   color: var(--text-muted);
 }
 
+/* Touch screens have no keys to press; the shortcut reference still lists them. */
+@media (pointer: coarse) {
+  .kbd {
+    display: none;
+  }
+
+  .shortcuts .kbd {
+    display: inline-block;
+  }
+}
+
 /* ---------- Empty state ---------- */
 .empty {
   text-align: center;
@@ -636,6 +740,17 @@ a.btn:focus {
 .empty__icon {
   font-size: 2.5rem;
   margin-bottom: var(--space-3);
+}
+
+/* The same size whatever the heading level: the level is for the outline, not the look. */
+.empty__title {
+  font-size: 1.35rem;
+  color: var(--text);
+}
+
+.empty__actions {
+  justify-content: center;
+  margin-top: var(--space-3);
 }
 
 .dialog--wide {
@@ -685,8 +800,15 @@ a.btn:focus {
   font-variant-numeric: tabular-nums;
 }
 
+/* A scroll container with no focusable content gets a tab stop (ScrollRegion), so
+   the keyboard can scroll it; the ring sits inside, where overflow does not clip it. */
 .history__scroll {
   overflow-x: auto;
+}
+
+.history__scroll:focus-visible {
+  outline-offset: -2px;
+  box-shadow: none;
 }
 
 /* Icons */
@@ -711,4 +833,61 @@ a.btn:focus {
 .btn > .icon + span,
 .btn > span + .icon {
   margin-left: 6px;
+}
+
+/* ---------- Windows High Contrast and other forced-colour modes ---------- */
+/* Backgrounds and shadows are dropped by the mode, so every state is drawn with
+   system colours and borders instead. */
+@media (forced-colors: active) {
+  .switch__track {
+    forced-color-adjust: none;
+    background: Canvas;
+    border: 2px solid ButtonText;
+  }
+
+  .switch__thumb {
+    background: ButtonText;
+    box-shadow: none;
+  }
+
+  .switch input:checked + .switch__track {
+    background: Highlight;
+    border-color: Highlight;
+  }
+
+  .switch input:checked + .switch__track .switch__thumb {
+    background: HighlightText;
+  }
+
+  .segmented__option {
+    border: 1px solid transparent;
+  }
+
+  .segmented__option[aria-checked='true'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
+  }
+
+  .progress {
+    border: 1px solid ButtonText;
+  }
+
+  .progress__fill {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+
+  .toast,
+  .dialog,
+  .alert,
+  .badge {
+    border-color: CanvasText;
+  }
+
+  .spinner {
+    border-color: GrayText;
+    border-top-color: Highlight;
+  }
 }

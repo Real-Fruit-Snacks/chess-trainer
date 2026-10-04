@@ -37,8 +37,10 @@ export interface KingSafety {
   where: 'kingside' | 'queenside' | 'centre';
   /** Own pawns on the three files around the king, one or two ranks ahead. */
   shield: number;
-  /** Open or half-open files (for the opponent) touching the king's file. */
+  /** Open files, and files half-open for the opponent, touching the king's file. */
   openFilesNear: string[];
+  /** Files beside the king with no own pawn left on them. */
+  bareFiles: string[];
   rating: 'safe' | 'loose' | 'exposed';
 }
 
@@ -161,17 +163,19 @@ export function kingSafety(
       if (s && own.includes(s)) shield += 1;
     }
   }
-  const near = [f - 1, f, f + 1]
-    .filter((x) => x >= 0 && x < 8)
-    .map((x) => FILES[x] ?? '')
-    .filter((file) => openFiles.includes(file) || halfOpenForOpponent.includes(file));
+  const files = [f - 1, f, f + 1].filter((x) => x >= 0 && x < 8).map((x) => FILES[x] ?? '');
+  const near = files.filter(
+    (file) => openFiles.includes(file) || halfOpenForOpponent.includes(file),
+  );
+  // Files beside the king with no own pawn left on them: the shelter is gone for good.
+  const bare = files.filter((file) => !own.some((s) => s.startsWith(file)));
   const rating: KingSafety['rating'] =
     shield >= 2 && near.length === 0
       ? 'safe'
-      : shield === 0 || near.length >= 2
+      : shield === 0 || near.length >= 2 || bare.length >= 2
         ? 'exposed'
         : 'loose';
-  return { square: sq, where, shield, openFilesNear: near, rating };
+  return { square: sq, where, shield, openFilesNear: near, bareFiles: bare, rating };
 }
 
 function phaseOf(all: PieceAt[], ply: number): PositionReport['phase'] {
@@ -401,7 +405,7 @@ export function reportPosition(fen: Fen): PositionReport {
       });
       plans[c].push({
         topic: 'plan',
-        text: `Support and advance the passed pawn on ${s.passed[0]}; it ties the opponent's pieces down.`,
+        text: `Support and advance the passed pawn on ${s.passed[0]}; it ties the opponent’s pieces down.`,
         side: c,
         squares: s.passed,
         lesson: 'passed-pawns-in-the-middlegame',
@@ -472,22 +476,27 @@ export function reportPosition(fen: Fen): PositionReport {
   }
 
   // Kings.
-  // Files with no pawns of the king's own colour are the ones an attack comes down.
+  // An attack comes down the files the opponent's rooks can use: open ones and the
+  // ones half-open for the opponent (no pawn of theirs on it).
   const kings: Record<LongColor, KingSafety> = {
-    white: kingSafety(all, 'white', openFiles, halfOpen.white),
-    black: kingSafety(all, 'black', openFiles, halfOpen.black),
+    white: kingSafety(all, 'white', openFiles, halfOpen[other('white')]),
+    black: kingSafety(all, 'black', openFiles, halfOpen[other('black')]),
   };
   const queensOn = counts.white.q > 0 && counts.black.q > 0;
   for (const c of ['white', 'black'] as const) {
     const k = kings[c];
     if (phase === 'endgame') continue;
     if (k.rating === 'exposed' || k.rating === 'loose') {
+      const near = k.openFilesNear;
+      const allOpen = near.every((file) => openFiles.includes(file));
       const why =
         k.shield === 0
           ? 'no pawns in front of it'
-          : k.openFilesNear.length
-            ? `the ${k.openFilesNear.join(' and ')}-file${k.openFilesNear.length > 1 ? 's' : ''} open beside it`
-            : 'a thin pawn cover';
+          : near.length
+            ? `the ${near.join(' and ')}-file${near.length > 1 ? 's' : ''} ${allOpen ? 'open' : 'half-open'} beside it`
+            : k.bareFiles.length >= 2
+              ? `its ${k.bareFiles.join('- and ')}-pawns are gone`
+              : 'a thin pawn cover';
       items.push({
         topic: 'king',
         text: `${SIDE(c)}'s king on ${k.square} is ${k.rating}: ${why}.`,

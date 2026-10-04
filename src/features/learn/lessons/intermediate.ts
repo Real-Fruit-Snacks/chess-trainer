@@ -426,7 +426,7 @@ export const intermediateLessons: Lesson[] = [
           moves: ['Rd4'],
           hint: 'Lift the rook to the rank where it will later block the checks.',
           success:
-            'Rd4! Now Kb7 walks out; after Rb1+ Kc6 Rc1+ Kb6 Rb1+ Kc5 Rc1+ the rook interposes with Rc4 and the pawn queens.',
+            'Rd4! Black can only wait with ...Ra1. Then Kb7 walks out, and after Rb1+ Kc6 Rc1+ Kb6 Rb1+ Kc5 Rc1+ the rook interposes with Rc4 and the pawn queens.',
           failure:
             'Other moves may also win, but practise the technique: the rook belongs on the 4th rank — the classic bridge.',
         },
@@ -446,7 +446,7 @@ export const intermediateLessons: Lesson[] = [
           success:
             'The rook drops back — Ra1 is the classic square. Now Kd6 is met by Rd1+ and the king has no shelter from the checks.',
           failure:
-            'Checking right away only helps the king forward. First get the rook far away, then check from behind.',
+            'Not the textbook way. Drop the rook to the first rank first, then check from behind — that defence never fails.',
         },
       },
       {

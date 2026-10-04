@@ -9,7 +9,11 @@
 export interface EngineLevel {
   id: number;
   name: string;
-  /** Rough human-equivalent rating, for display only. */
+  /**
+   * Rough human-equivalent rating, for display only: a guide, never measured
+   * against rated players. The fixed-depth levels seldom leave a piece to a
+   * one-move capture, so the weaker ones can play above their number.
+   */
   approxElo: number;
   description: string;
   /** Stockfish `Skill Level` (0–20). */

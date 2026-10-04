@@ -23,6 +23,17 @@ describe('diagnostics', () => {
     expect(text.split('\n').length).toBeLessThanOrEqual(16);
   });
 
+  it('names the commit, so the stack can be read with the source maps archived for it', () => {
+    const error = new Error('boom');
+    expect(describeCrash(error, { ...context, commit: '0123456789ab' })).toContain(
+      '0.9.0 (built 2026-10-01T00:00:00.000Z, commit 0123456789ab)',
+    );
+    expect(describeCrash(error, { ...context, commit: '' })).toContain(
+      '0.9.0 (built 2026-10-01T00:00:00.000Z)',
+    );
+    expect(reportContext().commit).toBe(__BUILD_COMMIT__);
+  });
+
   it('prefills the issue form fields', () => {
     const url = new URL(crashIssueUrl(new Error('boom'), context));
     expect(url.pathname).toMatch(/\/issues\/new$/);

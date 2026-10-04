@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Runs the engine verification of every lesson task (slow: ~2–5 minutes).
+ * Runs the engine verification of every lesson task and scripted reply (slow: about
+ * 20 minutes, the engine running on one core).
  * Wraps `vitest` so the environment flag works the same on every platform.
  *
  * Usage:  node scripts/verify-lessons.mjs [--depth 18]

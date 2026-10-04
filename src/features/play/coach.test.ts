@@ -67,3 +67,23 @@ describe('coach verdicts', () => {
     expect(coachShouldInterrupt(verdict)).toBe(true);
   });
 });
+
+describe('coach and checkmate', () => {
+  it('does not call a mating move a blunder when the engine has no line for the mated position', () => {
+    // A back-rank mate: Qa8# against the king on g8 behind its own pawns.
+    const before = {
+      fen: '6k1/5ppp/8/8/8/8/8/Q5K1 w - - 0 1',
+      score: { type: 'mate' as const, value: 1 },
+      best: 'a1a8',
+      pv: ['a1a8'],
+    };
+    const after = { fen: 'Q5k1/5ppp/8/8/8/8/8/6K1 b - - 1 1', score: null, best: null, pv: [] };
+    const verdict = coachVerdict(before, 'Qa8#', 'a1a8', after);
+    expect(verdict.judgement).toBe('best');
+    expect(verdict.loss).toBe(0);
+    // Even a mate the engine did not list first is a win, not a lost position.
+    const other = coachVerdict({ ...before, best: 'a1b1' }, 'Qa8#', 'a1a8', after);
+    expect(other.loss).toBe(0);
+    expect(coachShouldInterrupt(other)).toBe(false);
+  });
+});

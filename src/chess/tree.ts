@@ -1,6 +1,13 @@
 import { Chess, type Move } from 'chess.js';
-import { START_FEN, toUci, tryMove } from './helpers';
-import { NAG_GLYPHS, type PgnGame, type PgnLine, parsePgn } from './pgn';
+import { normalizeFen, sanitizeFen, START_FEN, toUci, tryMove } from './helpers';
+import {
+  NAG_GLYPHS,
+  type PgnCommand,
+  type PgnGame,
+  type PgnLine,
+  PgnParseError,
+  parsePgn,
+} from './pgn';
 import type { Fen, MoveInput, San, Uci } from './types';
 
 export interface TreeNode {
@@ -15,7 +22,12 @@ export interface TreeNode {
   parent: TreeNode | null;
   /** First child is the main continuation; the rest are variations. */
   children: TreeNode[];
+  /** Comment shown after the move (on the root: before the first move). */
   comment?: string;
+  /** Comment written before the move, as at the start of a variation. */
+  commentBefore?: string;
+  /** `[%clk …]`-style commands carried in the move's comment, kept for export. */
+  commands?: PgnCommand[];
   nags: number[];
 }
 
@@ -45,8 +57,10 @@ export class GameTree {
   headers: Record<string, string> = {};
   result = '*';
 
+  /** The start position is normalised (see `normalizeFen`), so stale castling flags never reach the board. */
   constructor(startFen: Fen = START_FEN) {
-    this.root = makeNode({ san: '', uci: '', fen: startFen, ply: 0, parent: null });
+    const fen = startFen === START_FEN ? startFen : normalizeFen(startFen);
+    this.root = makeNode({ san: '', uci: '', fen, ply: 0, parent: null });
     this.current = this.root;
   }
 
@@ -197,6 +211,31 @@ export class GameTree {
     return this.pathTo(this.current).map((n) => n.uci);
   }
 
+  /** An independent copy (fresh node ids), positioned at the root. */
+  clone(): GameTree {
+    const copy = new GameTree(this.root.fen);
+    copy.headers = { ...this.headers };
+    copy.result = this.result;
+    copyAnnotations(this.root, copy.root);
+    const copyChildren = (from: TreeNode, to: TreeNode) => {
+      for (const child of from.children) {
+        const node = makeNode({
+          san: child.san,
+          uci: child.uci,
+          fen: child.fen,
+          ply: child.ply,
+          parent: to,
+          nags: [...child.nags],
+        });
+        copyAnnotations(child, node);
+        to.children.push(node);
+        copyChildren(child, node);
+      }
+    };
+    copyChildren(this.root, copy.root);
+    return copy;
+  }
+
   /** PGN movetext with variations, comments and glyphs. */
   toPgn(headers: Record<string, string> = {}): string {
     const merged = { ...this.headers, ...headers };
@@ -207,22 +246,34 @@ export class GameTree {
     const headerText = Object.entries(merged)
       .map(([key, value]) => `[${key} "${value.replace(/"/g, '\\"')}"]`)
       .join('\n');
-    const body = writeLine(this.root, true);
+    const opening = this.root.comment ? `${writeComment(this.root.comment)} ` : '';
+    const body = opening + writeLine(this.root, true);
     const result = merged.Result ?? this.result;
     const movetext = `${body} ${result}`.trim();
     return headerText ? `${headerText}\n\n${wrap(movetext)}` : wrap(movetext);
   }
 
-  /** Builds a tree from PGN text (supports variations, comments and NAGs). */
+  /**
+   * Builds a tree from PGN text (supports variations, comments and NAGs). Throws a
+   * `PgnParseError` naming the first illegal move ("Illegal move Nf7 after Qh5").
+   */
   static fromPgn(pgn: string): GameTree {
     const game = parsePgn(pgn);
     return GameTree.fromParsed(game);
   }
 
   static fromParsed(game: PgnGame): GameTree {
-    const startFen = game.headers.FEN ?? START_FEN;
+    let startFen: Fen = START_FEN;
+    if (game.headers.FEN) {
+      const fen = sanitizeFen(game.headers.FEN);
+      if (!fen) {
+        throw new PgnParseError(`Invalid FEN header "${game.headers.FEN}"`, game.headers.FEN, 0);
+      }
+      startFen = fen;
+    }
     const tree = new GameTree(startFen);
     tree.headers = { ...game.headers };
+    if (game.headers.FEN) tree.headers.FEN = startFen;
     tree.result = game.result;
     if (game.comment) tree.root.comment = game.comment;
     const addLine = (parent: TreeNode, line: PgnLine) => {
@@ -230,9 +281,14 @@ export class GameTree {
       for (const entry of line) {
         const chess = new Chess(cursor.fen);
         const move = tryMove(chess, entry.san);
-        if (!move) throw new Error(`Illegal move "${entry.san}" after ${cursor.san || 'start'}`);
+        if (!move) {
+          const where = cursor.san ? `after ${cursor.san}` : 'at the start';
+          throw new PgnParseError(`Illegal move ${entry.san} ${where}`, entry.san, cursor.ply + 1);
+        }
         const node = tree.attach(cursor, move, chess.fen());
         if (entry.comment) node.comment = entry.comment;
+        if (entry.commentBefore) node.commentBefore = entry.commentBefore;
+        if (entry.commands.length) node.commands = [...entry.commands];
         if (entry.nags.length) node.nags = [...entry.nags];
         for (const variation of entry.variations) addLine(cursor, variation);
         cursor = node;
@@ -242,6 +298,37 @@ export class GameTree {
     tree.current = tree.root;
     return tree;
   }
+}
+
+function copyAnnotations(from: TreeNode, to: TreeNode): void {
+  if (from.comment) to.comment = from.comment;
+  if (from.commentBefore) to.commentBefore = from.commentBefore;
+  if (from.commands) to.commands = from.commands.map((c) => ({ ...c }));
+}
+
+const CACHE_SIZE = 32;
+const parsed = new Map<string, GameTree>();
+
+/**
+ * `GameTree.fromPgn` memoised per PGN string (a small LRU), for callers that
+ * re-read the same repertoires on every render. Each call returns a fresh copy,
+ * so the result may be navigated or edited freely.
+ */
+export function parsePgnCached(pgn: string): GameTree {
+  const hit = parsed.get(pgn);
+  if (hit) {
+    // Refresh the entry's position so the least recently used one is evicted first.
+    parsed.delete(pgn);
+    parsed.set(pgn, hit);
+    return hit.clone();
+  }
+  const tree = GameTree.fromPgn(pgn);
+  parsed.set(pgn, tree);
+  if (parsed.size > CACHE_SIZE) {
+    const oldest = parsed.keys().next().value;
+    if (oldest !== undefined) parsed.delete(oldest);
+  }
+  return tree.clone();
 }
 
 function writeLine(from: TreeNode, forceNumber: boolean): string {
@@ -255,22 +342,32 @@ function writeLine(from: TreeNode, forceNumber: boolean): string {
     // Variations of this move (siblings after it)
     const siblings = parent.children.slice(1);
     for (const sibling of siblings) {
+      const before = sibling.commentBefore ? `${writeComment(sibling.commentBefore)} ` : '';
       out.push(
-        `(${writeMove(sibling, parent.fen, true)}${sibling.children.length ? ' ' + writeLine(sibling, false) : ''})`,
+        `(${before}${writeMove(sibling, parent.fen, true)}${sibling.children.length ? ' ' + writeLine(sibling, false) : ''})`,
       );
       needNumber = true;
     }
-    if (node.comment) needNumber = true;
+    if (node.comment || node.commands?.length) needNumber = true;
     parent = node;
     node = node.children[0];
   }
   return out.join(' ');
 }
 
+function writeComment(text: string, commands: PgnCommand[] = []): string {
+  const parts = commands.map((c) => `[%${c.name} ${c.args}]`.replace(/\s+\]/, ']'));
+  const prose = text.replace(/[{}]/g, '').trim();
+  if (prose) parts.push(prose);
+  return `{${parts.join(' ')}}`;
+}
+
 function writeMove(node: TreeNode, parentFen: Fen, forceNumber: boolean): string {
   let text = moveNumberPrefix(parentFen, forceNumber) + node.san;
   for (const nag of node.nags) text += NAG_GLYPHS[nag] ?? ` $${nag}`;
-  if (node.comment) text += ` {${node.comment.replace(/[{}]/g, '')}}`;
+  if (node.comment || node.commands?.length) {
+    text += ` ${writeComment(node.comment ?? '', node.commands ?? [])}`;
+  }
   return text;
 }
 

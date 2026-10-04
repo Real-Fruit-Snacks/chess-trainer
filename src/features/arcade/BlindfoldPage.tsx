@@ -1,15 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Alert, Button, Card, Field, Select, Spinner, Stat, LinkButton } from '@/components/ui';
 import type { LongColor } from '@/chess/types';
-import { ENGINE_LEVELS, getLevel } from '@/engine/levels';
+import { getLevel } from '@/engine/levels';
 import { usePlayVsEngine } from '@/features/play/usePlayVsEngine';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
+import { AnalyzeGameButton, EngineLevelField } from './arcadeControls';
+import { useArcadeFocus } from './arcadeGame';
 import { EngineGameBoard, GameMoves } from './EngineGameBoard';
-import { BLINDFOLD_PEEKS, blindfoldScore, describeBlindfold, PEEK_MS } from './blindfold';
-import '@/features/play/play.css';
+import {
+  BLINDFOLD_PEEKS,
+  BLINDFOLD_SCORING,
+  blindfoldScore,
+  describeBlindfold,
+  PEEK_MS,
+} from './blindfold';
 import './arcade.css';
 
 export default function BlindfoldPage() {
@@ -19,9 +26,10 @@ export default function BlindfoldPage() {
   const best = useProgress((s) => s.arcade.blindfold);
   const [levelId, setLevelId] = useState(settings.playLevel);
   const [color, setColor] = useState<LongColor | 'random'>('white');
+  /** The setup card is up (before the first game, and after "New game"). */
+  const [settingUp, setSettingUp] = useState(true);
   const [peeksUsed, setPeeksUsed] = useState(0);
   const [peeking, setPeeking] = useState(false);
-  const [confirmResign, setConfirmResign] = useState(false);
   const [lastScore, setLastScore] = useState<number | null>(null);
   const recordedRef = useRef(false);
   const peekTimer = useRef<number | null>(null);
@@ -33,13 +41,24 @@ export default function BlindfoldPage() {
     };
   }, []);
 
+  useArcadeFocus(play.started && !play.gameOver);
+
+  /** A game with the chosen level and colour (Play again keeps them). */
   const begin = () => {
     recordedRef.current = false;
+    setSettingUp(false);
     setPeeksUsed(0);
     setPeeking(false);
     setLastScore(null);
-    setConfirmResign(false);
-    play.start({ color, levelId, timeControlId: 'none', opponent: 'engine', coach: false });
+    play.start({
+      color,
+      levelId,
+      timeControlId: 'none',
+      opponent: 'engine',
+      coach: false,
+      source: 'arcade',
+      event: `Blindfold · Level ${levelId}`,
+    });
   };
 
   const peek = () => {
@@ -52,7 +71,7 @@ export default function BlindfoldPage() {
   useEffect(() => {
     if (!play.gameOver || recordedRef.current) return;
     recordedRef.current = true;
-    const score = blindfoldScore(play.gameOver.verdict, peeksUsed);
+    const score = blindfoldScore(play.gameOver.verdict, peeksUsed, play.level.id);
     setLastScore(score);
     recordArcade(
       'blindfold',
@@ -65,29 +84,14 @@ export default function BlindfoldPage() {
   const over = play.gameOver;
   const blindfold = play.started && !peeking && !over;
 
-  const overlay = !play.started ? (
+  const overlay = settingUp ? (
     <Card className="arcade__summary">
       <h2>Blindfold</h2>
       <p className="muted">
         The pieces stay hidden; the move list is all you get. You may peek {BLINDFOLD_PEEKS} times.
       </p>
       <div className="stack" style={{ textAlign: 'left' }}>
-        <Field label="Strength">
-          {(id) => (
-            <Select
-              id={id}
-              value={levelId}
-              onChange={(e) => setLevelId(Number(e.target.value))}
-              data-testid="blindfold-level"
-            >
-              {ENGINE_LEVELS.map((l) => (
-                <option key={l.id} value={l.id}>
-                  Level {l.id} · {l.name} (~{l.approxElo})
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
+        <EngineLevelField value={levelId} onChange={setLevelId} testId="blindfold-level" />
         <Field label="Your colour">
           {(id) => (
             <Select
@@ -125,13 +129,23 @@ export default function BlindfoldPage() {
         <Stat value={best?.best ?? lastScore ?? 0} label="Best" />
       </div>
       <p className="muted">
-        {over.reason.charAt(0).toUpperCase() + over.reason.slice(1)} against{' '}
+        {over.reason.charAt(0).toUpperCase() + over.reason.slice(1)} against Level {play.level.id} ·{' '}
         {getLevel(play.level.id).name}.
+        {over.verdict === 'loss' ? ' A loss scores nothing, whatever the peeks.' : ''}
       </p>
-      <div className="row">
-        <Button variant="primary" onClick={begin}>
+      <div className="row arcade__summary-actions">
+        <Button
+          variant="primary"
+          onClick={begin}
+          title="The same engine level and colour"
+          data-testid="blindfold-again"
+        >
           Play again
         </Button>
+        <Button onClick={() => setSettingUp(true)} data-testid="blindfold-new">
+          New game
+        </Button>
+        <AnalyzeGameButton pgn={play.pgn} orientation={play.playerColor} />
         <LinkButton to="/arcade">Arcade</LinkButton>
       </div>
     </Card>
@@ -166,6 +180,8 @@ export default function BlindfoldPage() {
           ariaLabel={`Blindfold board, ${play.game.position.turn} to move`}
           overlay={overlay}
           blindfold={blindfold}
+          // Captured material would give the position away.
+          showMaterial={false}
           below={
             play.started && !over ? (
               <div className="row row--between" data-testid="blindfold-bar">
@@ -191,36 +207,16 @@ export default function BlindfoldPage() {
               <strong>{play.started ? `Stockfish · ${play.level.name}` : 'No game yet'}</strong>
               {play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
             </div>
-            <p className="small muted" style={{ margin: '4px 0 0' }}>
-              {best
-                ? `Best: ${best.best} — ${best.detail ?? ''}`
-                : 'Scores: a win is 100, a draw 50, plus 15 for every unused peek.'}
+            <p
+              className="small muted"
+              style={{ margin: '4px 0 0' }}
+              data-testid="blindfold-scoring"
+            >
+              {BLINDFOLD_SCORING}
+              {best ? ` Best: ${best.best} — ${best.detail ?? ''}.` : ''}
             </p>
           </Card>
-          <GameMoves
-            play={play}
-            onResign={() => setConfirmResign(true)}
-            extra={
-              confirmResign && play.started && !over ? (
-                <>
-                  <span className="small muted">Resign?</span>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    onClick={() => {
-                      play.resign();
-                      setConfirmResign(false);
-                    }}
-                  >
-                    Yes
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setConfirmResign(false)}>
-                    No
-                  </Button>
-                </>
-              ) : null
-            }
-          />
+          <GameMoves play={play} />
         </aside>
       </div>
     </div>
