@@ -97,17 +97,24 @@ test.describe('colour scheme and board', () => {
     await expect(page.locator('html')).toHaveAttribute('data-pieces', 'pixel');
     await expect(page.getByTestId('pieces-pixel')).toHaveAttribute('aria-pressed', 'true');
 
-    // The board shows the chosen set: the knight on the board is the pixel knight.
+    // The board shows the chosen set: the knight on the board is the pixel knight. (The board's
+    // own stylesheet comes with its code-split chunk, so its styles are awaited, not read once.)
     await page.goto('/analyze');
     await expectBoard(page);
     const boardKnight = page.locator('cg-board piece.white.knight').first();
-    const boardImage = await boardKnight.evaluate((el) => getComputedStyle(el).backgroundImage);
-    expect(boardImage).toBe(images[2]);
-    const square = await page
-      .locator('cg-board')
-      .first()
-      .evaluate((el) => getComputedStyle(el).backgroundImage);
-    expect(decodeURIComponent(square)).toContain('#e8eef5');
+    await expect
+      .poll(() => boardKnight.evaluate((el) => getComputedStyle(el).backgroundImage))
+      .toBe(images[2]);
+    await expect
+      .poll(async () =>
+        decodeURIComponent(
+          await page
+            .locator('cg-board')
+            .first()
+            .evaluate((el) => getComputedStyle(el).backgroundImage),
+        ),
+      )
+      .toContain('#e8eef5');
   });
 
   test('board highlights can be turned off', async ({ page }) => {

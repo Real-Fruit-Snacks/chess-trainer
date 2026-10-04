@@ -75,7 +75,7 @@ const FEATURES = [
     to: '/arcade',
     icon: 'gamepad' as IconName,
     title: 'Arcade',
-    text: 'Nine games: Hand & Brain with Stockfish as your partner, the Daily Opening, Who Stands Better?, the Odds Ladder, Army Draft, Fortress, Engine Says, Blindfold and a Simul on up to eight boards.',
+    text: 'Eleven games: Hand & Brain with Stockfish as your partner, the Daily Opening, Who Stands Better?, the Odds Ladder, Army Draft, Fortress, Engine Says, Blindfold, a Simul on up to eight boards, Arbiter and Ghost Knight.',
     cta: 'Pick a game',
   },
   {

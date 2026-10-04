@@ -2,7 +2,14 @@ import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
 import type { EngineClient, SearchHandle, SearchParams, SearchResult } from '@/engine/EngineClient';
 import type { SearchInfo } from '@/engine/uci';
-import { depthFor, judge, keyMoments, mateFloor, reviewGame } from './gameReview';
+import {
+  depthFor,
+  judge,
+  keyMoments,
+  mateFloor,
+  RECHECK_MIN_DEPTH,
+  reviewGame,
+} from './gameReview';
 
 interface Scripted {
   cp?: number;
@@ -10,8 +17,8 @@ interface Scripted {
   best: string;
   stopped?: number;
   /**
-   * Scores of single moves searched on their own (`searchmoves`), for the side to
-   * move here. Without one, such a search reports the position after the move, flipped.
+   * Scores of moves searched on their own (`searchmoves`), for the side to move here.
+   * Without one, such a search reports the position after the move, flipped.
    */
   only?: Record<string, { cp?: number; mate?: number }>;
 }
@@ -35,29 +42,44 @@ function fakeEngine(
     calls.push(params);
     // The review sends the start position plus the moves played; script by the position reached.
     const fen = positionOf(params);
-    const only = params.searchmoves?.length === 1 ? params.searchmoves[0] : undefined;
-    if (only) {
-      const scripted = evaluations[fen]?.only?.[only];
-      const next = positionOf({ ...params, moves: [...(params.moves ?? []), only] });
-      const after = evaluations[next];
-      // The position after the move, seen from this side: mated in k there is a mate in k + 1 here.
-      const derived =
-        after?.mate !== undefined
-          ? { mate: after.mate < 0 ? 1 - after.mate : -after.mate }
-          : { cp: -(after?.cp ?? 0) };
-      const value = scripted ?? derived;
-      const info: SearchInfo = {
-        depth: 12,
-        multipv: 1,
-        score:
+    if (params.searchmoves?.length) {
+      // Each move scored on its own, best first, one line per move (multipv).
+      const scored = params.searchmoves.map((uci) => {
+        const scripted = evaluations[fen]?.only?.[uci];
+        const next = positionOf({ ...params, moves: [...(params.moves ?? []), uci] });
+        const after = evaluations[next];
+        // The position after the move, seen from this side: mated in k there is a mate in k + 1
+        // here, and a move that mates is a mate in 1.
+        const derived = new Chess(next).isCheckmate()
+          ? { mate: 1 }
+          : after?.mate !== undefined
+            ? { mate: after.mate < 0 ? 1 - after.mate : -after.mate }
+            : { cp: -(after?.cp ?? 0) };
+        const value = scripted ?? derived;
+        const score: SearchInfo['score'] =
           value.mate !== undefined
             ? { type: 'mate', value: value.mate }
-            : { type: 'cp', value: value.cp ?? 0 },
-        pv: [only],
-      };
+            : { type: 'cp', value: value.cp ?? 0 };
+        const rank =
+          score.type === 'mate'
+            ? score.value > 0
+              ? 100_000 - score.value
+              : -100_000 - score.value
+            : score.value;
+        return { uci, score, rank };
+      });
+      scored.sort((a, b) => b.rank - a.rank);
+      const lines = new Map<number, SearchInfo>(
+        scored
+          .slice(0, params.multipv ?? 1)
+          .map((line, index) => [
+            index + 1,
+            { depth: params.depth ?? 12, multipv: index + 1, score: line.score, pv: [line.uci] },
+          ]),
+      );
       const result: SearchResult = {
-        bestmove: { move: only },
-        lines: new Map([[1, info]]),
+        bestmove: { move: scored[0]?.uci ?? null },
+        lines,
         stopped: false,
       };
       return { id: 1, result: Promise.resolve(result), stop: () => undefined };
@@ -191,8 +213,12 @@ describe('reviewGame', () => {
     const engine = fakeEngine(
       {
         [start]: { cp: 30, best: 'e2e4' },
-        // … but searched from the position before, d5 costs next to nothing.
-        [fenAfter(start, 'e4')]: { cp: -30, best: 'e7e5', only: { d7d5: { cp: -60 } } },
+        // … but searched with e5 from the position before, d5 costs next to nothing.
+        [fenAfter(start, 'e4')]: {
+          cp: -30,
+          best: 'e7e5',
+          only: { e7e5: { cp: -40 }, d7d5: { cp: -60 } },
+        },
         [fenAfter(start, 'e4', 'd5')]: { cp: 400, best: 'e4d5' },
         // The other moves are the engine's own choices: no second search.
         [fenAfter(start, 'e4', 'd5', 'exd5')]: { cp: -60, best: 'd8d5' },
@@ -203,12 +229,43 @@ describe('reviewGame', () => {
     const review = await reviewGame(engine, start, moves, { depth: 14 });
     expect(review.moves.map((m) => m.judgement)).toEqual(['best', 'good', 'best', 'best']);
     expect(review.moves[1]?.loss).toBeLessThan(0.05);
-    // One extra search, for the flagged move only, limited to it and at its position's depth.
+    // One extra search, for the flagged move only: the engine's choice and the move played,
+    // two lines, at least RECHECK_MIN_DEPTH deep (the position itself was searched at 10).
     const limited = calls.filter((c) => c.searchmoves);
     expect(limited).toHaveLength(1);
-    expect(limited[0]).toMatchObject({ moves: ['e2e4'], searchmoves: ['d7d5'], depth: 10 });
+    expect(limited[0]).toMatchObject({
+      moves: ['e2e4'],
+      searchmoves: ['e7e5', 'd7d5'],
+      multipv: 2,
+      depth: RECHECK_MIN_DEPTH,
+    });
     // The graph keeps the plain evaluations.
     expect(review.wins[2]).toBeGreaterThan(0.8);
+  });
+
+  it('lets the second look, as deep as the review, make a slip worse too', async () => {
+    const calls: SearchParams[] = [];
+    const start = '4k3/8/8/8/8/8/8/R3K3 w - - 0 1';
+    const chess = new Chess(start);
+    chess.move('Kd2');
+    const engine = fakeEngine(
+      {
+        // Searched together, the engine's Ra7 keeps +9 and Kd2 throws it all away …
+        [start]: { cp: 900, best: 'a1a7', only: { a1a7: { cp: 900 }, e1d2: { cp: 0 } } },
+        // … where the first pass, a ply later, saw only an inaccuracy.
+        [fenAfter(start, 'Kd2')]: { cp: -450, best: 'e8d7' },
+      },
+      calls,
+    );
+    const review = await reviewGame(engine, start, chess.history({ verbose: true }), {
+      depth: 16,
+    });
+    expect(review.moves[0]?.judgement).toBe('blunder');
+    expect(review.moves[0]?.loss).toBeGreaterThan(0.4);
+    // A review deeper than the minimum looks again at its own depth.
+    expect(calls.filter((c) => c.searchmoves)).toEqual([
+      expect.objectContaining({ searchmoves: ['a1a7', 'e1d2'], multipv: 2, depth: 16 }),
+    ]);
   });
 
   it('keeps the verdict when the second search agrees the move was a slip', async () => {
@@ -218,7 +275,11 @@ describe('reviewGame', () => {
     chess.move('f5');
     const engine = fakeEngine({
       [start]: { cp: 30, best: 'e2e4' },
-      [fenAfter(start, 'e4')]: { cp: -30, best: 'e7e5', only: { f7f5: { cp: -640 } } },
+      [fenAfter(start, 'e4')]: {
+        cp: -30,
+        best: 'e7e5',
+        only: { e7e5: { cp: -30 }, f7f5: { cp: -640 } },
+      },
       [fenAfter(start, 'e4', 'f5')]: { cp: 650, best: 'e4f5' },
     });
     const review = await reviewGame(engine, start, chess.history({ verbose: true }));

@@ -13,6 +13,11 @@ updates:
       production-dependencies:
         dependency-type: production
         update-types: [minor, patch]
+    ignore:
+      # TypeScript 7 (the native compiler) cannot be installed beside typescript-eslint, whose
+      # peer range stops at 6.x; drop this once typescript-eslint accepts 7.
+      - dependency-name: typescript
+        versions: ['>=7.0.0']
     labels: [dependencies]
 
   # Workflows pin every action to a commit SHA with its version in a comment;

@@ -84,7 +84,7 @@ a.btn:focus {
 
 .btn--danger:hover:not(:disabled) {
   background: var(--danger);
-  color: #fff;
+  color: var(--danger-contrast);
 }
 
 /*

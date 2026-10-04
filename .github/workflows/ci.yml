@@ -187,7 +187,9 @@ jobs:
 
   visual:
     name: Visual snapshots
-    runs-on: ubuntu-latest
+    # The pixel baselines are rendered with Ubuntu 24.04's fonts; ubuntu-latest moves to
+    # Ubuntu 26 from 19 October 2026. Move this with the baselines (`--update-snapshots`).
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: build
     steps:

@@ -195,6 +195,21 @@ describe('PuzzlesPage', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 
+  it('shows a linked puzzle as practice: no mode is chosen, and the tab says so', async () => {
+    renderAt('/puzzles?id=AbC12&rating=1734');
+    await yourMove();
+    const modes = screen.getByRole('radiogroup', { name: 'Puzzle mode' });
+    expect(modes.querySelectorAll('[aria-checked="true"]')).toHaveLength(0);
+    // The strip keeps one tab stop, on its first option.
+    expect(screen.getByRole('radio', { name: 'Rated' })).toHaveAttribute('tabindex', '0');
+    expect(document.title).toMatch(/^Puzzle practice · /);
+    expect(screen.getByText('Unrated practice')).toBeInTheDocument();
+    // Choosing Rated leaves the linked puzzle for rated solving.
+    fireEvent.click(screen.getByRole('radio', { name: 'Rated' }));
+    await vi.waitFor(() => expect(document.title).toMatch(/^Rated puzzles · /));
+    expect(screen.getByRole('radio', { name: 'Rated' })).toBeChecked();
+  });
+
   it('looks a linked puzzle up with the rating the link carries', async () => {
     renderAt('/puzzles?id=AbC12&rating=1734');
     await yourMove();

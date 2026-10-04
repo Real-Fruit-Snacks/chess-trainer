@@ -38,7 +38,8 @@ test.describe('test lab', () => {
 
     // Feedback: a toast and the dialog.
     await page.getByTestId('toast-success').click();
-    await expect(page.locator('.toast').last()).toContainText('A success toast.');
+    // Its own toast, wherever it sits: "Ready to work offline" may arrive at the same moment.
+    await expect(page.locator('.toast', { hasText: 'A success toast.' })).toBeVisible();
     await page.getByTestId('open-dialog').click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();

@@ -60,7 +60,9 @@ export type IconName =
   | 'info'
   | 'warning'
   | 'alert'
-  | 'swap';
+  | 'swap'
+  | 'whistle'
+  | 'ghost';
 
 /** Path data per icon; `fill` marks icons drawn as filled shapes. */
 const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
@@ -169,6 +171,14 @@ const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
   alert: { d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8v5M12 16.5h.01' },
   // Two arrows passing each other: in the line, but in another place (Daily Opening).
   swap: { d: 'M4 8h13M14 5l3 3-3 3M20 16H7M10 13l-3 3 3 3' },
+  // A referee's whistle: body, mouthpiece, the pea inside and the lanyard ring (Arbiter).
+  whistle: {
+    d: 'M9.5 8H21v4h-6.2A5.5 5.5 0 1 1 9.5 8zM9.5 11.8a1.7 1.7 0 1 0 0 3.4 1.7 1.7 0 0 0 0-3.4zM5.6 9.6 3.4 7.4',
+  },
+  // A sheet ghost with a ragged hem (Ghost Knight).
+  ghost: {
+    d: 'M6 20.5V10a6 6 0 0 1 12 0v10.5l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5zM10 10.5h.01M14 10.5h.01',
+  },
 };
 
 /** Every icon name, for the test lab and the tests. */

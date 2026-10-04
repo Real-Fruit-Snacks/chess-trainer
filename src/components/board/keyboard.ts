@@ -1,4 +1,5 @@
 import { Chess, type Color, type PieceSymbol, type Square } from 'chess.js';
+import { isPlacementField, parsePlacement } from '@/chess/geometry';
 import type { LongColor } from '@/chess/types';
 
 const FILES = 'abcdefgh';
@@ -93,15 +94,12 @@ export function describeSquare(
   square: Square,
   options: DescribeSquareOptions = {},
 ): string {
-  let text: string;
-  try {
-    const piece = new Chess(fen).get(square);
-    text = piece
-      ? `${square}, ${piece.color === 'w' ? 'white' : 'black'} ${PIECE_NAMES[piece.type]}`
-      : `${square}, empty`;
-  } catch {
-    text = square;
-  }
+  // Read from the placement alone, so a board chess.js would refuse (no kings, as in Ghost
+  // Knight) is described all the same.
+  const piece = parsePlacement(fen).get(square);
+  let text = piece
+    ? `${square}, ${piece.color === 'w' ? 'white' : 'black'} ${PIECE_NAMES[piece.type]}`
+    : `${square}, empty`;
   if (options.selected && options.dests?.get(options.selected)?.includes(square)) {
     text += ', legal destination';
   }
@@ -113,19 +111,22 @@ export function describeSquare(
  * piece of each side grouped by type, e.g. "White: king g1, rooks a1 and f1".
  */
 export function describePosition(fen: string): string {
-  let chess: Chess;
+  // chess.js only reads legal positions; the pieces are listed from the placement whatever it
+  // holds (an arbiter's illegal move, a board without kings), and the checks come from chess.js
+  // when it can read the position.
+  let chess: Chess | null;
   try {
     chess = new Chess(fen);
   } catch {
-    return 'The position could not be read.';
+    chess = null;
   }
+  if (!isPlacementField(fen)) return 'The position could not be read.';
+  const placement = parsePlacement(fen);
   const list = (color: Color) => {
     const groups = new Map<PieceSymbol, Square[]>();
-    for (const row of chess.board()) {
-      for (const cell of row) {
-        if (cell?.color !== color) continue;
-        groups.set(cell.type, [...(groups.get(cell.type) ?? []), cell.square]);
-      }
+    for (const [square, piece] of placement) {
+      if (piece.color !== color) continue;
+      groups.set(piece.type, [...(groups.get(piece.type) ?? []), square]);
     }
     const parts = ORDER.filter((t) => groups.has(t)).map((t) => {
       const squares = (groups.get(t) ?? []).sort();
@@ -138,13 +139,15 @@ export function describePosition(fen: string): string {
     });
     return parts.length ? parts.join(', ') : 'no pieces';
   };
-  const turn = chess.turn() === 'w' ? 'White' : 'Black';
-  const state = chess.isCheckmate()
-    ? ' Checkmate.'
-    : chess.isStalemate()
-      ? ' Stalemate.'
-      : chess.inCheck()
-        ? ` ${turn} is in check.`
-        : '';
+  const turn = fen.split(' ')[1] === 'b' ? 'Black' : 'White';
+  const state = !chess
+    ? ''
+    : chess.isCheckmate()
+      ? ' Checkmate.'
+      : chess.isStalemate()
+        ? ' Stalemate.'
+        : chess.inCheck()
+          ? ` ${turn} is in check.`
+          : '';
   return `${turn} to move.${state} White: ${list('w')}. Black: ${list('b')}.`;
 }

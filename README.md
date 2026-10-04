@@ -71,9 +71,10 @@ links that carry the whole game.
 trained with spaced repetition (or import your own), eight endgame studies and 46 classic games to
 guess move by move.
 
-**Arcade** — nine games that are not puzzles: a simul against up to eight engines at once, each
+**Arcade** — eleven games that are not puzzles: a simul against up to eight engines at once, each
 board with its own clocks, Hand & Brain with Stockfish as your partner, a daily opening Wordle, Who
-Stands Better?, the Odds Ladder, Army Draft, Fortress, Engine Says and Blindfold.
+Stands Better?, the Odds Ladder, Army Draft, Fortress, Engine Says, Blindfold, Arbiter (catch the
+illegal move in a replayed classic) and Ghost Knight (hunt a knight you only see every third move).
 
 <table>
   <tr>
@@ -104,7 +105,7 @@ it works offline.
 ```bash
 git clone https://github.com/Real-Fruit-Snacks/chess-trainer.git
 cd chess-trainer
-npm install     # Node 22 or newer
+npm install     # Node 22.22 or newer
 npm run dev     # downloads the engine on first run, then serves http://localhost:5173
 ```
 

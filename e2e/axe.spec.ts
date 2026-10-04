@@ -51,6 +51,8 @@ const PAGES = [
   '/arcade/engine-says',
   '/arcade/blindfold',
   '/arcade/simul',
+  '/arcade/arbiter',
+  '/arcade/ghost-knight',
 ];
 
 type Scheme = 'light' | 'dark' | 'black';

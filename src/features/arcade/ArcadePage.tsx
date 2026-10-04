@@ -6,7 +6,7 @@ import { useProgress } from '@/store/progress';
 import { ARCADE_GAMES, describeArcadeBest } from './games';
 import './arcade.css';
 
-/** The arcade: nine games that are not puzzles, each with a score to beat. */
+/** The arcade: eleven games that are not puzzles, each with a score to beat. */
 export default function ArcadePage() {
   const arcade = useProgress((s) => s.arcade);
   const dailyOpening = useProgress((s) => s.dailyOpening);
@@ -21,10 +21,10 @@ export default function ArcadePage() {
       <div className="page-header">
         <h1>Arcade</h1>
         <p>
-          Nine games that are not puzzles: play with the engine as your partner, guess the opening
+          Eleven games that are not puzzles: play with the engine as your partner, guess the opening
           of the day, judge positions, climb the odds ladder, draft an army, hold a fortress, replay
-          lines from memory, play blindfold, or take on several engines at once. Every game keeps a
-          score to beat.
+          lines from memory, play blindfold, take on several engines at once, catch illegal moves as
+          the arbiter, or hunt a knight you cannot see. Every game keeps a score to beat.
         </p>
       </div>
       <div className="grid grid--cards" data-testid="arcade-games">

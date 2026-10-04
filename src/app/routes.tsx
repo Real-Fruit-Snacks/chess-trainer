@@ -39,6 +39,8 @@ const FortressPage = lazy(() => import('@/features/arcade/FortressPage'));
 const EngineSaysPage = lazy(() => import('@/features/arcade/EngineSaysPage'));
 const BlindfoldPage = lazy(() => import('@/features/arcade/BlindfoldPage'));
 const SimulPage = lazy(() => import('@/features/arcade/SimulPage'));
+const ArbiterPage = lazy(() => import('@/features/arcade/ArbiterPage'));
+const GhostKnightPage = lazy(() => import('@/features/arcade/GhostKnightPage'));
 const NotFoundPage = lazy(() => import('@/features/home/NotFoundPage'));
 
 export const routes: RouteObject[] = [
@@ -75,6 +77,8 @@ export const routes: RouteObject[] = [
       { path: 'arcade/engine-says', element: <EngineSaysPage /> },
       { path: 'arcade/blindfold', element: <BlindfoldPage /> },
       { path: 'arcade/simul', element: <SimulPage /> },
+      { path: 'arcade/arbiter', element: <ArbiterPage /> },
+      { path: 'arcade/ghost-knight', element: <GhostKnightPage /> },
       { path: 'openings', element: <OpeningsPage /> },
       { path: 'openings/:repertoireId', element: <RepertoirePage /> },
       { path: 'games', element: <MyGamesPage /> },

@@ -34,6 +34,7 @@
   --warning-soft: #fbeed7;
   --danger: #b33636;
   --danger-soft: #f9dede;
+  --danger-contrast: #ffffff;
   --info: #27619e;
   --info-soft: #dce9f7;
 
@@ -105,6 +106,7 @@
   --warning-soft: #3a2c10;
   --danger: #e36b6b;
   --danger-soft: #3d1c1c;
+  --danger-contrast: #1a0b0b;
   --info: #6aa5e6;
   --info-soft: #172a40;
 
@@ -145,6 +147,7 @@
     --warning-soft: #3a2c10;
     --danger: #e36b6b;
     --danger-soft: #3d1c1c;
+    --danger-contrast: #1a0b0b;
     --info: #6aa5e6;
     --info-soft: #172a40;
 

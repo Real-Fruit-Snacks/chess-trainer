@@ -13,7 +13,7 @@ npm run dev
 ```
 
 `npm run dev` downloads the pinned Stockfish build into `public/engine/` on first run (about 2 MB) and
-starts Vite with hot reload. Node 22 or newer is required (see `.nvmrc`). Every script works the same
+starts Vite with hot reload. Node 22.22 or newer is required (see `.nvmrc`). Every script works the same
 on Windows, macOS and Linux, and `.gitattributes` keeps line endings LF on every platform.
 
 Before opening a pull request run:

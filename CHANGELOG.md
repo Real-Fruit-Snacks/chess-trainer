@@ -6,6 +6,89 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-04
+
+Two new Arcade games built on the rules themselves: Arbiter, where you catch the illegal move in a
+replayed classic, and Ghost Knight, where you hunt a knight you only see every third move.
+
+### Added
+
+- **Arbiter** (_Arcade_): a stretch of a classic game replays at speed and then one move breaks the
+  rules — call it with the button or Space before the next move would have come. Eighteen kinds of
+  illegal move in three tiers, from a knight off its L and a pawn going backwards, through a piece
+  jumping another and a pawn left unpromoted, to a pinned piece moving, a king walking into check, a
+  check ignored, castling past an attack, en passant too late and one side moving twice. Every call
+  is answered with the rule and arrows or marks that show it. Each round is faster; a missed move or
+  a legal one called is a strike, and three end the run. A normal and a slow pace; the replay pauses
+  when the page is hidden, and a pause covers the board.
+- **Ghost Knight** (_Arcade_): an enemy knight hides on the board and shows itself every third move.
+  Your squad moves by the ordinary rules; the knight never jumps onto an attacked square and takes
+  any piece left unprotected in its reach. Land on it (a rook or bishop that runs into it stops and
+  takes it) or corner it. The shaded mode marks every square it could be on; unshaded, you track it
+  yourself for double points. Five hunts, each harder than the last, and three lives.
+- Two icons for them, a whistle and a ghost, in the same line style as the rest.
+
+### Fixed
+
+- In the dark and black schemes a red button under the pointer (Resign, Delete, Arbiter's call) had
+  white text on light red, below the AA contrast ratio; it now has dark text.
+
+### Changed
+
+- The board's spoken square and position descriptions read the pieces from the position itself, so
+  boards chess.js cannot load — no kings, or the position after an illegal move — are described too.
+- Buttons take a `ref`, so a page can move the keyboard focus to one.
+- The Arcade, the Home page and the More menu count eleven games.
+
+### Testing
+
+- Every illegal move found at every position of every classic game, of every kind, is checked to be
+  one chess.js refuses; each kind is also tested on a position built for it. Rounds are tested for
+  their real moves, their tier and the rare kinds; the run for its clock, calls, strikes, pauses and
+  record.
+- Ghost Knight's squares-it-could-be-on are checked to hold the real knight through random hunts with
+  every squad, and every squad is won within its budget often enough by a hunter that looks one move
+  ahead. Catching, running into the knight, cornering it, losing a piece, running out of moves and
+  the scoring are tested one by one.
+- Both pages are tested end to end in every browser, and in the accessibility sweep in every colour
+  scheme.
+- The test lab's end-to-end check looks for its own toast rather than the newest one, so the "Ready
+  to work offline" toast arriving at the same moment no longer fails the nightly run in Firefox.
+
+## [0.12.1] - 2026-10-04
+
+Sharper game review at every depth, a linked puzzle that says what it is, and React Router 8,
+TypeScript 6 and vite-plugin-pwa 2.
+
+### Fixed
+
+- **Game review:** a move the first pass flags is now compared with the engine’s choice once more,
+  both moves in one search at depth 14 or deeper, and judged by that search. A deep sacrifice is no
+  longer marked down for what a shallow search cannot see — Morphy’s 15.Bxd7+ in the Opera Game was
+  a “mistake” at the Fast depth — and a slip the second search finds worse is reported as worse.
+- **Puzzles:** a puzzle opened from a link (the recent puzzles on Progress) is unrated practice, and
+  the mode bar no longer shows Rated as chosen while it is on the board; the tab reads “Puzzle
+  practice”.
+
+### Changed
+
+- **Dependencies:** React Router 8, TypeScript 6 (the deprecated `baseUrl` is gone from the
+  TypeScript configs) and vite-plugin-pwa 2. React Router 8 needs Node 22.22 or newer, which is now
+  the floor for working on the project.
+- The visual snapshot job runs on Ubuntu 24.04, whose fonts the pixel baselines were rendered with,
+  so the move of `ubuntu-latest` to Ubuntu 26 on 19 October does not break it.
+- Dependabot leaves TypeScript 7 alone until typescript-eslint accepts it (its peer range stops at
+  6.x, so TypeScript 7 cannot be installed beside it).
+- The screenshots in the README show the current app.
+
+### Testing
+
+- The game review’s second look is tested both ways (a strong move cleared, a slip made worse) and
+  at the review’s own depth when that is deeper than 14; a segmented control can show no option as
+  chosen; a linked puzzle leaves the mode bar unchosen until a mode is picked.
+- The board-style end-to-end check waits for the board’s styles instead of reading them once, so a
+  board re-created when the engine becomes ready no longer fails it on slower machines.
+
 ## [0.12.0] - 2026-10-03
 
 A full audit of every mode, and what it put right: safer backups, chess and PGN fixes, a sounder

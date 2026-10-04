@@ -123,9 +123,10 @@ export default function PuzzlesPage() {
     [mode, openingFilter],
   );
 
+  // A puzzle opened by a link (from Progress) is unrated practice, whatever the route says.
   useEffect(() => {
-    document.title = `${MODE_TITLES[mode]} · ${siteConfig.name}`;
-  }, [mode]);
+    document.title = `${puzzleId ? 'Puzzle practice' : MODE_TITLES[mode]} · ${siteConfig.name}`;
+  }, [mode, puzzleId]);
 
   // Changing mode is a navigation, after which the app moves focus to the page; a keyboard
   // user who was choosing on the mode strip gets the strip back, on the mode just chosen.
@@ -156,7 +157,8 @@ export default function PuzzlesPage() {
         <div className="puzzle-modes" ref={stripRef}>
           <Segmented
             ariaLabel="Puzzle mode"
-            value={mode}
+            // A linked puzzle belongs to none of the modes: none is shown as chosen.
+            value={puzzleId ? null : mode}
             onChange={(m) => {
               refocusStripRef.current = !!stripRef.current?.contains(document.activeElement);
               void navigate(m === 'rated' ? '/puzzles' : `/puzzles/${m}`);

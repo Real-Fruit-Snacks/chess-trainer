@@ -55,7 +55,7 @@ const ARCADE: NavItem = {
   to: '/arcade',
   label: 'Arcade',
   icon: 'gamepad',
-  blurb: 'Nine games, not puzzles',
+  blurb: 'Eleven games, not puzzles',
 };
 const MY_GAMES: NavItem = {
   to: '/games',

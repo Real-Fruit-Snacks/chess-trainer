@@ -102,7 +102,7 @@ the engine rates yours as good. Filter by era, difficulty and what you have play
 
 ## Arcade
 
-Nine games that are not puzzles, each with a score to beat:
+Eleven games that are not puzzles, each with a score to beat:
 
 - **Hand & Brain** — full-strength Stockfish as your partner: you call the piece and it finds the
   move, or the reverse, and every call is graded against the engine's best. The score is your
@@ -132,6 +132,26 @@ Nine games that are not puzzles, each with a score to beat:
   of board numbers sits under the big board too); tap one or press `N` for the next board waiting for
   you. Each win scores its board's level, a draw half of it. Leaving a simul in play asks first and
   resigns the boards still going.
+- **Arbiter** — a stretch of a classic game replays at speed, and then one move breaks the rules. Call
+  it (the button, or Space) before the next move would have come. Eighteen kinds of illegal move in
+  three tiers: in rounds one to three a piece moves in a way it never can (a knight off its L, a bishop
+  going straight, a pawn backwards or taking straight ahead); in rounds four to seven the right movement
+  comes where it is not allowed (a piece jumping another, a late double step, a pawn left
+  unpromoted); from round eight on it is what the king's safety and the move order forbid (a pinned
+  piece moving, a king walking into check, a check ignored, castling past an attack, en passant too
+  late, one side moving twice) — with now and then a kind from the tier below. Every call is answered
+  with the rule and the squares that show it. Rounds speed up; calling a legal move or letting the
+  illegal one pass is a strike, and three end the run. The replay pauses when the page is hidden, and
+  a pause covers the board. Slow pace gives each move nearly twice as long. The score is the illegal
+  moves caught.
+- **Ghost Knight** — an enemy knight hides on the board and shows itself every third move. Your
+  squad moves by the ordinary rules, one move a turn; the knight never jumps onto a square you attack
+  and takes any piece you leave unprotected within its reach (which shows where it is). Catch it by
+  landing on it — a rook or bishop that runs into it on the way stops and takes it — or corner it so
+  every square it could jump to is covered. Shaded, the board marks every square it could be on;
+  unshaded, you track it yourself for double points. Five hunts, each harder than the last (two rooks
+  and a bishop up to rook, bishop and knight), three lives; a catch scores 10 plus a point for each
+  move to spare.
 
 The games against the engine end with "Play again" (the same settings) and "New game" (the setup),
 hand the game to the analysis board from your side, copy its PGN, and follow focus mode. Odds
@@ -152,8 +172,9 @@ from the engine ladder and the Play results.
 - **Game review** with an evaluation graph, **key moments explained in words** — hanging pieces,
   forks, pins, missed mates, each linked to the lesson and the puzzle theme — and a choice of depth.
   The engine sees each position with the moves that led to it (so it knows about repetitions), and a
-  move that looks like a slip is searched again from the position before it, at the best move's
-  depth, before it is called one.
+  move that looks like a slip is compared with the engine's choice once more, both moves in one
+  search at depth 14 or more, before it is called one — so a deep sacrifice is not marked down for
+  what a shallow search cannot see.
 - **Import games** by pasting or opening a PGN (ChessBase-style `1.e4` numbering, chess.com clock
   tags, evaluation symbols and 4-field FENs included; an illegal move is named and the moves before
   it can be loaded), or straight from a Lichess or chess.com username. Variant games are skipped.

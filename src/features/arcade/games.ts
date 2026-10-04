@@ -13,7 +13,9 @@ export type ArcadeGameId =
   | 'fortress'
   | 'engine-says'
   | 'blindfold'
-  | 'simul';
+  | 'simul'
+  | 'arbiter'
+  | 'ghost-knight';
 
 export interface ArcadeGame {
   id: ArcadeGameId;
@@ -128,6 +130,28 @@ export const ARCADE_GAMES: readonly ArcadeGame[] = [
     icon: 'boards',
     engine: true,
     minutes: '10–40',
+  },
+  {
+    id: 'arbiter',
+    name: 'Arbiter',
+    tagline: 'Catch the illegal move before the next one.',
+    description:
+      'Classic games replay at speed, and in every round one move breaks the rules: a knight off its L, a pinned piece moving, castling through check. Call it in time; every round is faster, and three strikes end the run.',
+    trains: 'The rules, and seeing pins and checks at a glance',
+    icon: 'whistle',
+    engine: false,
+    minutes: '3–10',
+  },
+  {
+    id: 'ghost-knight',
+    name: 'Ghost Knight',
+    tagline: 'Hunt a knight you only see every third move.',
+    description:
+      'An enemy knight hides on the board and shows itself every third move. Corner it with your squad: it never jumps onto a square you attack, and it takes any piece you leave unprotected. Five hunts, each harder than the last, and three lives.',
+    trains: 'Knight geometry and cutting a piece off',
+    icon: 'ghost',
+    engine: false,
+    minutes: '5–15',
   },
 ];
 

@@ -95,6 +95,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     shortcuts: [
       { keys: ['Enter'], action: 'Daily Opening: submit the first matching opening name' },
       { keys: ['N'], action: 'Simul: next board waiting for your move' },
+      { keys: ['Space'], action: 'Arbiter: call the move on the board illegal' },
+      { keys: ['Enter'], action: 'Arbiter and Ghost Knight: go on once a round or hunt is over' },
     ],
   },
   {

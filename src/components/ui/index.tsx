@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type ReactElement,
   type ReactNode,
+  type Ref,
   type SelectHTMLAttributes,
   useEffect,
   useId,
@@ -31,7 +32,8 @@ interface ButtonBaseProps {
   loading?: boolean;
 }
 
-export type ButtonProps = ButtonBaseProps & ButtonHTMLAttributes<HTMLButtonElement>;
+export type ButtonProps = ButtonBaseProps &
+  ButtonHTMLAttributes<HTMLButtonElement> & { ref?: Ref<HTMLButtonElement> };
 
 function buttonClass({
   variant = 'secondary',
@@ -314,7 +316,8 @@ export function Switch({
 /**
  * One choice out of a few, shown side by side. A radio group: one tab stop,
  * the arrow keys move between the options (and select them, like native
- * radios), Home and End jump to the ends.
+ * radios), Home and End jump to the ends. `value` is null when none of the
+ * options describes what the page shows; the first option then takes the tab stop.
  */
 export function Segmented<T extends string | number>({
   value,
@@ -322,7 +325,7 @@ export function Segmented<T extends string | number>({
   onChange,
   ariaLabel,
 }: {
-  value: T;
+  value: T | null;
   options: { value: T; label: ReactNode }[];
   onChange: (value: T) => void;
   ariaLabel: string;

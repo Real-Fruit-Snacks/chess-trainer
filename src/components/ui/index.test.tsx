@@ -236,6 +236,27 @@ describe('Segmented', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Rush' }));
     expect(onChange).toHaveBeenCalledWith('rush');
   });
+
+  it('can show no option as chosen, the first one keeping the tab stop', () => {
+    const onChange = vi.fn();
+    render(
+      <Segmented<string>
+        ariaLabel="Puzzle mode"
+        value={null}
+        onChange={onChange}
+        options={[
+          { value: 'rated', label: 'Rated' },
+          { value: 'themes', label: 'Themes' },
+        ]}
+      />,
+    );
+    const radios = screen.getAllByRole('radio');
+    expect(radios.map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false']);
+    expect(radios.map((r) => r.tabIndex)).toEqual([0, -1]);
+    // Clicking the first option chooses it: it was not chosen before.
+    fireEvent.click(radios[0]!);
+    expect(onChange).toHaveBeenCalledWith('rated');
+  });
 });
 
 describe('Field, Switch and ProgressBar', () => {

@@ -137,10 +137,14 @@ export function depthFor(
   return depth;
 }
 
+/** The second look at a flagged move searches at least this deep, whatever the review depth. */
+export const RECHECK_MIN_DEPTH = 14;
+
 /**
  * Runs one search, retrying once when it comes back stopped (another search
  * interrupted it); a second stopped result is an error, not a review.
- * `searchmoves` limits the search to those moves of the position.
+ * `searchmoves` limits the search to those moves of the position, and
+ * `multipv` asks for that many lines.
  */
 async function evaluate(
   engine: EngineClient,
@@ -148,6 +152,7 @@ async function evaluate(
   depth: number,
   signal: AbortSignal | undefined,
   searchmoves?: Uci[],
+  multipv = 1,
 ) {
   for (let attempt = 0; attempt < 2; attempt++) {
     if (signal?.aborted) throw new DOMException('Review cancelled', 'AbortError');
@@ -156,7 +161,7 @@ async function evaluate(
       fen: position.startFen,
       moves: position.moves,
       depth,
-      multipv: 1,
+      multipv,
       ...(searchmoves ? { searchmoves } : {}),
     }).result;
     if (!result.stopped) return result;
@@ -198,12 +203,15 @@ export async function reviewGame(
     depth: number;
   }[] = [];
   /**
-   * The played move's own score, searched from the position before it at the same
-   * depth (mover's view), for moves the first pass flags. Two searches a ply apart
-   * can disagree by more than the move costs (the deeper one sees further), so a
-   * strong move can look like a slip; this one shares the best move's horizon.
+   * A second look at the moves the first pass flags: the engine's choice and the
+   * move played, searched together from the position before it, at least
+   * RECHECK_MIN_DEPTH deep (scores from the mover's point of view). Two searches a
+   * ply apart can disagree by more than the move costs — the later one sees
+   * further — so a strong move can look like a slip; one search of both moves
+   * judges them by the same horizon. `best` is null when only the move played
+   * could be searched.
    */
-  const checked = new Map<number, Score>();
+  const checked = new Map<number, { best: Score | null; played: Score }>();
   const PV_PLIES = 6;
 
   const chess = new Chess(startFen);
@@ -240,7 +248,7 @@ export async function reviewGame(
     }
 
     // The move that led here: when it is not the engine's choice and looks like a slip,
-    // ask how good it is from the position before, at that position's depth.
+    // compare the two again in one search from the position before.
     const before = evaluations[ply - 1];
     const after = evaluations[ply];
     const last = played[ply - 1];
@@ -254,15 +262,21 @@ export async function reviewGame(
         delivered,
       );
       if (first === 'inaccuracy' || first === 'mistake' || first === 'blunder') {
+        const both = before.best ? [before.best, last] : [last];
         const result = await evaluate(
           engine,
           { startFen, moves: played.slice(0, ply - 1) },
-          before.depth,
+          Math.max(before.depth, RECHECK_MIN_DEPTH),
           options.signal,
-          [last],
+          both,
+          both.length,
         );
-        const score = result.lines.get(1)?.score;
-        if (score) checked.set(ply - 1, score);
+        const lines = [...result.lines.values()];
+        const playedLine = lines.find((line) => line.pv[0] === last);
+        const bestLine = lines.find((line) => line.pv[0] === before.best);
+        if (playedLine) {
+          checked.set(ply - 1, { best: bestLine?.score ?? null, played: playedLine.score });
+        }
       }
     }
 
@@ -293,25 +307,30 @@ export async function reviewGame(
     const isBest = before.best === played;
     // The score after the move is reported for the side then to move: flip it to the mover's view.
     const scoreAfter = flipScore(after.score);
-    // A flagged move searched again from the position before it: when that search, which shares
-    // the best move's horizon, finds the move costs less, it is judged by that.
+    // A flagged move looked at again: with both moves in one search, that search's verdict
+    // stands; with the move played alone, it can only make the loss smaller.
+    let judgedBefore = before.score;
     let judgedAfter = scoreAfter;
-    const own = checked.get(i);
-    if (own) {
-      const ownLoss = moverLoss(
-        mover === 'white',
-        before.win,
-        cpToWinProbability(scoreToWhiteCp(own, mover === 'white')),
-      );
-      if (ownLoss < loss) {
-        loss = ownLoss;
-        judgedAfter = own;
+    const second = checked.get(i);
+    if (second) {
+      const white = mover === 'white';
+      const winPlayed = cpToWinProbability(scoreToWhiteCp(second.played, white));
+      if (second.best) {
+        loss = moverLoss(white, cpToWinProbability(scoreToWhiteCp(second.best, white)), winPlayed);
+        judgedBefore = second.best;
+        judgedAfter = second.played;
+      } else {
+        const ownLoss = moverLoss(white, before.win, winPlayed);
+        if (ownLoss < loss) {
+          loss = ownLoss;
+          judgedAfter = second.played;
+        }
       }
     }
     const delivered = after.score === null && after.win === (mover === 'white' ? 1 : 0);
     const judgement: MoveJudgement = isBest
       ? 'best'
-      : mateFloor(judge(loss), before.score, judgedAfter, delivered);
+      : mateFloor(judge(loss), judgedBefore, judgedAfter, delivered);
     if (judgement === 'inaccuracy' || judgement === 'mistake' || judgement === 'blunder') {
       counts[mover][judgement]++;
     }
