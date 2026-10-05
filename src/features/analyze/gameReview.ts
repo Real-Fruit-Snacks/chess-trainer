@@ -1,6 +1,6 @@
 import { Chess, type Move } from 'chess.js';
 import type { MoveJudgement } from '@/components/chess/MoveList';
-import { START_FEN, toUci } from '@/chess/helpers';
+import { passMove, START_FEN, toUci } from '@/chess/helpers';
 import type { Fen, Uci } from '@/chess/types';
 import type { EngineClient } from '@/engine/EngineClient';
 import { cpToWinProbability, type Score, scoreToWhiteCp } from '@/engine/uci';
@@ -28,7 +28,26 @@ export interface ReviewedMove {
   /** The opponent's best answer to the move actually played, with its line. */
   replyUci: Uci | null;
   replyPv: Uci[];
+  /**
+   * Mistakes and blunders: what the opponent would have played had the mover
+   * passed instead — the threat that was already on the board (see the threat drill).
+   */
+  passThreat?: PassThreat;
 }
+
+/** The opponent's best move after a pass, from the position before a flagged move. */
+export interface PassThreat {
+  uci: Uci;
+  /** The opponent's line from there (a few plies). */
+  pv: Uci[];
+  /** Its score, for the opponent. */
+  score: Score;
+  /** Other moves as strong (within a few centipawns). */
+  also: Uci[];
+}
+
+/** Moves within this much of the threat after a pass count as the same threat. */
+const PASS_ALSO_CP = 40;
 
 export interface ReviewSummary {
   moves: ReviewedMove[];
@@ -212,13 +231,18 @@ export async function reviewGame(
    * could be searched.
    */
   const checked = new Map<number, { best: Score | null; played: Score }>();
+  /** The threat after a pass, for the moves the first look flags as mistakes or blunders. */
+  const passThreats = new Map<number, PassThreat>();
   const PV_PLIES = 6;
 
   const chess = new Chess(startFen);
   const played: Uci[] = [];
+  /** The position after each ply (index 0: the start). */
+  const fens: Fen[] = [];
   for (let ply = 0; ply <= moves.length; ply++) {
     if (options.signal?.aborted) throw new DOMException('Review cancelled', 'AbortError');
     const moverIsWhite = chess.turn() === 'w';
+    fens.push(chess.fen());
 
     if (chess.isGameOver()) {
       const win = chess.isCheckmate() ? (moverIsWhite ? 0 : 1) : 0.5;
@@ -277,6 +301,16 @@ export async function reviewGame(
         if (playedLine) {
           checked.set(ply - 1, { best: bestLine?.score ?? null, played: playedLine.score });
         }
+      }
+      if (first === 'mistake' || first === 'blunder') {
+        const threat = await passSearch(
+          engine,
+          fens[ply - 1],
+          Math.max(before.depth, RECHECK_MIN_DEPTH),
+          options.signal,
+          PV_PLIES,
+        );
+        if (threat) passThreats.set(ply - 1, threat);
       }
     }
 
@@ -366,6 +400,9 @@ export async function reviewGame(
       bestPv: before.pv,
       replyUci: after.best,
       replyPv: after.pv,
+      ...(judgement === 'mistake' || judgement === 'blunder'
+        ? optional('passThreat', passThreats.get(i))
+        : {}),
     });
     replay.move(move.san);
   });
@@ -376,6 +413,57 @@ export async function reviewGame(
   };
 
   return { moves: reviewed, counts, accuracy, wins: evaluations.map((e) => e.win), depth };
+}
+
+/** `{ [key]: value }` when there is a value, else nothing (optional fields stay absent). */
+function optional<K extends string, V>(key: K, value: V | undefined): Partial<Record<K, V>> {
+  return value === undefined ? {} : ({ [key]: value } as Partial<Record<K, V>>);
+}
+
+/**
+ * What the opponent threatens in `fen`: their best move had the side to move
+ * passed (a "null move"), with any just as strong. Null when the side to move
+ * is in check (it cannot pass) or the search failed; a cancelled review still
+ * throws.
+ */
+async function passSearch(
+  engine: EngineClient,
+  fen: Fen | undefined,
+  depth: number,
+  signal: AbortSignal | undefined,
+  plies: number,
+): Promise<PassThreat | null> {
+  const passed = fen ? passMove(fen) : null;
+  if (!passed) return null;
+  try {
+    const result = await evaluate(
+      engine,
+      { startFen: passed, moves: [] },
+      depth,
+      signal,
+      undefined,
+      2,
+    );
+    const cp = (score: Score) => scoreToWhiteCp(score, true);
+    const lines = [...result.lines.values()]
+      .filter((line) => line.pv[0])
+      .sort((a, b) => cp(b.score) - cp(a.score));
+    const top = lines[0];
+    const uci = top?.pv[0];
+    if (!top || !uci) return null;
+    return {
+      uci,
+      pv: top.pv.slice(0, plies),
+      score: top.score,
+      also: lines
+        .slice(1)
+        .filter((line) => cp(line.score) >= cp(top.score) - PASS_ALSO_CP)
+        .map((line) => line.pv[0] as Uci),
+    };
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    return null;
+  }
 }
 
 /** Maps average win-probability loss to a 0–100 "accuracy" figure. */

@@ -27,16 +27,22 @@ describe('storage filler', () => {
     });
     const result = fillStorage();
     expect(result.refused).toBe(true);
-    // Three big chunks and one medium one fitted; the two smallest written are
-    // given back so the measured limit can be stored.
-    expect(result.chunks).toBe(3 + 1 - 2);
-    expect(result.bytes).toBe((150_000 + 10_000 - 50_000 - 10_000) * 2);
+    // Three big chunks and one medium one fitted: that is the limit measured.
     expect(result.limitBytes).toBe((150_000 + 10_000) * 2 + 4 * `${FILLER_PREFIX}0`.length * 2);
     expect(localStorage.getItem('chess-trainer:storage-limit')).toBe(String(result.limitBytes));
+    // The last chunk made room for that number, and the slack was filled again with smaller
+    // ones: less than the smallest chunk is left, so even a small save is refused.
+    let used = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      used += localStorage.getItem(localStorage.key(i) ?? '')?.length ?? 0;
+    }
+    expect(limit - used).toBeLessThan(40);
+    expect(result.bytes).toBe((used - String(result.limitBytes).length) * 2);
     expect(hasFiller()).toBe(true);
     expect(localStorage.getItem(`${FILLER_PREFIX}0`)?.length).toBe(50_000);
+    expect(() => localStorage.setItem('chess-trainer:save', 'x'.repeat(400))).toThrow('full');
 
-    expect(clearFiller()).toBe(2);
+    expect(clearFiller()).toBe(result.chunks);
     expect(hasFiller()).toBe(false);
     expect(localStorage.length).toBe(1);
   });

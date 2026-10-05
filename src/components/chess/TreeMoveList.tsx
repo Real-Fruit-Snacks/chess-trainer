@@ -33,6 +33,8 @@ export interface TreeMoveListProps {
   current: TreeNode;
   onSelect: (node: TreeNode) => void;
   judgements?: Map<number, MoveJudgement>;
+  /** Node ids flagged by the learner (self-analysis: "the game turned here"). */
+  marked?: ReadonlySet<number>;
 }
 
 function moveNumberFor(node: TreeNode, force: boolean): string {
@@ -49,7 +51,14 @@ function moveNumberFor(node: TreeNode, force: boolean): string {
  * card and variations appear as indented blocks under the move they branch
  * from, Lichess-style. Comments and glyphs are shown inline.
  */
-export function TreeMoveList({ tree, version, current, onSelect, judgements }: TreeMoveListProps) {
+export function TreeMoveList({
+  tree,
+  version,
+  current,
+  onSelect,
+  judgements,
+  marked,
+}: TreeMoveListProps) {
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,7 +79,8 @@ export function TreeMoveList({ tree, version, current, onSelect, judgements }: T
     const prefix = fenParts[1] === 'b' ? `${fenParts[5] ?? '1'} Black` : `${fenParts[5] ?? '1'}.`;
     const words = describeSan(parentFen, node.san) ?? node.san;
     const glyphWords = shownGlyph ? `, ${GLYPH_WORDS[shownGlyph] ?? shownGlyph}` : '';
-    const spoken = `${prefix} ${words}${glyphWords}`;
+    const flagged = marked?.has(node.id) ?? false;
+    const spoken = `${prefix} ${words}${glyphWords}${flagged ? ', marked' : ''}`;
     return (
       <button
         type="button"
@@ -93,6 +103,11 @@ export function TreeMoveList({ tree, version, current, onSelect, judgements }: T
         <San san={node.san} />
         {glyphs || judgementGlyph ? (
           <span className="treemoves__glyph">{glyphs || judgementGlyph}</span>
+        ) : null}
+        {flagged ? (
+          <span className="treemoves__flag">
+            <Icon name="flag" size={12} />
+          </span>
         ) : null}
       </button>
     );

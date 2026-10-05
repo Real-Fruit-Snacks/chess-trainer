@@ -56,20 +56,24 @@ up for. It runs entirely in your browser, installs as an app and keeps working o
 point, spaced recall of what you learned, and a gallery of the nineteen named mates.
 
 **Puzzles** — 48,000 engine-verified tactics across eight rating bands, a Glicko-2 rating with
-calibration, daily puzzle, Puzzle Rush, Woodpecker sets, a review queue for misses, and puzzles made
-from the blunders in your own games.
+calibration, daily puzzle, Puzzle Rush, blind puzzles (the line in notation only, the board frozen
+at the start), Woodpecker sets, a review queue for misses, and puzzles made from the blunders in
+your own games.
 
 **Play** — Stockfish 19 at eight levels from a beatable Newcomer to full strength, with clocks,
-take-backs, hints, a coach that pauses on a mistake and explains it, blindfold play, two players at
-one device, and a start from any position.
+take-backs, hints, a coach that pauses on a mistake and explains it, a blunder check that asks
+"checks, captures, threats?" before a move that hangs material, blindfold play, two players at one
+device, and a start from any position.
 
-**Analyze** — multi-line engine analysis, a full variation tree, a position report, game review with
-an evaluation graph and key moments explained in words, Lichess and chess.com imports, and shareable
-links that carry the whole game.
+**Analyze** — multi-line analysis by a multi-threaded Stockfish (with its full network as an optional
+99 MB download), a full variation tree, a position report, game review with an evaluation graph and
+key moments explained in words — or analyze the game yourself first and let the review score what
+you found — Lichess and chess.com imports, and shareable links that carry the whole game.
 
-**Train** — coordinate, vision and endgame drills on a 41-rung ladder, sixteen opening repertoires
-trained with spaced repetition (or import your own), eight endgame studies and 46 classic games to
-guess move by move.
+**Train** — coordinate, vision and endgame drills on a 41-rung ladder, "What's the threat?" (name
+the opponent's threat, then meet it — in real positions and in your own games), sixteen opening
+repertoires trained with spaced repetition (or import your own), eight endgame studies and 46 classic
+games to guess move by move.
 
 **Arcade** — eleven games that are not puzzles: a simul against up to eight engines at once, each
 board with its own clocks, Hand & Brain with Stockfish as your partner, a daily opening Wordle, Who
@@ -128,7 +132,7 @@ GitHub release. Custom domains and other static hosts are covered in
 | Part            | Technology                                                                                                     |
 | --------------- | -------------------------------------------------------------------------------------------------------------- |
 | App             | [React 19](https://react.dev), [TypeScript](https://www.typescriptlang.org), [Vite](https://vite.dev), Workbox |
-| Engine          | [Stockfish 19](https://stockfishchess.org) as WebAssembly, in a worker                                         |
+| Engine          | [Stockfish 19](https://stockfishchess.org) as WebAssembly in a worker: multi-threaded, full network optional   |
 | Board and chess | [Chessground](https://github.com/lichess-org/chessground), [chess.js](https://github.com/jhlywa/chess.js)      |
 | Data            | [Lichess](https://lichess.org) puzzle database and the chess-openings dataset (both CC0)                       |
 

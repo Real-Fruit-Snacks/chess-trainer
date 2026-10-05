@@ -30,9 +30,10 @@ vi.mock('@/lib/sound', async (importOriginal) => {
   return { ...actual, playSound: played };
 });
 const writeFlag = vi.hoisted(() => vi.fn(() => Promise.resolve(true)));
+const resetFlag = vi.hoisted(() => vi.fn(() => Promise.resolve(true)));
 vi.mock('@/sw/isolation', async (importOriginal) => {
   const actual = await importOriginal<typeof IsolationModule>();
-  return { ...actual, writeIsolationFlag: writeFlag };
+  return { ...actual, writeIsolationFlag: writeFlag, resetIsolationFlag: resetFlag };
 });
 
 const importedGame = (n: string): ImportedGame => ({
@@ -238,7 +239,8 @@ describe('SettingsPage', () => {
 
   it('asks before resetting, says what is kept, then clears progress, games, settings and the flag', () => {
     useProgress.getState().completeOnboarding(1800);
-    useSettings.getState().update({ showCoordinates: false, engineThreads: true });
+    useSettings.getState().update({ showCoordinates: false, engineThreads: false });
+    resetFlag.mockClear();
     useGames.getState().setPlayer('me');
     useGames.getState().addGames([importedGame('a')], 'pgn');
     localStorage.setItem(PRE_IMPORT_BACKUP_KEY, '{}');
@@ -253,10 +255,12 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Yes, reset' }));
     expect(useProgress.getState().onboarded).toBe(false);
     expect(useSettings.getState().showCoordinates).toBe(true);
-    expect(useSettings.getState().engineThreads).toBe(false);
+    // Threads are back on, and the service worker's flag back to that default.
+    expect(useSettings.getState().engineThreads).toBe(true);
     expect(useGames.getState().games).toEqual({});
     expect(useGames.getState().player).toBe('');
-    expect(writeFlag).toHaveBeenCalledWith(false);
+    expect(resetFlag).toHaveBeenCalled();
+    expect(writeFlag).not.toHaveBeenCalled();
     expect(localStorage.getItem(PRE_IMPORT_BACKUP_KEY)).toBeNull();
   });
 

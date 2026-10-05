@@ -8,6 +8,7 @@ import backupV4 from './fixtures/backup-v4.json';
 import backupV5 from './fixtures/backup-v5.json';
 import backupV6 from './fixtures/backup-v6.json';
 import backupV7 from './fixtures/backup-v7.json';
+import backupV8 from './fixtures/backup-v8.json';
 import { useGames } from './games';
 import {
   type PersistedProgress,
@@ -32,6 +33,7 @@ const FIXTURES = [
   ['v5 (0.7)', backupV5],
   ['v6 (0.9)', backupV6],
   ['v7 (0.12)', backupV7],
+  ['v8 (0.15)', backupV8],
 ] as const;
 
 describe('backups from earlier versions', () => {
@@ -160,6 +162,33 @@ describe('backups from earlier versions', () => {
     expect(games.games['pgn-fixture']?.review).toBeNull();
   });
 
+  it('imports a 0.15-era backup (export v8: blind puzzles, threats, self-review, blunder check)', () => {
+    const result = useProgress.getState().importState(backupV8);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.summary.version).toBe(8);
+    const s = useProgress.getState();
+    expect(s.blind).toMatchObject({ levels: { short: 1150, long: 980 }, clean: 5, bestRun: 3 });
+    expect(s.threatStats).toMatchObject({ found: 7, defended: 5, recent: ['tHr1a', 'tHr2b'] });
+    expect(s.ownThreats['threat-fixture1']).toMatchObject({
+      threat: 'h5f7',
+      kind: 'mate',
+      source: { ply: 6, played: 'Nf6', byLearner: true },
+    });
+    expect(s.selfReview).toMatchObject({ games: 2, found: 3, total: 5 });
+    expect(s.selfReview.history).toHaveLength(2);
+    expect(s.blunderChecks).toEqual({ stopped: 4, playedAnyway: 1 });
+  });
+
+  it('gives an older backup the new records empty', () => {
+    expect(useProgress.getState().importState(backupV7).ok).toBe(true);
+    const s = useProgress.getState();
+    expect(s.blind).toMatchObject({ levels: {}, solved: 0, lastAt: null });
+    expect(s.threatStats.recent).toEqual([]);
+    expect(s.ownThreats).toEqual({});
+    expect(s.selfReview.games).toBe(0);
+    expect(s.blunderChecks).toEqual({ stopped: 0, playedAnyway: 0 });
+  });
+
   it('round-trips the current export through import unchanged', () => {
     useProgress.getState().importState(backupV7);
     useProgress.getState().recordArcade('fortress', 12, 'Held level 2');
@@ -218,6 +247,7 @@ describe('stored state from earlier versions', () => {
     ['v5', backupV5.progress, 5],
     ['v6', backupV6.progress, 6],
     ['v7', backupV7.progress, 7],
+    ['v8', backupV8.progress, 8],
   ] as const)(
     'rehydrates a %s progress blob through the persist path',
     async (_, state, version) => {
@@ -288,6 +318,33 @@ describe('stored state from earlier versions', () => {
     expect(s.tourDismissed).toBe(true);
     expect(s.lichessUsername).toBe('oldname');
     expect(s.chesscomUsername).toBe('oldcc');
+  });
+
+  it('switches threads on for a settings save from before they were the default', async () => {
+    await rehydrate(
+      useSettings,
+      SETTINGS_STORAGE_KEY,
+      { colorScheme: 'black', engineThreads: false, soundVolume: 0.4 },
+      4,
+    );
+    expect(useSettings.getState()).toMatchObject({
+      colorScheme: 'black',
+      soundVolume: 0.4,
+      engineThreads: true,
+      engineFull: false,
+    });
+    // From this version on, the learner's choice stands.
+    await rehydrate(
+      useSettings,
+      SETTINGS_STORAGE_KEY,
+      { engineThreads: false, engineFull: true },
+      5,
+    );
+    expect(useSettings.getState()).toMatchObject({ engineThreads: false, engineFull: true });
+    // A value of the wrong type falls back to the default.
+    useSettings.getState().reset();
+    await rehydrate(useSettings, SETTINGS_STORAGE_KEY, { engineFull: 'yes' }, 5);
+    expect(useSettings.getState().engineFull).toBe(false);
   });
 
   it('keeps the unknown fields of a save from a newer version', async () => {

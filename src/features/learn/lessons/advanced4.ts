@@ -344,6 +344,7 @@ export const advancedLessons4: Lesson[] = [
     summary:
       'Before calculating anything, list the forcing moves — checks, captures, threats — then eliminate them one by one.',
     minutes: 9,
+    practiceDrills: [{ title: 'What’s the threat?', to: '/drills/threats' }],
     steps: [
       {
         title: 'List first, calculate second',

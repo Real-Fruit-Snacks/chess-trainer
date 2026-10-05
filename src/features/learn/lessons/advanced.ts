@@ -12,6 +12,10 @@ export const advancedLessons: Lesson[] = [
     category: 'Thinking',
     summary: 'A repeatable method for finding combinations instead of hoping to see them.',
     minutes: 10,
+    practiceDrills: [
+      { title: 'What’s the threat?', to: '/drills/threats' },
+      { title: 'Blind puzzles', to: '/puzzles/blind' },
+    ],
     steps: [
       {
         title: 'Forcing moves first',
@@ -172,6 +176,7 @@ export const advancedLessons: Lesson[] = [
     summary:
       'See the opponent’s plan before it happens — and counter-attack when it is the best defence.',
     minutes: 8,
+    practiceDrills: [{ title: 'What’s the threat?', to: '/drills/threats' }],
     steps: [
       {
         title: 'Prophylaxis: prevent, don’t react',

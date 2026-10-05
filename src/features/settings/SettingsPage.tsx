@@ -47,6 +47,7 @@ import { useBackupActions } from './useBackupActions';
 import { useImportBackup } from './useImportBackup';
 import { EngineDiagnostics } from './EngineDiagnostics';
 import { OfflinePuzzles } from './OfflinePuzzles';
+import { EngineFullSetting } from './EngineFullSetting';
 import { EngineThreadsSetting } from './EngineThreadsSetting';
 import { SoundThemePicker, VolumeSlider } from './SoundControls';
 import { StorageUsage } from './StorageUsage';
@@ -372,6 +373,12 @@ export default function SettingsPage() {
                 label="Coach mode by default"
                 description="New untimed games against the engine start with the coach on: mistakes pause the game with an explanation and a take-back."
               />
+              <Switch
+                checked={settings.playBlunderCheck}
+                onChange={(v) => settings.update({ playBlunderCheck: v })}
+                label="Blunder check by default"
+                description="New games against the engine hold back a move that hangs material or allows mate and ask: checks, captures, threats? You can still play it."
+              />
               <Field
                 label="Engine level for the next game"
                 hint="Every game you start updates this to the level you chose. The rating in brackets is a rough guide, not a measured strength."
@@ -471,6 +478,7 @@ export default function SettingsPage() {
                 description="In Analyze and Openings, show what masters and Lichess players play in the position and how it goes. Uses the network; off by default."
               />
               <EngineThreadsSetting />
+              <EngineFullSetting />
               <EngineDiagnostics />
             </div>
           </Card>
@@ -616,8 +624,9 @@ export default function SettingsPage() {
       >
         <p className="muted">
           This deletes the puzzle rating, lesson progress, repertoires, analysis library, game
-          history and imported games of this profile, and every device setting (the engine’s
-          multi-threading flag included). Export a backup first if you want to keep them.
+          history and imported games of this profile, and every device setting: the engine goes back
+          to its defaults, and a downloaded full engine is deleted. Export a backup first if you
+          want to keep them.
         </p>
         <p className="muted">
           Kept:{' '}

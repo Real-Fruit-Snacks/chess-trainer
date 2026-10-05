@@ -1,6 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { FILLER_PREFIX, PROBE_KEY } from '@/features/lab/labKeys';
 import { consumeLaunchFiles } from '@/lib/launchQueue';
+import { removeFullEngine } from '@/engine/fullEngine';
+import { useSettings } from '@/store/settings';
+import { syncIsolationFlag } from '@/sw/isolation';
 import { useAppBadge } from './useAppBadge';
 import { useDueCount } from './useDueCount';
 
@@ -24,13 +27,29 @@ function hasLabLeftovers(): boolean {
  * Integrations with the platform the app is installed on: the icon badge with
  * the number of due reviews, and backups opened from the file manager — which
  * are checked and confirmed like any other import, never applied on their own.
- * Also tidies up after the test lab, whose storage filler must not outlive it.
- * The import dialog and the lab code load only when they are needed.
+ * Also tidies up after the test lab, whose storage filler must not outlive it,
+ * keeps the service worker's isolation flag in step with the threads
+ * setting, and clears away a full engine that is switched off. The import
+ * dialog and the lab code load only when they are needed.
  */
 export function PlatformHooks() {
   const due = useDueCount();
   useAppBadge(due.total);
   const [launchFile, setLaunchFile] = useState<File | null>(null);
+  const engineThreads = useSettings((s) => s.engineThreads);
+
+  // The service worker reads the threads choice from its own flag: a save from before
+  // threads were the default, or a change made in another tab, brings it in line.
+  useEffect(() => {
+    void syncIsolationFlag(engineThreads);
+  }, [engineThreads]);
+
+  // The full engine's files go with the switch. A download stopped half-way can still
+  // land after the switch went off (the service worker finishes what it started), or a
+  // reset may have switched it off: either way, they are removed at the next start.
+  useEffect(() => {
+    if (!useSettings.getState().engineFull) void removeFullEngine();
+  }, []);
 
   useEffect(() => {
     if (!hasLabLeftovers()) return;

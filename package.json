@@ -1,6 +1,6 @@
 {
   "name": "chess-trainer",
-  "version": "0.13.0",
+  "version": "0.15.0",
   "private": true,
   "description": "Learn, practice and solve chess puzzles at any level — a fully static, installable web app built for GitHub Pages.",
   "license": "GPL-3.0-or-later",
@@ -9,7 +9,7 @@
     "node": ">=22.22"
   },
   "scripts": {
-    "predev": "node scripts/setup-engine.mjs",
+    "predev": "node scripts/setup-engine.mjs --lite",
     "dev": "vite",
     "prebuild": "node scripts/setup-engine.mjs && node scripts/build-lesson-index.mjs",
     "build": "vite build",
@@ -42,6 +42,7 @@
     "studies:verify": "node scripts/verify-studies.mjs",
     "repertoires:verify": "node scripts/verify-repertoires.mjs",
     "arcade:positions": "node scripts/build-arcade-positions.mjs",
+    "threats:build": "node scripts/build-threats.mjs",
     "bundle:check": "node scripts/check-bundle-size.mjs",
     "lighthouse": "node scripts/lighthouse.mjs",
     "e2e:visual": "node scripts/visual.mjs"

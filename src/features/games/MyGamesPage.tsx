@@ -24,6 +24,7 @@ import { InsightsCard } from './InsightsCard';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
 import { handOffToAnalysis } from '@/lib/handoff';
 import { type OwnPuzzle, ownPuzzlesFromReview } from '@/features/puzzles/ownPuzzles';
+import { missedThreatsNote, type OwnThreat, ownThreatsFromReview } from '@/features/drills/threats';
 import { formatDate } from '@/lib/dates';
 import {
   fetchChessComGamesPage,
@@ -540,6 +541,8 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
   const puzzleRating = useProgress((s) => Math.round(s.puzzleRating));
   const ownPuzzles = useProgress((s) => s.ownPuzzles);
   const addOwnPuzzles = useProgress((s) => s.addOwnPuzzles);
+  const ownThreats = useProgress((s) => s.ownThreats);
+  const addOwnThreats = useProgress((s) => s.addOwnThreats);
   const {
     engine,
     status: engineStatus,
@@ -549,6 +552,7 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
   const [queue, setQueue] = useState<string[]>([]);
   const [current, setCurrent] = useState<{ id: string; done: number; total: number } | null>(null);
   const [pending, setPending] = useState<Record<string, OwnPuzzle>>({});
+  const [pendingThreats, setPendingThreats] = useState<Record<string, OwnThreat>>({});
   const [confirm, setConfirm] = useState<
     { kind: 'clear' } | { kind: 'remove'; game: StoredGame } | null
   >(null);
@@ -574,23 +578,29 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
         digest: digestReview(summary),
       });
       const side = learnerColor(game, player);
-      const puzzles = ownPuzzlesFromReview(
-        { fens: line.fens, sans: line.sans },
-        summary,
-        {
-          title: `${game.white} – ${game.black}${game.date ? `, ${game.date}` : ''}`,
-          url: game.url ?? undefined,
-          rating: puzzleRating,
-        },
-        { side: side ?? 'both', includeInaccuracies: false },
-      );
+      const meta = {
+        title: `${game.white} – ${game.black}${game.date ? `, ${game.date}` : ''}`,
+        url: game.url ?? undefined,
+        rating: puzzleRating,
+      };
+      const puzzles = ownPuzzlesFromReview({ fens: line.fens, sans: line.sans }, summary, meta, {
+        side: side ?? 'both',
+        includeInaccuracies: false,
+      });
       setPending((prev) => {
         const next = { ...prev };
         for (const p of puzzles) if (!ownPuzzles[p.id]) next[p.id] = p;
         return next;
       });
+      // The threats the learner missed (their own moves only, when it is known which side is theirs).
+      const threats = ownThreatsFromReview(summary, meta, side ?? 'both');
+      setPendingThreats((prev) => {
+        const next = { ...prev };
+        for (const t of threats) if (!ownThreats[t.id]) next[t.id] = t;
+        return next;
+      });
     },
-    [engine, reviewDepth, setReview, player, puzzleRating, ownPuzzles],
+    [engine, reviewDepth, setReview, player, puzzleRating, ownPuzzles, ownThreats],
   );
 
   // Work through the queue one game at a time.
@@ -632,9 +642,12 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const openInAnalysis = (game: StoredGame) => {
+  const openInAnalysis = (game: StoredGame, selfReview = false) => {
     void navigate(
-      handOffToAnalysis(game.pgn, { orientation: learnerColor(game, player) ?? 'white' }),
+      handOffToAnalysis(game.pgn, {
+        orientation: learnerColor(game, player) ?? 'white',
+        selfReview,
+      }),
     );
   };
 
@@ -646,6 +659,7 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
 
   const unreviewed = list.filter((g) => !g.review);
   const pendingList = Object.values(pending);
+  const pendingThreatList = Object.values(pendingThreats);
   const running = current !== null || queue.length > 0;
 
   return (
@@ -747,6 +761,29 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
           </div>
         </Alert>
       ) : null}
+      {pendingThreatList.length > 0 ? (
+        <Alert tone="info">
+          <div className="row row--between" data-testid="pending-threats">
+            <span>{missedThreatsNote(pendingThreatList, 'games')} Practise seeing it coming.</span>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => {
+                const added = addOwnThreats(pendingThreatList);
+                setPendingThreats({});
+                toast(
+                  added
+                    ? `Added ${added} threat${added === 1 ? '' : 's'} — Drills → What’s the threat?`
+                    : 'Those threats were already in the drill.',
+                  { tone: 'success' },
+                );
+              }}
+            >
+              Add to the threat drill
+            </Button>
+          </div>
+        </Alert>
+      ) : null}
       {list.length === 0 ? (
         <p className="small muted">
           Nothing imported yet. Fetch games by username or paste a PGN on the left.
@@ -813,6 +850,16 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
                         <Button size="sm" variant="ghost" onClick={() => openInAnalysis(game)}>
                           Analyze game
                         </Button>
+                        {!game.review ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openInAnalysis(game, true)}
+                            title="Find the turning points yourself, then compare with the engine"
+                          >
+                            Analyze it yourself
+                          </Button>
+                        ) : null}
                         {!game.review ? (
                           <Button
                             size="sm"

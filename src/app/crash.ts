@@ -1,4 +1,4 @@
-import { writeIsolationFlag } from '@/sw/isolation';
+import { resetIsolationFlag } from '@/sw/isolation';
 
 /** React (and the browser) can throw anything; the crash page needs an Error. */
 export function normaliseError(thrown: unknown): Error {
@@ -53,5 +53,5 @@ export async function resetAppData(): Promise<void> {
   } catch {
     // Storage is unavailable: there is nothing to clear.
   }
-  await writeIsolationFlag(false);
+  await resetIsolationFlag();
 }

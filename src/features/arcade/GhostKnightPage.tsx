@@ -16,7 +16,7 @@ import {
   squadFen,
 } from './ghostKnight';
 import { LIVES, useGhostKnight } from './useGhostKnight';
-import { useStackedLayout } from './useStackedLayout';
+import { useStackedLayout } from '@/lib/useStackedLayout';
 import '@/features/play/play.css';
 import './arcade.css';
 

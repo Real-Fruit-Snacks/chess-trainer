@@ -316,9 +316,8 @@ describe('adaptive plan', () => {
       now,
     );
     const drill = plan.items.find((i) => i.id === 'drill');
-    // Drills never done come first: the third endgame drill in the list.
-    expect(drill?.to).not.toBe('/drills/endgame/mate-kq');
-    expect(drill?.title).toContain('Drill:');
+    // Drills never done come first: after the first endgame drill, the threat drill.
+    expect(drill).toMatchObject({ to: '/drills/threats', title: 'Drill: What’s the threat?' });
     const recall = plan.items.find((i) => i.id === 'recall');
     expect(recall).toMatchObject({ to: '/learn/recall', done: false, detail: '1 due' });
   });

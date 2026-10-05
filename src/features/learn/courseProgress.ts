@@ -79,7 +79,8 @@ function itemStatus(
       return {
         item,
         title: `Drill: ${item.title}`,
-        detail: (progress.drills[item.id]?.best ?? 0) > 0 ? 'Completed' : 'Win it once',
+        detail:
+          (progress.drills[item.id]?.best ?? 0) > 0 ? 'Completed' : (item.goal ?? 'Win it once'),
         to: item.to,
         done: (progress.drills[item.id]?.best ?? 0) > 0,
       };

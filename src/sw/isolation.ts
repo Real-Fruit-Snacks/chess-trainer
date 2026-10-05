@@ -1,22 +1,27 @@
 /**
- * Cross-origin isolation, opt-in.
+ * Cross-origin isolation, on by default.
  *
  * Multi-threaded WebAssembly needs `SharedArrayBuffer`, which browsers only
  * expose to documents served with the COOP/COEP headers. GitHub Pages cannot
  * send custom headers, so the service worker adds them to every same-origin
  * response instead — the document, and also the worker scripts, because a
  * dedicated worker's own response must carry an embedder policy at least as
- * strict as its owner's. The headers are only added when the learner has
- * switched the option on, because they also block any cross-origin resource
- * that is not CORS-enabled.
+ * strict as its owner's. The learner can switch threads off, which removes
+ * the headers again; they also block any cross-origin resource that is not
+ * CORS-enabled (the app loads none: its only cross-origin requests are CORS
+ * calls to the Lichess and Chess.com APIs).
  *
  * The flag lives in the Cache API (a tiny synthetic response) because that is
  * the one storage both the page and the service worker can read without a
- * message round-trip, and it survives service-worker restarts.
+ * message round-trip, and it survives service-worker restarts. No stored flag
+ * means the default: on.
  *
  * This module is shared by the page and the service worker, so it must not
  * touch `window`, `document` or React.
  */
+
+/** What an absent flag means: isolation on, so the threaded engine can run. */
+export const ISOLATION_DEFAULT = true;
 
 export const ISOLATION_HEADERS: Readonly<Record<string, string>> = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -47,22 +52,29 @@ function inTurn<T>(operation: () => Promise<T>): Promise<T> {
   return result;
 }
 
-/** Whether the learner has asked for cross-origin isolation. */
-export function readIsolationFlag(store: CacheStorageLike | null = storage()): Promise<boolean> {
+/** The stored choice: true or false, or null when none is stored (or it cannot be read). */
+function readStored(store: CacheStorageLike | null): Promise<boolean | null> {
   return inTurn(async () => {
-    if (!store) return false;
+    if (!store) return null;
     try {
       const cache = await store.open(ISOLATION_CACHE);
       const hit = await cache.match(ISOLATION_FLAG_URL);
-      return hit ? (await hit.text()) === '1' : false;
+      return hit ? (await hit.text()) === '1' : null;
     } catch {
-      return false;
+      return null;
     }
   });
 }
 
-/** Tells the controlling service worker (if any) that the flag changed. */
-function notifyWorker(enabled: boolean): void {
+/** Whether cross-origin isolation is on: the learner's stored choice, or the default. */
+export async function readIsolationFlag(
+  store: CacheStorageLike | null = storage(),
+): Promise<boolean> {
+  return (await readStored(store)) ?? ISOLATION_DEFAULT;
+}
+
+/** Tells the controlling service worker (if any) that the flag changed (undefined: read it again). */
+function notifyWorker(enabled: boolean | undefined): void {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
   try {
     navigator.serviceWorker.controller?.postMessage({
@@ -96,6 +108,35 @@ export function writeIsolationFlag(
       return false;
     }
   });
+}
+
+/** Forgets the stored choice, so the default applies again (Reset). */
+export function resetIsolationFlag(store: CacheStorageLike | null = storage()): Promise<boolean> {
+  return inTurn(async () => {
+    if (!store) return false;
+    try {
+      const cache = await store.open(ISOLATION_CACHE);
+      await cache.delete(ISOLATION_FLAG_URL);
+      notifyWorker(undefined);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * Makes the flag say what the setting says, writing only when they differ —
+ * for saves from before threads were the default, and changes made in
+ * another tab. Returns whether it wrote.
+ */
+export async function syncIsolationFlag(
+  wanted: boolean,
+  store: CacheStorageLike | null = storage(),
+): Promise<boolean> {
+  const stored = await readStored(store);
+  if ((stored ?? ISOLATION_DEFAULT) === wanted) return false;
+  return writeIsolationFlag(wanted, store);
 }
 
 /**

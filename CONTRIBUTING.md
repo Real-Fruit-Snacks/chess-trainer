@@ -12,9 +12,11 @@ npm install
 npm run dev
 ```
 
-`npm run dev` downloads the pinned Stockfish build into `public/engine/` on first run (about 2 MB) and
-starts Vite with hot reload. Node 22.22 or newer is required (see `.nvmrc`). Every script works the same
-on Windows, macOS and Linux, and `.gitattributes` keeps line endings LF on every platform.
+`npm run dev` downloads the pinned Stockfish lite builds into `public/engine/` on first run (about 4 MB)
+and starts Vite with hot reload. `npm run build` also fetches the full engine's two builds (about 200 MB,
+once; see [`public/engine/README.md`](public/engine/README.md)). Node 22.22 or newer is required (see
+`.nvmrc`). Every script works the same on Windows, macOS and Linux, and `.gitattributes` keeps line
+endings LF on every platform.
 
 Before opening a pull request run:
 
@@ -65,7 +67,7 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
 | `npm run e2e:visual`         | Pixel snapshots of the static pages; add `-- --update-snapshots` after a deliberate design change.                                             |
 | `npm run preview`            | Serve the production build locally.                                                                                                            |
 | `npm run preview:pages`      | Serve `dist/` as GitHub Pages does (404.html for unknown paths); `-- --base /chess-trainer/` for a build made with that `VITE_BASE_PATH`.      |
-| `npm run engine:setup`       | (Re)download the pinned Stockfish build into `public/engine/` and write its `version.json`.                                                    |
+| `npm run engine:setup`       | (Re)download the pinned Stockfish builds into `public/engine/` and write its `version.json`; `-- --lite` for the two lite builds only.         |
 | `npm run puzzles:import`     | Rebuild the puzzle set from the Lichess database.                                                                                              |
 | `npm run puzzles:verify`     | Validate the bundled puzzles; add `--engine 40` for an engine spot-check.                                                                      |
 | `npm run puzzles:reindex`    | Rebuild `public/puzzles/index.json` from the chunk files after editing them by hand.                                                           |

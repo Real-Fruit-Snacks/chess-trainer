@@ -6,6 +6,145 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-05
+
+Three habits that separate improving players from the rest, each with its own trainer: seeing a line
+without moving the pieces, asking what the opponent threatens before every move, and finding a game's
+turning points before the engine points them out.
+
+### Added
+
+- **Blind puzzles** (_Puzzles → Blind_): the board stays on the starting position while the line is
+  played out in notation only — two, three or four-plus moves deep. Moves go in by clicking their two
+  squares on the unchanging board or by typing them; the opponent's replies appear in the line (and
+  are read out in words). Each length keeps its own level, starting a few hundred points under the
+  puzzle rating: +40 for a clean solve, −60 for a miss, nothing gained after a **peek** at the current
+  position. A move that is not legal in the current position is turned down without counting as a
+  miss, any mate solves, and at the end the board shows where the line ends.
+- **What's the threat?** (_Drills_): with the opponent to move, as if you had passed, play the move
+  they threaten (two tries, then it is shown), then a move that meets it. 1,200 positions from the
+  puzzle set, each engine-checked: in the real game the side to move ignored the threat and lost to
+  it. The answer says what the threat does, lists the defences and the game's move; a threat or a
+  defence the position does not list is put to the engine, which accepts one as strong.
+- **Threats from your own games**: the game review now also asks, for every mistake and blunder,
+  what the opponent threatened before it. When the punishment was already threatened, the position
+  can join the threat drill — from the key moments on the analysis board, or after reviewing your
+  games in My games — and comes back every third position until you have named it twice in a row.
+  Only your own moves count when the game says which side you played (games against the engine, or
+  the name you import your games under); otherwise both sides' do, and the drill names the side.
+- **Blunder check** in games against the engine (off by default; the game setup and _Settings →
+  Play_): a move that allows mate at once, or loses two pawns' worth or more to a sequence of captures,
+  is held back with _checks, captures, threats?_ — Look again, Show me (the move and the answer that
+  punishes it, drawn and named) or Play it anyway. It stays quiet when every move loses as much, needs
+  no engine (it answers in a few milliseconds, clocks or not, on a small move generator of its own
+  that follows chess.js move for move) and the game summary counts the moves it held back.
+- **Analyze it yourself first**: on the analysis board (and from the end of a game, and next to each
+  unreviewed game in My games), go through a game with the engine, the explorer, the tablebase and the
+  position report out of sight, mark the moves where it turned (M) and play what you would have played
+  instead. _Check with the engine_ runs the review and scores your marks: the turning points found —
+  on the move or one move late — and missed, false alarms, and each of your moves against the
+  engine's (the game move itself, when the engine would have played that too).
+- A **Thinking skills** card on Progress (threats named and met, blind levels, turning points caught
+  and the trend of your last self-analyses, moves the blunder check held back); the three skills are
+  checkpoints in the courses, the threat drill and blind puzzles are on the Drills page and in the
+  daily plan's drill rotation, and the visualisation, calculation, candidate-moves, prophylaxis and
+  own-games lessons end with a link to the matching practice.
+
+### Changed
+
+- Backups are export format 8: they carry the new records (blind levels, the threat drill and your
+  own threats, self-analyses, blunder-check counts). Backups from every earlier format import as
+  before, with the new records empty.
+- The game review searches once more for each mistake and blunder (the threat after a pass), which
+  makes a review a little longer.
+- The move list shows the moves marked in self-analysis with a flag; the click board (vision drills,
+  board editor, blind puzzles) can tint the last move.
+- On phones, a game's pause alerts — the blunder check, the coach and the repertoire — appear right
+  under the board, where the move was made, rather than below the game's controls.
+
+### Fixed
+
+- Typing `--` into a move field passed the turn: chess.js reads it as a null move, which no board or
+  engine here can play (the engine was sent `a8a8`). It is now turned down like any illegal move.
+- The test lab's storage filler gave back two chunks after measuring the limit; depending on what
+  else was stored, that could be enough room for the next save to fit, and the "storage is full"
+  warning it is there to show never came. It now fills the slack again after the measurement.
+
+### Testing
+
+- Unit tests for the blind-puzzle model and trainer (levels, lines and numbering, legality versus a
+  wrong move, any mate, peeks, promotions, the mode on the puzzles page), the blunder check (hanging
+  pieces, bad captures, ignored threats, mate in one, forks and lost positions left alone, the
+  two-pawn threshold) and its use in the play hook and page (promotions checked once the piece is
+  known, counting, play anyway, take-backs), the threat model and drill (passing, descriptions,
+  engine checks of other threats and defences, own threats first when due), the review's pass search
+  and the threats taken from it, self-analysis scoring and the panel, the new progress records, the
+  v8 backup fixture, courses, the daily plan, the lesson links and the Thinking skills card.
+- Every bundled threat position is replayed in the unit suite: the threat after a pass, its line,
+  each defence and the game move must be legal. The generator's acceptance rules are unit tested.
+- The blunder check's move generator counts moves from the six standard perft positions exactly, and
+  lists the same moves as chess.js, in the same order, through random games and two moves deep from
+  the threat-drill positions. Before it replaced chess.js in the check, both versions judged every
+  legal move in 4,221 positions (threat-drill positions, puzzles, random games): 130,032 moves, the
+  same answer each time, with the slowest check down from over a second to a few milliseconds.
+- End to end in every browser: a blind puzzle solved by clicks and by typing, the threat drill
+  through both stages, the blunder check in a game, and self-analysis through to its score.
+- Three older end-to-end tests could fail by timing alone, and now wait for what they mean: the
+  simul's flag fall waits for the engine's reply on board 1 (its "Your move" was also how the board
+  started), the arcade hub clicks again when a click lands beside a link still scrolling into view
+  (Firefox), and the position report hovers again when the engine's lines move the card from under
+  the mouse.
+
+## [0.14.0] - 2026-10-04
+
+The engine now searches on several cores by default, and Stockfish's full network is one switch
+away: a 99 MB download, kept offline, for analysis that sees further in sharp positions.
+
+### Added
+
+- **Full engine** (_Settings → Engine & analysis_): Stockfish 19 with its large network instead of
+  the lite one. Switching it on downloads the build this device runs, threaded or not, with a
+  progress bar and a Stop button (a stopped download leaves nothing behind); the download carries on
+  while you use the rest of the app, and is kept offline. Until it is complete, or wherever it cannot
+  start (a phone short of memory, say), the lite engine runs. Switching it off deletes it and says
+  how much was freed.
+- The engine diagnostics show the full engine's state, and the speed test says when a lighter build
+  stood in and why: the full engine not downloaded yet, or a build that failed to start.
+
+### Changed
+
+- **The multi-threaded engine is on by default**, for everyone, saved settings included, and no
+  longer marked experimental. The service worker serves every page with the cross-origin-isolation
+  headers from the second load on, and the engine then searches on all cores but one (at most eight,
+  four on phones and tablets). Where threads cannot run, the one-thread engine takes over as before;
+  switching them off still removes the headers from the next load.
+- Engine names say which network runs: "Stockfish 19 lite · 3 threads", or "Stockfish 19 · 3
+  threads" for the full engine.
+- On a first visit the threads setting says "reload" from the start, with its button, rather than
+  changing its wording, and shifting the page, when the service worker takes over.
+- _Reset everything_ puts threads back on, as the default, and deletes a downloaded full engine.
+- Engine files kept offline no longer expire after 180 days (a 99 MB download must not quietly need
+  doing again); a new release deletes the engine files it no longer uses instead.
+- `npm run dev` installs only the lite builds (4 MB); `npm run build` installs all four (about
+  200 MB, once), and `npm run engine:setup -- --lite` just the lite ones, as CI's content checks do.
+
+### Testing
+
+- Build choice, fallbacks (full to lite, threads to one thread, a missing download skipped without a
+  warning, four times the start-up time for the full engine), the download's progress, storage check
+  and removal, the isolation flag's new default, reset and sync, and the settings migration are unit
+  tested; so are both settings switches, in every state they can explain.
+- End to end, in every browser: threads on by default and running from the second load, switching
+  them off and on, and the full engine downloaded, run from the device's copy with three threads and
+  deleted with its switch. API calls under isolation are checked everywhere but WebKit, where
+  Playwright cannot mock a request from an isolated page. On desktop Chromium, with the network
+  slowed, a download stopped half-way leaves nothing behind.
+- The whole suite was also run with every page on two engine threads, to make sure no test depends
+  on the engine's choices being the same from run to run.
+- The test lab's storage check waits for the lab to finish clearing up, which can come a moment
+  after the next page is drawn.
+- A test keeps the engine files the app expects equal to the ones the setup script installs.
+
 ## [0.13.0] - 2026-10-04
 
 Two new Arcade games built on the rules themselves: Arbiter, where you catch the illegal move in a

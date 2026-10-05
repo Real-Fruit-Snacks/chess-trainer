@@ -1,16 +1,19 @@
 import { Chess, type Square } from 'chess.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DrawShape } from '@/components/board/Board';
+import { type BlunderWarning, checkBlunder } from '@/chess/blunderCheck';
 import {
   canStillMate,
+  isPromotionMove,
   isValidFen,
   parseUci,
   START_FEN,
   toUci,
   tryMove,
+  tryNotation,
   uciToSan,
 } from '@/chess/helpers';
-import type { Fen, LongColor, PromotionPiece, Uci } from '@/chess/types';
+import type { Fen, LongColor, MoveInput, PromotionPiece, Uci } from '@/chess/types';
 import { useChess } from '@/chess/useChess';
 import { ENGINE_LEVELS, type EngineLevel, getLevel } from '@/engine/levels';
 import { useEngine } from '@/engine/useEngine';
@@ -66,6 +69,11 @@ export interface GameSetup {
   autoFlip?: boolean;
   /** Pause after a mistake with an explanation and the offer to take it back (untimed engine games). */
   coach?: boolean;
+  /**
+   * Hold back a move that hangs material or allows mate, asking "checks,
+   * captures, threats?" first (games against the engine).
+   */
+  blunderCheck?: boolean;
   /** Practise this repertoire: the opponent follows its lines while the game stays in book. */
   book?: { id: string; name: string; color: LongColor; pgn: string };
   /**
@@ -91,6 +99,15 @@ export interface BookInfo {
 export interface CoachAlert {
   san: string;
   verdict: CoachVerdict;
+}
+
+/** A move the blunder check held back, waiting for the learner's decision. */
+export interface BlunderAlert {
+  warning: BlunderWarning;
+  /** "Show me" was pressed: the answer is drawn and named. */
+  revealed: boolean;
+  /** The move as asked for, played as it is if the learner insists. */
+  input: MoveInput;
 }
 
 /** What the Hint or Threat arrow shows, in words (the arrow alone is invisible to a screen reader). */
@@ -132,6 +149,18 @@ export interface UsePlayVsEngine {
   coachTakeBack: () => void;
   /** … or keep it and let the engine reply. */
   coachPlayOn: () => void;
+  /** The blunder check is on for this game. */
+  blunderCheck: boolean;
+  /** A move held back by the blunder check, until the learner decides. */
+  blunderAlert: BlunderAlert | null;
+  /** Moves the blunder check held back in this game. */
+  blunderStops: number;
+  /** Dismiss the warning and choose another move. */
+  blunderLookAgain: () => void;
+  /** Draw and name the answer the check found. */
+  blunderShowMe: () => void;
+  /** Play the held-back move after all. */
+  blunderPlayAnyway: () => void;
   /** Opening practice: the repertoire being followed, if any. */
   book: BookInfo | null;
   /** The learner just left the repertoire: shown until they take it back or play on. */
@@ -173,6 +202,11 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const [coachAlert, setCoachAlert] = useState<CoachAlert | null>(null);
   const [coachChecking, setCoachChecking] = useState(false);
   const [coachInterventions, setCoachInterventions] = useState(0);
+  const [blunderCheck, setBlunderCheck] = useState(false);
+  const [blunderAlert, setBlunderAlert] = useState<BlunderAlert | null>(null);
+  const [blunderStops, setBlunderStops] = useState(0);
+  /** Held-back moves already counted this game (by position and move), so a retry is not a second stop. */
+  const blunderCountedRef = useRef(new Set<string>());
   const [bookBase, setBookBase] = useState<BookState | null>(null);
   const [bookAlert, setBookAlert] = useState<BookDeviation | null>(null);
   /** Deviations already counted as lapses this game (by ply and move), so a repeat is not a second lapse. */
@@ -189,7 +223,16 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const [gameOver, setGameOver] = useState<GameOver | null>(null);
   /** The arrow Hint or Threat drew, with its move in words. */
   const [hintArrow, setHintArrow] = useState<(HintMove & { shape: DrawShape }) | null>(null);
-  const hintShapes = useMemo<DrawShape[]>(() => (hintArrow ? [hintArrow.shape] : []), [hintArrow]);
+  const hintShapes = useMemo<DrawShape[]>(() => {
+    const shapes: DrawShape[] = hintArrow ? [hintArrow.shape] : [];
+    // "Show me": the move that was held back, and the answer that punishes it.
+    if (blunderAlert?.revealed) {
+      const { move, reply } = blunderAlert.warning;
+      shapes.push({ orig: move.from, dest: move.to, brush: 'paleBlue' });
+      shapes.push({ orig: reply.from, dest: reply.to, brush: 'red' });
+    }
+    return shapes;
+  }, [hintArrow, blunderAlert]);
   const hintMove = useMemo<HintMove | null>(
     () => (hintArrow ? { kind: hintArrow.kind, san: hintArrow.san } : null),
     [hintArrow],
@@ -618,6 +661,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       opponent: nextOpponent = 'engine',
       autoFlip: nextAutoFlip = false,
       coach: nextCoach = false,
+      blunderCheck: nextBlunderCheck = false,
       book: nextBook,
       source: nextSource = 'play',
       event: nextEvent,
@@ -656,6 +700,10 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       setCoachInterventions(0);
       coachEvals.current = new Map();
       coachRunRef.current++;
+      setBlunderCheck(nextBlunderCheck && nextOpponent === 'engine');
+      setBlunderAlert(null);
+      setBlunderStops(0);
+      blunderCountedRef.current = new Set();
       setPlayerColor(chosen);
       setOrientation(chosen);
       setLevelId(nextLevelId);
@@ -722,35 +770,104 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     [coach, engineStatus, evaluateForCoach],
   );
 
+  /**
+   * The blunder check: holds `input` back (and says why) when it hangs
+   * material or allows mate. True when the move was held back.
+   */
+  const holdBack = useCallback(
+    (input: MoveInput): boolean => {
+      if (!blunderCheck || hotSeat) return false;
+      const live = gameRef.current.chess();
+      // A move that ends the game — mate, or a draw by repetition the live game can see — is
+      // never held back. The live game has the history a position alone lacks.
+      const probe = tryMove(live, input);
+      if (!probe) return false;
+      const over = live.isGameOver();
+      live.undo();
+      if (over) return false;
+      const fen = live.fen();
+      const warning = checkBlunder(fen, input);
+      if (!warning) return false;
+      const key = `${fen}|${warning.move.uci}`;
+      if (!blunderCountedRef.current.has(key)) {
+        blunderCountedRef.current.add(key);
+        setBlunderStops((n) => n + 1);
+        useProgress.getState().recordBlunderCheck('stopped');
+      }
+      playSound('notify');
+      setBlunderAlert({ warning, revealed: false, input });
+      return true;
+    },
+    [blunderCheck, hotSeat],
+  );
+
   const playerMove = useCallback(
     (from: Square, to: Square, promotion?: PromotionPiece) => {
       if (!canPlayerMove) return;
       setHintArrow(null);
+      setBlunderAlert(null);
+      // A promotion still waiting for its piece is checked once the piece is chosen.
+      const promotes = isPromotionMove(gameRef.current.chess(), from, to);
+      const piece = promotion ?? (promotes && autoQueen ? 'q' : undefined);
+      if ((!promotes || piece) && holdBack({ from, to, ...(piece ? { promotion: piece } : {}) })) {
+        return;
+      }
       const fenBefore = position.fen;
       const move = game.playMove(from, to, promotion);
       if (move && move !== 'promotion' && !hotSeat) coachCheck(fenBefore, move.san, toUci(move));
     },
-    [canPlayerMove, game, position.fen, hotSeat, coachCheck],
+    [canPlayerMove, game, position.fen, hotSeat, coachCheck, holdBack, autoQueen],
   );
 
   const playerNotation = useCallback(
     (notation: string): boolean => {
       if (!canPlayerMove) return false;
       setHintArrow(null);
+      setBlunderAlert(null);
+      if (blunderCheck && !hotSeat) {
+        const typed = tryNotation(new Chess(gameRef.current.chess().fen()), notation, {
+          autoQueen,
+        });
+        if (!typed) return false;
+        const input: MoveInput = { from: typed.from, to: typed.to };
+        if (typed.promotion) input.promotion = typed.promotion as PromotionPiece;
+        // Held back: the typed move was understood, so the field clears.
+        if (holdBack(input)) return true;
+      }
       const fenBefore = position.fen;
       const move = game.playNotation(notation);
       if (move && !hotSeat) coachCheck(fenBefore, move.san, toUci(move));
       return move !== null;
     },
-    [canPlayerMove, game, position.fen, hotSeat, coachCheck],
+    [canPlayerMove, game, position.fen, hotSeat, coachCheck, blunderCheck, holdBack, autoQueen],
   );
 
-  /** Dismisses both pause alerts: resolving one must not leave the other standing. */
+  const blunderLookAgain = useCallback(() => setBlunderAlert(null), []);
+
+  const blunderShowMe = useCallback(
+    () => setBlunderAlert((alert) => (alert ? { ...alert, revealed: true } : alert)),
+    [],
+  );
+
+  const blunderPlayAnyway = useCallback(() => {
+    const alert = blunderAlert;
+    setBlunderAlert(null);
+    if (!alert || !canPlayerMove) return;
+    useProgress.getState().recordBlunderCheck('played-anyway');
+    setHintArrow(null);
+    const fenBefore = position.fen;
+    const { from, to, promotion } = alert.input;
+    const move = game.playMove(from, to, promotion);
+    if (move && move !== 'promotion' && !hotSeat) coachCheck(fenBefore, move.san, toUci(move));
+  }, [blunderAlert, canPlayerMove, position.fen, game, hotSeat, coachCheck]);
+
+  /** Dismisses the pause alerts: resolving one must not leave another standing. */
   const clearAlerts = useCallback(() => {
     coachRunRef.current++;
     setCoachAlert(null);
     setCoachChecking(false);
     setBookAlert(null);
+    setBlunderAlert(null);
   }, []);
 
   // An alert never outlives the game (a resignation while it is up, say): its "Take it back" would
@@ -797,11 +914,17 @@ export function usePlayVsEngine(): UsePlayVsEngine {
         game.resolvePromotion(null);
         return;
       }
+      const pending = game.pendingPromotion;
+      if (piece && pending && holdBack({ from: pending.from, to: pending.to, promotion: piece })) {
+        // Held back: the pawn goes back while the learner decides.
+        game.resolvePromotion(null);
+        return;
+      }
       const fenBefore = position.fen;
       const move = game.resolvePromotion(piece);
       if (move && !hotSeat) coachCheck(fenBefore, move.san, toUci(move));
     },
-    [canPlayerMove, game, position.fen, hotSeat, coachCheck],
+    [canPlayerMove, game, position.fen, hotSeat, coachCheck, holdBack],
   );
 
   const takeBack = useCallback(() => {
@@ -813,6 +936,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     setCoachAlert(null);
     setCoachChecking(false);
     setBookAlert(null);
+    setBlunderAlert(null);
     setThinking(false);
     setHintArrow(null);
     // Undo back to the player's previous turn (one ply between two people).
@@ -962,6 +1086,12 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     coachInterventions,
     coachTakeBack,
     coachPlayOn,
+    blunderCheck,
+    blunderAlert,
+    blunderStops,
+    blunderLookAgain,
+    blunderShowMe,
+    blunderPlayAnyway,
     book,
     bookAlert,
     bookTakeBack,

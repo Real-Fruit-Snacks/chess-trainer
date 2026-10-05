@@ -257,6 +257,27 @@ const ownPuzzle = struct(
   { opening: string },
 );
 
+const ownThreat = struct(
+  {
+    id: string,
+    fen: string,
+    threat: string,
+    line: array(string),
+    defences: array(string),
+    rating: number,
+    kind: literal('mate', 'material'),
+    source: struct(
+      { title: string, ply: number, played: string },
+      { url: string, byLearner: boolean },
+    ),
+    createdAt: number,
+    found: number,
+    missed: number,
+    streak: number,
+  },
+  { also: array(string), motifs: string, game: string },
+);
+
 const woodpeckerSet = struct({
   id: string,
   createdAt: number,
@@ -355,6 +376,38 @@ export const progressFields = {
   tourDismissed: boolean,
   lichessUsername: string,
   chesscomUsername: string,
+  // Added in 0.15 (export version 8).
+  blind: struct({
+    // Keyed by depth ('short', 'long', 'veryLong'); other keys are ignored when read.
+    levels: record(number),
+    solved: number,
+    failed: number,
+    clean: number,
+    run: number,
+    bestRun: number,
+    lastAt: nullable(number),
+  }),
+  threatStats: struct({
+    found: number,
+    missed: number,
+    defended: number,
+    defenceTried: number,
+    run: number,
+    bestRun: number,
+    lastAt: nullable(number),
+    recent: array(string),
+  }),
+  ownThreats: record(ownThreat),
+  selfReview: struct({
+    games: number,
+    found: number,
+    total: number,
+    falseAlarms: number,
+    suggestions: number,
+    goodSuggestions: number,
+    history: array(struct({ at: number, found: number, total: number })),
+  }),
+  blunderChecks: struct({ stopped: number, playedAnyway: number }),
 } satisfies { [K in keyof PersistedProgress]: Schema<unknown> };
 
 export const progressSlice = slice(progressFields) as Schema<Partial<PersistedProgress>>;
@@ -448,7 +501,7 @@ export const gamesSlice = slice(gamesFields);
 /* ------------------------------------------------------------------ */
 
 /** The export format written by this build (see `exportState`). */
-export const EXPORT_VERSION = 7;
+export const EXPORT_VERSION = 8;
 
 /** Why a file was refused: not ours, ours but broken, not JSON at all, or a PGN by the look of it. */
 export type BackupProblem = 'not-a-backup' | 'damaged' | 'unreadable' | 'looks-like-pgn';

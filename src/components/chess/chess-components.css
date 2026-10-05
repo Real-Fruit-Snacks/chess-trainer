@@ -390,6 +390,14 @@ button.movelist__move:hover {
   margin-left: 1px;
 }
 
+/* A move the learner flagged in self-analysis. */
+.treemoves__flag {
+  display: inline-flex;
+  margin-left: 2px;
+  color: var(--warning);
+  vertical-align: -1px;
+}
+
 .treemoves__comment {
   font-family: var(--font-sans);
   font-style: italic;

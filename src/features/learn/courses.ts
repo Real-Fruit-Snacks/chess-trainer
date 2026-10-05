@@ -7,7 +7,14 @@ import type { LessonLevel } from './model';
  */
 export type CourseItem =
   | { type: 'lesson'; id: string }
-  | { type: 'drill'; id: string; title: string; to: string }
+  | {
+      type: 'drill';
+      id: string;
+      title: string;
+      to: string;
+      /** What counts as done, when it is not winning the drill once. */
+      goal?: string;
+    }
   | { type: 'puzzles'; theme: string; target: number }
   | { type: 'repertoire'; id: string; title: string; target: number }
   | { type: 'game'; level: number }
@@ -150,6 +157,13 @@ export const COURSES: Course[] = [
           lesson('planning-basics'),
           lesson('space-and-pawn-breaks'),
           lesson('visualisation'),
+          {
+            type: 'drill',
+            id: 'threats',
+            title: 'What’s the threat?',
+            to: '/drills/threats',
+            goal: 'Name a threat',
+          },
           lesson('the-active-king'),
           { type: 'classic', id: 'opera-game', title: 'The Opera Game' },
           { type: 'game', level: 3 },
@@ -256,6 +270,13 @@ export const COURSES: Course[] = [
           puzzles('quietMove', 5),
           puzzles('long', 6),
           puzzles('veryLong', 3),
+          {
+            type: 'drill',
+            id: 'blind-puzzles',
+            title: 'Blind puzzles',
+            to: '/puzzles/blind',
+            goal: 'Solve one without peeking',
+          },
         ],
       },
       {
@@ -332,6 +353,13 @@ export const COURSES: Course[] = [
         blurb: 'Learn from what you actually play, and from the greatest games ever played.',
         items: [
           lesson('analysing-your-games'),
+          {
+            type: 'drill',
+            id: 'self-review',
+            title: 'Analyze a game yourself first',
+            to: '/games',
+            goal: 'Mark the turning points of one game, then check',
+          },
           lesson('practical-play-and-time'),
           { type: 'classic', id: 'byrne-fischer', title: 'The Game of the Century' },
           { type: 'game', level: 5 },

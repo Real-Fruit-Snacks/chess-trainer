@@ -3,18 +3,24 @@
  * Downloads the pinned Stockfish WASM builds into public/engine/.
  *
  * The engine is GPL-3.0 software maintained in a separate project
- * (https://github.com/nmrugg/stockfish.js). Rather than vendoring ~4 MB of
- * binaries in git — or pulling the 200 MB `stockfish` npm package into every
- * install — we fetch exactly the files we ship, verify their SHA-256 and
- * cache them locally. The script is idempotent: if the files are present and
- * their checksums match, it exits immediately.
+ * (https://github.com/nmrugg/stockfish.js). Rather than vendoring binaries in
+ * git — or pulling the 200 MB `stockfish` npm package into every install — we
+ * fetch exactly the files we ship, verify their SHA-256 and cache them
+ * locally. The script is idempotent: if the files are present and their
+ * checksums match, it exits immediately.
  *
- * Two builds are installed:
- *  - lite-single: one thread, precached by the service worker, used by default.
- *  - lite (pthreads): the experimental multi-threaded engine, loaded only when
- *    the learner opts in and the page is cross-origin isolated.
+ * Four builds are installed:
+ *  - lite-single: one thread, precached by the service worker; the engine of
+ *    the first visit and of browsers that cannot run threads.
+ *  - lite (pthreads): the default once the page is cross-origin isolated.
+ *  - full single and full (pthreads): Stockfish with its large network
+ *    (about 99 MB each), fetched only when the learner switches the full
+ *    engine on.
  *
- * Usage:  node scripts/setup-engine.mjs [--force]
+ * `--lite` installs the two lite builds only: the content checks and the dev
+ * server (which runs no service worker, so no full engine) need no more.
+ *
+ * Usage:  node scripts/setup-engine.mjs [--force] [--lite]
  */
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -50,10 +56,34 @@ export const ENGINE = {
       sha256: '18727c9ade11a8ca04391ab5a298232bc6fffebe2002e7cfffac82e7ad453447',
       build: 'multi',
     },
+    {
+      name: 'stockfish-19-single.js',
+      sha256: '72772f8bdd7353e4e24245d946bb831f56bcccf02fa16a779c1b92a6c00e5cc2',
+      build: 'full-single',
+    },
+    {
+      name: 'stockfish-19-single.wasm',
+      sha256: '8725c26572762617fd96b2ea83ff130e6640b85815890d682bf8c49db0820721',
+      build: 'full-single',
+    },
+    {
+      name: 'stockfish-19.js',
+      sha256: '227b9317cb8fc347da722b3f6694c5f57eafe17842a8a1afbfe08c3aeeae5671',
+      build: 'full-multi',
+    },
+    {
+      name: 'stockfish-19.wasm',
+      sha256: 'e0ef90031a310479e5b0c3692a9839118ed785535c306252e68ed3300a45b02d',
+      build: 'full-multi',
+    },
   ],
 };
 
+/** The lite builds: what `--lite` installs. */
+export const LITE_BUILDS = new Set(['single', 'multi']);
+
 const force = process.argv.includes('--force');
+const liteOnly = process.argv.includes('--lite');
 
 function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
@@ -105,7 +135,7 @@ export function versionRecord() {
       {
         name: 'Stockfish.js',
         version: ENGINE.version,
-        variants: ['lite-single', 'lite (pthreads)'],
+        variants: ['lite-single', 'lite (pthreads)', 'full-single', 'full (pthreads)'],
         license: 'GPL-3.0-only',
         source: 'https://github.com/nmrugg/stockfish.js',
         files: ENGINE.files,
@@ -138,16 +168,19 @@ export async function writeVersionFile(dir = OUT_DIR) {
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
 
+  const wanted = ENGINE.files.filter((file) => !liteOnly || LITE_BUILDS.has(file.build));
   const missing = [];
-  for (const file of ENGINE.files) {
+  for (const file of wanted) {
     if (force || !(await isValid(file))) missing.push(file);
   }
 
   if (missing.length === 0) {
-    console.log(`Engine v${ENGINE.version} already installed in public/engine/`);
+    console.log(
+      `Engine v${ENGINE.version} already installed in public/engine/${liteOnly ? ' (lite builds)' : ''}`,
+    );
   } else {
     console.log(
-      `Installing Stockfish ${ENGINE.version} (lite: single- and multi-threaded) into public/engine/`,
+      `Installing Stockfish ${ENGINE.version} (${liteOnly ? 'lite builds' : 'lite and full builds, about 200 MB the first time'}) into public/engine/`,
     );
     for (const file of missing) {
       await rm(join(OUT_DIR, file.name), { force: true });

@@ -71,3 +71,8 @@
   font-weight: 600;
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
+
+/* Phones: the pause alerts sit right under the board, where the move snapped back. */
+.play__alerts {
+  margin-top: var(--space-2);
+}

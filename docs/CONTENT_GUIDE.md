@@ -26,6 +26,9 @@ automatically and a unit test fails while the index is stale.
   summary: 'Attack two things at once — the most common tactic in chess.',
   minutes: 6,                       // rough reading + solving time
   practiceThemes: ['fork'],         // Lichess puzzle themes offered at the end
+  practiceDrills: [                 // optional: drills offered at the end, by title and app path
+    { title: 'What’s the threat?', to: '/drills/threats' },
+  ],
   steps: [ /* see below */ ],
 }
 ```
@@ -249,7 +252,9 @@ units. A unit unlocks when the previous one is done; an item is done when the le
 drill has been won, the puzzle/repertoire target has been reached (puzzle solves are counted from the
 lifetime per-theme counters, so a checkpoint never comes undone when old attempts age out of the list),
 an ordinary game at the level has been played (not an arcade, simul or drill game) or the classic game
-has been finished. Every lesson appears in exactly one course, the one of its own level (tests check
+has been finished. Three drill items stand for skills rather than drills — `threats` (a threat named
+in the threat drill), `blind-puzzles` (a blind puzzle solved without a peek) and `self-review` (a
+game analyzed before the engine) — and carry a `goal` that says so in place of "Win it once". Every lesson appears in exactly one course, the one of its own level (tests check
 both), and every referenced lesson, drill and classic id must exist. Lessons opened from a course carry
 `?course=<id>`, which gives them "Back to course" and "Next in course".
 

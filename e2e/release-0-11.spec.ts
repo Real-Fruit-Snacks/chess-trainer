@@ -182,6 +182,9 @@ test.describe('simul', () => {
     await seed(page);
     await startSimul(page, { boards: 2, level: 1, clock: '5+3' });
     await playMove(mainBoard(page), 'e2', 'e4');
+    // The move is in once play moves on to board 2 ("Your move" on board 1 is also how it
+    // started); then board 1 says "Your move" again only after the engine's reply.
+    await expect(page.getByTestId('simul-status')).toHaveText('Board 2: Your move.');
     await expect(page.getByTestId('simul-state-1')).toHaveText('Your move', { timeout: 30_000 });
     await page.clock.fastForward('05:10');
     await expect(page.getByTestId('simul-state-1')).toHaveText('Lost');

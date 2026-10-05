@@ -6,7 +6,9 @@ import {
   safeLocalStorage,
   warnNewerSave,
 } from '@/lib/persistStorage';
-import { writeIsolationFlag } from '@/sw/isolation';
+import { removeFullEngine } from '@/engine/fullEngine';
+import { BLIND_DEPTHS, type BlindDepth } from '@/features/puzzles/blind';
+import { resetIsolationFlag } from '@/sw/isolation';
 
 export const COLOR_SCHEMES = ['system', 'light', 'dark', 'black'] as const;
 export type ColorScheme = (typeof COLOR_SCHEMES)[number];
@@ -123,25 +125,40 @@ export interface SettingsState {
   playBlindfold: boolean;
   /** Coach mode in untimed engine games: pause after a mistake and offer a take-back. */
   playCoach: boolean;
+  /**
+   * Blunder check in games against the engine: a move that hangs material or
+   * allows mate is held back with "Checks, captures, threats?" before it is played.
+   */
+  playBlunderCheck: boolean;
   /** Query the Lichess tablebase API for positions with 7 or fewer pieces (network). */
   tablebase: boolean;
   /** Query the Lichess opening explorer for move statistics (network). */
   explorer: boolean;
   explorerDatabase: ExplorerDatabase;
   /**
-   * Experimental: run the multi-threaded engine build. Needs cross-origin
-   * isolation, which the service worker switches on at the next reload.
+   * Run the multi-threaded engine build (on by default). Needs cross-origin
+   * isolation, which the service worker provides from the next load on.
    */
   engineThreads: boolean;
+  /**
+   * Use Stockfish's large network once it is downloaded (Settings → Engine).
+   * Until then, or where it cannot start, the lite engine runs.
+   */
+  engineFull: boolean;
   /** Automatically load the next puzzle after a solve. */
   puzzleAutoNext: boolean;
+  /** How long the lines of blind puzzles are. */
+  blindDepth: BlindDepth;
   /** When the install banner was last dismissed (it stays away for a while), or never. */
   installDismissedAt: number | null;
   /** Single-key page shortcuts (H for a hint, arrows through moves…). */
   keyboardShortcuts: boolean;
 
   update: (patch: Partial<PersistedSettings>) => void;
-  /** Back to the defaults; also switches the service worker's isolation flag off. */
+  /**
+   * Back to the defaults; the service worker's isolation flag goes back to its
+   * default too, and a downloaded full engine is deleted.
+   */
   reset: () => void;
 }
 
@@ -182,11 +199,14 @@ export const DEFAULT_SETTINGS = {
   moveInput: false,
   playBlindfold: false,
   playCoach: true,
+  playBlunderCheck: false,
   tablebase: false,
   explorer: false,
   explorerDatabase: 'masters' as ExplorerDatabase,
-  engineThreads: false,
+  engineThreads: true,
+  engineFull: false,
   puzzleAutoNext: false,
+  blindDepth: 'short' as BlindDepth,
   installDismissedAt: null as number | null,
   keyboardShortcuts: true,
 };
@@ -194,7 +214,7 @@ export const DEFAULT_SETTINGS = {
 export type PersistedSettings = typeof DEFAULT_SETTINGS;
 
 export const SETTINGS_STORAGE_KEY = 'chess-trainer:settings';
-export const SETTINGS_VERSION = 4;
+export const SETTINGS_VERSION = 5;
 
 /* ------------------------------------------------------------------ */
 /* Validation on load                                                 */
@@ -251,11 +271,14 @@ const CHECKS: {
   moveInput: isBoolean,
   playBlindfold: isBoolean,
   playCoach: isBoolean,
+  playBlunderCheck: isBoolean,
   tablebase: isBoolean,
   explorer: isBoolean,
   explorerDatabase: oneOf(EXPLORER_DATABASES),
   engineThreads: isBoolean,
+  engineFull: isBoolean,
   puzzleAutoNext: isBoolean,
+  blindDepth: oneOf(BLIND_DEPTHS),
   keyboardShortcuts: isBoolean,
 };
 
@@ -369,7 +392,9 @@ export const useSettings = create<SettingsState>()(
       update: (patch) => set(patch),
       reset: () => {
         set({ ...DEFAULT_SETTINGS });
-        void writeIsolationFlag(false);
+        void resetIsolationFlag();
+        // The full engine is off by default: its download goes with the switch.
+        void removeFullEngine();
       },
     }),
     {
@@ -389,6 +414,8 @@ export const useSettings = create<SettingsState>()(
           legacyLearnerFields = pickLegacyLearnerFields(input);
           for (const key of [...LEGACY_LEARNER_KEYS, ...DROPPED_KEYS]) delete input[key];
         }
+        // 0.14: the multi-threaded engine became the default, for everyone.
+        if (version < 5) input.engineThreads = true;
         return { ...DEFAULT_SETTINGS, ...sanitizeSettings(input) };
       },
       merge: (persisted, current): SettingsState => ({

@@ -8,7 +8,7 @@ development-time tools only.
 
 | Component                                                                                                                                                                                  | Licence                           | Role                                                                          |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- | ----------------------------------------------------------------------------- |
-| [Stockfish](https://stockfishchess.org/) via [Stockfish.js](https://github.com/nmrugg/stockfish.js) (v19, lite WASM: single-threaded and pthreads builds)                                  | GPL-3.0-only                      | Chess engine (`public/engine/`, downloaded by `npm run engine:setup`)         |
+| [Stockfish](https://stockfishchess.org/) via [Stockfish.js](https://github.com/nmrugg/stockfish.js) (v19 WASM: lite and full, single-threaded and pthreads builds)                         | GPL-3.0-only                      | Chess engine (`public/engine/`, downloaded by `npm run engine:setup`)         |
 | [Chessground](https://github.com/lichess-org/chessground) (`@lichess-org/chessground`)                                                                                                     | GPL-3.0-or-later                  | Board rendering, drag & drop, arrows                                          |
 | cburnett piece set (from the Chessground package, re-emitted by `scripts/generate-pieces.mjs` as `src/components/board/pieces-classic.css`)                                                | CC BY-SA 3.0 — Colin M.L. Burnett | The "Classic" piece graphics; the Modern, Pixel and Letters sets are original |
 | [chess.js](https://github.com/jhlywa/chess.js)                                                                                                                                             | BSD-2-Clause                      | Move generation, legality, PGN/FEN                                            |
@@ -30,9 +30,10 @@ and traditional endings) are public-domain facts; every annotation is written fo
 Stockfish is GPL-3.0 software. The source code corresponding to the shipped binaries is the
 [Stockfish.js v19.0.0 release](https://github.com/nmrugg/stockfish.js/releases/tag/v19.0.0) (built from
 the [Stockfish](https://github.com/official-stockfish/Stockfish) sources it names); the exact files and
-their SHA-256 checksums are pinned in `scripts/setup-engine.mjs`. Both builds are the same engine and
-network; the pthreads build is only loaded when the learner opts in. The full GPL-3.0 text ships with the
-site as `licence.txt`.
+their SHA-256 checksums are pinned in `scripts/setup-engine.mjs`. The four builds are the same engine:
+two embed Stockfish's small network ("lite"), two its large one ("full"), each single-threaded and with
+pthreads. A full build reaches a device only when the learner switches the full engine on. The full
+GPL-3.0 text ships with the site as `licence.txt`.
 
 ## Development tools (not shipped)
 

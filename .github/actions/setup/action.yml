@@ -6,7 +6,9 @@ description: >-
 
 inputs:
   engine:
-    description: Install the pinned Stockfish binaries into public/engine/ ('true' or 'false').
+    description: >-
+      Install the pinned Stockfish binaries into public/engine/: 'true' for every build (the
+      full engine is about 200 MB), 'lite' for the two lite builds only, 'false' for none.
     default: 'false'
   browser:
     description: A Playwright browser to install (chromium, firefox or webkit); empty for none.
@@ -29,18 +31,21 @@ runs:
     # The engine is downloaded from a pinned release and checksum-verified; the
     # cache only saves the download — engine:setup still checks every file.
     - name: Restore the engine binaries
-      if: inputs.engine == 'true'
+      if: inputs.engine == 'true' || inputs.engine == 'lite'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: |
           public/engine/*.js
           public/engine/*.wasm
-        key: engine-${{ hashFiles('scripts/setup-engine.mjs') }}
+        key: engine-${{ inputs.engine == 'lite' && 'lite-' || '' }}${{ hashFiles('scripts/setup-engine.mjs') }}
 
     - name: Install the engine
-      if: inputs.engine == 'true'
+      if: inputs.engine == 'true' || inputs.engine == 'lite'
       shell: bash
-      run: npm run engine:setup
+      env:
+        ENGINE: ${{ inputs.engine }}
+      run: |
+        if [ "$ENGINE" = "lite" ]; then npm run engine:setup -- --lite; else npm run engine:setup; fi
 
     - name: Read the Playwright version
       if: inputs.browser != ''

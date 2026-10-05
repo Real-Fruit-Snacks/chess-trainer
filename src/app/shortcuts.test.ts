@@ -26,7 +26,8 @@ describe('shortcut reference', () => {
     expect(titles.join(' ')).not.toMatch(/\bPlay\b/);
     const flat = SHORTCUT_GROUPS.flatMap((g) => g.shortcuts.map((s) => ({ group: g.title, ...s })));
     const keysIn = (group: string) => flat.filter((s) => s.group === group).flatMap((s) => s.keys);
-    expect(keysIn('Analyze')).toEqual(expect.arrayContaining(['←', '→', 'Home', 'End', 'F']));
+    expect(keysIn('Analyze')).toEqual(expect.arrayContaining(['←', '→', 'Home', 'End', 'F', 'M']));
+    expect(keysIn('What’s the threat?')).toEqual(['S', 'N']);
     expect(keysIn('Puzzles')).toEqual(expect.arrayContaining(['H', 'S', 'N', 'Enter']));
     expect(keysIn('Lessons')).toEqual(expect.arrayContaining(['←', '→', 'H']));
     expect(keysIn('Endgame studies')).toEqual(['H', 'S']);

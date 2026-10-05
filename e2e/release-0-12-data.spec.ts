@@ -201,10 +201,11 @@ test.describe('the lab', () => {
       );
     expect(await fillerKeys()).toBeGreaterThan(0);
 
-    // Navigate away within the app: the lab cleans up after itself …
+    // Navigate away within the app: the lab cleans up after itself … (as its page
+    // unmounts, which can come a moment after the next page is drawn)
     await page.getByRole('link', { name: 'Settings' }).first().click();
     await expect(page.getByTestId('settings')).toBeVisible();
-    expect(await fillerKeys()).toBe(0);
+    await expect.poll(fillerKeys).toBe(0);
     expect(await page.evaluate(() => localStorage.getItem('chess-trainer:lab-probe'))).toBeNull();
 
     // … and a save works again straight away.

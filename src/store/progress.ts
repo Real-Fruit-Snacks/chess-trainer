@@ -12,6 +12,8 @@ import {
   warnNewerSave,
 } from '@/lib/persistStorage';
 import type { OwnPuzzle } from '@/features/puzzles/ownPuzzles';
+import { type BlindDepth, blindLevel, nextBlindLevel } from '@/features/puzzles/blind';
+import type { OwnThreat } from '@/features/drills/threats';
 import { daysBetween, localDateKey, trainingStreak } from '@/lib/dates';
 import {
   PUZZLE_REVIEW_STEPS_DAYS,
@@ -37,7 +39,6 @@ import {
   DEFAULT_START_RATING,
   SELF_ASSESSED_RD,
 } from '@/lib/rating';
-import { writeIsolationFlag } from '@/sw/isolation';
 import { useRepertoire } from './repertoire';
 import { useAnalyses } from './analyses';
 import { useGames } from './games';
@@ -242,6 +243,57 @@ export interface LifetimeStats {
   solveTimeMs: number;
 }
 
+/** Blind puzzles (calculation without the board moving): the level of each depth and the totals. */
+export interface BlindStats {
+  /** The rating each depth's next puzzle is chosen around; a depth not started has none. */
+  levels: Partial<Record<BlindDepth, number>>;
+  solved: number;
+  failed: number;
+  /** Solved without peeking at the board. */
+  clean: number;
+  /** Clean solves in a row, now and at best. */
+  run: number;
+  bestRun: number;
+  lastAt: number | null;
+}
+
+/** The threat drill: threats named, defences found, and the bundled positions seen lately. */
+export interface ThreatStats {
+  /** Threats named at the first try, and threats missed. */
+  found: number;
+  missed: number;
+  /** Defences found, out of those tried. */
+  defended: number;
+  defenceTried: number;
+  /** Threats named in a row, now and at best. */
+  run: number;
+  bestRun: number;
+  lastAt: number | null;
+  /** Bundled positions done lately, oldest first, so they do not come back soon. */
+  recent: string[];
+}
+
+/** Analysing a game before the engine does: the turning points found, game after game. */
+export interface SelfReviewStats {
+  games: number;
+  /** Turning points (the engine's mistakes and blunders) marked, out of all there were. */
+  found: number;
+  total: number;
+  /** Moves marked that the engine found fine. */
+  falseAlarms: number;
+  /** Better moves suggested, and how many the engine thought good. */
+  suggestions: number;
+  goodSuggestions: number;
+  /** Each self-review, newest last (capped). */
+  history: { at: number; found: number; total: number }[];
+}
+
+/** The blunder check in games: moves it stopped, and how many were played anyway. */
+export interface BlunderCheckStats {
+  stopped: number;
+  playedAnyway: number;
+}
+
 export interface ProgressState {
   onboarded: boolean;
   /** Glicko-2 puzzle rating (see lib/glicko.ts). */
@@ -301,6 +353,12 @@ export interface ProgressState {
   /** Usernames remembered for the game import (per learner, like the games). */
   lichessUsername: string;
   chesscomUsername: string;
+  blind: BlindStats;
+  threatStats: ThreatStats;
+  /** Threats missed in the learner's own games, by id (the threat drill brings them back). */
+  ownThreats: Record<string, OwnThreat>;
+  selfReview: SelfReviewStats;
+  blunderChecks: BlunderCheckStats;
 
   /**
    * Sets the starting rating. `'self'` trusts the learner's own assessment
@@ -391,6 +449,35 @@ export interface ProgressState {
     names: Partial<Pick<ProgressState, 'lichessUsername' | 'chesscomUsername'>>,
   ) => void;
   /**
+   * Records a blind puzzle: the depth's level moves (up after a clean solve,
+   * down after a miss), the puzzle counts as seen, and the run and totals
+   * follow. Returns the level before and after.
+   */
+  recordBlind: (attempt: {
+    id: string;
+    depth: BlindDepth;
+    outcome: PuzzleOutcome;
+    /** The board was shown during the attempt. */
+    peeked: boolean;
+  }) => { before: number; after: number };
+  /**
+   * Records a position of the threat drill: whether the threat was named at
+   * the first try and, when a defence was asked for, whether it held. An own
+   * threat keeps its own record (and retires once named twice in a row).
+   */
+  recordThreat: (result: { id: string; found: boolean; defence: 'held' | 'failed' | null }) => void;
+  /** Stores threats missed in the learner's games; returns how many were new. */
+  addOwnThreats: (threats: OwnThreat[]) => number;
+  removeOwnThreat: (id: string) => void;
+  recordSelfReview: (result: {
+    found: number;
+    total: number;
+    falseAlarms: number;
+    suggestions: number;
+    goodSuggestions: number;
+  }) => void;
+  recordBlunderCheck: (event: 'stopped' | 'played-anyway') => void;
+  /**
    * Replaces this profile's progress, repertoire, library and games with a
    * backup. Every part is checked first; nothing changes when the file is refused.
    */
@@ -431,10 +518,55 @@ export const MAX_SEEN = 20_000;
 export const MAX_PUZZLE_REVIEWS = 500;
 /** The biggest Woodpecker set the app builds (shared sets are cut to it). */
 export const MAX_WOODPECKER_IDS = 200;
+/** Threats from the learner's games kept for the drill; the oldest learned ones go first. */
+export const MAX_OWN_THREATS = 200;
+/** Bundled threat positions remembered as done lately. */
+export const MAX_RECENT_THREATS = 300;
+/** Self-reviews kept in the history. */
+export const MAX_SELF_REVIEWS = 50;
 
 function withToday(days: string[], today = localDateKey()): string[] {
   if (days.includes(today)) return days;
   return [...days, today].sort().slice(-MAX_TRAINING_DAYS);
+}
+
+function emptyBlind(): BlindStats {
+  return { levels: {}, solved: 0, failed: 0, clean: 0, run: 0, bestRun: 0, lastAt: null };
+}
+
+function emptyThreatStats(): ThreatStats {
+  return {
+    found: 0,
+    missed: 0,
+    defended: 0,
+    defenceTried: 0,
+    run: 0,
+    bestRun: 0,
+    lastAt: null,
+    recent: [],
+  };
+}
+
+function emptySelfReview(): SelfReviewStats {
+  return {
+    games: 0,
+    found: 0,
+    total: 0,
+    falseAlarms: 0,
+    suggestions: 0,
+    goodSuggestions: 0,
+    history: [],
+  };
+}
+
+/** Keeps the newest own threats, learned ones going before those still being learned. */
+function capOwnThreats(own: Record<string, OwnThreat>): Record<string, OwnThreat> {
+  const all = Object.values(own);
+  if (all.length <= MAX_OWN_THREATS) return own;
+  const kept = all
+    .sort((a, b) => Number(a.streak >= 2) - Number(b.streak >= 2) || b.createdAt - a.createdAt)
+    .slice(0, MAX_OWN_THREATS);
+  return Object.fromEntries(kept.map((t) => [t.id, t]));
 }
 
 const emptyLifetime = (): LifetimeStats => ({
@@ -483,6 +615,11 @@ const initialState = {
   tourDismissed: false,
   lichessUsername: '',
   chesscomUsername: '',
+  blind: emptyBlind(),
+  threatStats: emptyThreatStats(),
+  ownThreats: {} as Record<string, OwnThreat>,
+  selfReview: emptySelfReview(),
+  blunderChecks: { stopped: 0, playedAnyway: 0 },
 };
 
 export type PersistedProgress = typeof initialState;
@@ -508,7 +645,7 @@ export const RECALL_CARD_RATING = 0;
 export const RECALL_FIRST_STEP = 1;
 
 export const PROGRESS_STORAGE_KEY = 'chess-trainer:progress';
-export const PROGRESS_VERSION = 7;
+export const PROGRESS_VERSION = 8;
 /** Where the data an import is about to replace is kept, for "Undo import". */
 export const PRE_IMPORT_BACKUP_KEY = 'chess-trainer:pre-import-backup';
 
@@ -1150,6 +1287,143 @@ export const useProgress = create<ProgressState>()(
           });
         },
 
+        recordBlind: ({ id, depth, outcome, peeked }) => {
+          const state = get();
+          const before = blindLevel(state.blind.levels, depth, state.puzzleRating);
+          const after = nextBlindLevel(before, outcome, peeked);
+          const clean = outcome === 'solved' && !peeked;
+          const run = clean ? state.blind.run + 1 : 0;
+          const now = Date.now();
+          const drill = state.drills['blind-puzzles'];
+          set({
+            blind: {
+              levels: { ...state.blind.levels, [depth]: after },
+              solved: state.blind.solved + (outcome === 'solved' ? 1 : 0),
+              failed: state.blind.failed + (outcome === 'failed' ? 1 : 0),
+              clean: state.blind.clean + (clean ? 1 : 0),
+              run,
+              bestRun: Math.max(state.blind.bestRun, run),
+              lastAt: now,
+            },
+            // A puzzle seen blind (and its solution with it) is spoiled for rated solving.
+            seen: pruneSeen({ ...state.seen, [id]: outcome }),
+            drills: {
+              ...state.drills,
+              'blind-puzzles': {
+                best: Math.max(drill?.best ?? 0, run),
+                attempts: (drill?.attempts ?? 0) + 1,
+                lastAt: now,
+              },
+            },
+            ...training(state.trainingDays),
+          });
+          return { before, after };
+        },
+
+        recordThreat: ({ id, found, defence }) => {
+          const state = get();
+          const stats = state.threatStats;
+          const run = found ? stats.run + 1 : 0;
+          const now = Date.now();
+          const own = state.ownThreats[id];
+          const drill = state.drills.threats;
+          set({
+            threatStats: {
+              found: stats.found + (found ? 1 : 0),
+              missed: stats.missed + (found ? 0 : 1),
+              defended: stats.defended + (defence === 'held' ? 1 : 0),
+              defenceTried: stats.defenceTried + (defence ? 1 : 0),
+              run,
+              bestRun: Math.max(stats.bestRun, run),
+              lastAt: now,
+              recent: own
+                ? stats.recent
+                : [...stats.recent.filter((r) => r !== id), id].slice(-MAX_RECENT_THREATS),
+            },
+            ...(own
+              ? {
+                  ownThreats: {
+                    ...state.ownThreats,
+                    [id]: {
+                      ...own,
+                      found: own.found + (found ? 1 : 0),
+                      missed: own.missed + (found ? 0 : 1),
+                      streak: found ? own.streak + 1 : 0,
+                    },
+                  },
+                }
+              : {}),
+            drills: {
+              ...state.drills,
+              threats: {
+                best: Math.max(drill?.best ?? 0, run),
+                attempts: (drill?.attempts ?? 0) + 1,
+                lastAt: now,
+              },
+            },
+            ...training(state.trainingDays),
+          });
+        },
+
+        addOwnThreats: (threats) => {
+          const own = { ...get().ownThreats };
+          let added = 0;
+          for (const threat of threats) {
+            if (own[threat.id]) continue;
+            own[threat.id] = threat;
+            added++;
+          }
+          if (added === 0) return 0;
+          set({ ownThreats: capOwnThreats(own) });
+          return added;
+        },
+
+        removeOwnThreat: (id) => {
+          const own = { ...get().ownThreats };
+          delete own[id];
+          set({ ownThreats: own });
+        },
+
+        recordSelfReview: (result) => {
+          const state = get();
+          const stats = state.selfReview;
+          const now = Date.now();
+          const drill = state.drills['self-review'];
+          set({
+            selfReview: {
+              games: stats.games + 1,
+              found: stats.found + result.found,
+              total: stats.total + result.total,
+              falseAlarms: stats.falseAlarms + result.falseAlarms,
+              suggestions: stats.suggestions + result.suggestions,
+              goodSuggestions: stats.goodSuggestions + result.goodSuggestions,
+              history: [
+                ...stats.history,
+                { at: now, found: result.found, total: result.total },
+              ].slice(-MAX_SELF_REVIEWS),
+            },
+            drills: {
+              ...state.drills,
+              'self-review': {
+                best: Math.max(drill?.best ?? 0, stats.games + 1),
+                attempts: (drill?.attempts ?? 0) + 1,
+                lastAt: now,
+              },
+            },
+            ...training(state.trainingDays),
+          });
+        },
+
+        recordBlunderCheck: (event) => {
+          const stats = get().blunderChecks;
+          set({
+            blunderChecks:
+              event === 'stopped'
+                ? { ...stats, stopped: stats.stopped + 1 }
+                : { ...stats, playedAnyway: stats.playedAnyway + 1 },
+          });
+        },
+
         recordGuessGame: (gameId, score, maxScore) => {
           const current = get().guessGames[gameId];
           const days = training(get().trainingDays);
@@ -1268,8 +1542,14 @@ export const useProgress = create<ProgressState>()(
           useAnalyses.getState().clear();
           useGames.getState().clear();
           safeLocalStorage.removeItem(PRE_IMPORT_BACKUP_KEY);
-          void writeIsolationFlag(false);
-          set({ ...initialState, lifetime: emptyLifetime() });
+          set({
+            ...initialState,
+            lifetime: emptyLifetime(),
+            blind: emptyBlind(),
+            threatStats: emptyThreatStats(),
+            selfReview: emptySelfReview(),
+            blunderChecks: { stopped: 0, playedAnyway: 0 },
+          });
         },
       };
     },

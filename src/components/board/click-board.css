@@ -126,3 +126,8 @@
   bottom: 2px;
   right: 3px;
 }
+
+/* The last move, tinted like the last-move squares of the main board. */
+.clickboard__square--last {
+  background-image: linear-gradient(rgba(255, 204, 0, 0.42), rgba(255, 204, 0, 0.42));
+}

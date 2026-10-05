@@ -195,7 +195,13 @@ export function isPromotionMove(chess: Chess, from: Square, to: Square): boolean
 /** Attempts a move; returns the Move on success or null if illegal (never throws). */
 export function tryMove(chess: Chess, input: MoveInput | San): Move | null {
   try {
-    return chess.move(input);
+    const move = chess.move(input);
+    // chess.js reads "--" as a null move (the turn passes): no board or engine here can play that.
+    if (move.san === '--') {
+      chess.undo();
+      return null;
+    }
+    return move;
   } catch {
     return null;
   }
@@ -379,4 +385,27 @@ export function moveLabel(plyIndex: number, startFen: Fen = START_FEN): string {
   const ply = plyIndex + (startsWithBlack ? 1 : 0);
   const moveNumber = startMove + Math.floor(ply / 2);
   return ply % 2 === 0 ? `${moveNumber}.` : `${moveNumber}...`;
+}
+
+/**
+ * The position with the other side to move (a "null move"), for asking what
+ * that side threatens: the en passant square goes, as it belongs to the move
+ * just made. Null when the side passing is in check (its king could simply be
+ * taken) or the result is not a position chess.js accepts.
+ */
+export function passMove(fen: Fen): Fen | null {
+  const parts = fen.split(' ');
+  if (parts.length < 4) return null;
+  const passer = parts[1] === 'b' ? 'b' : 'w';
+  parts[1] = passer === 'w' ? 'b' : 'w';
+  parts[3] = '-';
+  const flipped = parts.join(' ');
+  try {
+    const chess = new Chess(flipped);
+    const king = chess.findPiece({ type: 'k', color: passer })[0];
+    if (!king || chess.isAttacked(king, chess.turn())) return null;
+    return flipped;
+  } catch {
+    return null;
+  }
 }

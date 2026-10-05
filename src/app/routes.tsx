@@ -17,6 +17,7 @@ const DrillsPage = lazy(() => import('@/features/drills/DrillsPage'));
 const CoordinatesDrill = lazy(() => import('@/features/drills/CoordinatesDrill'));
 const VisionDrill = lazy(() => import('@/features/drills/VisionDrill'));
 const EndgameDrillPage = lazy(() => import('@/features/drills/EndgameDrillPage'));
+const ThreatDrillPage = lazy(() => import('@/features/drills/ThreatDrillPage'));
 const OpeningsPage = lazy(() => import('@/features/openings/OpeningsPage'));
 const RepertoirePage = lazy(() => import('@/features/openings/RepertoirePage'));
 const MyGamesPage = lazy(() => import('@/features/games/MyGamesPage'));
@@ -65,6 +66,7 @@ export const routes: RouteObject[] = [
       { path: 'drills', element: <DrillsPage /> },
       { path: 'drills/coordinates', element: <CoordinatesDrill /> },
       { path: 'drills/vision', element: <VisionDrill /> },
+      { path: 'drills/threats', element: <ThreatDrillPage /> },
       { path: 'drills/endgame/:drillId', element: <EndgameDrillPage /> },
       { path: 'patterns', element: <PatternsPage /> },
       { path: 'arcade', element: <ArcadePage /> },

@@ -42,17 +42,29 @@ async function axe(page: Page) {
   return results.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) }));
 }
 
+/**
+ * Opens a game from the hub. The page scrolls smoothly, and a freshly loaded hub may still be
+ * settling, so a click can land beside a link that is moving (seen in Firefox): click until the
+ * page has changed.
+ */
+async function openFromHub(page: Page, name: string, path: RegExp) {
+  const link = page.getByRole('link', { name, exact: true });
+  await expect(async () => {
+    if (!path.test(page.url())) await link.click({ timeout: 2_000 });
+    await expect(page).toHaveURL(path, { timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+}
+
 test.describe('arcade hub', () => {
   test('lists Arbiter and Ghost Knight with their Play links', async ({ page }) => {
     await seed(page);
     await page.goto('/arcade');
     await expect(page.getByTestId('arcade-best-arbiter')).toHaveText('Not played yet');
     await expect(page.getByTestId('arcade-best-ghost-knight')).toHaveText('Not played yet');
-    await page.getByRole('link', { name: 'Play Ghost Knight', exact: true }).click();
-    await expect(page).toHaveURL(/\/arcade\/ghost-knight$/);
+    await openFromHub(page, 'Play Ghost Knight', /\/arcade\/ghost-knight$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Ghost Knight');
     await page.goto('/arcade');
-    await page.getByRole('link', { name: 'Play Arbiter', exact: true }).click();
+    await openFromHub(page, 'Play Arbiter', /\/arcade\/arbiter$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Arbiter');
   });
 });

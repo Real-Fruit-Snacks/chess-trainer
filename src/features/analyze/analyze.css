@@ -228,3 +228,30 @@
     display: none;
   }
 }
+
+/* Self-analysis: how each turning point and mark came out. */
+.self-review__mark {
+  display: inline-flex;
+  vertical-align: -2px;
+}
+
+.self-review__mark--found {
+  color: var(--success);
+}
+
+.self-review__mark--late {
+  color: var(--warning);
+}
+
+.self-review__mark--missed {
+  color: var(--danger);
+}
+
+.self-review__mark--other {
+  color: var(--text-muted);
+}
+
+.analyze__hidden-icon {
+  display: inline-flex;
+  vertical-align: -3px;
+}

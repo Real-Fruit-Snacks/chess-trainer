@@ -181,6 +181,41 @@ describe('reviewGame', () => {
     });
   });
 
+  it('records the threat a mistake ignored: the opponent’s best move after a pass', async () => {
+    const start = new Chess().fen();
+    const chess = new Chess();
+    for (const san of ['e4', 'e5', 'Bc4', 'Nc6', 'Qh5', 'Nf6', 'Qxf7#']) chess.move(san);
+    const moves = chess.history({ verbose: true });
+    const after = (...sans: string[]) => fenAfter(start, ...sans);
+    const queenOut = after('e4', 'e5', 'Bc4', 'Nc6', 'Qh5');
+    const calls: SearchParams[] = [];
+    const engine = fakeEngine(
+      {
+        [start]: { cp: 30, best: 'e2e4' },
+        [after('e4')]: { cp: -30, best: 'e7e5' },
+        [after('e4', 'e5')]: { cp: 30, best: 'g1f3' },
+        [after('e4', 'e5', 'Bc4')]: { cp: -20, best: 'b8c6' },
+        [after('e4', 'e5', 'Bc4', 'Nc6')]: { cp: 30, best: 'g1f3' },
+        [queenOut]: { cp: 0, best: 'g7g6' },
+        [after('e4', 'e5', 'Bc4', 'Nc6', 'Qh5', 'Nf6')]: { mate: 1, best: 'h5f7' },
+        // After a pass in that position, White to move: the mate was already threatened.
+        [queenOut.replace(' b ', ' w ')]: { mate: 1, best: 'h5f7' },
+      },
+      calls,
+    );
+    const review = await reviewGame(engine, start, moves);
+    expect(review.moves[5]).toMatchObject({ san: 'Nf6', judgement: 'blunder', replyUci: 'h5f7' });
+    expect(review.moves[5]?.passThreat).toEqual({
+      uci: 'h5f7',
+      pv: ['h5f7'],
+      score: { type: 'mate', value: 1 },
+      also: [],
+    });
+    // Only flagged moves get the extra search.
+    expect(review.moves.filter((m) => m.passThreat)).toHaveLength(1);
+    expect(calls.filter((c) => c.fen === queenOut.replace(' b ', ' w '))).toHaveLength(1);
+  });
+
   it('counts a missed mate as at least an inaccuracy and an allowed mate as a mistake', async () => {
     const start = '6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1';
     const chess = new Chess(start);

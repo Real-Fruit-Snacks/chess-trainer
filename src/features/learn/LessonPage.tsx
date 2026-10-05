@@ -159,8 +159,8 @@ function LessonView({ lesson }: { lesson: Lesson }) {
           </h2>
           <p className="muted">
             {completed
-              ? lesson.practiceThemes?.length
-                ? 'Nice work. Cement the idea with a few puzzles on the same theme.'
+              ? lesson.practiceThemes?.length || lesson.practiceDrills?.length
+                ? 'Nice work. Cement the idea with some practice.'
                 : 'Nice work. Keep going with the next lesson.'
               : `You reached the end with ${
                   openTasks > 0
@@ -177,6 +177,11 @@ function LessonView({ lesson }: { lesson: Lesson }) {
             {lesson.practiceThemes?.map((theme) => (
               <LinkButton key={theme} to={`/puzzles/themes?theme=${encodeURIComponent(theme)}`}>
                 Practise: {themeName(theme)}
+              </LinkButton>
+            ))}
+            {lesson.practiceDrills?.map((drill) => (
+              <LinkButton key={drill.to} to={drill.to}>
+                Practise: {drill.title}
               </LinkButton>
             ))}
             {course ? (

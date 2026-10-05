@@ -45,12 +45,14 @@ import { OpeningCatalog } from './OpeningCatalog';
 import { WoodpeckerPanel } from './WoodpeckerPanel';
 import { WOODPECKER_NEAR } from './woodpecker';
 import { RushTrainer } from './RushTrainer';
+import { BlindTrainer } from './BlindTrainer';
 import { PRACTICE_GROUPS, THEMES, themeDescription, themeName } from './themes';
 import { type PuzzleOutcomeEvent, usePuzzleTrainer, type VerifyMove } from './usePuzzleTrainer';
 import './puzzles.css';
 import { Icon } from '@/components/ui';
 
-type Mode = 'rated' | 'daily' | 'themes' | 'openings' | 'rush' | 'review' | 'mine' | 'woodpecker';
+type Mode =
+  'rated' | 'daily' | 'themes' | 'openings' | 'rush' | 'blind' | 'review' | 'mine' | 'woodpecker';
 
 const MODES: readonly Mode[] = [
   'rated',
@@ -58,6 +60,7 @@ const MODES: readonly Mode[] = [
   'themes',
   'openings',
   'rush',
+  'blind',
   'review',
   'mine',
   'woodpecker',
@@ -70,6 +73,7 @@ const MODE_TITLES: Record<Mode, string> = {
   themes: 'Puzzles by theme',
   openings: 'Puzzles by opening',
   rush: 'Puzzle Rush',
+  blind: 'Blind puzzles',
   review: 'Due puzzles',
   mine: 'My puzzles',
   woodpecker: 'Woodpecker',
@@ -169,6 +173,7 @@ export default function PuzzlesPage() {
               { value: 'themes', label: 'By theme' },
               { value: 'openings', label: 'By opening' },
               { value: 'rush', label: 'Rush' },
+              { value: 'blind', label: 'Blind' },
               {
                 value: 'review',
                 label: (
@@ -194,6 +199,8 @@ export default function PuzzlesPage() {
         <Onboarding />
       ) : mode === 'rush' ? (
         <RushTrainer />
+      ) : mode === 'blind' ? (
+        <BlindTrainer />
       ) : mode === 'review' && reviewQueueEmpty ? (
         <ReviewEmpty />
       ) : mode === 'mine' && ownCount === 0 ? (
@@ -340,8 +347,9 @@ function Onboarding() {
         </div>
         <p className="small muted" style={{ margin: '12px 0 0' }}>
           Not ready to be rated? <Link to="/puzzles/daily">Today’s puzzle</Link>,{' '}
-          <Link to="/puzzles/themes">puzzles by theme</Link> and{' '}
-          <Link to="/puzzles/rush">Puzzle Rush</Link> are open right away.
+          <Link to="/puzzles/themes">puzzles by theme</Link>,{' '}
+          <Link to="/puzzles/rush">Puzzle Rush</Link> and{' '}
+          <Link to="/puzzles/blind">blind puzzles</Link> are open right away.
         </p>
       </Card>
     </div>

@@ -46,34 +46,44 @@ export function fillStorage(): FillResult {
   const store = storage();
   if (!store) return { chunks: 0, bytes: 0, refused: false, limitBytes: null };
   const written: { key: string; size: number }[] = [];
-  for (const size of CHUNK_SIZES) {
-    const filler = 'x'.repeat(size);
-    let refused = false;
-    while (chunks < MAX_CHUNKS) {
-      try {
-        const key = `${FILLER_PREFIX}${chunks}`;
-        store.setItem(key, filler);
-        written.push({ key, size });
-        chunks += 1;
-        bytes += size * 2;
-      } catch (error) {
-        if (!isQuotaError(error)) throw error;
-        refused = true;
-        break;
+  /**
+   * Writes chunks from the biggest size down, each size until the browser
+   * refuses one; false when the ceiling came first (a browser that never says no).
+   */
+  const fill = (): boolean => {
+    for (const size of CHUNK_SIZES) {
+      const filler = 'x'.repeat(size);
+      for (;;) {
+        if (chunks >= MAX_CHUNKS) return false;
+        try {
+          const key = `${FILLER_PREFIX}${chunks}`;
+          store.setItem(key, filler);
+          written.push({ key, size });
+          chunks += 1;
+          bytes += size * 2;
+        } catch (error) {
+          if (!isQuotaError(error)) throw error;
+          break;
+        }
       }
     }
-    if (!refused) return { chunks, bytes, refused: false, limitBytes: null };
-  }
+    return true;
+  };
+  if (!fill()) return { chunks, bytes, refused: false, limitBytes: null };
   // Everything under the app's prefix (the filler included) is what fitted.
   const limitBytes = storageUsage('chess-trainer:').bytes;
-  // Storage is full now, so make a little room for the number itself: the two
-  // smallest chunks (160 bytes) go, far less than the probe's next step needs.
-  for (const chunk of written.splice(-2)) {
-    store.removeItem(chunk.key);
+  // Room for the number itself: the last chunk goes and the limit is stored. Then the slack
+  // is filled again, smallest chunks last, so the next save — even a small one — is refused
+  // like a learner's would be. (How much room the last chunk leaves depends on what else is
+  // stored, so it is never left empty.)
+  const last = written.pop();
+  if (last) {
+    store.removeItem(last.key);
     chunks -= 1;
-    bytes -= chunk.size * 2;
+    bytes -= last.size * 2;
   }
   recordStorageLimit(limitBytes);
+  fill();
   return { chunks, bytes, refused: true, limitBytes };
 }
 

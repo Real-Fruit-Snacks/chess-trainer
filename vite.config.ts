@@ -212,13 +212,18 @@ export default defineConfig(({ mode }) => {
           // Everything the app needs offline is static, so precache all of it —
           // including the single-threaded engine WASM and the puzzle chunks.
           globPatterns: ['**/*.{js,css,html,ico,png,svg,wasm,json,webmanifest,woff2}'],
-          // The threaded engine build is optional and cached on first use instead, and so
-          // are the puzzle chunks beyond the first one of each rating band (b*-00.json).
-          // The engine's version.json is a record for people, not something the app reads.
+          // The threaded engine build is cached on first use instead, the full engine (99 MB a
+          // build) only when the learner downloads it, and the puzzle chunks beyond the first
+          // one of each rating band (b*-00.json) as they are played. The engine's version.json
+          // is a record for people, not something the app reads.
           globIgnores: [
             '**/screenshots/**',
             '**/engine/stockfish-19-lite.js',
             '**/engine/stockfish-19-lite.wasm',
+            '**/engine/stockfish-19.js',
+            '**/engine/stockfish-19.wasm',
+            '**/engine/stockfish-19-single.js',
+            '**/engine/stockfish-19-single.wasm',
             '**/engine/version.json',
             '**/puzzles/b*-@(0[1-9]|[1-9][0-9]).json',
           ],

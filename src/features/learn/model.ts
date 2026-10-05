@@ -56,6 +56,8 @@ export interface Lesson {
   steps: LessonStep[];
   /** Puzzle themes to practise after the lesson. */
   practiceThemes?: string[];
+  /** Drills to practise after the lesson (app paths). */
+  practiceDrills?: { title: string; to: string }[];
 }
 
 /**

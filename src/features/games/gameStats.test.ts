@@ -4,6 +4,7 @@ import { groupDeviations, repertoireDeviations } from './deviations';
 import {
   guessPlayer,
   learnerColor,
+  learnerSideOf,
   mainLineOfPgn,
   openingStats,
   outcomeFor,
@@ -58,6 +59,18 @@ describe('game statistics', () => {
     expect(outcomeFor('1-0', 'black')).toBe('loss');
     expect(outcomeFor('1/2-1/2', 'black')).toBe('draw');
     expect(outcomeFor('*', 'white')).toBeNull();
+  });
+
+  it('tells the learner’s side of a game on the board from its headers', () => {
+    // Games against the engine call the learner "You".
+    expect(learnerSideOf({ White: 'You', Black: 'Stockfish level 3' }, '')).toBe('white');
+    expect(learnerSideOf({ White: 'Stockfish level 3', Black: 'You' }, 'alice')).toBe('black');
+    // Imported games: by the name the learner imports under.
+    expect(learnerSideOf({ White: 'carol', Black: 'Alice' }, 'alice')).toBe('black');
+    // Two people at one board, a stranger's game, or no headers: unknown.
+    expect(learnerSideOf({ White: 'White', Black: 'Black' }, '')).toBeNull();
+    expect(learnerSideOf({ White: 'erin', Black: 'frank' }, 'alice')).toBeNull();
+    expect(learnerSideOf({}, 'alice')).toBeNull();
   });
 
   it('groups openings per colour with scores', () => {

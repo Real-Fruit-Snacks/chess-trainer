@@ -256,13 +256,14 @@ describe('progress store (0.12)', () => {
     expect(useProgress.getState().puzzleRating).toBe(1777);
   });
 
-  it('reset clears the imported games, the isolation flag and the pre-import copy', () => {
+  it('reset clears the imported games and the pre-import copy, and leaves the flag to settings', () => {
     useGames.getState().setPlayer('me');
     localStorage.setItem('chess-trainer:pre-import-backup', '{}');
     useProgress.getState().completeOnboarding(1500);
     useProgress.getState().resetAll();
     expect(useGames.getState().player).toBe('');
-    expect(writeFlag).toHaveBeenCalledWith(false);
+    // The isolation flag follows the threads setting, which the settings reset restores.
+    expect(writeFlag).not.toHaveBeenCalled();
     expect(localStorage.getItem('chess-trainer:pre-import-backup')).toBeNull();
     expect(useProgress.getState().lifetime.attempts).toBe(0);
   });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ENGINE_BUILD_URLS } from './build';
+import { ENGINE_BUILD_URLS, ENGINE_WASM_URLS } from './build';
 import { EngineClient, EngineCrashedError } from './EngineClient';
 
 /**
@@ -9,6 +9,10 @@ import { EngineClient, EngineCrashedError } from './EngineClient';
 class FakeWorker {
   static instances: FakeWorker[] = [];
   static failingUrl: string | null = null;
+  /** Further URLs whose workers report a load error. */
+  static failingUrls = new Set<string>();
+  /** URLs whose workers never answer the handshake (a slow compile). */
+  static hangingUrls = new Set<string>();
   /** When set, `go` commands are recorded but never answered (until `stop`). */
   static silentSearches = false;
   readonly url: string;
@@ -20,13 +24,14 @@ class FakeWorker {
   constructor(url: string | URL) {
     this.url = String(url);
     FakeWorker.instances.push(this);
-    if (this.url === FakeWorker.failingUrl) {
+    if (this.url === FakeWorker.failingUrl || FakeWorker.failingUrls.has(this.url)) {
       queueMicrotask(() => this.onerror?.({ message: 'SharedArrayBuffer is not defined' }));
     }
   }
 
   postMessage(command: string) {
     this.sent.push(command);
+    if (FakeWorker.hangingUrls.has(this.url)) return;
     const reply = (line: string) =>
       queueMicrotask(() => this.onmessage?.({ data: line } as MessageEvent<string>));
     if (command === 'uci') reply('uciok');
@@ -49,15 +54,34 @@ class FakeWorker {
   }
 }
 
+/** The page is served by the service worker, which hands the engine worker the stored files. */
+function controlled() {
+  Object.defineProperty(navigator, 'serviceWorker', {
+    configurable: true,
+    value: { controller: {} },
+  });
+}
+
+/** A Cache API holding the given URLs (the files downloaded to the device). */
+function fakeCaches(stored: string[]) {
+  const urls = new Set(stored);
+  return {
+    match: (url: string) => Promise.resolve(urls.has(url) ? new Response('stored') : undefined),
+  };
+}
+
 describe('EngineClient builds', () => {
   beforeEach(() => {
     FakeWorker.instances = [];
     FakeWorker.failingUrl = null;
+    FakeWorker.failingUrls.clear();
+    FakeWorker.hangingUrls.clear();
     vi.stubGlobal('Worker', FakeWorker);
     vi.stubGlobal('WebAssembly', {});
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    Reflect.deleteProperty(navigator, 'serviceWorker');
   });
 
   it('starts the single-threaded build by default without touching Threads', async () => {
@@ -79,7 +103,8 @@ describe('EngineClient builds', () => {
     expect(client.build).toBe('multi');
     expect(client.threads).toBe(4);
     expect(client.fellBack).toBe(false);
-    expect(client.name).toBe('Stockfish 19 · 4 threads');
+    expect(client.fallbackReason).toBeNull();
+    expect(client.name).toBe('Stockfish 19 lite · 4 threads');
     const worker = FakeWorker.instances[0];
     expect(worker?.url).toBe(ENGINE_BUILD_URLS.multi);
     // Threads must be configured before the engine is asked whether it is ready.
@@ -99,6 +124,7 @@ describe('EngineClient builds', () => {
     expect(client.build).toBe('single');
     expect(client.threads).toBe(1);
     expect(client.fellBack).toBe(true);
+    expect(client.fallbackReason).toBe('failed');
     expect(FakeWorker.instances.map((w) => w.url)).toEqual([
       ENGINE_BUILD_URLS.multi,
       ENGINE_BUILD_URLS.single,
@@ -115,6 +141,130 @@ describe('EngineClient builds', () => {
     await expect(client.init()).rejects.toThrow(/failed to load/);
     expect(client.status).toBe('error');
   });
+
+  it('starts the downloaded full engine with its threads', async () => {
+    controlled();
+    vi.stubGlobal(
+      'caches',
+      fakeCaches([ENGINE_BUILD_URLS['full-multi'], ENGINE_WASM_URLS['full-multi']]),
+    );
+    const client = new EngineClient({ build: 'full-multi', threads: 4 });
+    await client.init();
+    expect(client.build).toBe('full-multi');
+    expect(client.threads).toBe(4);
+    expect(client.fellBack).toBe(false);
+    expect(client.name).toBe('Stockfish 19 · 4 threads');
+    const worker = FakeWorker.instances[0];
+    expect(worker?.url).toBe(ENGINE_BUILD_URLS['full-multi']);
+    expect(worker?.sent).toContain('setoption name Threads value 4');
+    client.terminate();
+  });
+
+  it('runs the lite engine, quietly, while the full one is not downloaded', async () => {
+    controlled();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    // Only the script made it: a half-finished download counts as none.
+    vi.stubGlobal('caches', fakeCaches([ENGINE_BUILD_URLS['full-multi']]));
+    const threaded = new EngineClient({ build: 'full-multi', threads: 4 });
+    await threaded.init();
+    expect(threaded.build).toBe('multi');
+    expect(threaded.threads).toBe(4);
+    expect(threaded.fellBack).toBe(true);
+    expect(threaded.fallbackReason).toBe('not-downloaded');
+    // No worker was started for the missing build.
+    expect(FakeWorker.instances.map((w) => w.url)).toEqual([ENGINE_BUILD_URLS.multi]);
+    threaded.terminate();
+
+    // A browser without the Cache API can never have it.
+    vi.stubGlobal('caches', undefined);
+    const single = new EngineClient({ build: 'full-single' });
+    await single.init();
+    expect(single.build).toBe('single');
+    expect(single.fallbackReason).toBe('not-downloaded');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+    single.terminate();
+  });
+
+  it('falls back to lite when the full engine fails to start, then to one thread', async () => {
+    controlled();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.stubGlobal(
+      'caches',
+      fakeCaches([ENGINE_BUILD_URLS['full-multi'], ENGINE_WASM_URLS['full-multi']]),
+    );
+    FakeWorker.failingUrls = new Set([ENGINE_BUILD_URLS['full-multi'], ENGINE_BUILD_URLS.multi]);
+    const client = new EngineClient({ build: 'full-multi', threads: 4, initTimeoutMs: 2000 });
+    await client.init();
+    expect(client.build).toBe('single');
+    expect(client.threads).toBe(1);
+    expect(client.fallbackReason).toBe('failed');
+    expect(FakeWorker.instances.map((w) => w.url)).toEqual([
+      ENGINE_BUILD_URLS['full-multi'],
+      ENGINE_BUILD_URLS.multi,
+      ENGINE_BUILD_URLS.single,
+    ]);
+    expect(FakeWorker.instances.slice(0, 2).every((w) => w.terminated)).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+    client.terminate();
+  });
+
+  it('leaves a stored full engine alone on a page the service worker does not serve', async () => {
+    // A hard reload passes the worker by: the engine worker would fetch 99 MB from the network.
+    vi.stubGlobal(
+      'caches',
+      fakeCaches([ENGINE_BUILD_URLS['full-multi'], ENGINE_WASM_URLS['full-multi']]),
+    );
+    const client = new EngineClient({ build: 'full-multi', threads: 4 });
+    await client.init();
+    expect(client.build).toBe('multi');
+    expect(client.fallbackReason).toBe('not-downloaded');
+    client.terminate();
+  });
+
+  it('says a build failed even when the full engine was also missing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.stubGlobal('caches', fakeCaches([]));
+    FakeWorker.failingUrls = new Set([ENGINE_BUILD_URLS.multi]);
+    const client = new EngineClient({ build: 'full-multi', threads: 4, initTimeoutMs: 2000 });
+    await client.init();
+    expect(client.build).toBe('single');
+    expect(client.fallbackReason).toBe('failed');
+    warn.mockRestore();
+    client.terminate();
+  });
+
+  it('gives the full engine four times as long to compile', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      controlled();
+      vi.stubGlobal(
+        'caches',
+        fakeCaches([ENGINE_BUILD_URLS['full-single'], ENGINE_WASM_URLS['full-single']]),
+      );
+      FakeWorker.hangingUrls = new Set([ENGINE_BUILD_URLS['full-single']]);
+      const client = new EngineClient({ build: 'full-single', initTimeoutMs: 1000 });
+      const ready = client.init();
+      await vi.advanceTimersByTimeAsync(3900);
+      // Past the lite engine's limit, still waiting for the full one.
+      expect(FakeWorker.instances).toHaveLength(1);
+      expect(client.status).toBe('loading');
+      await vi.advanceTimersByTimeAsync(200);
+      await ready;
+      expect(client.build).toBe('single');
+      expect(client.fallbackReason).toBe('failed');
+      expect(FakeWorker.instances.map((w) => w.url)).toEqual([
+        ENGINE_BUILD_URLS['full-single'],
+        ENGINE_BUILD_URLS.single,
+      ]);
+      client.terminate();
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
 });
 
 /** Lets queued microtasks and the fake worker's replies run. */
@@ -124,6 +274,8 @@ describe('EngineClient searches', () => {
   beforeEach(() => {
     FakeWorker.instances = [];
     FakeWorker.failingUrl = null;
+    FakeWorker.failingUrls.clear();
+    FakeWorker.hangingUrls.clear();
     FakeWorker.silentSearches = false;
     vi.stubGlobal('Worker', FakeWorker);
     vi.stubGlobal('WebAssembly', {});

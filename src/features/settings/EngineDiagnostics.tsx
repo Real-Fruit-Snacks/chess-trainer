@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button } from '@/components/ui';
-import { detectThreadEnvironment } from '@/engine/build';
+import { chooseEngineBuild, detectThreadEnvironment } from '@/engine/build';
 import { EngineClient, isEngineSupported } from '@/engine/EngineClient';
+import { isBuildAvailable } from '@/engine/fullEngine';
 import { engineOptionsFromSettings } from '@/engine/useEngine';
 import { readIsolationFlag } from '@/sw/isolation';
 import { useSettings } from '@/store/settings';
@@ -11,6 +12,7 @@ import {
   describeBenchmark,
   diagnosticRows,
 } from './engineDiagnostics';
+import { currentEngineDownload, subscribeToEngineDownload } from './fullEngineDownload';
 import './settings.css';
 
 /**
@@ -20,7 +22,9 @@ import './settings.css';
  */
 export function EngineDiagnostics() {
   const wantThreads = useSettings((s) => s.engineThreads);
+  const wantFull = useSettings((s) => s.engineFull);
   const [flag, setFlag] = useState<boolean | null>(null);
+  const [fullDownloaded, setFullDownloaded] = useState<boolean | null>(null);
   const [tick, setTick] = useState(0);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<Benchmark | null>(null);
@@ -42,9 +46,33 @@ export function EngineDiagnostics() {
     };
   }, [wantThreads]);
 
+  // Whether the full build these settings pick is here: asked again when the panel
+  // opens and when a download ends, which can happen while the panel is open.
+  const fullBuild = chooseEngineBuild(wantThreads, detectThreadEnvironment(), true).build;
+  useEffect(
+    () =>
+      subscribeToEngineDownload(() => {
+        if (!currentEngineDownload()) setTick((t) => t + 1);
+      }),
+    [],
+  );
+  useEffect(() => {
+    if (!wantFull) return;
+    let cancelled = false;
+    // What the engine itself checks: stored, and served from the device's copy.
+    void isBuildAvailable(fullBuild).then((stored) => {
+      if (!cancelled) setFullDownloaded(stored);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [wantFull, fullBuild, tick]);
+
   const rows = diagnosticRows({
     env: detectThreadEnvironment(),
     wantThreads,
+    wantFull,
+    fullDownloaded,
     workers: typeof Worker !== 'undefined',
     wasm: typeof WebAssembly === 'object',
     serviceWorkerControlled:
@@ -69,7 +97,13 @@ export function EngineDiagnostics() {
   };
 
   return (
-    <details className="settings__diagnostics" data-testid="engine-diagnostics">
+    <details
+      className="settings__diagnostics"
+      data-testid="engine-diagnostics"
+      onToggle={(event) => {
+        if (event.currentTarget.open) setTick((t) => t + 1);
+      }}
+    >
       <summary>Engine diagnostics</summary>
       <dl className="diagnostics">
         {rows.map((row) => (

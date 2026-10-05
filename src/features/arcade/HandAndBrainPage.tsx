@@ -42,7 +42,7 @@ import {
   summarizeCalls,
 } from './handAndBrain';
 import { useHandAndBrain } from './useHandAndBrain';
-import { useStackedLayout } from './useStackedLayout';
+import { useStackedLayout } from '@/lib/useStackedLayout';
 import '@/features/play/play.css';
 import './arcade.css';
 

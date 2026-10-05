@@ -18,6 +18,19 @@ export function learnerColor(
   return null;
 }
 
+/**
+ * Which side the learner played in a game, from its PGN headers: "You" in
+ * games against the engine, otherwise the name they import their games under.
+ * Null when it cannot be told.
+ */
+export function learnerSideOf(headers: Record<string, string>, player: string): LongColor | null {
+  const white = headers.White?.trim() ?? '';
+  const black = headers.Black?.trim() ?? '';
+  if (white === 'You' && black !== 'You') return 'white';
+  if (black === 'You' && white !== 'You') return 'black';
+  return learnerColor({ white, black }, player);
+}
+
 /** The result from one side's point of view; null for unfinished games. */
 export function outcomeFor(result: string, color: LongColor): GameOutcome | null {
   if (result === '1/2-1/2') return 'draw';

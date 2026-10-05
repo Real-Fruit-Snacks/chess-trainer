@@ -64,6 +64,24 @@ const SKILL_DRILLS: DrillCard[] = [
     difficulty: 2,
   },
   {
+    id: 'blind-puzzles',
+    to: '/puzzles/blind',
+    title: 'Blind puzzles',
+    description:
+      'Puzzles with the board frozen at the start: the whole line has to be seen in your head.',
+    meta: 'Visualisation · 2 to 4+ moves',
+    difficulty: 3,
+  },
+  {
+    id: 'threats',
+    to: '/drills/threats',
+    title: 'What’s the threat?',
+    description:
+      'Name what your opponent threatens, then meet it — in real positions, and in your own games once reviewed.',
+    meta: 'Calculation · defence',
+    difficulty: 2,
+  },
+  {
     id: 'mating-patterns',
     to: '/patterns?drill=all',
     title: 'Mating patterns',

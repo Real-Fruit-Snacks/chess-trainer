@@ -49,8 +49,13 @@ import { START_FEN } from '@/chess/helpers';
 import { getLessonMeta } from '@/features/learn/lessonMeta';
 import { themeName } from '@/features/puzzles/themes';
 import { explainReviewedMove, MOTIF_HELP } from './commentary';
+import { missedThreatsNote, ownThreatsFromReview } from '@/features/drills/threats';
+import { learnerSideOf } from '@/features/games/gameStats';
+import { useGames } from '@/store/games';
 import { keyMoments, type ReviewSummary } from './gameReview';
+import { SelfReviewPanel } from './SelfReviewPanel';
 import { useAnalysis } from './useAnalysis';
+import { useSelfReview } from './useSelfReview';
 import './analyze.css';
 import { Icon } from '@/components/ui';
 import { Notated, San } from '@/chess/San';
@@ -78,8 +83,15 @@ export default function AnalyzePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const analysis = useAnalysis();
+  const self = useSelfReview(analysis);
+  /** Self-analysis is under way: everything that would give the engine's opinion away is hidden. */
+  const selfOn = self.phase === 'marking' || self.phase === 'checking';
+  /** `?self=1`: a game handed over for self-analysis starts it once the game is on the board. */
+  const [selfRequested, setSelfRequested] = useState(false);
   const settings = useSettings();
   const ownPuzzleRating = useProgress((s) => Math.round(s.puzzleRating));
+  /** The name the learner imports their games under (My games). */
+  const gamesPlayer = useGames((s) => s.player);
   const [orientation, setOrientation] = useState<LongColor>('white');
   const [saveOpen, setSaveOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -112,6 +124,7 @@ export default function AnalyzePage() {
         setOrientation(handoff.orientation ?? 'white');
         // Kept until now so a reload mid-way still found the game.
         clearHandoff();
+        if (searchParams.get('self') === '1') setSelfRequested(true);
       } else if (!handoff) {
         toast('No game was handed over — play a game or import one.', { tone: 'info' });
       }
@@ -123,6 +136,16 @@ export default function AnalyzePage() {
     setSearchParams({}, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Self-analysis asked for by the hand-off: from the start of the game, engine out of sight.
+  const { start: startSelf } = self;
+  const { goStart } = analysis;
+  useEffect(() => {
+    if (!selfRequested) return;
+    setSelfRequested(false);
+    startSelf();
+    goStart();
+  }, [selfRequested, startSelf, goStart]);
 
   // Shared links carry the game in the fragment: #z=<deflated PGN>&ply=N, #pgn=… or #fen=….
   useEffect(() => {
@@ -199,6 +222,11 @@ export default function AnalyzePage() {
           if (event.shiftKey || !characterShortcutsOn()) return;
           setOrientation((o) => (o === 'white' ? 'black' : 'white'));
           break;
+        case 'm':
+          // Self-analysis: mark the move on the board as a turning point.
+          if (event.shiftKey || !characterShortcutsOn() || self.phase !== 'marking') return;
+          self.toggleMark(analysis.current);
+          break;
         default:
           return;
       }
@@ -206,7 +234,7 @@ export default function AnalyzePage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [analysis, dialogsOpen]);
+  }, [analysis, dialogsOpen, self]);
 
   const { viewed, current, tree } = analysis;
   const score = analysis.lines.get(1)?.score ?? null;
@@ -224,6 +252,8 @@ export default function AnalyzePage() {
   // Guarded by SAN: after "Move up" the move at this ply may be a different one.
   const reviewedCurrent = analysis.reviewFor(current);
   const sourceUrl = safeSourceUrl(tree.headers.Site) ?? safeSourceUrl(tree.headers.Link);
+  /** The side the learner played, when the game says so (null for anyone's game). */
+  const learnerSide = learnerSideOf(tree.headers, gamesPlayer);
   const onHighlight = useCallback((shapes: DrawShape[]) => setReportShapes(shapes), []);
   const reset = () => {
     analysis.reset();
@@ -407,67 +437,98 @@ export default function AnalyzePage() {
               </span>
             )}
             {settings.moveInput ? <MoveInput onMove={analysis.playNotation} /> : null}
+            {self.phase === 'marking' && isMain && current.ply > 0 ? (
+              <div className="row" data-testid="self-mark-strip">
+                <Button
+                  size="sm"
+                  aria-pressed={self.marks.some((m) => m.ply === current.ply)}
+                  onClick={() => self.toggleMark(current)}
+                >
+                  <Icon name="flag" size={14} />{' '}
+                  {self.marks.some((m) => m.ply === current.ply)
+                    ? 'Marked as a turning point'
+                    : 'Mark as a turning point'}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
 
         <aside className="trainer__panel stack">
-          <Card>
-            <div className="row row--between" style={{ marginBottom: 8 }}>
-              <Switch checked={analysis.engineOn} onChange={analysis.setEngineOn} label="Engine" />
-              <div className="row">
-                <label className="small muted">
-                  Lines{' '}
-                  <select
-                    className="select analyze__mini"
-                    value={settings.analysisLines}
-                    onChange={(e) => settings.update({ analysisLines: Number(e.target.value) })}
-                    aria-label="Number of engine lines"
-                  >
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="small muted">
-                  Depth{' '}
-                  <select
-                    className="select analyze__mini"
-                    value={settings.analysisDepth}
-                    onChange={(e) => settings.update({ analysisDepth: Number(e.target.value) })}
-                    aria-label="Search depth"
-                  >
-                    {[12, 15, 18, 20, 22, 24].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+          {selfOn ? (
+            <Card>
+              <p className="small muted" style={{ margin: 0 }} data-testid="engine-hidden">
+                <span className="analyze__hidden-icon">
+                  <Icon name="eye-off" size={16} />
+                </span>{' '}
+                The engine, the explorer and the position report are out of sight while you analyze
+                the game yourself.
+              </p>
+            </Card>
+          ) : null}
+          {selfOn ? null : (
+            <Card>
+              <div className="row row--between" style={{ marginBottom: 8 }}>
+                <Switch
+                  checked={analysis.engineOn}
+                  onChange={analysis.setEngineOn}
+                  label="Engine"
+                />
+                <div className="row">
+                  <label className="small muted">
+                    Lines{' '}
+                    <select
+                      className="select analyze__mini"
+                      value={settings.analysisLines}
+                      onChange={(e) => settings.update({ analysisLines: Number(e.target.value) })}
+                      aria-label="Number of engine lines"
+                    >
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="small muted">
+                    Depth{' '}
+                    <select
+                      className="select analyze__mini"
+                      value={settings.analysisDepth}
+                      onChange={(e) => settings.update({ analysisDepth: Number(e.target.value) })}
+                      aria-label="Search depth"
+                    >
+                      {[12, 15, 18, 20, 22, 24].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
-            </div>
-            <EngineLines
-              fen={viewed.fen}
-              turn={viewed.turn}
-              lines={analysis.lines}
-              count={settings.analysisLines}
-              thinking={analysis.thinking}
-              onPlayMove={analysis.playUci}
-              moveLabel={moveLabel}
-            />
-            <div style={{ marginTop: 8 }}>
-              <EngineStatus
-                name={analysis.engineName}
-                depth={analysis.depthReached}
-                nps={analysis.nps}
+              <EngineLines
+                fen={viewed.fen}
+                turn={viewed.turn}
+                lines={analysis.lines}
+                count={settings.analysisLines}
                 thinking={analysis.thinking}
-                loading={analysis.engineStatus === 'idle' || analysis.engineStatus === 'loading'}
+                onPlayMove={analysis.playUci}
+                moveLabel={moveLabel}
               />
-            </div>
-          </Card>
+              <div style={{ marginTop: 8 }}>
+                <EngineStatus
+                  name={analysis.engineName}
+                  depth={analysis.depthReached}
+                  nps={analysis.nps}
+                  thinking={analysis.thinking}
+                  loading={analysis.engineStatus === 'idle' || analysis.engineStatus === 'loading'}
+                />
+              </div>
+            </Card>
+          )}
 
-          {analysis.tablebase.status !== 'off' ? (
+          {analysis.tablebase.status !== 'off' && !selfOn ? (
             <Card>
               <div className="row row--between">
                 <strong>Tablebase</strong>
@@ -511,9 +572,12 @@ export default function AnalyzePage() {
             </Card>
           ) : null}
 
-          <ExplorerPanel fen={viewed.fen} onPlay={analysis.playUci} />
-
-          <PositionReportCard fen={viewed.fen} onHighlight={onHighlight} />
+          {selfOn ? null : (
+            <>
+              <ExplorerPanel fen={viewed.fen} onPlay={analysis.playUci} />
+              <PositionReportCard fen={viewed.fen} onHighlight={onHighlight} />
+            </>
+          )}
 
           <Card>
             <div className="analyze__panelnav">
@@ -533,6 +597,7 @@ export default function AnalyzePage() {
                 current={current}
                 onSelect={analysis.goTo}
                 judgements={analysis.judgements}
+                marked={self.phase === 'off' ? undefined : self.markedNodes}
               />
             </div>
             {reviewedCurrent &&
@@ -688,49 +753,67 @@ export default function AnalyzePage() {
 
           <Card>
             <div className="row row--between">
-              <strong>Game review</strong>
-              <div className="row">
-                {analysis.reviewProgress === null ? (
-                  <label className="small muted">
-                    Depth{' '}
-                    <select
-                      className="select analyze__mini"
-                      value={settings.reviewDepth}
-                      onChange={(e) =>
-                        settings.update({ reviewDepth: e.target.value as ReviewDepth })
+              <strong>{selfOn ? 'Your own analysis' : 'Game review'}</strong>
+              {selfOn ? null : (
+                <div className="row">
+                  {analysis.reviewProgress === null ? (
+                    <label className="small muted">
+                      Depth{' '}
+                      <select
+                        className="select analyze__mini"
+                        value={settings.reviewDepth}
+                        onChange={(e) =>
+                          settings.update({ reviewDepth: e.target.value as ReviewDepth })
+                        }
+                        aria-label="Review depth"
+                      >
+                        <option value="fast">fast</option>
+                        <option value="balanced">balanced</option>
+                        <option value="thorough">thorough</option>
+                      </select>
+                    </label>
+                  ) : null}
+                  {analysis.reviewProgress === null ? (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={analysis.startReview}
+                      disabled={!hasMoves || analysis.engineStatus !== 'ready'}
+                      title={
+                        !hasMoves
+                          ? 'Play or import some moves first'
+                          : analysis.engineStatus !== 'ready'
+                            ? 'Waiting for the engine to load'
+                            : undefined
                       }
-                      aria-label="Review depth"
                     >
-                      <option value="fast">fast</option>
-                      <option value="balanced">balanced</option>
-                      <option value="thorough">thorough</option>
-                    </select>
-                  </label>
-                ) : null}
-                {analysis.reviewProgress === null ? (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={analysis.startReview}
-                    disabled={!hasMoves || analysis.engineStatus !== 'ready'}
-                    title={
-                      !hasMoves
-                        ? 'Play or import some moves first'
-                        : analysis.engineStatus !== 'ready'
-                          ? 'Waiting for the engine to load'
-                          : undefined
-                    }
-                  >
-                    {analysis.review ? 'Review again' : 'Review game'}
-                  </Button>
-                ) : (
-                  <Button size="sm" variant="ghost" onClick={analysis.cancelReview}>
-                    Cancel
-                  </Button>
-                )}
-              </div>
+                      {analysis.review ? 'Review again' : 'Review game'}
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="ghost" onClick={analysis.cancelReview}>
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
-            {analysis.reviewProgress !== null ? (
+            {self.phase !== 'off' ? (
+              <div style={{ marginTop: 8 }}>
+                <SelfReviewPanel
+                  self={self}
+                  current={current}
+                  isMain={isMain}
+                  mainLine={mainLine}
+                  review={analysis.review}
+                  reviewProgress={analysis.reviewProgress}
+                  engineReady={analysis.engineStatus === 'ready'}
+                  label={(ply) => moveNumberLabel({ ply }, tree.startFen)}
+                  onSelectPly={analysis.goToPly}
+                  shortcutsOn={settings.keyboardShortcuts}
+                />
+              </div>
+            ) : null}
+            {analysis.reviewProgress !== null && !selfOn ? (
               <div style={{ marginTop: 8 }}>
                 <ProgressBar value={analysis.reviewProgress} label="Review progress" />
                 <p className="small muted" style={{ margin: '6px 0 0' }}>
@@ -741,7 +824,7 @@ export default function AnalyzePage() {
                 </p>
               </div>
             ) : null}
-            {analysis.review ? (
+            {analysis.review && !selfOn ? (
               <>
                 <div style={{ marginTop: 8 }}>
                   <EvalGraph
@@ -766,20 +849,37 @@ export default function AnalyzePage() {
                     url: sourceUrl ?? undefined,
                     rating: ownPuzzleRating,
                   }}
+                  learnerSide={learnerSide}
                 />
               </>
             ) : null}
-            {!analysis.review && analysis.reviewProgress === null ? (
-              <p className="small muted" style={{ margin: '8px 0 0' }}>
-                Finds inaccuracies, mistakes and blunders along the main line and shows the better
-                move. Play a game against the engine, then hit <Link to="/play">Analyze game</Link>,
-                or paste a PGN above.
-                {hasMoves && analysis.engineStatus !== 'ready'
-                  ? analysis.engineStatus === 'error'
-                    ? ' The engine could not start, so the review is unavailable.'
-                    : ' The review starts once the engine has loaded.'
-                  : ''}
-              </p>
+            {!analysis.review && analysis.reviewProgress === null && self.phase === 'off' ? (
+              <>
+                <p className="small muted" style={{ margin: '8px 0 0' }}>
+                  Finds inaccuracies, mistakes and blunders along the main line and shows the better
+                  move. Play a game against the engine, then hit{' '}
+                  <Link to="/play">Analyze game</Link>, or paste a PGN above.
+                  {hasMoves && analysis.engineStatus !== 'ready'
+                    ? analysis.engineStatus === 'error'
+                      ? ' The engine could not start, so the review is unavailable.'
+                      : ' The review starts once the engine has loaded.'
+                    : ''}
+                </p>
+                {hasMoves ? (
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        self.start();
+                        analysis.goStart();
+                      }}
+                      title="Find the turning points yourself, then compare with the engine"
+                    >
+                      Analyze it yourself first
+                    </Button>
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </Card>
         </aside>
@@ -874,6 +974,7 @@ function KeyMoments({
   startsWithBlack,
   line,
   meta,
+  learnerSide,
 }: {
   review: ReviewSummary;
   currentPly: number;
@@ -882,10 +983,29 @@ function KeyMoments({
   startsWithBlack: boolean;
   line: MainLine;
   meta: OwnPuzzleMeta;
+  /** The side the learner played, when known: only their moves' missed threats count then. */
+  learnerSide: LongColor | null;
 }) {
   const ownPuzzles = useProgress((s) => s.ownPuzzles);
   const addOwnPuzzles = useProgress((s) => s.addOwnPuzzles);
+  const ownThreats = useProgress((s) => s.ownThreats);
+  const addOwnThreats = useProgress((s) => s.addOwnThreats);
   const moments = keyMoments(review);
+  const threats = useMemo(
+    () => ownThreatsFromReview(review, meta, learnerSide ?? 'both'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [review, meta.title, meta.url, meta.rating, learnerSide],
+  );
+  const newThreats = threats.filter((t) => !ownThreats[t.id]);
+  const addThreats = () => {
+    const added = addOwnThreats(newThreats);
+    toast(
+      added
+        ? `Added ${added} threat${added === 1 ? '' : 's'} to the drill — Drills → What’s the threat?`
+        : 'Those threats are already in the drill.',
+      { tone: added ? 'success' : 'info' },
+    );
+  };
   const candidates = useMemo(
     () => ownPuzzlesFromReview(line, review, meta, { includeInaccuracies: true }),
     // meta is rebuilt on every render by the caller; its fields are what matters.
@@ -989,6 +1109,18 @@ function KeyMoments({
           );
         })}
       </ol>
+      {threats.length > 0 ? (
+        <div className="row row--between" style={{ marginTop: 8 }} data-testid="missed-threats">
+          <p className="small muted" style={{ margin: 0 }}>
+            {missedThreatsNote(threats, 'game')}
+          </p>
+          <Button size="sm" onClick={addThreats} disabled={newThreats.length === 0}>
+            {newThreats.length === 0
+              ? 'In the threat drill'
+              : `Add ${newThreats.length} to the threat drill`}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

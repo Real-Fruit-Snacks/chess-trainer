@@ -133,6 +133,18 @@ describe('PuzzlesPage', () => {
     expect(screen.getByText('Where should your puzzle rating start?')).toBeInTheDocument();
   });
 
+  it('opens blind puzzles without a starting rating, at the remembered length', async () => {
+    useProgress.setState({ onboarded: false });
+    useSettings.setState({ blindDepth: 'long' });
+    renderAt('/puzzles/blind');
+    expect(document.title).toMatch(/^Blind puzzles · /);
+    expect(screen.getByRole('radio', { name: 'Blind' })).toBeChecked();
+    expect(screen.queryByText('Where should your puzzle rating start?')).toBeNull();
+    await vi.waitFor(() => expect(screen.getByTestId('blind-line')).toBeInTheDocument());
+    expect(selectPuzzle).toHaveBeenLastCalledWith(expect.objectContaining({ themes: ['long'] }));
+    expect(screen.getByRole('radio', { name: '3 moves' })).toBeChecked();
+  });
+
   it('names the review segment "Due" and the theme link "Practise by theme"', () => {
     renderAt('/puzzles/review');
     expect(screen.getByRole('radio', { name: 'Due' })).toBeInTheDocument();

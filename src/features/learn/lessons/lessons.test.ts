@@ -36,6 +36,14 @@ describe('lesson content', () => {
     }
   });
 
+  it('points its practice at pages the app has', () => {
+    const linked = lessons.flatMap((l) => (l.practiceDrills ?? []).map((d) => [l.id, d.to]));
+    expect(linked.length).toBeGreaterThanOrEqual(5);
+    for (const [id, to] of linked) {
+      expect(to, `${id}: ${to}`).toMatch(/^\/(drills\/threats|puzzles\/blind|games)$/);
+    }
+  });
+
   it('every lesson sits in the course of its level', () => {
     const courseOf = new Map<string, string>();
     for (const course of COURSES) {

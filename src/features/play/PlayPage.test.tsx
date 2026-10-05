@@ -169,6 +169,66 @@ describe('PlayPage', () => {
     expect(readHandoff()?.orientation).toBe('black');
   });
 
+  it('asks "checks, captures, threats?" before a hanging move when the blunder check is on', async () => {
+    renderPlay();
+    const setup = openDialog('New game')!;
+    const toggle = within(setup).getByRole('switch', { name: 'Blunder check' });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    expect(useSettings.getState().playBlunderCheck).toBe(true);
+    fireEvent.click(within(setup).getByRole('button', { name: 'Start' }));
+    await nextTask();
+    expect(screen.getByText(/Blunder check on/)).toBeInTheDocument();
+
+    // 1.Qf6?? puts the queen where the g-pawn takes it.
+    act(() => board.props?.onMove?.('a1', 'f6'));
+    const alert = screen.getByTestId('blunder-alert');
+    expect(alert).toHaveTextContent(
+      'Checks, captures, threats? Before you play Qf6: one of your opponent’s answers wins material.',
+    );
+    fireEvent.click(within(alert).getByRole('button', { name: 'Show me' }));
+    expect(screen.getByTestId('blunder-alert')).toHaveTextContent(
+      'gxf6 takes your queen, and you end up 9 pawns down.',
+    );
+    fireEvent.click(
+      within(screen.getByTestId('blunder-alert')).getByRole('button', { name: 'Look again' }),
+    );
+    expect(screen.queryByTestId('blunder-alert')).toBeNull();
+
+    act(() => board.props?.onMove?.('a1', 'a8'));
+    const result = openDialog('You won!')!;
+    expect(within(result).getByTestId('blunder-summary')).toHaveTextContent(
+      'The blunder check held back 1 move.',
+    );
+    expect(useProgress.getState().blunderChecks).toEqual({ stopped: 1, playedAnyway: 0 });
+  });
+
+  it('puts the blunder check right under the board when the panel is stacked below it', async () => {
+    // A phone: the side panel sits under the board, out of sight when the move snaps back.
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('max-width'),
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    try {
+      useSettings.getState().update({ playBlunderCheck: true });
+      renderPlay();
+      fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+      await nextTask();
+      act(() => board.props?.onMove?.('a1', 'f6'));
+      const alert = screen.getByTestId('blunder-alert');
+      expect(alert.closest('.play__boardcol')).not.toBeNull();
+      expect(alert.closest('.trainer__panel')).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('says the engine stopped responding when the worker died mid-game, with Retry', () => {
     engineState.status = 'error';
     engineState.error = new EngineCrashedError('Engine crashed: out of memory');

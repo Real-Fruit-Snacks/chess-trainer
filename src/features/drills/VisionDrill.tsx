@@ -2,9 +2,9 @@ import type { Square } from 'chess.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Board, type DrawShape } from '@/components/board/Board';
-import { ClickBoard, type ClickBoardPiece, type PieceRole } from '@/components/board/ClickBoard';
+import { ClickBoard, type ClickBoardPiece } from '@/components/board/ClickBoard';
+import { piecesFromFen } from '@/components/board/clickBoardPieces';
 import { Alert, Button, Card, Segmented, Stat, Switch, LinkButton } from '@/components/ui';
-import { Chess } from 'chess.js';
 import { NONE } from '@/lib/format';
 import { playSound } from '@/lib/sound';
 import { pickRandom } from '@/lib/random';
@@ -31,14 +31,6 @@ const DURATIONS: Record<VisionMode, number> = {
 /** Opening sequences for the recall drill: the classic games, from move one. */
 const RECALL_LINES = CLASSIC_GAMES.map((g) => g.moves);
 const BLINDFOLD_PREVIEW_MS = 2500;
-const ROLE: Record<string, PieceRole> = {
-  k: 'king',
-  q: 'queen',
-  r: 'rook',
-  b: 'bishop',
-  n: 'knight',
-  p: 'pawn',
-};
 
 const MODE_INFO: Record<VisionMode, { title: string; prompt: string; blurb: string }> = {
   moves: {
@@ -72,21 +64,6 @@ const ROLE_NAME: Record<string, string> = {
   knight: 'knight',
   pawn: 'pawn',
 };
-
-function piecesFromFen(fen: string): Map<Square, ClickBoardPiece> {
-  const map = new Map<Square, ClickBoardPiece>();
-  const chess = new Chess(fen);
-  for (const row of chess.board()) {
-    for (const cell of row) {
-      if (!cell) continue;
-      map.set(cell.square, {
-        color: cell.color === 'w' ? 'white' : 'black',
-        role: ROLE[cell.type] ?? 'pawn',
-      });
-    }
-  }
-  return map;
-}
 
 export default function VisionDrill() {
   const [searchParams, setSearchParams] = useSearchParams();

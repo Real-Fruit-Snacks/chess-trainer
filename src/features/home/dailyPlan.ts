@@ -42,14 +42,27 @@ function capped(minutes: number, max: number): Pick<PlanItem, 'minutes' | 'moreT
   return minutes > max ? { minutes: max, moreThan: true } : { minutes };
 }
 
-/** Drills the plan rotates through: never done first (in endgame-ladder order), then the least recent. */
+const ENDGAME_ROTATION = ladderOrder().map((d) => ({
+  id: d.id,
+  title: d.title,
+  description: d.description,
+  to: `/drills/endgame/${d.id}`,
+}));
+
+/**
+ * Drills the plan rotates through: never done first (in this order: the first
+ * endgame drill, the threat drill, the rest of the endgame ladder…), then the
+ * least recent.
+ */
 const DRILL_ROTATION: { id: string; title: string; description: string; to: string }[] = [
-  ...ladderOrder().map((d) => ({
-    id: d.id,
-    title: d.title,
-    description: d.description,
-    to: `/drills/endgame/${d.id}`,
-  })),
+  ...ENDGAME_ROTATION.slice(0, 1),
+  {
+    id: 'threats',
+    title: 'What’s the threat?',
+    description: 'Name what your opponent threatens, then meet it',
+    to: '/drills/threats',
+  },
+  ...ENDGAME_ROTATION.slice(1),
   {
     id: 'coordinates',
     title: 'Coordinates',
@@ -67,6 +80,12 @@ const DRILL_ROTATION: { id: string; title: string; description: string; to: stri
     title: 'Guess the position',
     description: 'Track the pieces of an opening in your head',
     to: '/drills/vision?mode=recall',
+  },
+  {
+    id: 'blind-puzzles',
+    title: 'Blind puzzles',
+    description: 'Solve a puzzle with the board frozen at the start',
+    to: '/puzzles/blind',
   },
 ];
 

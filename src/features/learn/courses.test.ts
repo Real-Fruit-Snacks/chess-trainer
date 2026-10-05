@@ -9,7 +9,15 @@ import { type Course, COURSES } from './courses';
 const lesson = (id: string) => ({ type: 'lesson' as const, id });
 import { getLesson } from './lessons';
 
-const DRILL_IDS = new Set([...ENDGAME_DRILLS.map((d) => d.id), 'coordinates', 'mating-patterns']);
+/** Drills a course can point to: the endgame drills and the skills the progress store records. */
+const DRILL_IDS = new Set([
+  ...ENDGAME_DRILLS.map((d) => d.id),
+  'coordinates',
+  'mating-patterns',
+  'threats',
+  'blind-puzzles',
+  'self-review',
+]);
 
 describe('courses content', () => {
   it('has unique ids and only references things that exist', () => {
@@ -108,6 +116,24 @@ describe('courseStatus', () => {
     expect(checkpoint?.progress).toEqual({ value: 3, target: 5 });
     expect(checkpoint?.done).toBe(false);
     expect(status.next?.unit.id).toBe(first.units[1]?.id);
+  });
+
+  it('says what finishes the thinking-skill drills, and ticks them off from their records', () => {
+    const club = COURSES.find((c) => c.id === 'club-player')!;
+    const thinking = (drills: typeof empty.drills) =>
+      courseStatus(club, { ...empty, drills })
+        .units.flatMap((u) => u.items)
+        .find((i) => i.item.type === 'drill' && i.item.id === 'threats');
+    expect(thinking({})).toMatchObject({
+      title: 'Drill: What’s the threat?',
+      detail: 'Name a threat',
+      to: '/drills/threats',
+      done: false,
+    });
+    expect(thinking({ threats: { best: 1, attempts: 1, lastAt: 1 } })).toMatchObject({
+      detail: 'Completed',
+      done: true,
+    });
   });
 
   it('counts checkpoint solves from the lifetime counters, not the capped attempt list', () => {

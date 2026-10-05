@@ -27,6 +27,8 @@ const BUDGETS = [
   { name: 'lessons', match: /^lessons-/, limitBytes: 110 * KB },
   { name: 'arcade positions', match: /^positions-/, limitBytes: 40 * KB },
   { name: 'classic games', match: /^games-/, limitBytes: 40 * KB },
+  // The threat drill's 1,200 positions, loaded with the drill only.
+  { name: 'threat positions', match: /^threat-positions-/, limitBytes: 90 * KB },
   { name: 'any other chunk', match: /./, limitBytes: 40 * KB },
 ];
 /** The code that runs before the first page: the entry and its static imports, React aside. */

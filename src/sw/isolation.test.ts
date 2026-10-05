@@ -1,42 +1,71 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  ISOLATION_CHANGED_MESSAGE,
+  ISOLATION_DEFAULT,
   ISOLATION_FLAG_URL,
   ISOLATION_HEADERS,
   readIsolationFlag,
+  resetIsolationFlag,
+  syncIsolationFlag,
   withIsolationHeaders,
   writeIsolationFlag,
 } from './isolation';
 
-/** Minimal in-memory CacheStorage: enough for open/match/put. */
+/** Minimal in-memory CacheStorage: enough for open/match/put/delete. */
 function fakeCaches() {
   const stores = new Map<string, Map<string, Response>>();
+  const puts: string[] = [];
   return {
     stores,
+    /** The values written, in order. */
+    puts,
     open: (name: string) => {
       const store = stores.get(name) ?? new Map<string, Response>();
       stores.set(name, store);
       return Promise.resolve({
         match: (url: string) => Promise.resolve(store.get(url)?.clone()),
-        put: (url: string, response: Response) => {
+        put: async (url: string, response: Response) => {
+          puts.push(await response.clone().text());
           store.set(url, response);
-          return Promise.resolve();
         },
+        delete: (url: string) => Promise.resolve(store.delete(url)),
       } as unknown as Cache);
     },
   };
 }
 
 describe('isolation flag', () => {
-  it('is off until written, then round-trips', async () => {
+  it('is on until the learner says otherwise, then round-trips', async () => {
+    expect(ISOLATION_DEFAULT).toBe(true);
     const caches = fakeCaches();
-    expect(await readIsolationFlag(caches)).toBe(false);
-    expect(await writeIsolationFlag(true, caches)).toBe(true);
     expect(await readIsolationFlag(caches)).toBe(true);
-    await writeIsolationFlag(false, caches);
+    expect(await writeIsolationFlag(false, caches)).toBe(true);
     expect(await readIsolationFlag(caches)).toBe(false);
+    await writeIsolationFlag(true, caches);
+    expect(await readIsolationFlag(caches)).toBe(true);
     expect([...(caches.stores.values().next().value ?? new Map()).keys()]).toEqual([
       ISOLATION_FLAG_URL,
     ]);
+  });
+
+  it('goes back to the default on reset', async () => {
+    const caches = fakeCaches();
+    await writeIsolationFlag(false, caches);
+    expect(await resetIsolationFlag(caches)).toBe(true);
+    expect(await readIsolationFlag(caches)).toBe(true);
+    expect(await resetIsolationFlag(null)).toBe(false);
+  });
+
+  it('syncs to the setting, writing only when they differ', async () => {
+    const caches = fakeCaches();
+    // Nothing stored means on: a setting that is on needs no write.
+    expect(await syncIsolationFlag(true, caches)).toBe(false);
+    expect(caches.puts).toEqual([]);
+    expect(await syncIsolationFlag(false, caches)).toBe(true);
+    expect(await syncIsolationFlag(false, caches)).toBe(false);
+    expect(await syncIsolationFlag(true, caches)).toBe(true);
+    expect(caches.puts).toEqual(['0', '1']);
+    expect(await readIsolationFlag(caches)).toBe(true);
   });
 
   it('never lets a read that started first return the value a later write replaced', async () => {
@@ -66,13 +95,47 @@ describe('isolation flag', () => {
   });
 
   it('degrades gracefully without the Cache API', async () => {
-    expect(await readIsolationFlag(null)).toBe(false);
-    expect(await writeIsolationFlag(true, null)).toBe(false);
+    // Nothing can be read: the default applies (the service worker has caches anyway).
+    expect(await readIsolationFlag(null)).toBe(true);
+    expect(await writeIsolationFlag(false, null)).toBe(false);
+    expect(await syncIsolationFlag(false, null)).toBe(false);
     const broken = {
       open: () => Promise.reject(new Error('quota')),
     };
-    expect(await readIsolationFlag(broken)).toBe(false);
-    expect(await writeIsolationFlag(true, broken)).toBe(false);
+    expect(await readIsolationFlag(broken)).toBe(true);
+    expect(await writeIsolationFlag(false, broken)).toBe(false);
+    expect(await resetIsolationFlag(broken)).toBe(false);
+  });
+});
+
+describe('telling the service worker', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'serviceWorker');
+  });
+
+  it('posts the new value on a write, and "read it again" on a reset', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { controller: { postMessage } },
+    });
+    const caches = fakeCaches();
+    await writeIsolationFlag(false, caches);
+    await resetIsolationFlag(caches);
+    expect(postMessage.mock.calls).toEqual([
+      [{ type: ISOLATION_CHANGED_MESSAGE, enabled: false }],
+      [{ type: ISOLATION_CHANGED_MESSAGE, enabled: undefined }],
+    ]);
+  });
+
+  it('writes the flag even when no worker controls the page', async () => {
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { controller: null },
+    });
+    const caches = fakeCaches();
+    expect(await writeIsolationFlag(false, caches)).toBe(true);
+    expect(await readIsolationFlag(caches)).toBe(false);
   });
 });
 

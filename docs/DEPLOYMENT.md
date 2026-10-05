@@ -23,6 +23,12 @@ Every action in the workflows is pinned to a commit SHA, with its version in a c
 moves the pins. First deploys can take a minute to propagate. The site URL is shown on the workflow's
 summary page.
 
+The deployed site is about 210 MB, nearly all of it the full engine's two builds (99 MB each). A
+visitor downloads one of them only after switching _Settings → Full engine_ on, and keeps it offline
+from then on; the app's own offline copy is about 6 MB, plus the threaded lite engine (2 MB). GitHub
+Pages allows a 1 GB site and has a soft bandwidth limit of 100 GB a month — on the order of a
+thousand full-engine downloads.
+
 On a `user.github.io` repository the app owns the whole origin: its service worker is registered at
 the root scope and Pages serves its `404.html` for every unknown path. The worker only answers
 navigations to the app's own routes (`src/sw/appRoutes.ts`), so another project published under the
@@ -79,7 +85,8 @@ VITE_BASE_PATH=/ npm run build
 Requirements:
 
 - Serve `index.html` for unknown paths (SPA fallback) **or** rely on the generated `404.html`.
-- Serve `.wasm` with `Content-Type: application/wasm` (all mainstream hosts do).
+- Serve `.wasm` with `Content-Type: application/wasm` (all mainstream hosts do): the service worker
+  keeps an engine file offline only when it has that type.
 - Keep `licence.txt` and `notices.txt` next to `index.html`: every page links to them.
 
 Optional headers:
@@ -87,10 +94,11 @@ Optional headers:
 - `Content-Security-Policy: frame-ancestors 'none'` — the one directive the page's own policy (a meta
   tag in `index.html`) cannot set. The service worker adds it to the pages it serves, but a host
   header also covers the very first visit.
-- Not needed for the multi-threaded engine: when the learner turns it on in Settings, the service
-  worker adds the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers itself (see
-  `src/sw/isolation.ts`). A host that sends them on every response makes the app cross-origin isolated
-  for everyone, which also blocks cross-origin resources that are not CORS-enabled.
+- Not needed for the multi-threaded engine: the service worker adds the `Cross-Origin-Opener-Policy`
+  and `Cross-Origin-Embedder-Policy` headers itself to every response it serves, unless the learner
+  switches threads off (see `src/sw/isolation.ts`). A host that sends them makes the first visit
+  isolated too, and keeps every page isolated even with threads off; the app loads nothing those
+  headers would block.
 
 ## Environment variables
 
@@ -104,6 +112,8 @@ Optional headers:
 
 - Open the site, then go offline (DevTools → Network → Offline) and reload: it should still work,
   including Play and Analyze.
+- After that reload, _Settings → Engine diagnostics_ shows "Cross-origin isolated: Yes" and a
+  threaded build (on a device that reports at least three CPU cores).
 - Chrome DevTools → Application → Manifest: no warnings; "Add to home screen" available.
 - The console shows no Content-Security-Policy violations, and the footer's Licence and Third-party
   notices links open `licence.txt` and `notices.txt`.

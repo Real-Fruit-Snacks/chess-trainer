@@ -17,12 +17,13 @@ function serviceWorkerApi(): boolean {
 }
 
 /**
- * The experimental "use more CPU cores" switch. Turning it on records the
- * choice for the service worker (which adds the COOP/COEP headers on the next
+ * The "use several CPU cores" switch, on by default. Its state is recorded for
+ * the service worker (which adds the COOP/COEP headers from the next
  * navigation) and in settings (which picks the threaded build once the page
- * is isolated). Turning it off reverses both. When the flag cannot be stored
- * the switch goes back, so the setting never says one thing and the service
- * worker another.
+ * is isolated); switching it off reverses both. When the flag cannot be
+ * stored the switch goes back, so the setting never says one thing and the
+ * service worker another — unless the browser has no service workers at all,
+ * where there is no flag to keep.
  */
 export function EngineThreadsSetting() {
   const enabled = useSettings((s) => s.engineThreads);
@@ -77,9 +78,11 @@ export function EngineThreadsSetting() {
   );
   // A reload changes something only when the stored flag (what the service worker
   // will apply next time) disagrees with what the page is now — and not when the
-  // page is isolated by the host's own headers, which no reload will undo.
+  // page is isolated by the host's own headers, which no reload will undo. On a
+  // first visit the worker may not control the page yet; a reload is still the way
+  // on, so the button does not wait for it (and the page does not shift when it comes).
   const needsReload =
-    support.serviceWorker &&
+    serviceWorkerApi() &&
     flagStored !== null &&
     flagStored !== support.isolated &&
     !(hostIsolated && !flagStored);
@@ -87,6 +90,9 @@ export function EngineThreadsSetting() {
   const toggle = async (next: boolean) => {
     const previous = useSettings.getState().engineThreads;
     update({ engineThreads: next });
+    // Without service workers nothing adds the headers, so there is no flag to keep in step
+    // (and threads cannot run here either way).
+    if (!serviceWorkerApi()) return;
     const stored = await writeIsolationFlag(next);
     if (!stored) {
       update({ engineThreads: previous });
@@ -110,8 +116,8 @@ export function EngineThreadsSetting() {
       <Switch
         checked={enabled}
         onChange={(v) => void toggle(v)}
-        label="Multi-threaded engine (experimental)"
-        description="Use several CPU cores for analysis and stronger play. Needs a reload; some browsers do not support it."
+        label="Multi-threaded engine"
+        description="Uses several CPU cores, so analysis goes deeper and the engine plays stronger. A change takes effect after a reload; where a browser cannot run threads, one core is used."
       />
       <div className="settings__row" style={{ paddingLeft: 0 }}>
         <span className="small muted" data-testid="engine-threads-status">

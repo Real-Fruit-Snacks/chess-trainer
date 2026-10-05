@@ -21,7 +21,7 @@ import { CLASSIC_GAMES } from '@/features/classics/games';
 import { type ArbiterPace, formatSeconds, type ReplayGame, replayGame, STRIKES } from './arbiter';
 import { KIND_TITLES } from './arbiterMoves';
 import { useArbiter } from './useArbiter';
-import { useStackedLayout } from './useStackedLayout';
+import { useStackedLayout } from '@/lib/useStackedLayout';
 import '@/features/play/play.css';
 import './arcade.css';
 

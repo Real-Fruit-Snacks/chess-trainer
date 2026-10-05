@@ -36,6 +36,11 @@ Out of scope:
   to the site itself, lichess.org, explorer.lichess.ovh, tablebase.lichess.ovh and api.chess.com; and
   forbids plugins, `<base>` changes and form posts elsewhere. The service worker adds
   `frame-ancestors 'none'` to the pages it serves, so the app cannot be framed by another site.
+- **Cross-origin isolation.** Unless threads are switched off in Settings, the service worker serves
+  every page with the `Cross-Origin-Opener-Policy` header set to `same-origin` and the
+  `Cross-Origin-Embedder-Policy` header set to `require-corp`, which the multi-threaded engine needs:
+  a window opened by another site cannot keep a handle on the app's, and nothing cross-origin loads
+  without opting in.
 - **No HTML from data.** Imported games, comments and share links are rendered as text, never as markup.
 
 ## Supply chain

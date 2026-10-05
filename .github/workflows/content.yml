@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup
         with:
-          engine: 'true'
+          engine: 'lite'
       - name: Verify the lessons with Stockfish
         run: npm run lessons:verify
 
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup
         with:
-          engine: 'true'
+          engine: 'lite'
       - name: Verify the studies with Stockfish
         run: npm run studies:verify
 
@@ -82,7 +82,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup
         with:
-          engine: 'true'
+          engine: 'lite'
       - name: Verify the repertoires with Stockfish
         run: npm run repertoires:verify
 
@@ -94,6 +94,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup
         with:
-          engine: 'true'
+          engine: 'lite'
       - name: Verify the drill positions with Stockfish
         run: npm run drills:verify -- --depth 24

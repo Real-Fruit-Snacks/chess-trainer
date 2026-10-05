@@ -10,6 +10,8 @@ export const HANDOFF_PGN_KEY = 'chess-trainer:handoff-pgn';
 export interface HandoffOptions {
   /** The side the learner played: the board opens from that side. */
   orientation?: LongColor;
+  /** Open in self-analysis: the learner looks for the turning points before the engine does. */
+  selfReview?: boolean;
 }
 
 export interface Handoff {
@@ -27,7 +29,7 @@ export function handOffToAnalysis(pgn: string, options: HandoffOptions = {}): st
   } catch {
     // Storage blocked: the analysis board simply opens empty.
   }
-  return '/analyze?from=game';
+  return options.selfReview ? '/analyze?from=game&self=1' : '/analyze?from=game';
 }
 
 /**

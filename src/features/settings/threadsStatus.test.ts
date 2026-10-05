@@ -12,11 +12,15 @@ describe('threadsStatus', () => {
     expect(threadsStatus(true, ready, 8)).toEqual({ kind: 'active', threads: 7 });
   });
 
-  it('asks for a reload when the service worker can apply the headers', () => {
+  it('asks for a reload while the page is not isolated, whether or not the worker has taken over', () => {
     expect(threadsStatus(true, { ...ready, isolated: false }, 8)).toEqual({ kind: 'reload' });
+    // The first visit: the worker is still getting ready. The advice is the same.
     expect(
       threadsStatus(true, { isolated: false, sharedMemory: false, serviceWorker: false }, 8),
-    ).toEqual({ kind: 'no-service-worker' });
+    ).toEqual({ kind: 'reload' });
+    expect(describeThreadsStatus({ kind: 'reload' })).toBe(
+      'On from the next load: reload the app to start the threaded engine.',
+    );
   });
 
   it('flags devices that cannot benefit, and says which way', () => {
@@ -37,7 +41,7 @@ describe('threadsStatus', () => {
 
   it('tells a browser without service workers from one whose worker has not taken over yet', () => {
     const none = { isolated: false, sharedMemory: false, serviceWorker: false };
-    expect(threadsStatus(true, none, 8, true)).toEqual({ kind: 'no-service-worker' });
+    expect(threadsStatus(true, none, 8, true)).toEqual({ kind: 'reload' });
     expect(threadsStatus(true, none, 8, false)).toEqual({ kind: 'service-worker-unsupported' });
     expect(describeThreadsStatus({ kind: 'service-worker-unsupported' })).toMatch(
       /no service worker/,

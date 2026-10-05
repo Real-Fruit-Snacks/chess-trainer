@@ -19,6 +19,7 @@ import {
 } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import { START_FEN } from '@/chess/helpers';
+import { PIECE_NAMES } from '@/chess/blunderCheck';
 import { MOTIF_HELP } from '@/features/analyze/commentary';
 import { getLessonMeta } from '@/features/learn/lessonMeta';
 import type { Fen, LongColor } from '@/chess/types';
@@ -37,6 +38,7 @@ import './play.css';
 import { Notated, San } from '@/chess/San';
 import { useFocus } from '@/app/focus';
 import { handOffToAnalysis } from '@/lib/handoff';
+import { useStackedLayout } from '@/lib/useStackedLayout';
 
 /** How long a blindfold "peek" shows the pieces. */
 const PEEK_MS = 2000;
@@ -54,6 +56,7 @@ export default function PlayPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const settings = useSettings();
   const play = usePlayVsEngine();
+  const stacked = useStackedLayout();
   const [setupOpen, setSetupOpen] = useState(true);
   // Focus mode: the shell drops its header and navigation while a game is on.
   const setFocus = useFocus((s) => s.set);
@@ -170,6 +173,7 @@ export default function PlayPage() {
       opponent,
       autoFlip: opponent === 'human' && autoFlip,
       coach: settings.playCoach,
+      blunderCheck: settings.playBlunderCheck,
       book,
     });
   };
@@ -181,7 +185,7 @@ export default function PlayPage() {
       openSetup();
       return;
     }
-    launch({ ...last, coach: settings.playCoach });
+    launch({ ...last, coach: settings.playCoach, blunderCheck: settings.playBlunderCheck });
   };
 
   const peek = () => {
@@ -209,15 +213,16 @@ export default function PlayPage() {
       opponent: 'engine',
       autoFlip: false,
       coach: settings.playCoach,
+      blunderCheck: settings.playBlunderCheck,
       source: 'ladder',
       event: `Engine ladder · Level ${nextLevelId}`,
     });
   };
 
-  const analyze = () => {
+  const analyze = (selfReview = false) => {
     // Analysis opens from the learner's side (between two players, as the board faces now).
     const orientation = play.opponent === 'human' ? play.orientation : play.playerColor;
-    void navigate(handOffToAnalysis(play.pgn(), { orientation }));
+    void navigate(handOffToAnalysis(play.pgn(), { orientation, selfReview }));
   };
 
   const copyPgn = async () => {
@@ -228,6 +233,72 @@ export default function PlayPage() {
       toast('Could not access the clipboard.', { tone: 'warning' });
     }
   };
+
+  /**
+   * The pause alerts (blunder check, repertoire, coach) and the coach's "checking" line. Beside
+   * the board on wide screens; under it when the panel is stacked below, where they would
+   * otherwise sit out of sight just when the move snaps back.
+   */
+  const pauseAlerts = (
+    <>
+      {play.blunderAlert ? <BlunderCheckAlert play={play} /> : null}
+      {play.bookAlert ? (
+        <Alert tone="warning" role="alert">
+          <div data-testid="book-alert">
+            <strong>Repertoire:</strong> {describeDeviation(play.bookAlert)}{' '}
+            <Link to={`/openings/${play.book?.repertoireId ?? ''}`}>Review the line</Link>
+            <div className="row" style={{ marginTop: 8 }}>
+              <Button size="sm" variant="primary" onClick={play.bookTakeBack}>
+                Take it back
+              </Button>
+              <Button size="sm" onClick={play.bookPlayOn}>
+                Play on
+              </Button>
+            </div>
+          </div>
+        </Alert>
+      ) : null}
+      {play.coachAlert ? (
+        <Alert
+          tone={play.coachAlert.verdict.judgement === 'blunder' ? 'danger' : 'warning'}
+          role="alert"
+        >
+          <div data-testid="coach-alert">
+            <strong>Coach:</strong> <San san={play.coachAlert.san} /> was{' '}
+            {play.coachAlert.verdict.judgement === 'blunder' ? 'a blunder' : 'a mistake'}.
+            {play.coachAlert.verdict.explanation ? (
+              <>
+                {' '}
+                <Notated text={play.coachAlert.verdict.explanation.text} />
+                {(() => {
+                  const help = MOTIF_HELP[play.coachAlert.verdict.explanation.motif];
+                  const lesson = getLessonMeta(help.lesson);
+                  return lesson ? (
+                    <>
+                      {' '}
+                      <Link to={`/learn/${lesson.id}`}>Lesson: {lesson.title}</Link>
+                    </>
+                  ) : null;
+                })()}
+              </>
+            ) : null}
+            <div className="row" style={{ marginTop: 8 }}>
+              <Button size="sm" variant="primary" onClick={play.coachTakeBack}>
+                Take it back
+              </Button>
+              <Button size="sm" onClick={play.coachPlayOn}>
+                Play on
+              </Button>
+            </div>
+          </div>
+        </Alert>
+      ) : play.coachChecking ? (
+        <p className="small muted" role="status" data-testid="coach-checking">
+          Coach is checking your move…
+        </p>
+      ) : null}
+    </>
+  );
 
   const playerTurn =
     play.started &&
@@ -321,6 +392,10 @@ export default function PlayPage() {
           {settings.moveInput && play.started ? (
             <MoveInput onMove={play.playerNotation} disabled={!playerTurn} keepFocus />
           ) : null}
+          {stacked &&
+          (play.blunderAlert || play.bookAlert || play.coachAlert || play.coachChecking) ? (
+            <div className="stack play__alerts">{pauseAlerts}</div>
+          ) : null}
         </div>
 
         <aside className="trainer__panel stack">
@@ -333,7 +408,7 @@ export default function PlayPage() {
               <p className="small muted" style={{ margin: '4px 0 0' }}>
                 {hotSeat
                   ? `Pass the device after each move${hasClock ? ` · ${play.timeControl.label}` : ''}.`
-                  : `${play.level.description} You play ${play.playerColor}${hasClock ? ` · ${play.timeControl.label}` : ''}${play.coach ? ' · Coach on' : ''}.`}
+                  : `${play.level.description} You play ${play.playerColor}${hasClock ? ` · ${play.timeControl.label}` : ''}${play.coach ? ' · Coach on' : ''}${play.blunderCheck ? ' · Blunder check on' : ''}.`}
                 {play.book ? (
                   <>
                     {' '}
@@ -410,61 +485,7 @@ export default function PlayPage() {
             </p>
           </Card>
 
-          {play.bookAlert ? (
-            <Alert tone="warning" role="alert">
-              <div data-testid="book-alert">
-                <strong>Repertoire:</strong> {describeDeviation(play.bookAlert)}{' '}
-                <Link to={`/openings/${play.book?.repertoireId ?? ''}`}>Review the line</Link>
-                <div className="row" style={{ marginTop: 8 }}>
-                  <Button size="sm" variant="primary" onClick={play.bookTakeBack}>
-                    Take it back
-                  </Button>
-                  <Button size="sm" onClick={play.bookPlayOn}>
-                    Play on
-                  </Button>
-                </div>
-              </div>
-            </Alert>
-          ) : null}
-          {play.coachAlert ? (
-            <Alert
-              tone={play.coachAlert.verdict.judgement === 'blunder' ? 'danger' : 'warning'}
-              role="alert"
-            >
-              <div data-testid="coach-alert">
-                <strong>Coach:</strong> <San san={play.coachAlert.san} /> was{' '}
-                {play.coachAlert.verdict.judgement === 'blunder' ? 'a blunder' : 'a mistake'}.
-                {play.coachAlert.verdict.explanation ? (
-                  <>
-                    {' '}
-                    <Notated text={play.coachAlert.verdict.explanation.text} />
-                    {(() => {
-                      const help = MOTIF_HELP[play.coachAlert.verdict.explanation.motif];
-                      const lesson = getLessonMeta(help.lesson);
-                      return lesson ? (
-                        <>
-                          {' '}
-                          <Link to={`/learn/${lesson.id}`}>Lesson: {lesson.title}</Link>
-                        </>
-                      ) : null;
-                    })()}
-                  </>
-                ) : null}
-                <div className="row" style={{ marginTop: 8 }}>
-                  <Button size="sm" variant="primary" onClick={play.coachTakeBack}>
-                    Take it back
-                  </Button>
-                  <Button size="sm" onClick={play.coachPlayOn}>
-                    Play on
-                  </Button>
-                </div>
-              </div>
-            </Alert>
-          ) : play.coachChecking ? (
-            <p className="small muted" role="status" data-testid="coach-checking">
-              Coach is checking your move…
-            </p>
-          ) : null}
+          {stacked ? null : pauseAlerts}
 
           {!play.started || play.gameOver ? <LadderCard onPlay={playLadder} /> : null}
 
@@ -483,7 +504,7 @@ export default function PlayPage() {
               >
                 Copy PGN
               </Button>
-              <Button size="sm" onClick={analyze} disabled={position.history.length === 0}>
+              <Button size="sm" onClick={() => analyze()} disabled={position.history.length === 0}>
                 Analyze game
               </Button>
             </div>
@@ -653,6 +674,14 @@ export default function PlayPage() {
               }
             />
           ) : null}
+          {opponent === 'engine' ? (
+            <Switch
+              checked={settings.playBlunderCheck}
+              onChange={(next) => settings.update({ playBlunderCheck: next })}
+              label="Blunder check"
+              description="Before a move that hangs material or allows mate is played, ask: checks, captures, threats? Play it anyway if you meant it."
+            />
+          ) : null}
           <Switch
             checked={settings.playBlindfold}
             onChange={(next) => settings.update({ playBlindfold: next })}
@@ -701,7 +730,7 @@ export default function PlayPage() {
             <Button variant="ghost" onClick={dismissResult}>
               Show the board
             </Button>
-            <Button onClick={analyze}>Analyze game</Button>
+            <Button onClick={() => analyze()}>Analyze game</Button>
             <Button onClick={openSetup}>New game</Button>
             <Button variant="primary" onClick={playAgain} title="Same opponent, colour and clock">
               Play again
@@ -717,6 +746,11 @@ export default function PlayPage() {
               {play.coachInterventions > 0
                 ? `The coach stepped in ${play.coachInterventions} time${play.coachInterventions === 1 ? '' : 's'}. `
                 : ''}
+              {play.blunderStops > 0 ? (
+                <span data-testid="blunder-summary">
+                  {`The blunder check held back ${play.blunderStops} move${play.blunderStops === 1 ? '' : 's'}. `}
+                </span>
+              ) : null}
               {play.book ? (
                 <span data-testid="book-summary">
                   {play.book.status === 'deviated' && play.book.deviation
@@ -738,7 +772,62 @@ export default function PlayPage() {
             </>
           ) : null}
         </p>
+        {play.gameOver && position.history.length > 0 ? (
+          <p className="small muted" style={{ margin: 0 }}>
+            Before the engine has its say, find the turning points yourself:{' '}
+            <Button size="sm" variant="ghost" onClick={() => analyze(true)}>
+              Analyze it yourself
+            </Button>
+          </p>
+        ) : null}
       </Dialog>
     </div>
+  );
+}
+
+/** The blunder check's question, with the move it held back and the way on. */
+function BlunderCheckAlert({ play }: { play: ReturnType<typeof usePlayVsEngine> }) {
+  const alert = play.blunderAlert;
+  if (!alert) return null;
+  const { kind, move, reply, captured } = alert.warning;
+  return (
+    <Alert tone="warning" role="alert">
+      <div data-testid="blunder-alert">
+        <strong>Checks, captures, threats?</strong> Before you play <San san={move.san} />:{' '}
+        {alert.revealed ? (
+          kind === 'mate' ? (
+            <>
+              <San san={reply.san} /> mates.
+            </>
+          ) : (
+            <>
+              <San san={reply.san} />{' '}
+              {captured ? `takes your ${PIECE_NAMES[captured]}` : 'wins material'}
+              {alert.warning.loss > 0
+                ? `, and you end up ${alert.warning.loss} pawn${alert.warning.loss === 1 ? '' : 's'} down`
+                : ''}
+              .
+            </>
+          )
+        ) : kind === 'mate' ? (
+          'one of your opponent’s answers is mate.'
+        ) : (
+          'one of your opponent’s answers wins material.'
+        )}
+        <div className="row" style={{ marginTop: 8 }}>
+          <Button size="sm" variant="primary" onClick={play.blunderLookAgain}>
+            Look again
+          </Button>
+          {alert.revealed ? null : (
+            <Button size="sm" onClick={play.blunderShowMe}>
+              Show me
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={play.blunderPlayAnyway}>
+            Play it anyway
+          </Button>
+        </div>
+      </div>
+    </Alert>
   );
 }

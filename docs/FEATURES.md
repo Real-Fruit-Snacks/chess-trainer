@@ -35,6 +35,13 @@ The complete reference of what Chess Trainer does, section by section. For how i
   in spaced cycles and shared as links, hints, streaks and per-theme statistics. Only rated mode asks
   for a starting rating; the other modes are open at once. A promotion always asks for the piece, so
   underpromotions can be solved with auto-queen on.
+- **Blind puzzles**: the board stays on the starting position while the line is played out in
+  notation only, so the whole combination has to be seen in the head. Two, three or four-plus moves
+  deep, each length with its own level (it starts a few hundred points under the puzzle rating, rises
+  40 with a clean solve and drops 60 with a miss). Moves go in by clicking their two squares on the
+  unchanging board or by typing them; a move that is not legal in the current position is turned down
+  without counting as a miss. A **peek** shows the current position, but a solve after one leaves the
+  level where it was; at the end the board shows where the line ends, to compare with what you saw.
 - **Due puzzles**: missed puzzles come back on a 1-3-7-14-30 day schedule (Woodpecker misses stay in
   their set); **bookmarks**; and **puzzles from your own games**: every reviewed blunder becomes a
   puzzle, and a different move the engine rates as good as the review's (within half a pawn) counts
@@ -44,6 +51,15 @@ The complete reference of what Chess Trainer does, section by section. For how i
 
 - Coordinate trainer (click the square or type it), piece vision, "find every capture / check" and
   **guess the position** drills, with a **blindfold** mode.
+- **What's the threat?**: the board shows the position with your opponent to move (as if you had
+  passed); play the move they threaten — two tries, then it is shown — and then a move that meets it.
+  The answer says what the threat does (mates, wins the queen, a piece…), lists the moves that hold,
+  and for the 1,200 bundled positions what was played in the real game instead. A threat or defence
+  the stored answer does not name is put to the engine, which accepts one that is as strong. Threats
+  you missed in **your own games** join the drill after a review (on the analysis board or in My
+  games) and come back every third position until you have named each twice in a row. Only your own
+  moves count when the game says which side you played (games against the engine, or games under the
+  name you import with); otherwise both sides' do, and the drill says which side missed it.
 - An **endgame library of 41 drills**, every position engine-verified and played out against a
   full-strength engine, arranged as an **endgame ladder**: checkmates; pawn endings (key squares, the
   square of the pawn, outside and protected passers, triangulation, the breakthrough, Réti); rook
@@ -90,6 +106,12 @@ the engine rates yours as good. Filter by era, difficulty and what you have play
 - A **coach mode** that pauses after a mistake, explains it in words, links the lesson and offers a
   take-back. The coach judges at full strength whatever level you play against, and never interrupts a
   move that ends the game.
+- A **blunder check** (off by default, in the game setup and in Settings): before a move that lets
+  the opponent mate at once, or loses two pawns' worth or more to a sequence of captures, is played,
+  it asks _checks, captures, threats?_ — "Look again", "Show me" (the move and its punishment, drawn
+  and named) or "Play it anyway". It says nothing when every move loses as much (a fork), works in
+  timed games too (it answers in a few milliseconds, without the engine), and the game summary counts
+  the moves it held back.
 - An **engine ladder** with the next rung one click away; its height is remembered even when the old
   games have scrolled out of the history, and a slip (three losses at a rung) clears after one game at
   the rung below. Only ordinary engine games count: handicap, simul and drill games are recorded under
@@ -175,6 +197,13 @@ from the engine ladder and the Play results.
   move that looks like a slip is compared with the engine's choice once more, both moves in one
   search at depth 14 or more, before it is called one — so a deep sacrifice is not marked down for
   what a shallow search cannot see.
+- **Analyze it yourself first**: before the engine's review, go through the game with the engine,
+  the explorer, the tablebase and the position report out of sight; mark the moves where the game
+  turned (M, or the button) and play what you would have played instead. "Check with the engine" then
+  runs the review and scores you: the turning points (mistakes and blunders, either side) you found —
+  on the move or one move late — the ones you missed, false alarms (a mark on an inaccuracy is
+  neither), and each of your moves against the engine's. Offered on the analysis board, at the end of
+  a game against the engine and next to each unreviewed game in My games.
 - **Import games** by pasting or opening a PGN (ChessBase-style `1.e4` numbering, chess.com clock
   tags, evaluation symbols and 4-field FENs included; an illegal move is named and the moves before
   it can be loaded), or straight from a Lichess or chess.com username. Variant games are skipped.
@@ -183,7 +212,9 @@ from the engine ladder and the Play results.
 
 Import your games (Lichess and chess.com with time-control, colour and rated filters, or PGN), see
 your **opening statistics** per colour, find where you or your opponents **left your repertoire**,
-review every game in one go, turn the mistakes into puzzles, and read the **insights** — accuracy by
+review every game in one go, turn the mistakes into puzzles and the threats you missed into
+positions for the threat drill, analyze a game yourself before the engine does, and read the
+**insights** — accuracy by
 phase, the mistakes you make most, results by colour, opening and engine level — with a "work on" list
 of lessons and themes. Rows resting on fewer than 3 games or 20 reviewed moves are greyed out.
 
@@ -198,7 +229,8 @@ of lessons and themes. Rows resting on fewer than 3 games or 20 reviewed moves a
 - **Progress**: rating history chart, a weekly summary (the last seven calendar days against the seven
   before, with the trend shown by an arrow as well as colour), solve statistics, strengths and
   weaknesses by theme (measured against your own accuracy), lesson completion, the game log with results per engine level, arcade records, drill and
-  rush records, opening and puzzle review counts, and a reminder when a backup is overdue (shown once
+  rush records, **thinking skills** (threats named and met, blind-puzzle levels, the share of turning
+  points caught in your own analyses, moves the blunder check held back), opening and puzzle review counts, and a reminder when a backup is overdue (shown once
   there is anything worth keeping — puzzles, lessons, openings or games — with a week's "Later").
   Solve counts, accuracy and solve time are lifetime figures, not just the last 300 attempts.
 
@@ -214,17 +246,19 @@ and captured material beside the player bars as the difference, every capture, o
 **Play:** defaults plus **focus mode**, which hides the header and navigation while you play the
 engine: in Play, the simul and the arcade games. **Single-key shortcuts** can be turned off.
 Engine and analysis options (the engine level for the next game, review and analysis depth,
-the multi-threaded engine, coach mode), the puzzle rating reset or calibration (a button with a
+threads — on by default — and the optional **full engine** download with its progress, coach mode),
+the puzzle rating reset or calibration (a button with a
 confirmation; the rating history is kept), **profiles** for several learners on one device, an engine
 diagnostics panel with a speed test, offline puzzle download (it keeps going when you change page),
 install, a **storage meter**, and backups — export or import as JSON, **share a backup** straight to
 another device, or open a backup file with the installed app. An import is checked field by field,
 then asks first: it shows the backup's date and what it holds (puzzle attempts, imported games, saved
 analyses, custom repertoires), offers to export the current progress, replaces everything in the
-profile at once, and can be undone from the toast that follows. Backups since 0.12 (format 7)
-include the imported games and, on a device with several profiles, carry the profile's name in the
+profile at once, and can be undone from the toast that follows. Backups since 0.15 (format 8)
+carry the thinking-skill records too; since 0.12 (format 7) they include the imported games and, on a device with several profiles, carry the profile's name in the
 file name. _Reset everything_ clears this profile's progress, repertoires, library and imported games
-and the device settings; the other profiles are kept, and the dialog says so.
+and the device settings, a downloaded full engine included; the other profiles are kept, and the
+dialog says so.
 
 ### The test lab
 
@@ -330,18 +364,25 @@ suite on every run.
   (`licence.txt`, `notices.txt`), linked from the footer of every page with the credits: Stockfish
   and Chessground (GPL-3.0), the Classic pieces (Colin M.L. Burnett, CC BY-SA 3.0) and the Lichess
   puzzles and openings (CC0).
-- **Engine.** [Stockfish.js](https://github.com/nmrugg/stockfish.js) (lite NNUE build). The
-  single-threaded build is used by default and is far stronger than any human; the lowest playing
-  levels are weakened in software (shallow search, sampling among several candidate moves, occasional
-  random moves) so that real beginners can win.
-- **Multi-threaded engine (experimental).** Multi-threaded WASM needs `SharedArrayBuffer`, which
-  browsers only expose to cross-origin-isolated pages, and GitHub Pages cannot send the required
-  headers. Turning on _Settings → Multi-threaded engine_ makes the service worker add the
-  `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers itself on the next reload;
-  the app then loads the pthreads build with all but one CPU core (at most eight, four on phones and
-  tablets). If the threaded worker fails to start, the single-threaded engine takes over; if a worker
-  dies later, mid-game, the page shows the error with a Retry button that starts a fresh engine. Off by
-  default because the headers also block cross-origin resources that are not CORS-enabled.
+- **Engine.** [Stockfish.js](https://github.com/nmrugg/stockfish.js) 19. The lite build, with
+  Stockfish's small network (about 2 MB), runs by default and is far stronger than any human; the
+  lowest playing levels are weakened in software (shallow search, sampling among several candidate
+  moves, occasional random moves) so that real beginners can win.
+- **Multi-threaded by default.** Multi-threaded WASM needs `SharedArrayBuffer`, which browsers only
+  expose to cross-origin-isolated pages, and GitHub Pages cannot send the required headers, so the
+  service worker adds the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers
+  itself. The first visit runs one thread (there is no service worker yet); from the next load on, the
+  engine uses all but one CPU core (at most eight, four on phones and tablets). The headers also block
+  cross-origin resources that are not CORS-enabled, and the app loads none: its only cross-origin
+  requests are CORS calls to the Lichess and Chess.com APIs. _Settings → Multi-threaded engine_
+  switches threads, and the headers, off from the next load. If the threaded worker fails to start,
+  the one-thread engine takes over; if a worker dies later, mid-game, the page shows the error with a
+  Retry button that starts a fresh engine.
+- **Full engine (optional).** _Settings → Full engine_ downloads Stockfish 19 with its large network
+  (99 MB) — the threaded or the one-thread build, whichever this device runs — and the service worker
+  keeps it offline. It is noticeably stronger in deep, sharp positions, which analysis and game review
+  gain most from. Until the download is complete, or where the full engine cannot start (a phone short
+  of memory, say), the lite engine runs. Switching it off deletes the download.
 - **Puzzles.** `scripts/import-lichess-puzzles.mjs` streams the Lichess puzzle dump, keeps
   well-established puzzles (at least 500 plays, popularity 70 or more) and reservoir-samples 6,000 per
   rating band with a fixed seed, keeping the ids of the previous set so histories stay valid. The
@@ -373,6 +414,8 @@ suite on every run.
 
 Any evergreen browser with WebAssembly and Web Workers: Chrome and Edge 111+, Firefox 121+, Safari 16.4+
 (iOS 16.4+) — the floor set by the stylesheet (`color-mix()`, `:has()`, `dvh` units and container
-queries). If the engine fails to load, lessons and puzzles still work. CI runs the end-to-end tests
+queries). The threaded engine runs in all of them from the second load on (once the service worker
+isolates the page) wherever at least three CPU cores are reported; elsewhere the one-thread engine
+runs. If the engine fails to load, lessons and puzzles still work. CI runs the end-to-end tests
 on Chromium (desktop and a phone profile), Firefox and WebKit, and once more under the production
 base path. The interface is in English only.

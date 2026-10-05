@@ -1,5 +1,13 @@
 import type { Fen, Uci } from '@/chess/types';
-import { describeEngine, ENGINE_BUILD_URLS, type EngineBuild } from './build';
+import {
+  describeEngine,
+  ENGINE_BUILD_URLS,
+  type EngineBuild,
+  fallbackBuilds,
+  isFullBuild,
+  isThreadedBuild,
+} from './build';
+import { isBuildAvailable } from './fullEngine';
 import { type BestMove, parseBestMove, parseInfo, type SearchInfo } from './uci';
 
 export interface SearchParams {
@@ -37,13 +45,14 @@ export interface EngineOptions {
   /** URL of the engine's worker script. Defaults to the bundled Stockfish build for `build`. */
   workerUrl?: string;
   /**
-   * Which Stockfish build to load. `multi` needs a cross-origin-isolated page;
-   * when it fails to start the client silently falls back to `single`.
+   * Which Stockfish build to load. A threaded build needs a cross-origin-isolated
+   * page and a full build must have been downloaded; whatever cannot start falls
+   * back to the next build in `fallbackBuilds` (full → lite, threads → one).
    */
   build?: EngineBuild;
-  /** Search threads for the `multi` build (ignored for `single`). */
+  /** Search threads for a threaded build (ignored for the single-threaded ones). */
   threads?: number;
-  /** Milliseconds to wait for `uciok` before giving up. */
+  /** Milliseconds to wait for `uciok` before giving up (four times as long for a full build). */
   initTimeoutMs?: number;
   /** Hash table size in MB. */
   hashMb?: number;
@@ -104,8 +113,13 @@ export class EngineClient {
   build: EngineBuild;
   /** Search threads in use. */
   threads = 1;
-  /** True when the threaded build was requested but the single-threaded one had to be used. */
+  /** True when the requested build could not run and a lighter one is running instead. */
   fellBack = false;
+  /**
+   * Why: the full engine was asked for but is not downloaded (a quiet, expected
+   * case), or a build failed to start (which wins when both happened).
+   */
+  fallbackReason: 'not-downloaded' | 'failed' | null = null;
 
   constructor(options: EngineOptions = {}) {
     this.options = {
@@ -138,23 +152,32 @@ export class EngineClient {
     }
     this.status = 'loading';
     const requested = this.options.build;
-    try {
-      await this.bootBuild(requested);
-    } catch (err) {
-      if (requested !== 'multi' || this.terminated) this.fail(err);
-      // Threads are an optimisation: never let them stop the engine from starting.
-      console.warn(
-        'Threaded engine failed to start; falling back to the single-threaded build.',
-        err,
-      );
-      this.fellBack = true;
+    // Threads and the large network are improvements: never let either stop the
+    // engine from starting. Each build that cannot run hands over to a lighter one.
+    const order = [requested, ...fallbackBuilds(requested)];
+    for (const [index, build] of order.entries()) {
+      const last = index === order.length - 1;
+      if (isFullBuild(build) && !(await isBuildAvailable(build))) {
+        // Switched on but not downloaded (or not served from the device's copy): lite, quietly.
+        this.fallbackReason = 'not-downloaded';
+        continue;
+      }
       try {
-        await this.bootBuild('single');
-      } catch (fallbackErr) {
-        this.fail(fallbackErr);
+        await this.bootBuild(build);
+        this.fellBack = build !== requested;
+        this.status = 'ready';
+        return;
+      } catch (err) {
+        if (this.terminated || last) this.fail(err);
+        console.warn(
+          `The ${describeEngine(build, this.options.threads)} engine failed to start.`,
+          err,
+        );
+        this.fallbackReason = 'failed';
       }
     }
-    this.status = 'ready';
+    // Unreachable: the last build in the order is never skipped.
+    this.fail(new Error('No engine build could start.'));
   }
 
   private fail(err: unknown): never {
@@ -170,7 +193,11 @@ export class EngineClient {
     this.worker?.terminate();
     this.worker = null;
     this.build = build;
-    this.threads = build === 'multi' ? this.options.threads : 1;
+    this.threads = isThreadedBuild(build) ? this.options.threads : 1;
+    // Compiling the full engine's 99 MB takes a while, on a phone especially.
+    const timeoutMs = isFullBuild(build)
+      ? this.options.initTimeoutMs * 4
+      : this.options.initTimeoutMs;
     const url =
       build === this.options.build && this.options.workerUrl
         ? this.options.workerUrl
@@ -203,11 +230,11 @@ export class EngineClient {
       await Promise.race([
         (async () => {
           this.send('uci');
-          await this.waitFor((line) => line === 'uciok', this.options.initTimeoutMs);
-          if (build === 'multi') this.send(`setoption name Threads value ${this.threads}`);
+          await this.waitFor((line) => line === 'uciok', timeoutMs);
+          if (isThreadedBuild(build)) this.send(`setoption name Threads value ${this.threads}`);
           this.send(`setoption name Hash value ${this.options.hashMb}`);
           this.send('isready');
-          await this.waitFor((line) => line === 'readyok', this.options.initTimeoutMs);
+          await this.waitFor((line) => line === 'readyok', timeoutMs);
         })(),
         failure,
       ]);

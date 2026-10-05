@@ -23,6 +23,7 @@ import { BackupNudge } from './BackupNudge';
 import { buildEngineLadder } from '@/features/play/ladder';
 import { LevelResults } from './LevelResults';
 import { RatingChart } from './RatingChart';
+import { ThinkingSkillsCard } from './ThinkingSkillsCard';
 import { WeeklyCard } from './WeeklyCard';
 import {
   buildThemeReport,
@@ -313,6 +314,8 @@ export default function ProgressPage() {
               <Link to="/openings">Openings</Link> · <Link to="/classics">Classic games</Link>
             </p>
           </Card>
+
+          <ThinkingSkillsCard />
 
           <Card>
             <h2 style={{ fontSize: '1.15rem' }}>Strengths and weaknesses</h2>

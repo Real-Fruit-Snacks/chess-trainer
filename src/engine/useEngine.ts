@@ -19,14 +19,15 @@ export interface UseEngine {
 
 /** Engine options implied by the learner's settings (build and thread count). */
 export function engineOptionsFromSettings(): Pick<EngineOptions, 'build' | 'threads'> {
-  const { build, threads } = chooseEngineBuild(useSettings.getState().engineThreads);
+  const { engineThreads, engineFull } = useSettings.getState();
+  const { build, threads } = chooseEngineBuild(engineThreads, undefined, engineFull);
   return { build, threads };
 }
 
 /**
  * Owns one engine instance for the lifetime of the calling component.
  * The worker is terminated on unmount so pages never leak background searches.
- * The build (single- or multi-threaded) follows the settings at creation time.
+ * The build (threads, lite or full) follows the settings at creation time.
  */
 export function useEngine(options: UseEngineOptions = {}): UseEngine {
   const { autoStart = true, ...engineOptions } = options;

@@ -24,6 +24,7 @@ const baseURL = `http://127.0.0.1:${PORT}${BASE_PATH}`;
  */
 const CROSS_BROWSER_SPECS = [
   /smoke\.spec\.ts/,
+  /threads\.spec\.ts/,
   /features\.spec\.ts/,
   /accessibility\.spec\.ts/,
   /release-0-8\.spec\.ts/,
@@ -32,6 +33,7 @@ const CROSS_BROWSER_SPECS = [
   /release-0-11\.spec\.ts/,
   /release-0-12-[a-z]+\.spec\.ts/,
   /release-0-13-[a-z]+\.spec\.ts/,
+  /release-0-15-[a-z]+\.spec\.ts/,
 ];
 
 /** Pixel snapshots run only when asked (VISUAL=1, `npm run e2e:visual`); see e2e/visual.spec.ts. */

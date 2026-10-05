@@ -319,6 +319,7 @@ export const intermediateLessons3: Lesson[] = [
     summary:
       'Seeing the position after the moves, not before them: the skill behind every calculation.',
     minutes: 9,
+    practiceDrills: [{ title: 'Blind puzzles', to: '/puzzles/blind' }],
     steps: [
       {
         title: 'See the board that is not there yet',

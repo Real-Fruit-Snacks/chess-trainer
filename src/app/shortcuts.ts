@@ -29,7 +29,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       {
         keys: ['Settings'],
         action:
-          'Letter keys (H, S, N, F and ?) can be turned off in Settings → Play; Enter, Space and the arrows keep working',
+          'Letter keys (H, S, N, F, M and ?) can be turned off in Settings → Play; Enter, Space and the arrows keep working',
       },
     ],
   },
@@ -39,18 +39,26 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['←', '→'], action: 'Previous / next move' },
       { keys: ['Home', 'End'], action: 'Start / end of the game' },
       { keys: ['F'], action: 'Flip the board' },
+      { keys: ['M'], action: 'Analyzing it yourself: mark the move as a turning point' },
     ],
   },
   {
     title: 'Puzzles',
     shortcuts: [
-      { keys: ['H'], action: 'Hint' },
+      { keys: ['H'], action: 'Hint (in blind puzzles: peek at the position)' },
       { keys: ['S'], action: 'Show the solution' },
       { keys: ['N'], action: 'Next puzzle (after a solve or a miss)' },
       {
         keys: ['Enter'],
         action: 'Start a Puzzle Rush run (three minutes; after a run, the same mode again)',
       },
+    ],
+  },
+  {
+    title: 'What’s the threat?',
+    shortcuts: [
+      { keys: ['S'], action: 'Show the threat' },
+      { keys: ['N'], action: 'Next position (once one is done)' },
     ],
   },
   {

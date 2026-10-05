@@ -219,11 +219,18 @@ test.describe('position report', () => {
     ).toBeVisible();
     await expect(page.getByTestId('report-plans-white')).toContainText('isolated d-pawn');
     await expect(page.getByTestId('report-plans-black')).toContainText('Blockade');
-    // Hovering the finding circles the pawn.
-    await card.getByText('isolated pawn on d4').hover();
-    await expect(
-      page.locator('cg-board').locator('..').locator('svg circle, svg .cg-shapes circle').first(),
-    ).toBeAttached();
+    // Hovering the finding circles the pawn. The engine's lines can still be changing size
+    // above the card, moving it out from under the mouse (which clears the circle): hover again.
+    const finding = card.getByText('isolated pawn on d4');
+    const circle = page
+      .locator('cg-board')
+      .locator('..')
+      .locator('svg circle, svg .cg-shapes circle')
+      .first();
+    await expect(async () => {
+      await finding.hover();
+      await expect(circle).toBeAttached({ timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
     await card.getByRole('button', { name: 'Hide' }).click();
     await expect(card).not.toContainText('isolated pawn');
   });

@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { Chess } from 'chess.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { checkBlunder } from '@/chess/blunderCheck';
 import { START_FEN } from '@/chess/helpers';
 import type * as BookModule from './openingBook';
 import type * as SoundModule from '@/lib/sound';
@@ -622,5 +623,136 @@ describe('usePlayVsEngine', () => {
     act(() => result.current.resolvePromotion('q'));
     await settle();
     expect(result.current.game.position.history).toHaveLength(0);
+  });
+
+  describe('blunder check', () => {
+    /** 1.e4 e5 2.Nf3 Nc6: 3.Ba6?? loses the bishop to ...bxa6. */
+    const ITALIAN = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3';
+
+    const startWith = (
+      blunderCheck: boolean,
+      fen = ITALIAN,
+      opponent: 'engine' | 'human' = 'engine',
+    ) => {
+      const hook = renderHook(() => usePlayVsEngine());
+      act(() =>
+        hook.result.current.start({
+          color: 'white',
+          levelId: 1,
+          timeControlId: 'none',
+          fen,
+          opponent,
+          blunderCheck,
+        }),
+      );
+      return hook;
+    };
+
+    it('holds back a move that hangs a piece, and counts it once', async () => {
+      const { result } = startWith(true);
+      expect(result.current.blunderCheck).toBe(true);
+      act(() => result.current.playerMove('f1', 'a6'));
+      expect(result.current.game.position.history).toHaveLength(0);
+      expect(result.current.blunderAlert).toMatchObject({
+        revealed: false,
+        warning: { kind: 'material', move: { san: 'Ba6' }, reply: { san: 'bxa6' }, captured: 'b' },
+      });
+      expect(played).toHaveBeenCalledWith('notify');
+      expect(result.current.blunderStops).toBe(1);
+      // The same move again is the same stop.
+      act(() => result.current.blunderLookAgain());
+      act(() => result.current.playerMove('f1', 'a6'));
+      expect(result.current.blunderStops).toBe(1);
+      expect(useProgress.getState().blunderChecks).toEqual({ stopped: 1, playedAnyway: 0 });
+      await settle();
+      // Nothing was played, so the engine was not asked for a reply.
+      expect(fake.searches).toHaveLength(0);
+    });
+
+    it('shows the answer on the board when asked', () => {
+      const { result } = startWith(true);
+      act(() => result.current.playerMove('f1', 'a6'));
+      expect(result.current.hintShapes).toEqual([]);
+      act(() => result.current.blunderShowMe());
+      expect(result.current.blunderAlert?.revealed).toBe(true);
+      expect(result.current.hintShapes).toEqual([
+        { orig: 'f1', dest: 'a6', brush: 'paleBlue' },
+        { orig: 'b7', dest: 'a6', brush: 'red' },
+      ]);
+    });
+
+    it('lets another move through, or the same one played anyway', async () => {
+      const { result } = startWith(true);
+      act(() => result.current.playerMove('f1', 'a6'));
+      // Choosing another move simply replaces the warning.
+      act(() => result.current.playerMove('f1', 'c4'));
+      expect(result.current.blunderAlert).toBeNull();
+      expect(result.current.game.position.history.map((m) => m.san)).toEqual(['Bc4']);
+      await settle();
+      expect(result.current.game.position.history).toHaveLength(2);
+
+      const second = startWith(true).result;
+      act(() => {
+        second.current.playerNotation('Ba6');
+      });
+      expect(second.current.blunderAlert?.warning.move.san).toBe('Ba6');
+      act(() => second.current.blunderPlayAnyway());
+      expect(second.current.blunderAlert).toBeNull();
+      expect(second.current.game.position.history.map((m) => m.san)).toEqual(['Ba6']);
+      expect(useProgress.getState().blunderChecks.playedAnyway).toBe(1);
+    });
+
+    it('stops a promotion that allows mate once the piece is chosen', () => {
+      // After c8=Q the bishop on b8 sees h2, and ...Qxh2 is mate.
+      const { result } = startWith(true, '1b6/2P5/8/k7/7q/8/6PP/7K w - - 0 1');
+      act(() => result.current.playerMove('c7', 'c8'));
+      expect(result.current.game.pendingPromotion).not.toBeNull();
+      expect(result.current.blunderAlert).toBeNull();
+      act(() => result.current.resolvePromotion('q'));
+      expect(result.current.game.pendingPromotion).toBeNull();
+      expect(result.current.game.position.history).toHaveLength(0);
+      expect(result.current.blunderAlert?.warning).toMatchObject({
+        kind: 'mate',
+        reply: { san: 'Qxh2#' },
+      });
+      act(() => result.current.blunderPlayAnyway());
+      expect(result.current.game.position.history.map((m) => m.san)).toEqual(['c8=Q']);
+    });
+
+    it('stays out of the way when it is off, and between two players', () => {
+      const off = startWith(false).result;
+      act(() => off.current.playerMove('f1', 'a6'));
+      expect(off.current.blunderAlert).toBeNull();
+      expect(off.current.game.position.history).toHaveLength(1);
+
+      const hotSeat = startWith(true, ITALIAN, 'human').result;
+      expect(hotSeat.current.blunderCheck).toBe(false);
+      act(() => hotSeat.current.playerMove('f1', 'a6'));
+      expect(hotSeat.current.game.position.history).toHaveLength(1);
+    });
+
+    it('clears the warning with a take-back or a new game', async () => {
+      const { result } = startWith(true);
+      act(() => result.current.playerMove('f1', 'c4'));
+      await settle();
+      expect(result.current.game.position.history).toHaveLength(2);
+      // Whatever the engine answered, some move now hangs material: find one and try it.
+      const fen = result.current.game.position.fen;
+      const hanging = new Chess(fen)
+        .moves({ verbose: true })
+        .find((m) => checkBlunder(fen, { from: m.from, to: m.to }));
+      if (!hanging) throw new Error('no hanging move');
+      act(() => result.current.playerMove(hanging.from, hanging.to));
+      expect(result.current.blunderAlert).not.toBeNull();
+      act(() => result.current.takeBack());
+      expect(result.current.blunderAlert).toBeNull();
+      expect(result.current.game.position.history).toHaveLength(0);
+      act(() => result.current.playerMove('f1', 'a6'));
+      expect(result.current.blunderAlert).not.toBeNull();
+      act(() => result.current.start({ color: 'white', levelId: 1, timeControlId: 'none' }));
+      expect(result.current.blunderAlert).toBeNull();
+      expect(result.current.blunderStops).toBe(0);
+      expect(result.current.blunderCheck).toBe(false);
+    });
   });
 });

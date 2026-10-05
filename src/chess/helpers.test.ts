@@ -240,6 +240,17 @@ describe('tryNotation (typed moves)', () => {
     expect(tryNotation(new Chess(), 'b3')?.san).toBe('b3');
     expect(tryNotation(new Chess(), 'bxc3')).toBeNull();
   });
+
+  it('never passes the turn: "--" is not a move here', () => {
+    // chess.js reads "--" (with any check or comment sign) as a null move.
+    for (const text of ['--', '--+', '--#', '--!', '-=-']) {
+      const chess = new Chess();
+      expect(tryNotation(chess, text)).toBeNull();
+      expect(tryMove(chess, text)).toBeNull();
+      expect(chess.fen()).toBe(START_FEN);
+      expect(chess.history()).toEqual([]);
+    }
+  });
 });
 
 describe('canStillMate (flag fall)', () => {

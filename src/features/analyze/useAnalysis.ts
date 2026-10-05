@@ -60,6 +60,8 @@ export interface UseAnalysis {
   setEngineOn: (on: boolean) => void;
   engineStatus: ReturnType<typeof useEngine>['status'];
   engineError: Error | null;
+  /** The engine client, for searches of the page's own (with the board's analysis off). */
+  engine: ReturnType<typeof useEngine>['engine'];
   /** Status-line label: build and thread count once the engine is running. */
   engineName: string;
   lines: Map<number, SearchInfo>;
@@ -575,6 +577,7 @@ export function useAnalysis(): UseAnalysis {
     setEngineOn,
     engineStatus,
     engineError,
+    engine,
     engineName: engineStatus === 'ready' ? engine().name : 'Stockfish 19',
     lines,
     thinking,

@@ -6,11 +6,13 @@
  * - Serves `index.html` for navigations to the app's own routes, so deep links
  *   boot the SPA offline — and only for those, so another site on the same
  *   origin is left alone.
- * - Caches puzzle chunks and the optional multi-threaded engine build as they
- *   are fetched. Only complete responses of the right type are kept, and they
- *   expire, so a captive portal's HTML answer can never poison a chunk for good.
- * - Adds the COOP/COEP headers to documents when the learner has enabled the
- *   experimental multi-threaded engine — see `sw/isolation.ts`.
+ * - Caches puzzle chunks and the threaded engine build as they are fetched,
+ *   and serves the full engine from the same cache once the page has
+ *   downloaded it. Only complete responses of the right type are kept, so a
+ *   captive portal's HTML answer can never poison a file; puzzle chunks
+ *   expire, engine files are kept until a newer engine replaces them.
+ * - Adds the COOP/COEP headers that let the multi-threaded engine run — on by
+ *   default, unless the learner has switched threads off; see `sw/isolation.ts`.
  * - Adds `Content-Security-Policy: frame-ancestors 'none'` to the pages it
  *   serves, the one directive the page's meta policy cannot set — see `sw/framing.ts`.
  */
@@ -26,6 +28,12 @@ import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import { appNavigationPattern } from './sw/appRoutes';
 import { cacheable } from './sw/cacheable';
+import {
+  ENGINE_CACHE,
+  ENGINE_DOWNLOAD_HEADER,
+  isCurrentEngineFile,
+  isEngineFilePath,
+} from './sw/engineFiles';
 import { isNavigation, withFramePolicy } from './sw/framing';
 import { ISOLATION_CHANGED_MESSAGE, readIsolationFlag, withIsolationHeaders } from './sw/isolation';
 
@@ -108,17 +116,37 @@ registerRoute(
   }),
 );
 
-// The threaded engine build is fetched on demand and kept for offline use. Its
-// files are versioned by name, so once cached they are good until they expire.
+// The engine builds beyond the precached one are kept for offline use: the
+// threaded build as it is first fetched, the full engine once the page has
+// downloaded it into this cache (its download itself passes the worker by, so
+// that stopping it stops it). The files are versioned by name, so they never
+// expire: the full engine is a 99 MB download that must not quietly come back.
+// Files of an older engine are dropped when a new worker takes over (below).
 registerRoute(
-  ({ url, sameOrigin }) =>
-    sameOrigin && /\/engine\/stockfish-[\w.-]+\.(?:js|wasm)$/.test(url.pathname),
+  ({ url, sameOrigin, request }) =>
+    sameOrigin && isEngineFilePath(url.pathname) && !request.headers.has(ENGINE_DOWNLOAD_HEADER),
   new CacheFirst({
-    cacheName: 'chess-trainer-engine',
+    cacheName: ENGINE_CACHE,
     plugins: [
       cacheable('application/wasm', 'application/javascript', 'text/javascript'),
-      new ExpirationPlugin({ maxEntries: 6, maxAgeSeconds: 180 * DAY }),
+      new ExpirationPlugin({ maxEntries: 12 }),
       isolationPlugin,
     ],
   }),
 );
+
+/** Deletes cached engine files that the current version no longer names (an upgrade's leftovers). */
+async function pruneOldEngineFiles(): Promise<void> {
+  try {
+    const cache = await caches.open(ENGINE_CACHE);
+    for (const request of await cache.keys()) {
+      if (!isCurrentEngineFile(new URL(request.url).pathname)) await cache.delete(request);
+    }
+  } catch {
+    // Storage unavailable: nothing to prune.
+  }
+}
+
+self.addEventListener('activate', (event: ExtendableEvent) => {
+  event.waitUntil(pruneOldEngineFiles());
+});

@@ -166,6 +166,7 @@ export const advancedLessons2: Lesson[] = [
     summary:
       'The fastest way to improve: find the turning point of every game and learn one thing from it.',
     minutes: 8,
+    practiceDrills: [{ title: 'Analyze a game yourself', to: '/games' }],
     steps: [
       {
         title: 'A four-step method',
