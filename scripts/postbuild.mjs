@@ -8,10 +8,12 @@
  * 2. `.nojekyll` — tells Pages not to run Jekyll, which would otherwise ignore
  *    files and folders that start with an underscore (Vite's asset hashes can
  *    produce those) and slow down deployments.
- * 3. `licence.txt` and `notices.txt` — the project's licence (`LICENSE`) and the
- *    third-party notices (`THIRD_PARTY_NOTICES.md`) ship with the site, and the
- *    footer links to them. They are not precached: they are tiny and rarely
- *    opened, and the service worker leaves them to the network.
+ * 3. `licence.txt`, `licence-agpl.txt` and `notices.txt` — the project's licence
+ *    (`LICENSE`), the licence of the human-like opponent's model (Maia-3, AGPL-3.0:
+ *    `LICENSES/AGPL-3.0.txt`) and the third-party notices (`THIRD_PARTY_NOTICES.md`)
+ *    ship with the site, and the footer links to them. They are not precached:
+ *    they are small and rarely opened, and the service worker leaves them to the
+ *    network.
  * 4. Source maps — the build writes hidden maps (no `sourceMappingURL` comment);
  *    they are moved out of `dist/` into `sourcemaps/`, so they are never deployed
  *    or precached. CI keeps them as an artifact for reading crash-report stacks.
@@ -27,6 +29,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 /** Files copied from the repository into the site, as [source, published name]. */
 export const LICENCE_FILES = [
   ['LICENSE', 'licence.txt'],
+  ['LICENSES/AGPL-3.0.txt', 'licence-agpl.txt'],
   ['THIRD_PARTY_NOTICES.md', 'notices.txt'],
 ];
 

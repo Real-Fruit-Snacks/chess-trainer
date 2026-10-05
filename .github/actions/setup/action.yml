@@ -1,14 +1,20 @@
 name: Set up the project
 description: >-
   Node from .nvmrc and the locked dependencies (no install scripts), plus, when
-  asked, the pinned engine binaries and one Playwright browser, each restored
-  from a cache when it can be.
+  asked, the pinned engine binaries, the human-like opponent's files and one
+  Playwright browser, each restored from a cache when it can be.
 
 inputs:
   engine:
     description: >-
       Install the pinned Stockfish binaries into public/engine/: 'true' for every build (the
       full engine is about 200 MB), 'lite' for the two lite builds only, 'false' for none.
+    default: 'false'
+  maia:
+    description: >-
+      Install the human-like opponent's files into public/maia/ ('true' or 'false'): the pinned
+      Maia-3 model (10.8 MB, from Hugging Face) and ONNX Runtime Web's WebAssembly build (copied
+      from node_modules). Builds need them, and so does the unit test that runs the real model.
     default: 'false'
   browser:
     description: A Playwright browser to install (chromium, firefox or webkit); empty for none.
@@ -46,6 +52,19 @@ runs:
         ENGINE: ${{ inputs.engine }}
       run: |
         if [ "$ENGINE" = "lite" ]; then npm run engine:setup -- --lite; else npm run engine:setup; fi
+
+    # Like the engine: the cache only saves the download, maia:setup checks the checksums.
+    - name: Restore the human-like opponent's model
+      if: inputs.maia == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: public/maia/*.onnx
+        key: maia-${{ hashFiles('scripts/setup-maia.mjs') }}
+
+    - name: Install the human-like opponent's files
+      if: inputs.maia == 'true'
+      shell: bash
+      run: npm run maia:setup
 
     - name: Read the Playwright version
       if: inputs.browser != ''

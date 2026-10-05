@@ -1,6 +1,6 @@
 {
   "name": "chess-trainer",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "private": true,
   "description": "Learn, practice and solve chess puzzles at any level — a fully static, installable web app built for GitHub Pages.",
   "license": "GPL-3.0-or-later",
@@ -9,9 +9,9 @@
     "node": ">=22.22"
   },
   "scripts": {
-    "predev": "node scripts/setup-engine.mjs --lite",
+    "predev": "node scripts/setup-engine.mjs --lite && node scripts/setup-maia.mjs --optional",
     "dev": "vite",
-    "prebuild": "node scripts/setup-engine.mjs && node scripts/build-lesson-index.mjs",
+    "prebuild": "node scripts/setup-engine.mjs && node scripts/setup-maia.mjs && node scripts/build-lesson-index.mjs",
     "build": "vite build",
     "postbuild": "node scripts/postbuild.mjs",
     "preview": "vite preview",
@@ -29,6 +29,7 @@
     "e2e:ui": "playwright test --ui",
     "check": "npm run lint && npm run lint:dead && npm run format:check && npm run typecheck && npm run test && npm run build && npm run bundle:check",
     "engine:setup": "node scripts/setup-engine.mjs",
+    "maia:setup": "node scripts/setup-maia.mjs",
     "puzzles:import": "node scripts/import-lichess-puzzles.mjs",
     "openings:import": "node scripts/import-openings.mjs",
     "puzzles:verify": "node scripts/verify-puzzles.mjs",
@@ -50,6 +51,7 @@
   "dependencies": {
     "@lichess-org/chessground": "^10.4.2",
     "chess.js": "^1.4.0",
+    "onnxruntime-web": "1.30.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router": "^8.4.0",

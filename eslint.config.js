@@ -13,6 +13,7 @@ export default tseslint.config(
       'playwright-report/**',
       'test-results/**',
       'public/engine/**',
+      'public/maia/**',
       'dev-dist/**',
       'scripts/lib/*.d.mts',
     ],

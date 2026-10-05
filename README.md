@@ -35,8 +35,8 @@
 </p>
 
 A complete chess trainer in a single web app: lessons, 48,000 puzzles, drills, opening repertoires,
-a Stockfish opponent with a coach, game analysis and an arcade of chess games — with nothing to sign
-up for. It runs entirely in your browser, installs as an app and keeps working on a plane.
+a Stockfish opponent with a coach, a human-like opponent that plays like a person of any rating, game
+analysis and an arcade of chess games — with nothing to sign up for. It runs entirely in your browser, installs as an app and keeps working on a plane.
 
 ## Why Chess Trainer
 
@@ -60,10 +60,13 @@ calibration, daily puzzle, Puzzle Rush, blind puzzles (the line in notation only
 at the start), Woodpecker sets, a review queue for misses, and puzzles made from the blunders in
 your own games.
 
-**Play** — Stockfish 19 at eight levels from a beatable Newcomer to full strength, with clocks,
-take-backs, hints, a coach that pauses on a mistake and explains it, a blunder check that asks
-"checks, captures, threats?" before a move that hangs material, blindfold play, two players at one
-device, and a start from any position.
+**Play** — Stockfish 19 at eight levels from a beatable Newcomer to full strength, or a human-like
+opponent: Maia-3, a neural network trained on millions of real games, which plays like a person rated
+600 to 2600 — the plausible plans and the missed tactics of that rating, not an engine's random
+blunders (an optional 25 MB download, run on your device). With clocks, take-backs, hints, a coach
+that pauses on a mistake and explains it, a blunder check that asks "checks, captures, threats?"
+before a move that hangs material, blindfold play, two players at one device, and a start from any
+position.
 
 **Analyze** — multi-line analysis by a multi-threaded Stockfish (with its full network as an optional
 99 MB download), a full variation tree, a position report, game review with an evaluation graph and
@@ -110,7 +113,7 @@ it works offline.
 git clone https://github.com/Real-Fruit-Snacks/chess-trainer.git
 cd chess-trainer
 npm install     # Node 22.22 or newer
-npm run dev     # downloads the engine on first run, then serves http://localhost:5173
+npm run dev     # downloads the engine and the human-like opponent on first run, then serves http://localhost:5173
 ```
 
 `npm run check` runs CI's quality and build gates locally: lint, dead-code and dependency check, format
@@ -129,12 +132,13 @@ GitHub release. Custom domains and other static hosts are covered in
 
 ## Built with
 
-| Part            | Technology                                                                                                     |
-| --------------- | -------------------------------------------------------------------------------------------------------------- |
-| App             | [React 19](https://react.dev), [TypeScript](https://www.typescriptlang.org), [Vite](https://vite.dev), Workbox |
-| Engine          | [Stockfish 19](https://stockfishchess.org) as WebAssembly in a worker: multi-threaded, full network optional   |
-| Board and chess | [Chessground](https://github.com/lichess-org/chessground), [chess.js](https://github.com/jhlywa/chess.js)      |
-| Data            | [Lichess](https://lichess.org) puzzle database and the chess-openings dataset (both CC0)                       |
+| Part            | Technology                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------ |
+| App             | [React 19](https://react.dev), [TypeScript](https://www.typescriptlang.org), [Vite](https://vite.dev), Workbox     |
+| Engine          | [Stockfish 19](https://stockfishchess.org) as WebAssembly in a worker: multi-threaded, full network optional       |
+| Human-like play | [Maia-3](https://huggingface.co/UofTCSSLab/Maia3-5M) run by [ONNX Runtime Web](https://onnxruntime.ai) in a worker |
+| Board and chess | [Chessground](https://github.com/lichess-org/chessground), [chess.js](https://github.com/jhlywa/chess.js)          |
+| Data            | [Lichess](https://lichess.org) puzzle database and the chess-openings dataset (both CC0)                           |
 
 Any evergreen browser with WebAssembly and Web Workers works: Chrome and Edge 111+, Firefox 121+,
 Safari 16.4+ (iOS 16.4+); the test suite runs on Chromium, Firefox and WebKit. The interface is in
@@ -150,8 +154,10 @@ is written and verified. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 Chess Trainer is licensed under the [GNU General Public License v3.0 or later](LICENSE). It bundles
 GPL-licensed components that are inseparable from the delivered app (Chessground for the board,
-Stockfish for the engine), so a copyleft licence for the whole is the honest choice. Third-party
-components and their licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The
-built site ships both texts (`licence.txt` and `notices.txt`) and links them from the footer of every
-page, next to the credits the components ask for — among them the classic piece set's, by Colin M.L.
-Burnett under CC BY-SA 3.0.
+Stockfish for the engine), so a copyleft licence for the whole is the honest choice. The human-like
+opponent's model, Maia-3, is under the GNU Affero General Public License v3, which the GPL v3 allows
+the app to be combined with ([LICENSES/AGPL-3.0.txt](LICENSES/AGPL-3.0.txt)). Third-party components
+and their licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The built site
+ships the texts (`licence.txt`, `licence-agpl.txt` and `notices.txt`) and links them from the footer
+of every page, next to the credits the components ask for — among them the classic piece set's, by
+Colin M.L. Burnett under CC BY-SA 3.0.

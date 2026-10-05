@@ -47,8 +47,8 @@ const FEATURES = [
     to: '/play',
     icon: 'play' as IconName,
     title: 'Play',
-    text: 'Eight opponents from “just learned the rules” to master strength. Take back moves, ask for hints, review afterwards.',
-    cta: 'Play the engine',
+    text: 'Eight engine levels from “just learned the rules” to master, or a human-like opponent that plays like a person of the rating you pick. Take back moves, ask for hints, review afterwards.',
+    cta: 'Choose an opponent',
   },
   {
     to: '/analyze',
@@ -158,8 +158,9 @@ export default function HomePage() {
             <h1 className="hero__title">Learn chess at your own pace — whatever your level.</h1>
             <p className="hero__lead">
               {siteConfig.name} runs entirely in your browser: interactive lessons, rating-aware
-              puzzles, drills, an opening trainer, a scalable engine to play against and a full
-              analysis board. No account, no ads, nothing to install unless you want to.
+              puzzles, drills, an opening trainer, an engine and a human-like opponent to play
+              against and a full analysis board. No account, no ads, nothing to install unless you
+              want to.
             </p>
             <div className="row">
               <LinkButton variant="primary" size="lg" to="/learn">

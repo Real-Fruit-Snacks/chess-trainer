@@ -25,11 +25,14 @@ import { getLessonMeta } from '@/features/learn/lessonMeta';
 import type { Fen, LongColor } from '@/chess/types';
 import { EngineCrashedError } from '@/engine/EngineClient';
 import { ENGINE_LEVELS } from '@/engine/levels';
+import { useMaiaDownload } from '@/engine/maia/maiaDownload';
+import { HUMAN_MAX_RATING, HUMAN_RATINGS } from '@/engine/maia/ratings';
 import { TIME_CONTROLS } from '@/lib/clock';
 import { siteConfig } from '@/site.config';
 import { useSettings } from '@/store/settings';
 import { useRepertoire } from '@/store/repertoire';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
+import { HumanOpponentDownload } from './HumanOpponentDownload';
 import { LadderCard } from './LadderCard';
 import { checkStartPosition } from './startPosition';
 import { canFollowBook, describeDeviation } from './openingBook';
@@ -50,6 +53,11 @@ const CATEGORY_LABEL: Record<string, string> = {
   rapid: 'Rapid',
   classical: 'Classical',
 };
+
+/** An error message as the end of a sentence the page writes itself (one full stop, not two). */
+function reasonOf(message: string | null): string {
+  return (message ?? 'unknown error').trim().replace(/\.+$/, '');
+}
 
 export default function PlayPage() {
   const navigate = useNavigate();
@@ -84,7 +92,12 @@ export default function PlayPage() {
     return ENGINE_LEVELS.some((l) => l.id === requested) ? requested : settings.playLevel;
   });
   const [timeControlId, setTimeControlId] = useState(settings.playTimeControl);
-  const [opponent, setOpponent] = useState<Opponent>('engine');
+  // The last kind of opponent, unless a link asks for an engine level.
+  const [opponent, setOpponent] = useState<Opponent>(() =>
+    searchParams.has('level') ? 'engine' : settings.playOpponent,
+  );
+  const [humanRating, setHumanRating] = useState(settings.playHumanRating);
+  const humanFiles = useMaiaDownload();
   const [autoFlip, setAutoFlip] = useState(true);
   // Opening practice: follow a repertoire while the game stays in book.
   const customRepertoires = useRepertoire((s) => s.custom);
@@ -128,7 +141,10 @@ export default function PlayPage() {
 
   const { game, position } = { game: play.game, position: play.game.position };
   const hotSeat = play.opponent === 'human';
-  const engineName = `Stockfish · ${play.level.name}`;
+  const humanlike = play.opponent === 'humanlike';
+  const engineName = humanlike ? `Maia · ${play.humanRating}` : `Stockfish · ${play.level.name}`;
+  /** Who takes over when a repertoire runs out. */
+  const playsOn = humanlike ? 'Maia plays on' : 'the engine plays on';
   const opponentName = hotSeat ? 'Two players' : engineName;
   const topColor: LongColor = play.orientation === 'white' ? 'black' : 'white';
   const bottomColor: LongColor = play.orientation;
@@ -151,6 +167,10 @@ export default function PlayPage() {
       playLevel: setup.levelId,
       playColor: setup.color,
       playTimeControl: setup.timeControlId,
+      playOpponent: setup.opponent ?? 'engine',
+      ...(setup.opponent === 'humanlike' && setup.humanRating !== undefined
+        ? { playHumanRating: setup.humanRating }
+        : {}),
     });
     setSetupOpen(false);
     setPeeks(0);
@@ -158,7 +178,7 @@ export default function PlayPage() {
   };
 
   const startGame = () => {
-    const book = bookChoice && opponent === 'engine' && !startFrom ? bookChoice : undefined;
+    const book = bookChoice && opponent !== 'human' && !startFrom ? bookChoice : undefined;
     if (book && !canFollowBook(book.pgn)) {
       toast(`“${book.name}” could not be read. Open it from Openings to copy or delete it.`, {
         tone: 'warning',
@@ -171,6 +191,7 @@ export default function PlayPage() {
       timeControlId,
       fen: startFrom ?? undefined,
       opponent,
+      humanRating,
       autoFlip: opponent === 'human' && autoFlip,
       coach: settings.playCoach,
       blunderCheck: settings.playBlunderCheck,
@@ -317,8 +338,9 @@ export default function PlayPage() {
       <div className="page-header page-header--lean">
         <h1>Play</h1>
         <p>
-          Eight engine levels, from “just learned the rules” to master, with or without a clock — or
-          two players at one device. Take back moves, ask for hints, or play blindfold.
+          Eight engine levels, from “just learned the rules” to master; a human-like opponent at any
+          rating from 600 to 2600; or two players at one device. With or without a clock — take back
+          moves, ask for hints, or play blindfold.
         </p>
       </div>
 
@@ -328,6 +350,19 @@ export default function PlayPage() {
             ? 'The engine stopped responding. Retry starts a fresh one and the game carries on.'
             : `The engine could not start: ${play.engineError?.message ?? 'unknown error'}.`}{' '}
           <Button size="sm" onClick={() => void play.retryEngine()}>
+            Retry
+          </Button>
+        </Alert>
+      ) : null}
+
+      {humanlike && play.started && (play.humanStatus === 'failed' || play.humanMoveError) ? (
+        <Alert tone="danger" role="alert">
+          <span data-testid="human-failed">
+            {play.humanStatus === 'failed'
+              ? `The human-like opponent could not run: ${reasonOf(play.humanError)}.`
+              : `The human-like opponent could not choose a move: ${reasonOf(play.humanMoveError)}.`}
+          </span>{' '}
+          <Button size="sm" onClick={play.retryHuman}>
             Retry
           </Button>
         </Alert>
@@ -402,13 +437,17 @@ export default function PlayPage() {
           <Card>
             <div className="row row--between">
               <strong>{play.started ? opponentName : 'No game in progress'}</strong>
-              {play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
+              {humanlike && play.started && play.humanStatus === 'loading' ? (
+                <Spinner label="Loading the human-like opponent" />
+              ) : play.engineStatus === 'loading' ? (
+                <Spinner label="Loading engine" />
+              ) : null}
             </div>
             {play.started ? (
               <p className="small muted" style={{ margin: '4px 0 0' }}>
                 {hotSeat
                   ? `Pass the device after each move${hasClock ? ` · ${play.timeControl.label}` : ''}.`
-                  : `${play.level.description} You play ${play.playerColor}${hasClock ? ` · ${play.timeControl.label}` : ''}${play.coach ? ' · Coach on' : ''}${play.blunderCheck ? ' · Blunder check on' : ''}.`}
+                  : `${humanlike ? `Plays like a ${play.humanRating}-rated player.` : play.level.description} You play ${play.playerColor}${hasClock ? ` · ${play.timeControl.label}` : ''}${play.coach ? ' · Coach on' : ''}${play.blunderCheck ? ' · Blunder check on' : ''}.`}
                 {play.book ? (
                   <>
                     {' '}
@@ -416,8 +455,8 @@ export default function PlayPage() {
                       {play.book.status === 'in-book'
                         ? `Book: ${play.book.name} — the opponent follows your repertoire.`
                         : play.book.status === 'deviated'
-                          ? `Book: ${play.book.name} — you left it at move ${Math.ceil((play.book.deviation?.ply ?? 0) / 2)}; the engine plays on.`
-                          : `Book: ${play.book.name} — out of book after move ${Math.ceil((play.book.endedAtPly ?? 0) / 2)}; the engine plays on.`}
+                          ? `Book: ${play.book.name} — you left it at move ${Math.ceil((play.book.deviation?.ply ?? 0) / 2)}; ${playsOn}.`
+                          : `Book: ${play.book.name} — out of book after move ${Math.ceil((play.book.endedAtPly ?? 0) / 2)}; ${playsOn}.`}
                     </span>
                   </>
                 ) : null}
@@ -522,7 +561,11 @@ export default function PlayPage() {
             <Button variant="ghost" onClick={() => setSetupOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" onClick={startGame}>
+            <Button
+              variant="primary"
+              onClick={startGame}
+              disabled={opponent === 'humanlike' && humanFiles.downloaded !== true}
+            >
               Start
             </Button>
           </>
@@ -538,7 +581,15 @@ export default function PlayPage() {
               </Button>
             </Alert>
           ) : null}
-          {play.suggestedLevel ? (
+          {play.suggestedRating && opponent === 'humanlike' ? (
+            <Alert tone="info">
+              Based on your last two games, try <strong>Maia · {play.suggestedRating}</strong>.{' '}
+              <Button size="sm" onClick={() => setHumanRating(play.suggestedRating ?? humanRating)}>
+                Use it
+              </Button>
+            </Alert>
+          ) : null}
+          {play.suggestedLevel && opponent === 'engine' ? (
             <Alert tone="info">
               Based on your last two games, try{' '}
               <strong>
@@ -558,16 +609,17 @@ export default function PlayPage() {
                 onChange={(e) => setOpponent(e.target.value as Opponent)}
               >
                 <option value="engine">Stockfish (engine)</option>
+                <option value="humanlike">A human-like opponent (Maia)</option>
                 <option value="human">Another person at this device</option>
               </Select>
             )}
           </Field>
-          {opponent === 'engine' && !startFrom ? (
+          {opponent !== 'human' && !startFrom ? (
             <Field
               label="Practise an opening"
               hint={
                 bookChoice
-                  ? `You play ${bookChoice.color}. The opponent follows the repertoire’s lines; when the book runs out, the engine takes over. Leaving the book pauses the game.`
+                  ? `You play ${bookChoice.color}. The opponent follows the repertoire’s lines; when the book runs out, ${opponent === 'humanlike' ? 'Maia' : 'the engine'} takes over. Leaving the book pauses the game.`
                   : 'Rehearse a repertoire against a live opponent.'
               }
             >
@@ -607,6 +659,28 @@ export default function PlayPage() {
                 </Select>
               )}
             </Field>
+          ) : opponent === 'humanlike' ? (
+            <>
+              <Field
+                label="Rating"
+                hint="Maia learned from millions of real games: it plays the moves people of this rating play — the misjudged plans and missed tactics included — rather than an engine’s random blunders."
+              >
+                {(id) => (
+                  <Select
+                    id={id}
+                    value={humanRating}
+                    onChange={(e) => setHumanRating(Number(e.target.value))}
+                  >
+                    {HUMAN_RATINGS.map((rating) => (
+                      <option key={rating} value={rating}>
+                        {rating}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <HumanOpponentDownload />
+            </>
           ) : (
             <Switch
               checked={autoFlip}
@@ -615,7 +689,7 @@ export default function PlayPage() {
               description="The board faces whoever is to move."
             />
           )}
-          {bookChoice && opponent === 'engine' && !startFrom ? null : (
+          {bookChoice && opponent !== 'human' && !startFrom ? null : (
             <Field label={opponent === 'human' ? 'Board faces' : 'Your colour'}>
               {(id) => (
                 <Select
@@ -662,7 +736,7 @@ export default function PlayPage() {
             label="Keyboard move entry"
             description="Type moves like Nf3 or e2e4 under the board."
           />
-          {opponent === 'engine' ? (
+          {opponent !== 'human' ? (
             <Switch
               checked={settings.playCoach}
               onChange={(next) => settings.update({ playCoach: next })}
@@ -674,7 +748,7 @@ export default function PlayPage() {
               }
             />
           ) : null}
-          {opponent === 'engine' ? (
+          {opponent !== 'human' ? (
             <Switch
               checked={settings.playBlunderCheck}
               onChange={(next) => settings.update({ playBlunderCheck: next })}
@@ -760,15 +834,25 @@ export default function PlayPage() {
               ) : null}
               {hotSeat
                 ? 'Analyze the game together to find the turning points.'
-                : play.suggestedLevel
-                  ? play.suggestedLevel.id > play.level.id
-                    ? `Two wins in a row — Level ${play.suggestedLevel.id} (${play.suggestedLevel.name}) should give you a better fight.`
-                    : `Two losses in a row — try Level ${play.suggestedLevel.id} (${play.suggestedLevel.name}) to work on fundamentals, then come back.`
-                  : play.gameOver.verdict === 'loss'
-                    ? 'Tip: analyze the game to find the turning point.'
-                    : play.gameOver.verdict === 'win' && play.level.id < ENGINE_LEVELS.length
-                      ? 'Nicely done. Win again at this level and we will suggest the next one.'
-                      : ''}
+                : humanlike
+                  ? play.suggestedRating
+                    ? play.suggestedRating > play.humanRating
+                      ? `Two wins in a row — Maia ${play.suggestedRating} should give you a better fight.`
+                      : `Two losses in a row — try Maia ${play.suggestedRating}, then come back.`
+                    : play.gameOver.verdict === 'loss'
+                      ? 'Tip: analyze the game to find the turning point.'
+                      : play.gameOver.verdict === 'win' && play.humanRating < HUMAN_MAX_RATING
+                        ? 'Nicely done. Win again at this rating and we will suggest a stronger one.'
+                        : ''
+                  : play.suggestedLevel
+                    ? play.suggestedLevel.id > play.level.id
+                      ? `Two wins in a row — Level ${play.suggestedLevel.id} (${play.suggestedLevel.name}) should give you a better fight.`
+                      : `Two losses in a row — try Level ${play.suggestedLevel.id} (${play.suggestedLevel.name}) to work on fundamentals, then come back.`
+                    : play.gameOver.verdict === 'loss'
+                      ? 'Tip: analyze the game to find the turning point.'
+                      : play.gameOver.verdict === 'win' && play.level.id < ENGINE_LEVELS.length
+                        ? 'Nicely done. Win again at this level and we will suggest the next one.'
+                        : ''}
             </>
           ) : null}
         </p>

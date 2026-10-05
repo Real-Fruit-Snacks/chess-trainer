@@ -135,8 +135,18 @@ export interface OpeningInsight {
   reliable: boolean;
 }
 
+/** Results against one engine level. */
 export interface LevelInsight {
   level: number;
+  games: number;
+  wins: number;
+  draws: number;
+  losses: number;
+}
+
+/** Results against the human-like opponent at one rating. */
+export interface RatingInsight {
+  rating: number;
   games: number;
   wins: number;
   draws: number;
@@ -158,6 +168,8 @@ export interface Insights {
   colours: ColourInsight[];
   openings: OpeningInsight[];
   levels: LevelInsight[];
+  /** The human-like opponent's games, by its rating. */
+  ratings: RatingInsight[];
   /** Games where the book was followed vs left early. */
   book: { games: number; deviated: number; averageBookMoves: number | null };
   workOn: WorkItem[];
@@ -325,23 +337,29 @@ export function buildInsights(
     .slice(0, 8);
 
   const levels = new Map<number, LevelInsight>();
+  const ratings = new Map<number, RatingInsight>();
   let bookGames = 0;
   let bookDeviated = 0;
   let bookMoves = 0;
   for (const game of engineGames) {
-    const row = levels.get(game.level) ?? {
-      level: game.level,
-      games: 0,
-      wins: 0,
-      draws: 0,
-      losses: 0,
-    };
-    row.games += 1;
-    const outcome = outcomeFor(game.result, game.color);
-    if (outcome === 'win') row.wins += 1;
-    else if (outcome === 'draw') row.draws += 1;
-    else if (outcome === 'loss') row.losses += 1;
-    levels.set(game.level, row);
+    // The human-like opponent has a rating, not an engine level: its games get rows of their own.
+    const humanlike = game.source === 'humanlike';
+    if (!humanlike || game.opponentRating !== undefined) {
+      const key = humanlike ? (game.opponentRating ?? 0) : game.level;
+      const rows: Map<number, { games: number; wins: number; draws: number; losses: number }> =
+        humanlike ? ratings : levels;
+      const row =
+        rows.get(key) ??
+        (humanlike
+          ? { rating: key, games: 0, wins: 0, draws: 0, losses: 0 }
+          : { level: key, games: 0, wins: 0, draws: 0, losses: 0 });
+      row.games += 1;
+      const outcome = outcomeFor(game.result, game.color);
+      if (outcome === 'win') row.wins += 1;
+      else if (outcome === 'draw') row.draws += 1;
+      else if (outcome === 'loss') row.losses += 1;
+      rows.set(key, row);
+    }
     if (game.book) {
       bookGames += 1;
       if (game.book.status === 'deviated') bookDeviated += 1;
@@ -386,6 +404,7 @@ export function buildInsights(
     colours: [colours.white, colours.black],
     openings: openingInsights,
     levels: [...levels.values()].sort((a, b) => a.level - b.level),
+    ratings: [...ratings.values()].sort((a, b) => a.rating - b.rating),
     book: {
       games: bookGames,
       deviated: bookDeviated,

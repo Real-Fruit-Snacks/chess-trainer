@@ -99,6 +99,17 @@ the engine rates yours as good. Filter by era, difficulty and what you have play
 - **Stockfish 19** in the browser at **eight strength levels**, from a beatable "Newcomer" (about 400)
   to full strength (the ratings are a rough guide), with optional clocks from bullet to classical. A
   flag that falls when the other side could never checkmate is a draw, as in the rules.
+- A **human-like opponent** at any rating from 600 to 2600, in steps of 100. Maia-3, a neural network
+  trained on millions of online games, predicts how players of that rating move in the position, and
+  the opponent plays a move drawn from the prediction (never one the model expects fewer than 2% of
+  such players to choose). So it plays like a person of the rating — natural plans, misjudged positions, missed tactics
+  — rather than a strong engine with random blunders added, and no two games go the same way. It
+  takes a moment over a move, longer when the position is less clear to it and less when its clock
+  runs low. It is a one-time download of about 25 MB (the model and the runtime that plays it), kept
+  on the device for offline play and removable in Settings, and it runs in a worker on your device.
+  Hints, the coach and the review still come from Stockfish, and the blunder check and opening
+  practice work as they do against the engine. Its games are recorded by rating, and two wins or two losses in a row
+  at one rating suggest a step of 100 up or down.
 - Take-backs (until the game is over — a finished game is recorded once), hints and "show threat"
   (the arrow's move is also given in words), keyboard move entry that keeps its focus between moves,
   PGN export and a hand-off to analysis from your side of the board. "Play again" repeats the last
@@ -114,8 +125,8 @@ the engine rates yours as good. Filter by era, difficulty and what you have play
   the moves it held back.
 - An **engine ladder** with the next rung one click away; its height is remembered even when the old
   games have scrolled out of the history, and a slip (three losses at a rung) clears after one game at
-  the rung below. Only ordinary engine games count: handicap, simul and drill games are recorded under
-  their own mode.
+  the rung below. Only ordinary engine games count: handicap, simul, drill and human-like games are
+  recorded under their own mode.
 - **Opening practice** against a repertoire (the hint shows the repertoire's move; a clock pauses while
   a deviation alert is up), **two players** at one device, **blindfold** play with a peek button (the
   pieces return when the game ends), and a start from **any position**: a FEN, a lesson diagram, a
@@ -215,7 +226,7 @@ your **opening statistics** per colour, find where you or your opponents **left 
 review every game in one go, turn the mistakes into puzzles and the threats you missed into
 positions for the threat drill, analyze a game yourself before the engine does, and read the
 **insights** — accuracy by
-phase, the mistakes you make most, results by colour, opening and engine level — with a "work on" list
+phase, the mistakes you make most, results by colour and opening — with a "work on" list
 of lessons and themes. Rows resting on fewer than 3 games or 20 reviewed moves are greyed out.
 
 ## Home and Progress
@@ -228,7 +239,7 @@ of lessons and themes. Rows resting on fewer than 3 games or 20 reviewed moves a
   introduction is for newcomers.
 - **Progress**: rating history chart, a weekly summary (the last seven calendar days against the seven
   before, with the trend shown by an arrow as well as colour), solve statistics, strengths and
-  weaknesses by theme (measured against your own accuracy), lesson completion, the game log with results per engine level, arcade records, drill and
+  weaknesses by theme (measured against your own accuracy), lesson completion, the game log with results per engine level and per human-like rating, arcade records, drill and
   rush records, **thinking skills** (threats named and met, blind-puzzle levels, the share of turning
   points caught in your own analyses, moves the blunder check held back), opening and puzzle review counts, and a reminder when a backup is overdue (shown once
   there is anything worth keeping — puzzles, lessons, openings or games — with a week's "Later").
@@ -244,7 +255,8 @@ strips to pick from, coordinates, legal-move dots, last-move and check highlight
 **magnified dragged piece** with a circle or square **drag target**, moving by tap, drag or either,
 and captured material beside the player bars as the difference, every capture, or nothing.
 **Play:** defaults plus **focus mode**, which hides the header and navigation while you play the
-engine: in Play, the simul and the arcade games. **Single-key shortcuts** can be turned off.
+computer: in Play, the simul and the arcade games; and the **human-like opponent**'s download, with
+its progress, and a Delete that frees its 25 MB. **Single-key shortcuts** can be turned off.
 Engine and analysis options (the engine level for the next game, review and analysis depth,
 threads — on by default — and the optional **full engine** download with its progress, coach mode),
 the puzzle rating reset or calibration (a button with a
@@ -254,8 +266,9 @@ install, a **storage meter**, and backups — export or import as JSON, **share 
 another device, or open a backup file with the installed app. An import is checked field by field,
 then asks first: it shows the backup's date and what it holds (puzzle attempts, imported games, saved
 analyses, custom repertoires), offers to export the current progress, replaces everything in the
-profile at once, and can be undone from the toast that follows. Backups since 0.15 (format 8)
-carry the thinking-skill records too; since 0.12 (format 7) they include the imported games and, on a device with several profiles, carry the profile's name in the
+profile at once, and can be undone from the toast that follows. Backups since 0.16 (format 9)
+keep games against the human-like opponent with its rating; since 0.15 (format 8) they carry the
+thinking-skill records too; since 0.12 (format 7) they include the imported games and, on a device with several profiles, carry the profile's name in the
 file name. _Reset everything_ clears this profile's progress, repertoires, library and imported games
 and the device settings, a downloaded full engine included; the other profiles are kept, and the
 dialog says so.
@@ -330,7 +343,9 @@ sideways.
 
 There are no accounts and no server: everything you do is stored in your browser, on your device.
 The app talks to the network only when you ask it to — importing your games from Lichess or
-chess.com, and the opening explorer and tablebase lookups, which are off by default. Backups are
+chess.com, and the opening explorer and tablebase lookups, which are off by default. Optional
+downloads (the full engine, the human-like opponent, the whole puzzle set) come from the app's own
+site, and the human-like opponent runs on your device like the engine: no position leaves it. Backups are
 files you keep. The page's Content-Security-Policy holds the app to that: it can connect only to
 its own site and those four services (lichess.org, its explorer and tablebase, api.chess.com), runs
 only its own scripts, and refuses to be shown inside another site's frame.
@@ -360,10 +375,10 @@ suite on every run.
 
 - **Static only.** Vite, React and TypeScript build to plain files. The engine is a WebAssembly
   worker and the puzzle database is a set of JSON chunks fetched on demand.
-- **Free software.** GPL-3.0-or-later. The site ships its licence and the third-party notices
-  (`licence.txt`, `notices.txt`), linked from the footer of every page with the credits: Stockfish
-  and Chessground (GPL-3.0), the Classic pieces (Colin M.L. Burnett, CC BY-SA 3.0) and the Lichess
-  puzzles and openings (CC0).
+- **Free software.** GPL-3.0-or-later. The site ships its licences and the third-party notices
+  (`licence.txt`, `licence-agpl.txt`, `notices.txt`), linked from the footer of every page with the
+  credits: Stockfish and Chessground (GPL-3.0), Maia-3 (AGPL-3.0), the Classic pieces (Colin M.L.
+  Burnett, CC BY-SA 3.0) and the Lichess puzzles and openings (CC0).
 - **Engine.** [Stockfish.js](https://github.com/nmrugg/stockfish.js) 19. The lite build, with
   Stockfish's small network (about 2 MB), runs by default and is far stronger than any human; the
   lowest playing levels are weakened in software (shallow search, sampling among several candidate
@@ -383,6 +398,15 @@ suite on every run.
   keeps it offline. It is noticeably stronger in deep, sharp positions, which analysis and game review
   gain most from. Until the download is complete, or where the full engine cannot start (a phone short
   of memory, say), the lite engine runs. Switching it off deletes the download.
+- **Human-like opponent.** [Maia-3](https://huggingface.co/UofTCSSLab/Maia3-5M) (University of
+  Toronto Computational Social Science Lab; the 5M-parameter model in half precision, 10.8 MB) runs
+  in its own worker on [ONNX Runtime Web](https://onnxruntime.ai)'s WebAssembly build (14.2 MB). It
+  reads the board from the side to move's point of view and scores every move for a player of the
+  chosen rating facing one of the same rating; the app keeps the legal moves, turns the scores into
+  probabilities and draws one. The two files come from the app's own site, are checked against their
+  SHA-256 before they are kept (a cut-off download or a captive portal's page is refused), and live
+  in a cache of their own that the worker reads directly — offline, and with or without the service
+  worker.
 - **Puzzles.** `scripts/import-lichess-puzzles.mjs` streams the Lichess puzzle dump, keeps
   well-established puzzles (at least 500 plays, popularity 70 or more) and reservoir-samples 6,000 per
   rating band with a fixed seed, keeping the ids of the previous set so histories stay valid. The
@@ -416,6 +440,8 @@ Any evergreen browser with WebAssembly and Web Workers: Chrome and Edge 111+, Fi
 (iOS 16.4+) — the floor set by the stylesheet (`color-mix()`, `:has()`, `dvh` units and container
 queries). The threaded engine runs in all of them from the second load on (once the service worker
 isolates the page) wherever at least three CPU cores are reported; elsewhere the one-thread engine
-runs. If the engine fails to load, lessons and puzzles still work. CI runs the end-to-end tests
+runs. If the engine fails to load, lessons and puzzles still work. The human-like opponent needs
+WebAssembly SIMD (in all of them) and site storage on a secure connection; where a browser cannot keep
+its files, the setup says so. CI runs the end-to-end tests
 on Chromium (desktop and a phone profile), Firefox and WebKit, and once more under the production
 base path. The interface is in English only.

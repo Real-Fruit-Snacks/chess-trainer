@@ -19,8 +19,9 @@ describe('CI path filter', () => {
     expect(documentationOnly(['package.json'])).toBe(false);
     expect(documentationOnly(['.github/workflows/ci.yml'])).toBe(false);
     expect(documentationOnly(['src/features/learn/lessons/beginner.ts'])).toBe(false);
-    // Shipped in dist/ as licence.txt and notices.txt.
+    // Shipped in dist/ as licence.txt, licence-agpl.txt and notices.txt.
     expect(documentationOnly(['LICENSE'])).toBe(false);
+    expect(documentationOnly(['LICENSES/AGPL-3.0.txt'])).toBe(false);
     expect(documentationOnly(['THIRD_PARTY_NOTICES.md'])).toBe(false);
   });
 

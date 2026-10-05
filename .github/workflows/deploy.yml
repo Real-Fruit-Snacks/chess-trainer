@@ -40,10 +40,12 @@ jobs:
         id: pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
 
-      # Dependencies without install scripts, then the engine, downloaded and checksum-verified.
+      # Dependencies without install scripts, then the engine and the human-like opponent's
+      # files, downloaded and checksum-verified.
       - uses: ./.github/actions/setup
         with:
           engine: 'true'
+          maia: 'true'
 
       - name: Build
         # configure-pages reports the site's base path ("/" for user/org sites,

@@ -9,7 +9,7 @@ const ROWS: { key: keyof WeekFigures; label: string; suffix?: string }[] = [
   { key: 'puzzlesSolved', label: 'Puzzles solved' },
   { key: 'accuracy', label: 'Puzzle accuracy', suffix: '%' },
   { key: 'lessonsCompleted', label: 'Lessons completed' },
-  { key: 'gamesPlayed', label: 'Games vs the engine' },
+  { key: 'gamesPlayed', label: 'Games vs the computer' },
   { key: 'drills', label: 'Drills' },
   { key: 'trainingDays', label: 'Training days' },
   { key: 'ratingChange', label: 'Rating change' },

@@ -88,6 +88,37 @@ function contentSecurityPolicyHtml(): Plugin {
   };
 }
 
+/**
+ * ONNX Runtime's bundle names its WebAssembly with `new URL('…wasm', import.meta.url)`, which
+ * Vite would copy into the build as an asset — 14 MB, a second copy. The app never uses that
+ * URL: the human-like opponent's worker hands the runtime the binary itself, from the device's
+ * own download (public/maia/). Splitting the literal keeps Vite from collecting the file; the
+ * reference stays for the runtime, which never fetches it.
+ */
+function ortWasmReference(): Plugin {
+  const literal = '"ort-wasm-simd-threaded.wasm",import.meta.url';
+  return {
+    name: 'chess-trainer:ort-wasm-reference',
+    enforce: 'pre',
+    transform(code, id) {
+      if (
+        !/onnxruntime-web[\\/]dist[\\/]ort\.wasm\.bundle\.min\.mjs$/.test(id.split('?')[0] ?? '')
+      ) {
+        return null;
+      }
+      if (!code.includes(literal)) {
+        this.error(
+          'onnxruntime-web no longer names its binary as expected: update ortWasmReference.',
+        );
+      }
+      return {
+        code: code.replaceAll(literal, '"ort-wasm-simd-threaded"+".wasm",import.meta.url'),
+        map: null,
+      };
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const base = resolveBase(mode);
 
@@ -226,6 +257,8 @@ export default defineConfig(({ mode }) => {
             '**/engine/stockfish-19-single.wasm',
             '**/engine/version.json',
             '**/puzzles/b*-@(0[1-9]|[1-9][0-9]).json',
+            // The human-like opponent (about 25 MB): downloaded only when the learner asks for it.
+            '**/maia/**',
           ],
           // The Stockfish WASM binary is ~1.8 MB; Workbox's default cap is 2 MB.
           maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
@@ -242,6 +275,7 @@ export default defineConfig(({ mode }) => {
     },
     worker: {
       format: 'es',
+      plugins: () => [ortWasmReference()],
     },
     build: {
       target: 'es2022',

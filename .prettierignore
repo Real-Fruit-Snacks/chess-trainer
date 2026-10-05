@@ -4,6 +4,7 @@ coverage
 playwright-report
 test-results
 public/engine
+public/maia
 public/puzzles/*.json
 public/openings/*.json
 src/features/arcade/positions.json

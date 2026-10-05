@@ -6,6 +6,73 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-05
+
+An opponent that plays like a person. The engine levels are Stockfish held back by shallow searches
+and random moves: beatable, but nothing like a 1500 player who misjudges a position. The new
+human-like opponent is a neural network trained on millions of real games, and it plays the moves
+people of the chosen rating play.
+
+### Added
+
+- **A human-like opponent** (_Play → New game → Opponent_), at any rating from 600 to 2600 in steps
+  of 100. [Maia-3](https://huggingface.co/UofTCSSLab/Maia3-5M), from the University of Toronto's
+  Computational Social Science Lab, predicts how players of that rating move in each position, and
+  the opponent plays a move drawn from that prediction — never one the model expects fewer than 2%
+  of such players to choose. It goes wrong the way people of its rating do rather than at random, and
+  no two games are the same. It takes a moment over its moves: longer when the position is less clear
+  to it, less in the opening and when its clock runs low.
+- It is a one-time download of about 25 MB — the model and the runtime that plays it — offered in the
+  game setup and in _Settings → Play_, with progress and a Stop button. The files are checked against
+  their SHA-256 before they are kept, stay on the device for offline play, and Delete in Settings
+  removes them. The model runs in a worker on your device: no position leaves it. If it cannot run —
+  or cannot choose a move — the game says why and offers Retry, and it starts again by itself if it
+  is stopped mid-game.
+- Hints, the coach, the blunder check, opening practice, the clocks, blindfold play and the review
+  work as they do against the engine. The game setup remembers the opponent and the rating for next
+  time (a link that asks for an engine level still opens on the engine), and two wins or two losses
+  in a row at one rating suggest a step of 100 up or down.
+- Games against the human-like opponent are recorded by rating: in the game log ("Human-like ·
+  1500") and in Progress's results, next to the engine levels. The engine ladder and the level
+  suggestions count engine games only.
+- The footer credits Maia-3, and its licence, the GNU Affero General Public License v3, ships with the
+  site as `licence-agpl.txt`.
+
+### Changed
+
+- Backups are export format 9: a game record can come from the human-like opponent, with the rating
+  it played at. Backups from every earlier format import as before; a 0.16 backup opened in an older
+  version imports with a warning, without the games against the human-like opponent.
+- Wording that took the engine for the only opponent now covers both: the coach and blunder-check
+  settings, the Home page, "Practise in a game" on a repertoire (it opens the game setup), and the
+  weekly summary's "Games vs the computer".
+- `npm run build` also installs the human-like opponent's files with `npm run maia:setup` — the
+  model from a pinned revision, the runtime from `onnxruntime-web`, both checksum-verified — and
+  `npm run dev` tries to, with only a warning when it cannot. CI caches the model's download like
+  the engine's.
+
+### Testing
+
+- Unit tests for the model's input and output: the board seen from the side to move (mirrored for
+  Black), the 4,352-move vocabulary with promotions for both colours, legal moves only in the
+  prediction, the draw from it and the pause before a move; for the worker client (one worker, a
+  failed load retried, a crashed or stopped worker failing what was waiting); for the download (the
+  runtime then the model, progress, a file that is not the pinned one refused and nothing of it kept,
+  an earlier version's files dropped, Stop, Delete); and for the game hook and page (the move drawn
+  from the prediction after its pause, waiting for the model to load, a failed load or move and
+  Retry, a model stopped mid-game started again, the record and the rating suggestion, the setup
+  with its rating and download, Start only once the files are there, the choice remembered), the
+  settings, the insights by rating, the setup script's pins and clean-up, and the shipped licence.
+- The real model runs in the unit suite — in Node, through the app's own modules, whenever
+  `npm run maia:setup` has installed it (CI's quality job does): 1.e4 and 1.d4 first, more 1...e5
+  against 1.e4 at 800 and more Sicilians at 2200, a hanging queen taken, promotions for both colours,
+  whole games of legal moves at 600, 1500 and 2600, and the very scores Chromium, Firefox and WebKit
+  computed.
+- End to end in every browser: the download from the game setup, a game with the model's real
+  replies, its record on Progress, a game played offline from the stored copy after a reload (online
+  in WebKit, which cannot start a worker offline under Playwright), Delete in Settings, and a game in
+  a cross-origin-isolated page (the threaded engine's).
+
 ## [0.15.0] - 2026-10-05
 
 Three habits that separate improving players from the rest, each with its own trainer: seeing a line

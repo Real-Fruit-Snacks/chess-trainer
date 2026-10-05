@@ -459,8 +459,15 @@ export function Shell() {
             </a>
           </span>
           <span className="faint" data-testid="credits">
-            Engine: Stockfish (GPL-3.0) · Board: Chessground (GPL-3.0) · Pieces (Classic): Colin
-            M.L. Burnett,{' '}
+            Engine: Stockfish (GPL-3.0) · Human-like opponent: Maia-3 (
+            <a
+              href={`${import.meta.env.BASE_URL}licence-agpl.txt`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              AGPL-3.0
+            </a>
+            ) · Board: Chessground (GPL-3.0) · Pieces (Classic): Colin M.L. Burnett,{' '}
             <a
               href="https://creativecommons.org/licenses/by-sa/3.0/"
               target="_blank"

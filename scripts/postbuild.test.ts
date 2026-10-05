@@ -27,8 +27,13 @@ describe('postbuild', () => {
     expect(existsSync(join(dist, '.nojekyll'))).toBe(true);
     expect(readFileSync(join(dist, 'licence.txt'), 'utf8')).toBe(readFileSync('LICENSE', 'utf8'));
     expect(readFileSync(join(dist, 'licence.txt'), 'utf8')).toContain('GNU GENERAL PUBLIC LICENSE');
+    // The human-like opponent's model is AGPL-3.0: its licence ships too.
+    expect(readFileSync(join(dist, 'licence-agpl.txt'), 'utf8')).toContain(
+      'GNU AFFERO GENERAL PUBLIC LICENSE',
+    );
     expect(readFileSync(join(dist, 'notices.txt'), 'utf8')).toContain('Colin M.L. Burnett');
-    expect(result.licences).toEqual(['licence.txt', 'notices.txt']);
+    expect(readFileSync(join(dist, 'notices.txt'), 'utf8')).toContain('Maia-3');
+    expect(result.licences).toEqual(['licence.txt', 'licence-agpl.txt', 'notices.txt']);
 
     expect(result.maps.sort()).toEqual([join('assets', 'index-abc.js.map'), 'sw.js.map']);
     expect(existsSync(join(dist, 'assets', 'index-abc.js.map'))).toBe(false);

@@ -1,4 +1,5 @@
 import { toast } from '@/components/ui/toastStore';
+import { describeFailure } from '@/lib/describeFailure';
 import { chooseEngineBuild, type EngineBuild, type ThreadEnvironment } from '@/engine/build';
 import { fetchBuild, isBuildDownloaded, removeFullEngine } from '@/engine/fullEngine';
 
@@ -91,16 +92,6 @@ export function subscribeToEngineDownload(listener: () => void): () => void {
 /** The current progress, or null when nothing is downloading. */
 export function currentEngineDownload(): EngineDownloadProgress | null {
   return task ? { ...task.progress } : null;
-}
-
-/** Why a download failed, in words: the browser's own messages are terse ("Failed to fetch"). */
-export function describeFailure(err: unknown): string {
-  // A network failure is the one TypeError fetch throws.
-  if (err instanceof TypeError) return 'the network could not be reached.';
-  if (err instanceof DOMException && err.name === 'QuotaExceededError') {
-    return 'there is not enough storage space on this device.';
-  }
-  return err instanceof Error ? err.message : String(err);
 }
 
 /**

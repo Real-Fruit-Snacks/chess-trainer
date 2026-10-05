@@ -16,6 +16,9 @@ import {
 import type { Fen, LongColor, MoveInput, PromotionPiece, Uci } from '@/chess/types';
 import { useChess } from '@/chess/useChess';
 import { ENGINE_LEVELS, type EngineLevel, getLevel } from '@/engine/levels';
+import { humanThinkMs, sampleHumanMove } from '@/engine/maia/encoding';
+import { maiaClient, type MaiaStatus, useMaiaStatus } from '@/engine/maia/maiaClient';
+import { isHumanRating, stepHumanRating } from '@/engine/maia/ratings';
 import { useEngine } from '@/engine/useEngine';
 import {
   type ClockState,
@@ -32,7 +35,7 @@ import { gameEndSound, playSound } from '@/lib/sound';
 import { type GameRecordSource, useProgress } from '@/store/progress';
 import { cardsFor, useRepertoire } from '@/store/repertoire';
 import { chooseLevelMove, ensureSkill, type SkillCache } from './engineMove';
-import { useSettings } from '@/store/settings';
+import { type PlayOpponent, useSettings } from '@/store/settings';
 import {
   type BookDeviation,
   type BookState,
@@ -55,7 +58,12 @@ export interface GameOver {
   verdict: 'win' | 'loss' | 'draw';
 }
 
-export type Opponent = 'engine' | 'human';
+/**
+ * Who plays the other side: the engine at one of its levels, the human-like
+ * opponent (a model trained on people's games, at a rating), or a second
+ * person at the same device.
+ */
+export type Opponent = PlayOpponent;
 
 export interface GameSetup {
   color: LongColor | 'random';
@@ -63,15 +71,17 @@ export interface GameSetup {
   timeControlId: string;
   /** Start from this position instead of the initial one. */
   fen?: Fen;
-  /** Play the engine (default) or a second person at the same device. */
+  /** Play the engine (default), the human-like opponent or a second person at the same device. */
   opponent?: Opponent;
+  /** Games against the human-like opponent: the rating it plays at. */
+  humanRating?: number;
   /** Two-player games: turn the board towards the side to move after every move. */
   autoFlip?: boolean;
-  /** Pause after a mistake with an explanation and the offer to take it back (untimed engine games). */
+  /** Pause after a mistake with an explanation and the offer to take it back (untimed games against the computer). */
   coach?: boolean;
   /**
    * Hold back a move that hangs material or allows mate, asking "checks,
-   * captures, threats?" first (games against the engine).
+   * captures, threats?" first (games against the computer).
    */
   blunderCheck?: boolean;
   /** Practise this repertoire: the opponent follows its lines while the game stays in book. */
@@ -118,10 +128,19 @@ export interface HintMove {
 
 export interface UsePlayVsEngine {
   game: ReturnType<typeof useChess>;
-  /** Who plays the other side: the engine or a second person (hot-seat). */
+  /** Who plays the other side: the engine, the human-like opponent or a second person (hot-seat). */
   opponent: Opponent;
   playerColor: LongColor;
   level: EngineLevel;
+  /** The rating the human-like opponent plays at (its games). */
+  humanRating: number;
+  /** The human-like opponent's model: loading, ready, or failed (with why). */
+  humanStatus: MaiaStatus;
+  humanError: string | null;
+  /** Why the human-like opponent could not choose its last move (the model itself loaded). */
+  humanMoveError: string | null;
+  /** Loads the human-like opponent again after a failure, and asks it for its move again. */
+  retryHuman: () => void;
   timeControl: TimeControl;
   /** FEN the current game started from. */
   startFen: Fen;
@@ -138,6 +157,8 @@ export interface UsePlayVsEngine {
   hinting: boolean;
   /** Suggested level after the last game, if the results call for a change. */
   suggestedLevel: EngineLevel | null;
+  /** The same for the human-like opponent: a rating a step up or down. */
+  suggestedRating: number | null;
   /** Coach mode is on for this game. */
   coach: boolean;
   /** The coach is checking the last move or waiting for a decision on it. */
@@ -185,6 +206,12 @@ export interface UsePlayVsEngine {
 
 const MIN_THINK_MS = 350;
 const LOW_TIME_MS = 10_000;
+
+/** The opponent's next move, and how long to look as if thinking about it. */
+interface EngineChoice {
+  uci: Uci;
+  thinkMs: number;
+}
 
 export function usePlayVsEngine(): UsePlayVsEngine {
   const autoQueen = useSettings((s) => s.autoQueen);
@@ -239,6 +266,12 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   );
   const [hinting, setHinting] = useState(false);
   const [suggestedLevel, setSuggestedLevel] = useState<EngineLevel | null>(null);
+  const [suggestedRating, setSuggestedRating] = useState<number | null>(null);
+  const [humanRating, setHumanRating] = useState<number>(settings.playHumanRating);
+  const { status: humanStatus, error: humanError } = useMaiaStatus();
+  const [humanMoveError, setHumanMoveError] = useState<string | null>(null);
+  /** Bumped by Retry, so the opponent's turn is played again after a failed move. */
+  const [humanRetries, setHumanRetries] = useState(0);
 
   const level = useMemo(() => getLevel(levelId), [levelId]);
   const timeControl = useMemo(() => getTimeControl(timeControlId), [timeControlId]);
@@ -278,6 +311,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   }, [engine]);
   const hasClock = timeControl.initialMs > 0;
   const hotSeat = opponent === 'human';
+  const humanlike = opponent === 'humanlike';
   /** The side whose threats "Threat" shows: the engine, or whoever is not to move. */
   const rivalColor: LongColor = hotSeat
     ? position.turn === 'white'
@@ -457,7 +491,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     });
   }, [position.status, started, gameOver, playerColor, hotSeat, syncClockView]);
 
-  // Persist finished engine games once and work out a level suggestion.
+  // Persist finished games against the computer once and work out a level (or rating) suggestion.
   useEffect(() => {
     if (!gameOver || recordedRef.current) return;
     recordedRef.current = true;
@@ -466,15 +500,17 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       return;
     }
     recordGame({
-      level: level.id,
+      // The human-like opponent has a rating rather than an engine level.
+      level: humanlike ? 0 : level.id,
+      ...(humanlike ? { opponentRating: humanRating } : {}),
       color: playerColor,
       result: gameOver.result,
       reason: gameOver.reason,
       plies: position.history.length,
       pgn: gameRef.current.pgn(
-        pgnHeaders(playerColor, level, timeControl, gameOver.result, 'engine', event),
+        pgnHeaders(playerColor, level, timeControl, gameOver.result, opponent, event, humanRating),
       ),
-      source: bookNow ? 'book' : source,
+      source: humanlike ? 'humanlike' : bookNow ? 'book' : source,
       ...(event ? { event } : {}),
       ...(bookNow
         ? {
@@ -489,7 +525,11 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     });
     const recent = useProgress
       .getState()
-      .games.filter((g) => g.level === level.id)
+      .games.filter((g) =>
+        humanlike
+          ? g.source === 'humanlike' && g.opponentRating === humanRating
+          : g.source !== 'humanlike' && g.level === level.id,
+      )
       .slice(0, 2);
     const verdicts = recent.map((g) =>
       g.result === '1/2-1/2'
@@ -498,6 +538,15 @@ export function usePlayVsEngine(): UsePlayVsEngine {
           ? 'win'
           : 'loss',
     );
+    if (humanlike) {
+      // Two wins in a row at a rating: a hundred points up; two losses: a hundred down.
+      const twoWins = verdicts.length === 2 && verdicts.every((v) => v === 'win');
+      const twoLosses = verdicts.length === 2 && verdicts.every((v) => v === 'loss');
+      const next = stepHumanRating(humanRating, twoWins ? 1 : twoLosses ? -1 : 0);
+      setSuggestedLevel(null);
+      setSuggestedRating(next !== humanRating ? next : null);
+      return;
+    }
     if (verdicts.length === 2 && verdicts.every((v) => v === 'win')) {
       setSuggestedLevel(ENGINE_LEVELS.find((l) => l.id === level.id + 1) ?? null);
     } else if (verdicts.length === 2 && verdicts.every((v) => v === 'loss')) {
@@ -513,13 +562,47 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     recordGame,
     timeControl,
     hotSeat,
+    humanlike,
+    humanRating,
+    opponent,
     bookNow,
     source,
     event,
   ]);
 
+  // The human-like opponent's model loads with its first game; Retry loads it again after a failure.
+  // The model loads when a game against it starts, and again if it was stopped mid-game (its
+  // files deleted from another tab, say). A failure waits for Retry.
+  useEffect(() => {
+    if (!humanlike || !started || humanStatus !== 'idle') return;
+    void maiaClient()
+      .load()
+      .catch(() => undefined);
+  }, [humanlike, started, humanStatus]);
+  const retryHuman = useCallback(() => {
+    setHumanMoveError(null);
+    setHumanRetries((n) => n + 1);
+    if (maiaClient().status !== 'ready') {
+      void maiaClient()
+        .load()
+        .catch(() => undefined);
+    }
+  }, []);
+
   const chooseEngineMove = useCallback(
-    async (fen: string, movesUci: Uci[]): Promise<Uci | null> => {
+    async (fen: string, movesUci: Uci[]): Promise<EngineChoice | null> => {
+      if (humanlike) {
+        // A move as a player of the rating might choose it, after a pause as long as theirs.
+        const live = gameRef.current.position;
+        const prediction = await maiaClient().predict(live.fen, humanRating);
+        const move = sampleHumanMove(prediction.moves);
+        if (!move) return null;
+        const clockMs = hasClock ? remaining(clockRef.current, engineColor, Date.now()) : null;
+        return {
+          uci: move.uci,
+          thinkMs: humanThinkMs(prediction.moves, { ply: live.history.length, clockMs }),
+        };
+      }
       // Never let the engine think longer than a slice of its own remaining time.
       const depth = level.depth;
       let movetime = level.movetime;
@@ -533,7 +616,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
           movetime = Math.min(budget, 300);
         }
       }
-      return chooseLevelMove(client(), skillCache.current, {
+      const uci = await chooseLevelMove(client(), skillCache.current, {
         level,
         fen,
         moves: movesUci,
@@ -542,8 +625,9 @@ export function usePlayVsEngine(): UsePlayVsEngine {
         depth,
         movetime,
       });
+      return uci ? { uci, thinkMs: MIN_THINK_MS } : null;
     },
-    [client, level, hasClock, engineColor],
+    [client, level, hasClock, engineColor, humanlike, humanRating],
   );
 
   const evaluateForCoach = useCallback(
@@ -599,7 +683,9 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     if (hotSeat) return;
     if (coachChecking || coachAlert || bookAlert) return;
     if (!started || gameOver || position.turn !== engineColor || game.pendingPromotion) return;
-    if (engineStatus !== 'ready') return;
+    if (humanlike ? humanStatus !== 'ready' || humanMoveError !== null : engineStatus !== 'ready') {
+      return;
+    }
     const id = ++searchIdRef.current;
     let cancelled = false;
     setThinking(true);
@@ -610,23 +696,32 @@ export function usePlayVsEngine(): UsePlayVsEngine {
         ? bookReply(bookNow, cardsFor(useRepertoire.getState().cards, bookNow.repertoireId))
         : null;
     const choose = bookMove
-      ? Promise.resolve<Uci | null>(bookMove)
+      ? Promise.resolve<EngineChoice | null>({ uci: bookMove, thinkMs: MIN_THINK_MS })
       : chooseEngineMove(position.startFen, movesUci);
 
     void choose
-      .then(async (uci) => {
-        if (cancelled || id !== searchIdRef.current || !uci) return;
-        // The short "thinking" pause reads naturally, but not when it could flag the engine.
+      .then(async (choice) => {
+        if (cancelled || id !== searchIdRef.current || !choice) return;
+        // The "thinking" pause reads naturally, but not when it could flag the opponent.
         const engineLeft = hasClock
           ? remaining(clockRef.current, engineColor, Date.now())
           : Number.POSITIVE_INFINITY;
         const wait =
-          engineLeft < LOW_TIME_MS ? 0 : Math.max(0, MIN_THINK_MS - (Date.now() - startedAt));
+          engineLeft < LOW_TIME_MS ? 0 : Math.max(0, choice.thinkMs - (Date.now() - startedAt));
         if (wait) await new Promise((r) => setTimeout(r, wait));
         if (cancelled || id !== searchIdRef.current) return;
-        gameRef.current.playNotation(uci);
+        gameRef.current.playNotation(choice.uci);
       })
-      .catch((err: unknown) => console.error('Engine move failed', err))
+      .catch((err: unknown) => {
+        if (cancelled || id !== searchIdRef.current) return;
+        // A model that crashed or was stopped says so through its status (with a Retry); a
+        // prediction that failed on its own would otherwise leave the game waiting for ever.
+        if (humanlike && maiaClient().status === 'ready') {
+          setHumanMoveError(err instanceof Error ? err.message : String(err));
+          return;
+        }
+        console.error('Engine move failed', err);
+      })
       .finally(() => {
         if (id === searchIdRef.current) setThinking(false);
       });
@@ -645,6 +740,10 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     chooseEngineMove,
     game.pendingPromotion,
     hotSeat,
+    humanlike,
+    humanStatus,
+    humanMoveError,
+    humanRetries,
     coachChecking,
     coachAlert,
     bookAlert,
@@ -659,6 +758,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       timeControlId: nextTc,
       fen,
       opponent: nextOpponent = 'engine',
+      humanRating: nextHumanRating,
       autoFlip: nextAutoFlip = false,
       coach: nextCoach = false,
       blunderCheck: nextBlunderCheck = false,
@@ -670,7 +770,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       searchIdRef.current++;
       // A repertoire decides the colour and the opponent; the book only makes sense from the start.
       let bookState: BookState | null = null;
-      if (nextBook && nextOpponent === 'engine' && !fen) {
+      if (nextBook && nextOpponent !== 'human' && !fen) {
         try {
           bookState = createBook(nextBook);
         } catch (err) {
@@ -692,15 +792,17 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       setEvent(nextEvent);
       const control = getTimeControl(nextTc);
       setOpponent(nextOpponent);
+      if (isHumanRating(nextHumanRating)) setHumanRating(nextHumanRating);
       setAutoFlip(nextAutoFlip);
-      // The coach needs the engine free between moves and no clock to run down.
-      setCoach(nextCoach && nextOpponent === 'engine' && control.initialMs === 0);
+      // The coach needs the engine free between moves and no clock to run down. Against the
+      // human-like opponent it judges with Stockfish all the same.
+      setCoach(nextCoach && nextOpponent !== 'human' && control.initialMs === 0);
       setCoachAlert(null);
       setCoachChecking(false);
       setCoachInterventions(0);
       coachEvals.current = new Map();
       coachRunRef.current++;
-      setBlunderCheck(nextBlunderCheck && nextOpponent === 'engine');
+      setBlunderCheck(nextBlunderCheck && nextOpponent !== 'human');
       setBlunderAlert(null);
       setBlunderStops(0);
       blunderCountedRef.current = new Set();
@@ -710,6 +812,8 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       setTimeControlId(control.id);
       setGameOver(null);
       setSuggestedLevel(null);
+      setSuggestedRating(null);
+      setHumanMoveError(null);
       hintRunRef.current++;
       setHintArrow(null);
       setHinting(false);
@@ -939,6 +1043,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     setBlunderAlert(null);
     setThinking(false);
     setHintArrow(null);
+    setHumanMoveError(null);
     // Undo back to the player's previous turn (one ply between two people).
     if (!hotSeat && position.turn === playerColor) {
       game.undo();
@@ -1058,9 +1163,17 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const pgn = useCallback(
     () =>
       game.pgn(
-        pgnHeaders(playerColor, level, timeControl, gameOver?.result ?? '*', opponent, event),
+        pgnHeaders(
+          playerColor,
+          level,
+          timeControl,
+          gameOver?.result ?? '*',
+          opponent,
+          event,
+          humanRating,
+        ),
       ),
-    [game, playerColor, level, timeControl, gameOver, opponent, event],
+    [game, playerColor, level, timeControl, gameOver, opponent, event, humanRating],
   );
 
   return {
@@ -1068,6 +1181,11 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     opponent,
     playerColor,
     level,
+    humanRating,
+    humanStatus,
+    humanError,
+    humanMoveError,
+    retryHuman,
     timeControl,
     startFen: position.startFen,
     clock: clockView,
@@ -1080,6 +1198,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     hintMove,
     hinting,
     suggestedLevel,
+    suggestedRating,
     coach,
     coachAlert,
     coachChecking,
@@ -1127,8 +1246,12 @@ function pgnHeaders(
   result: string,
   opponent: Opponent = 'engine',
   event?: string,
+  humanRating?: number,
 ): Record<string, string> {
-  const engineName = `Stockfish (level ${level.id} · ${level.name})`;
+  const engineName =
+    opponent === 'humanlike'
+      ? `Maia ${humanRating ?? ''} (human-like)`
+      : `Stockfish (level ${level.id} · ${level.name})`;
   const date = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   const hotSeat = opponent === 'human';
@@ -1137,7 +1260,9 @@ function pgnHeaders(
       ? `Chess Trainer — ${event}`
       : hotSeat
         ? 'Chess Trainer — two players'
-        : 'Chess Trainer — play vs engine',
+        : opponent === 'humanlike'
+          ? 'Chess Trainer — play a human-like opponent'
+          : 'Chess Trainer — play vs engine',
     Site: 'Chess Trainer',
     Date: `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`,
     White: hotSeat ? 'White' : playerColor === 'white' ? 'You' : engineName,

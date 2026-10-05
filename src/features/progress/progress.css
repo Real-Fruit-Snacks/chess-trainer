@@ -126,7 +126,7 @@
   background: var(--success);
 }
 
-/* ---------- Results by engine level ---------- */
+/* ---------- Results by engine level and human-like rating ---------- */
 .levels {
   display: flex;
   flex-direction: column;

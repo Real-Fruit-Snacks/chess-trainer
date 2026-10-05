@@ -47,6 +47,7 @@ import { useBackupActions } from './useBackupActions';
 import { useImportBackup } from './useImportBackup';
 import { EngineDiagnostics } from './EngineDiagnostics';
 import { OfflinePuzzles } from './OfflinePuzzles';
+import { HumanOpponentDownload } from '@/features/play/HumanOpponentDownload';
 import { EngineFullSetting } from './EngineFullSetting';
 import { EngineThreadsSetting } from './EngineThreadsSetting';
 import { SoundThemePicker, VolumeSlider } from './SoundControls';
@@ -371,13 +372,13 @@ export default function SettingsPage() {
                 checked={settings.playCoach}
                 onChange={(v) => settings.update({ playCoach: v })}
                 label="Coach mode by default"
-                description="New untimed games against the engine start with the coach on: mistakes pause the game with an explanation and a take-back."
+                description="New untimed games against the engine or the human-like opponent start with the coach on: mistakes pause the game with an explanation and a take-back."
               />
               <Switch
                 checked={settings.playBlunderCheck}
                 onChange={(v) => settings.update({ playBlunderCheck: v })}
                 label="Blunder check by default"
-                description="New games against the engine hold back a move that hangs material or allows mate and ask: checks, captures, threats? You can still play it."
+                description="New games against the engine or the human-like opponent hold back a move that hangs material or allows mate and ask: checks, captures, threats? You can still play it."
               />
               <Field
                 label="Engine level for the next game"
@@ -397,6 +398,14 @@ export default function SettingsPage() {
                   </Select>
                 )}
               </Field>
+              <div data-testid="human-opponent-setting">
+                <strong className="small">Human-like opponent</strong>
+                <p className="small muted" style={{ margin: '2px 0 6px' }}>
+                  Maia-3, a model trained on real games, plays like a person of the rating you
+                  choose in Play. It runs on this device.
+                </p>
+                <HumanOpponentDownload removable />
+              </div>
             </div>
           </Card>
           <Card data-testid="rating-settings">

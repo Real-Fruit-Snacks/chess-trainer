@@ -36,6 +36,7 @@ import {
 } from './sw/engineFiles';
 import { isNavigation, withFramePolicy } from './sw/framing';
 import { ISOLATION_CHANGED_MESSAGE, readIsolationFlag, withIsolationHeaders } from './sw/isolation';
+import { isCurrentMaiaFile, MAIA_CACHE } from './sw/maiaFiles';
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: (PrecacheEntry | string)[];
@@ -147,6 +148,24 @@ async function pruneOldEngineFiles(): Promise<void> {
   }
 }
 
+/**
+ * The same for the human-like opponent's files (the page downloads and reads them itself; the
+ * worker only clears out what an upgrade replaced). An emptied cache goes altogether, so a
+ * learner who had the files sees the download offered again rather than a half pair.
+ */
+async function pruneOldMaiaFiles(): Promise<void> {
+  try {
+    if (!(await caches.has(MAIA_CACHE))) return;
+    const cache = await caches.open(MAIA_CACHE);
+    for (const request of await cache.keys()) {
+      if (!isCurrentMaiaFile(new URL(request.url).pathname)) await cache.delete(request);
+    }
+    if ((await cache.keys()).length === 0) await caches.delete(MAIA_CACHE);
+  } catch {
+    // Storage unavailable: nothing to prune.
+  }
+}
+
 self.addEventListener('activate', (event: ExtendableEvent) => {
-  event.waitUntil(pruneOldEngineFiles());
+  event.waitUntil(Promise.all([pruneOldEngineFiles(), pruneOldMaiaFiles()]));
 });

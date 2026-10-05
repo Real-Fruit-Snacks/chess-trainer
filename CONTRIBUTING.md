@@ -33,8 +33,9 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
 
 - **CI** (`.github/workflows/ci.yml`, every pull request and push to `main`):
   - lint, the dead-code and dependency check, the format check, the typecheck, the unit tests with
-    the coverage floor (`npm run test:coverage` fails below the thresholds in `vite.config.ts`) and
-    the puzzle data validator;
+    the coverage floor (`npm run test:coverage` fails below the thresholds in `vite.config.ts`) — the
+    human-like opponent's model installed, so the test that runs it on real positions is not
+    skipped — and the puzzle data validator;
   - a production build with the bundle budget, then the end-to-end suite against it in four
     browser projects (desktop and phone Chromium, Firefox, WebKit), the visual snapshots and the
     Lighthouse audit;
@@ -54,33 +55,34 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
 
 ### Scripts
 
-| Command                      | Purpose                                                                                                                                        |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`                | Start Vite with hot reload on <http://localhost:5173> (downloads the engine on first run).                                                     |
-| `npm run check`              | Lint, dead-code check, format check, typecheck, unit tests, production build and bundle budget — CI's quality and build gates, run locally.    |
-| `npm run lint:dead`          | Unused files, exports and dependencies (knip); runs in `check` and CI.                                                                         |
-| `npm test`                   | Unit tests (Vitest); `npm run test:watch` for watch mode, `npm run test:coverage` for a coverage report and the floor CI enforces.             |
-| `npm run e2e`                | Playwright end-to-end tests, including the axe-core accessibility sweep, against the production build; Chromium only unless `ALL_BROWSERS=1`.  |
-| `npm run build`              | Production build to `dist/`, with `404.html`, `.nojekyll`, `licence.txt` and `notices.txt` for GitHub Pages; source maps go to `sourcemaps/`.  |
-| `npm run bundle:check`       | Fail when a gzipped chunk, the start-up code or the service-worker precache outgrows its budget (runs in `check` and CI).                      |
-| `npm run lighthouse`         | Lighthouse audit of five pages against a running preview (`npm run preview` first); fails on regressions.                                      |
-| `npm run e2e:visual`         | Pixel snapshots of the static pages; add `-- --update-snapshots` after a deliberate design change.                                             |
-| `npm run preview`            | Serve the production build locally.                                                                                                            |
-| `npm run preview:pages`      | Serve `dist/` as GitHub Pages does (404.html for unknown paths); `-- --base /chess-trainer/` for a build made with that `VITE_BASE_PATH`.      |
-| `npm run engine:setup`       | (Re)download the pinned Stockfish builds into `public/engine/` and write its `version.json`; `-- --lite` for the two lite builds only.         |
-| `npm run puzzles:import`     | Rebuild the puzzle set from the Lichess database.                                                                                              |
-| `npm run puzzles:verify`     | Validate the bundled puzzles; add `--engine 40` for an engine spot-check.                                                                      |
-| `npm run puzzles:reindex`    | Rebuild `public/puzzles/index.json` from the chunk files after editing them by hand.                                                           |
-| `npm run openings:import`    | Rebuild the ECO opening table and the opening lines from lichess-org/chess-openings at the pinned commit (`-- --ref <commit>` to move it).     |
-| `npm run lessons:verify`     | Engine-verify every lesson task and scripted reply (slow; runs in the Content workflow).                                                       |
-| `npm run lessons:index`      | Regenerate the lightweight lesson index used outside the Learn pages (also runs before build).                                                 |
-| `npm run drills:verify`      | Engine-verify the endgame drill positions.                                                                                                     |
-| `npm run studies:verify`     | Engine-verify every endgame study (accepted moves keep the goal, alternatives that are not listed do not).                                     |
-| `npm run repertoires:verify` | Engine-verify every move of the built-in repertoires (a learner move within 120 centipawns of the engine's best, an opponent move within 300). |
-| `npm run arcade:positions`   | Re-evaluate the classic-game positions used by Who Stands Better? and Fortress (slow).                                                         |
-| `npm run icons:generate`     | Re-render the PWA icons (standard, maskable, monochrome, shortcuts) from `scripts/icons/logo.svg`.                                             |
-| `npm run screenshots`        | Re-render the install-dialog screenshots in `public/screenshots/` from a running preview (`npm run build && npm run preview` first).           |
-| `npm run pieces:generate`    | Rebuild the piece-set stylesheets (`src/components/board/pieces-*.css`) from the drawings in the script.                                       |
+| Command                      | Purpose                                                                                                                                                                                                                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run dev`                | Start Vite with hot reload on <http://localhost:5173> (downloads the engine and the human-like opponent on first run).                                                                                                                                                   |
+| `npm run check`              | Lint, dead-code check, format check, typecheck, unit tests, production build and bundle budget — CI's quality and build gates, run locally.                                                                                                                              |
+| `npm run lint:dead`          | Unused files, exports and dependencies (knip); runs in `check` and CI.                                                                                                                                                                                                   |
+| `npm test`                   | Unit tests (Vitest); `npm run test:watch` for watch mode, `npm run test:coverage` for a coverage report and the floor CI enforces.                                                                                                                                       |
+| `npm run e2e`                | Playwright end-to-end tests, including the axe-core accessibility sweep, against the production build; Chromium only unless `ALL_BROWSERS=1`.                                                                                                                            |
+| `npm run build`              | Production build to `dist/`, with `404.html`, `.nojekyll`, `licence.txt`, `licence-agpl.txt` and `notices.txt` for GitHub Pages; source maps go to `sourcemaps/`.                                                                                                        |
+| `npm run bundle:check`       | Fail when a gzipped chunk, the start-up code or the service-worker precache outgrows its budget (runs in `check` and CI).                                                                                                                                                |
+| `npm run lighthouse`         | Lighthouse audit of five pages against a running preview (`npm run preview` first); fails on regressions.                                                                                                                                                                |
+| `npm run e2e:visual`         | Pixel snapshots of the static pages; add `-- --update-snapshots` after a deliberate design change.                                                                                                                                                                       |
+| `npm run preview`            | Serve the production build locally.                                                                                                                                                                                                                                      |
+| `npm run preview:pages`      | Serve `dist/` as GitHub Pages does (404.html for unknown paths); `-- --base /chess-trainer/` for a build made with that `VITE_BASE_PATH`.                                                                                                                                |
+| `npm run engine:setup`       | (Re)download the pinned Stockfish builds into `public/engine/` and write its `version.json`; `-- --lite` for the two lite builds only.                                                                                                                                   |
+| `npm run maia:setup`         | Install the human-like opponent's files into `public/maia/`: the pinned Maia-3 model (downloaded) and ONNX Runtime's WebAssembly build (copied from `node_modules`), both checksum-verified. A build needs them; `npm run dev` only warns when they cannot be installed. |
+| `npm run puzzles:import`     | Rebuild the puzzle set from the Lichess database.                                                                                                                                                                                                                        |
+| `npm run puzzles:verify`     | Validate the bundled puzzles; add `--engine 40` for an engine spot-check.                                                                                                                                                                                                |
+| `npm run puzzles:reindex`    | Rebuild `public/puzzles/index.json` from the chunk files after editing them by hand.                                                                                                                                                                                     |
+| `npm run openings:import`    | Rebuild the ECO opening table and the opening lines from lichess-org/chess-openings at the pinned commit (`-- --ref <commit>` to move it).                                                                                                                               |
+| `npm run lessons:verify`     | Engine-verify every lesson task and scripted reply (slow; runs in the Content workflow).                                                                                                                                                                                 |
+| `npm run lessons:index`      | Regenerate the lightweight lesson index used outside the Learn pages (also runs before build).                                                                                                                                                                           |
+| `npm run drills:verify`      | Engine-verify the endgame drill positions.                                                                                                                                                                                                                               |
+| `npm run studies:verify`     | Engine-verify every endgame study (accepted moves keep the goal, alternatives that are not listed do not).                                                                                                                                                               |
+| `npm run repertoires:verify` | Engine-verify every move of the built-in repertoires (a learner move within 120 centipawns of the engine's best, an opponent move within 300).                                                                                                                           |
+| `npm run arcade:positions`   | Re-evaluate the classic-game positions used by Who Stands Better? and Fortress (slow).                                                                                                                                                                                   |
+| `npm run icons:generate`     | Re-render the PWA icons (standard, maskable, monochrome, shortcuts) from `scripts/icons/logo.svg`.                                                                                                                                                                       |
+| `npm run screenshots`        | Re-render the install-dialog screenshots in `public/screenshots/` from a running preview (`npm run build && npm run preview` first).                                                                                                                                     |
+| `npm run pieces:generate`    | Rebuild the piece-set stylesheets (`src/components/board/pieces-*.css`) from the drawings in the script.                                                                                                                                                                 |
 
 ## Project layout
 
@@ -88,15 +90,15 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
 src/
   app/          shell, routing, PWA registration, theme, platform integrations
   chess/        chess.js helpers, the PGN parser, the move tree and the useChess hook (pure logic, well tested)
-  engine/       UCI worker client, strength levels, engine build choice
+  engine/       UCI worker client, strength levels, engine build choice; maia/: the human-like opponent
   components/   board wrapper, chess widgets, generic UI primitives
   features/     one folder per area: home, placement, learn, puzzles, drills, patterns, studies,
                 openings, classics, play, analyze, games, arcade, progress, reference, settings, lab
   store/        persisted settings, progress, repertoires, games, analyses and profiles (zustand)
   lib/          rating maths, scheduling, imports, backups, share links, sound, dates
   sw/, sw.ts    the service worker and the helpers it shares with the page
-scripts/        engine download, content checks, puzzle and opening imports, build steps, CI helpers
-public/         static assets: engine (downloaded), puzzles and openings (committed), icons
+scripts/        engine and model downloads, content checks, puzzle and opening imports, build steps, CI helpers
+public/         static assets: engine and maia (downloaded), puzzles and openings (committed), icons
 e2e/            Playwright end-to-end tests and the accessibility sweep
 docs/           feature reference, architecture, content and deployment guides
 ```

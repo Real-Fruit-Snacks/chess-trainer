@@ -13,9 +13,9 @@ vi.mock('@/engine/fullEngine', async (importOriginal) => ({
 const toast = vi.hoisted(() => vi.fn());
 vi.mock('@/components/ui/toastStore', () => ({ toast }));
 
+import { describeFailure } from '@/lib/describeFailure';
 import {
   currentEngineDownload,
-  describeFailure,
   type DownloadPlatform,
   fullEngineTarget,
   startEngineDownload,

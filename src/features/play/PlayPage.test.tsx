@@ -37,6 +37,90 @@ vi.mock('@/engine/useEngine', () => {
   };
 });
 
+/**
+ * The human-like opponent's files: missing until the test downloads them. One
+ * store for every component that asks, as in the app.
+ */
+const maiaFiles = vi.hoisted(() => {
+  const listeners = new Set<() => void>();
+  const state = { downloaded: false, downloads: 0 };
+  return {
+    state,
+    listeners,
+    set(downloaded: boolean) {
+      state.downloaded = downloaded;
+      for (const listener of listeners) listener();
+    },
+  };
+});
+vi.mock('@/engine/maia/maiaDownload', async () => {
+  const { useSyncExternalStore } = await import('react');
+  const subscribe = (listener: () => void) => {
+    maiaFiles.listeners.add(listener);
+    return () => void maiaFiles.listeners.delete(listener);
+  };
+  return {
+    useMaiaDownload: () => ({
+      downloaded: useSyncExternalStore(subscribe, () => maiaFiles.state.downloaded),
+      progress: null,
+      canStore: true,
+      start: () => {
+        maiaFiles.state.downloads++;
+        maiaFiles.set(true);
+      },
+      stop: () => undefined,
+      remove: () => Promise.resolve(true),
+    }),
+  };
+});
+
+/**
+ * The human-like opponent's worker: loading makes it ready (unless the test says it fails), and a
+ * prediction never comes — or fails, when the test asks for that.
+ */
+const maiaWorker = vi.hoisted(() => {
+  const listeners = new Set<() => void>();
+  return {
+    status: 'idle',
+    listeners,
+    setStatus(status: string) {
+      this.status = status;
+      for (const listener of listeners) listener();
+    },
+    loads: 0,
+    loadFails: false,
+    predictionFails: false,
+  };
+});
+vi.mock('@/engine/maia/maiaClient', async () => {
+  const { useSyncExternalStore } = await import('react');
+  const client = {
+    get status() {
+      return maiaWorker.status;
+    },
+    load: () => {
+      maiaWorker.loads++;
+      maiaWorker.setStatus(maiaWorker.loadFails ? 'failed' : 'ready');
+      return Promise.resolve();
+    },
+    predict: () =>
+      maiaWorker.predictionFails
+        ? Promise.reject(new Error('bad input'))
+        : new Promise(() => undefined),
+  };
+  const subscribe = (listener: () => void) => {
+    maiaWorker.listeners.add(listener);
+    return () => void maiaWorker.listeners.delete(listener);
+  };
+  return {
+    maiaClient: () => client,
+    useMaiaStatus: () => {
+      const status = useSyncExternalStore(subscribe, () => maiaWorker.status);
+      return { status, error: status === 'failed' ? 'maia3-5m.fp16.onnx: HTTP 404' : null };
+    },
+  };
+});
+
 /** The board is a chessground instance; a stub that hands its props to the test. */
 const board = vi.hoisted(() => ({
   props: null as null | { onMove?: (from: string, to: string) => void; className?: string },
@@ -102,6 +186,12 @@ describe('PlayPage', () => {
     board.props = null;
     engineState.status = 'ready';
     engineState.error = null;
+    maiaFiles.state.downloaded = false;
+    maiaFiles.state.downloads = 0;
+    maiaWorker.status = 'idle';
+    maiaWorker.loads = 0;
+    maiaWorker.loadFails = false;
+    maiaWorker.predictionFails = false;
     sessionStorage.clear();
   });
 
@@ -227,6 +317,109 @@ describe('PlayPage', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('offers a human-like opponent by rating, startable once its files are on the device', async () => {
+    renderPlay();
+    const setup = openDialog('New game')!;
+    fireEvent.change(within(setup).getByLabelText('Opponent'), {
+      target: { value: 'humanlike' },
+    });
+    expect(within(setup).queryByLabelText('Engine level')).toBeNull();
+    const rating = within(setup).getByLabelText('Rating');
+    expect(rating).toHaveValue('1200');
+    expect(
+      within(rating)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toHaveLength(21);
+    expect(within(setup).getByTestId('human-download-status')).toHaveTextContent(
+      'A one-time download of about 25 MB',
+    );
+    const start = within(setup).getByRole('button', { name: 'Start' });
+    expect(start).toBeDisabled();
+
+    fireEvent.click(within(setup).getByRole('button', { name: 'Download (25 MB)' }));
+    expect(maiaFiles.state.downloads).toBe(1);
+    expect(within(setup).getByTestId('human-download-status')).toHaveTextContent(
+      'On this device (25 MB), ready offline.',
+    );
+    expect(start).toBeEnabled();
+    fireEvent.change(rating, { target: { value: '1700' } });
+    fireEvent.click(start);
+    await nextTask();
+
+    expect(maiaWorker.loads).toBe(1);
+    expect(
+      screen.getByText(/^Plays like a 1700-rated player\. You play white/),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Maia · 1700').length).toBeGreaterThan(0);
+    expect(useSettings.getState()).toMatchObject({
+      playOpponent: 'humanlike',
+      playHumanRating: 1700,
+    });
+
+    act(() => board.props?.onMove?.('a1', 'a8'));
+    expect(openDialog('You won!')).toHaveTextContent(
+      'Win again at this rating and we will suggest a stronger one.',
+    );
+    expect(useProgress.getState().games[0]).toMatchObject({
+      source: 'humanlike',
+      opponentRating: 1700,
+    });
+  });
+
+  it('remembers the human-like opponent for the next game, unless a link asks for a level', () => {
+    maiaFiles.state.downloaded = true;
+    useSettings.getState().update({ playOpponent: 'humanlike', playHumanRating: 2000 });
+    const { unmount } = renderPlay();
+    const setup = openDialog('New game')!;
+    expect(within(setup).getByLabelText('Opponent')).toHaveValue('humanlike');
+    expect(within(setup).getByLabelText('Rating')).toHaveValue('2000');
+    expect(within(setup).getByRole('button', { name: 'Start' })).toBeEnabled();
+    unmount();
+
+    renderPlay('/play?level=5');
+    expect(within(openDialog('New game')!).getByLabelText('Opponent')).toHaveValue('engine');
+  });
+
+  it('says when the human-like opponent could not run, with Retry', async () => {
+    maiaFiles.state.downloaded = true;
+    maiaWorker.loadFails = true;
+    useSettings.getState().update({ playOpponent: 'humanlike' });
+    renderPlay();
+    fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+    await nextTask();
+    const alert = screen.getByRole('alert');
+    expect(within(alert).getByTestId('human-failed')).toHaveTextContent(
+      'The human-like opponent could not run: maia3-5m.fp16.onnx: HTTP 404.',
+    );
+    expect(maiaWorker.loads).toBe(1);
+    maiaWorker.loadFails = false;
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    expect(maiaWorker.loads).toBe(2);
+    expect(screen.queryByTestId('human-failed')).toBeNull();
+  });
+
+  it('says when the human-like opponent could not choose a move, with Retry', async () => {
+    maiaFiles.state.downloaded = true;
+    maiaWorker.predictionFails = true;
+    // No coach: its check of the move would wait for an engine that never answers here.
+    useSettings.getState().update({ playOpponent: 'humanlike', playCoach: false });
+    renderPlay();
+    fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+    await nextTask();
+    // Not the mate: 1.Qa2, and the opponent is to move.
+    act(() => board.props?.onMove?.('a1', 'a2'));
+    await nextTask();
+    expect(screen.getByTestId('human-failed')).toHaveTextContent(
+      'The human-like opponent could not choose a move: bad input.',
+    );
+    maiaWorker.predictionFails = false;
+    fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Retry' }));
+    expect(screen.queryByTestId('human-failed')).toBeNull();
+    // The model was fine: Retry asks it for the move again without loading it again.
+    expect(maiaWorker.loads).toBe(1);
   });
 
   it('says the engine stopped responding when the worker died mid-game, with Retry', () => {

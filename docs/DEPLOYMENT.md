@@ -12,7 +12,8 @@ a push to `main`, and on demand. It:
 
 - checks out exactly the commit CI tested,
 - installs dependencies with `npm ci --ignore-scripts` (no package runs an install script), then
-  downloads and checksum-verifies the engine,
+  downloads and checksum-verifies the engine and the human-like opponent's model (both from a cache
+  when it can),
 - builds with `VITE_BASE_PATH` taken from `actions/configure-pages` — `/` for `user.github.io`
   repositories, `/<repo>/` for project sites,
 - keeps the build's source maps as a workflow artifact (`sourcemaps-<commit>`, 90 days) — they are
@@ -23,11 +24,13 @@ Every action in the workflows is pinned to a commit SHA, with its version in a c
 moves the pins. First deploys can take a minute to propagate. The site URL is shown on the workflow's
 summary page.
 
-The deployed site is about 210 MB, nearly all of it the full engine's two builds (99 MB each). A
-visitor downloads one of them only after switching _Settings → Full engine_ on, and keeps it offline
-from then on; the app's own offline copy is about 6 MB, plus the threaded lite engine (2 MB). GitHub
-Pages allows a 1 GB site and has a soft bandwidth limit of 100 GB a month — on the order of a
-thousand full-engine downloads.
+The deployed site is about 235 MB, nearly all of it the full engine's two builds (99 MB each) and
+the human-like opponent's model and runtime (25 MB). A visitor downloads a full engine only after
+switching _Settings → Full engine_ on, and the human-like opponent only after asking for it in the
+game setup or in Settings, and keeps either offline from then on; the app's own offline copy is
+about 6 MB, plus the threaded lite engine (2 MB). GitHub Pages allows a 1 GB site and has a soft
+bandwidth limit of 100 GB a month — on the order of a thousand full-engine downloads, or four
+thousand of the human-like opponent.
 
 On a `user.github.io` repository the app owns the whole origin: its service worker is registered at
 the root scope and Pages serves its `404.html` for every unknown path. The worker only answers
@@ -87,7 +90,10 @@ Requirements:
 - Serve `index.html` for unknown paths (SPA fallback) **or** rely on the generated `404.html`.
 - Serve `.wasm` with `Content-Type: application/wasm` (all mainstream hosts do): the service worker
   keeps an engine file offline only when it has that type.
-- Keep `licence.txt` and `notices.txt` next to `index.html`: every page links to them.
+- Keep `licence.txt`, `licence-agpl.txt` and `notices.txt` next to `index.html`: every page links to
+  them.
+- Serve `maia/` as it is built (no rewriting of `.onnx` or `.wasm` bodies): the app checks the
+  human-like opponent's files against their SHA-256 and refuses anything else.
 
 Optional headers:
 
@@ -115,7 +121,9 @@ Optional headers:
 - After that reload, _Settings → Engine diagnostics_ shows "Cross-origin isolated: Yes" and a
   threaded build (on a device that reports at least three CPU cores).
 - Chrome DevTools → Application → Manifest: no warnings; "Add to home screen" available.
-- The console shows no Content-Security-Policy violations, and the footer's Licence and Third-party
-  notices links open `licence.txt` and `notices.txt`.
+- The console shows no Content-Security-Policy violations, and the footer's Licence, AGPL-3.0 and
+  Third-party notices links open `licence.txt`, `licence-agpl.txt` and `notices.txt`.
+- _Play → New game → Opponent: A human-like opponent → Download_ fetches about 25 MB and the game
+  starts; after that, it plays offline too.
 - `npm run lighthouse` against a preview of the same build passes its accessibility, best-practices
   and SEO floors (Lighthouse no longer has a PWA category).

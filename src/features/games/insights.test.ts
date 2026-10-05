@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ReviewSummary } from '@/features/analyze/gameReview';
 import type { StoredGame } from '@/store/games';
+import type { GameRecord } from '@/store/progress';
 import { accuracyFromLoss, buildInsights, digestReview, phaseOf } from './insights';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -228,6 +229,49 @@ describe('buildInsights', () => {
     // Work on: the most frequent mistake, then the weakest phase.
     expect(insights.workOn.map((w) => w.id)).toEqual(['motif:hanging-piece', 'phase:middlegame']);
     expect(insights.workOn[1]?.lessonId).toBe('planning-basics');
+  });
+
+  it('gives the human-like opponent rows by rating, apart from the engine levels', () => {
+    const record = (
+      id: string,
+      color: 'white' | 'black',
+      result: GameRecord['result'],
+      extra: Partial<GameRecord>,
+    ): GameRecord => ({
+      id,
+      source: 'humanlike',
+      at: 1,
+      level: 0,
+      color,
+      result,
+      reason: 'checkmate',
+      plies: 40,
+      pgn: '',
+      ...extra,
+    });
+    const insights = buildInsights([], '', [
+      record('h1', 'white', '1-0', { opponentRating: 1500 }),
+      record('h2', 'black', '1-0', { opponentRating: 1500 }),
+      record('h3', 'white', '1/2-1/2', {
+        opponentRating: 1100,
+        book: {
+          repertoireId: 'italian',
+          status: 'out-of-book',
+          endedAtPly: 10,
+          deviationPly: null,
+        },
+      }),
+      // A record without its rating (hand-edited, say) has no row to go in.
+      record('h4', 'white', '1-0', {}),
+      record('e1', 'white', '0-1', { source: 'play', level: 2 }),
+    ]);
+    expect(insights.levels).toEqual([{ level: 2, games: 1, wins: 0, draws: 0, losses: 1 }]);
+    expect(insights.ratings).toEqual([
+      { rating: 1100, games: 1, wins: 0, draws: 1, losses: 0 },
+      { rating: 1500, games: 2, wins: 1, draws: 0, losses: 1 },
+    ]);
+    // Opening practice counts whoever the opponent was.
+    expect(insights.book).toEqual({ games: 1, deviated: 0, averageBookMoves: 5 });
   });
 
   it('is empty without reviews or a known player', () => {

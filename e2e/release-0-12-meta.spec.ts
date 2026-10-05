@@ -51,6 +51,7 @@ test.describe('licence and credits', () => {
     await expect(credits).toContainText('Stockfish (GPL-3.0)');
     await expect(credits).toContainText('Chessground (GPL-3.0)');
     await expect(credits).toContainText('Lichess (CC0)');
+    await expect(credits).toContainText('Human-like opponent: Maia-3 (AGPL-3.0)');
   });
 
   test('the footer links the licence and the notices, which ship with the site', async ({
@@ -79,6 +80,15 @@ test.describe('licence and credits', () => {
     const text = await notices.text();
     expect(text).toContain('Colin M.L. Burnett');
     expect(text).toContain('CC BY-SA 3.0');
+    // 0.16: the human-like opponent's model is AGPL-3.0, and its licence ships too.
+    await expect(footer.getByRole('link', { name: 'AGPL-3.0' })).toHaveAttribute(
+      'href',
+      `${base}licence-agpl.txt`,
+    );
+    const agpl = await page.request.get(`${base}licence-agpl.txt`);
+    expect(agpl.status()).toBe(200);
+    expect(await agpl.text()).toContain('GNU AFFERO GENERAL PUBLIC LICENSE');
+    expect(text).toContain('Maia-3');
   });
 });
 

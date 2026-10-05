@@ -7,6 +7,7 @@ import {
   warnNewerSave,
 } from '@/lib/persistStorage';
 import { removeFullEngine } from '@/engine/fullEngine';
+import { DEFAULT_HUMAN_RATING, isHumanRating } from '@/engine/maia/ratings';
 import { BLIND_DEPTHS, type BlindDepth } from '@/features/puzzles/blind';
 import { resetIsolationFlag } from '@/sw/isolation';
 
@@ -26,6 +27,9 @@ export const BOARD_THEMES = [
 export type BoardTheme = (typeof BOARD_THEMES)[number];
 export const PLAY_COLORS = ['white', 'black', 'random'] as const;
 export type PlayColor = (typeof PLAY_COLORS)[number];
+/** Play's opponents: the engine's levels, the human-like opponent (Maia), a person at the device. */
+export const PLAY_OPPONENTS = ['engine', 'humanlike', 'human'] as const;
+export type PlayOpponent = (typeof PLAY_OPPONENTS)[number];
 export const REVIEW_DEPTH_IDS = ['fast', 'balanced', 'thorough'] as const;
 export type ReviewDepth = (typeof REVIEW_DEPTH_IDS)[number];
 export const PIECE_SET_IDS = ['classic', 'letters', 'pixel', 'modern'] as const;
@@ -116,6 +120,10 @@ export interface SettingsState {
   reviewDepth: ReviewDepth;
   /** Engine strength offered for the next game (every game played updates it). */
   playLevel: number;
+  /** Who the next game is against: the engine's levels, the human-like opponent, or a second person. */
+  playOpponent: PlayOpponent;
+  /** The rating the human-like opponent plays at (600–2600, in hundreds). */
+  playHumanRating: number;
   playColor: PlayColor;
   /** Time control id for games against the engine (see lib/clock.ts); 'none' = no clock. */
   playTimeControl: string;
@@ -194,6 +202,8 @@ export const DEFAULT_SETTINGS = {
   analysisLines: 3,
   reviewDepth: 'balanced' as ReviewDepth,
   playLevel: 3,
+  playOpponent: 'engine' as PlayOpponent,
+  playHumanRating: DEFAULT_HUMAN_RATING,
   playColor: 'white' as PlayColor,
   playTimeControl: 'none',
   moveInput: false,
@@ -266,6 +276,8 @@ const CHECKS: {
   analysisLines: numberIn(1, 10, true),
   reviewDepth: oneOf(REVIEW_DEPTH_IDS),
   playLevel: numberIn(1, 99, true),
+  playOpponent: oneOf(PLAY_OPPONENTS),
+  playHumanRating: isHumanRating,
   playColor: oneOf(PLAY_COLORS),
   playTimeControl: isString,
   moveInput: isBoolean,

@@ -44,7 +44,8 @@ function outcomeLabel(outcome: 'solved' | 'failed', hintUsed: boolean): string {
 export default function ProgressPage() {
   const progress = useProgress();
   const stats = summarizeProgress(progress);
-  // "Games against the engine" means the ordinary ones: arcade, simul and drill games have their own cards.
+  // "Games against the computer" means the ordinary ones — the engine's levels and the human-like
+  // opponent; arcade, simul and drill games have their own cards.
   const engineGames = progress.games.filter(
     (g) => g.source !== 'arcade' && g.source !== 'simul' && g.source !== 'drill',
   );
@@ -237,7 +238,7 @@ export default function ProgressPage() {
 
           {engineGames.length > 0 ? (
             <Card>
-              <h2 style={{ fontSize: '1.15rem' }}>Games against the engine</h2>
+              <h2 style={{ fontSize: '1.15rem' }}>Games against the computer</h2>
               <p className="small muted" style={{ margin: '0 0 8px' }} data-testid="ladder-height">
                 {engineLadder.height > 0
                   ? `Engine ladder: Level ${engineLadder.height} beaten · ${engineLadder.reason}`
@@ -268,7 +269,9 @@ export default function ProgressPage() {
                         <tr key={g.id}>
                           <td>{formatDate(g.at, siteConfig.locale)}</td>
                           <td>
-                            Level {g.level} · {level?.name}
+                            {g.source === 'humanlike'
+                              ? `Human-like · ${g.opponentRating ?? ''}`
+                              : `Level ${g.level} · ${level?.name ?? ''}`}
                           </td>
                           <td>{g.color === 'white' ? 'White' : 'Black'}</td>
                           <td>

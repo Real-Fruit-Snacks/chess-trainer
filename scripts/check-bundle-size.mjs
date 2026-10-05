@@ -100,6 +100,11 @@ if (startupBytes > STARTUP_LIMIT_BYTES) {
 if (precache.total > PRECACHE_LIMIT_BYTES) {
   failures.push(`the precache is ${(precache.total / KB / KB).toFixed(2)} MB`);
 }
+// The human-like opponent's runtime ships once, in maia/ (downloaded on request): a copy among
+// the assets would be 14 MB deployed for nothing (see ortWasmReference in vite.config.ts).
+for (const file of readdirSync(ASSETS).filter((f) => f.endsWith('.wasm'))) {
+  failures.push(`${file} was copied into the assets`);
+}
 if (failures.length && !print) {
   console.error(`\nBundle budget exceeded:\n  - ${failures.join('\n  - ')}`);
   process.exit(1);

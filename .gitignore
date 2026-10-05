@@ -12,6 +12,10 @@ coverage/
 public/engine/*
 !public/engine/README.md
 
+# The human-like opponent's model and runtime are installed by `npm run maia:setup`
+public/maia/*
+!public/maia/README.md
+
 # Playwright
 playwright-report/
 test-results/

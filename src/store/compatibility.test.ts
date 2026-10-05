@@ -9,6 +9,7 @@ import backupV5 from './fixtures/backup-v5.json';
 import backupV6 from './fixtures/backup-v6.json';
 import backupV7 from './fixtures/backup-v7.json';
 import backupV8 from './fixtures/backup-v8.json';
+import backupV9 from './fixtures/backup-v9.json';
 import { useGames } from './games';
 import {
   type PersistedProgress,
@@ -34,6 +35,7 @@ const FIXTURES = [
   ['v6 (0.9)', backupV6],
   ['v7 (0.12)', backupV7],
   ['v8 (0.15)', backupV8],
+  ['v9 (0.16)', backupV9],
 ] as const;
 
 describe('backups from earlier versions', () => {
@@ -177,6 +179,14 @@ describe('backups from earlier versions', () => {
     expect(s.selfReview).toMatchObject({ games: 2, found: 3, total: 5 });
     expect(s.selfReview.history).toHaveLength(2);
     expect(s.blunderChecks).toEqual({ stopped: 4, playedAnyway: 1 });
+  });
+
+  it('imports a 0.16-era backup (export v9: games against the human-like opponent)', () => {
+    const result = useProgress.getState().importState(backupV9);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.summary.version).toBe(9);
+    const game = useProgress.getState().games.find((g) => g.id === 'g-humanlike-1');
+    expect(game).toMatchObject({ source: 'humanlike', opponentRating: 1500, level: 0 });
   });
 
   it('gives an older backup the new records empty', () => {
@@ -345,6 +355,33 @@ describe('stored state from earlier versions', () => {
     useSettings.getState().reset();
     await rehydrate(useSettings, SETTINGS_STORAGE_KEY, { engineFull: 'yes' }, 5);
     expect(useSettings.getState().engineFull).toBe(false);
+  });
+
+  it('remembers the human-like opponent and its rating, and drops what it does not offer', async () => {
+    useSettings.getState().reset();
+    // Saves from before 0.16 have neither: the engine stays the opponent, and 1200 the rating.
+    await rehydrate(useSettings, SETTINGS_STORAGE_KEY, { colorScheme: 'dark' }, 5);
+    expect(useSettings.getState()).toMatchObject({ playOpponent: 'engine', playHumanRating: 1200 });
+    await rehydrate(
+      useSettings,
+      SETTINGS_STORAGE_KEY,
+      { playOpponent: 'humanlike', playHumanRating: 1900 },
+      5,
+    );
+    expect(useSettings.getState()).toMatchObject({
+      playOpponent: 'humanlike',
+      playHumanRating: 1900,
+    });
+    useSettings.getState().reset();
+    await rehydrate(
+      useSettings,
+      SETTINGS_STORAGE_KEY,
+      { playOpponent: 'robot', playHumanRating: 1250 },
+      5,
+    );
+    expect(useSettings.getState()).toMatchObject({ playOpponent: 'engine', playHumanRating: 1200 });
+    await rehydrate(useSettings, SETTINGS_STORAGE_KEY, { playHumanRating: 3000 }, 5);
+    expect(useSettings.getState().playHumanRating).toBe(1200);
   });
 
   it('keeps the unknown fields of a save from a newer version', async () => {

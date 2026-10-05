@@ -104,8 +104,12 @@ function compareStepKeys(a: number | string, b: number | string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** Where a game against the engine was played. */
-export type GameRecordSource = 'play' | 'ladder' | 'book' | 'arcade' | 'simul' | 'drill';
+/**
+ * Where a game against the computer was played. `humanlike`: against the
+ * human-like opponent (Maia), which has a rating instead of an engine level.
+ */
+export type GameRecordSource =
+  'play' | 'ladder' | 'book' | 'arcade' | 'simul' | 'drill' | 'humanlike';
 export const GAME_RECORD_SOURCES: readonly GameRecordSource[] = [
   'play',
   'ladder',
@@ -113,6 +117,7 @@ export const GAME_RECORD_SOURCES: readonly GameRecordSource[] = [
   'arcade',
   'simul',
   'drill',
+  'humanlike',
 ];
 
 export interface GameRecord {
@@ -127,6 +132,8 @@ export interface GameRecord {
   pgn: string;
   /** Which mode the game came from; an ordinary engine game when missing in old saves. */
   source: GameRecordSource;
+  /** Games against the human-like opponent: the rating it played at (`level` is 0 then). */
+  opponentRating?: number;
   /** What the mode called the game, e.g. "Queen odds" or "Simul board 3". */
   event?: string;
   /** Opening practice: the repertoire followed and where the game left it. */

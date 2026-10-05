@@ -220,8 +220,10 @@ const gameRecord = struct(
   {
     // Added in 0.12: older records get an id and the 'play' source when they load.
     id: string,
-    source: literal('play', 'ladder', 'book', 'arcade', 'simul', 'drill'),
+    source: literal('play', 'ladder', 'book', 'arcade', 'simul', 'drill', 'humanlike'),
     event: string,
+    // Added in 0.16: the rating a human-like opponent played at.
+    opponentRating: number,
     book: struct({
       repertoireId: string,
       status: literal('in-book', 'out-of-book', 'deviated'),
@@ -501,7 +503,7 @@ export const gamesSlice = slice(gamesFields);
 /* ------------------------------------------------------------------ */
 
 /** The export format written by this build (see `exportState`). */
-export const EXPORT_VERSION = 8;
+export const EXPORT_VERSION = 9;
 
 /** Why a file was refused: not ours, ours but broken, not JSON at all, or a PGN by the look of it. */
 export type BackupProblem = 'not-a-backup' | 'damaged' | 'unreadable' | 'looks-like-pgn';
