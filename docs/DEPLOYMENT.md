@@ -62,6 +62,15 @@ tag (`git tag v0.12.0 && git push origin v0.12.0`). The **Release** workflow ref
 not match `package.json`, and otherwise publishes a GitHub release for the tag with that section as
 the notes and a link to the live app (the `siteUrl` in `src/site.config.ts`).
 
+### The Lichess sign-in
+
+Nothing to set up: Lichess lets apps without a server sign people in with PKCE and no registration.
+The app names itself by its address (`lichess.org` shows the learner the site and path asking) and
+asks Lichess to send the learner back to `<site>/settings/lichess`, which the service worker and the
+Pages `404.html` fallback both serve. Moving the site to another address only changes that name:
+devices already connected keep their tokens. The Content-Security-Policy already allows
+`connect-src https://lichess.org`.
+
 ### Crash reports
 
 A crash report (the error page's "Copy details" or its pre-filled issue) names the version, the build
@@ -125,5 +134,10 @@ Optional headers:
   Third-party notices links open `licence.txt`, `licence-agpl.txt` and `notices.txt`.
 - _Play → New game → Opponent: A human-like opponent → Download_ fetches about 25 MB and the game
   starts; after that, it plays offline too.
+- _Settings → Lichess account → Connect_ goes to lichess.org, asks for the puzzle and study
+  permissions and comes back to Settings connected; the card then reads "Synced just now", and a
+  private study named _Chess Trainer · Repertoires_ appears on Lichess once there is a custom
+  repertoire. _Disconnect_ withdraws the permission (the app then disappears from the third-party apps in
+  the Lichess account's settings).
 - `npm run lighthouse` against a preview of the same build passes its accessibility, best-practices
   and SEO floors (Lighthouse no longer has a PWA category).

@@ -15,7 +15,11 @@ vi.hoisted(() => {
 
 const clearLabStorage = vi.hoisted(() => vi.fn(() => 1));
 vi.mock('@/features/lab/storageTest', () => ({ clearLabStorage }));
+const stopSync = vi.hoisted(() => vi.fn());
+const startLichessSync = vi.hoisted(() => vi.fn(() => stopSync));
+vi.mock('@/lib/lichess/sync', () => ({ startLichessSync }));
 
+import { useLichess } from '@/store/lichess';
 import { PlatformHooks } from './PlatformHooks';
 
 type Consumer = (params: { files: { getFile: () => Promise<File> }[] }) => void;
@@ -65,5 +69,26 @@ describe('PlatformHooks', () => {
     expect(await screen.findByTestId('import-summary')).toBeInTheDocument();
     expect(screen.getByTestId('import-confirm')).toBeInTheDocument();
     expect(localStorage.getItem('chess-trainer:pre-import-backup')).toBeNull();
+  });
+
+  it('runs the Lichess sync while an account is connected, and stops it after', async () => {
+    useLichess.getState().forget();
+    startLichessSync.mockClear();
+    stopSync.mockClear();
+    render(<PlatformHooks />);
+    await act(() => new Promise<void>((r) => setTimeout(r, 0)));
+    expect(startLichessSync).not.toHaveBeenCalled();
+    act(() => {
+      useLichess
+        .getState()
+        .connect(
+          { id: 'learner', username: 'Learner', token: 'lip_x', expiresAt: null },
+          { puzzle: null, bullet: null, blitz: null, rapid: null, classical: null, at: 0 },
+        );
+    });
+    await waitFor(() => expect(startLichessSync).toHaveBeenCalledTimes(1));
+    act(() => useLichess.getState().setNeedsReconnect(true));
+    expect(stopSync).toHaveBeenCalledTimes(1);
+    act(() => useLichess.getState().forget());
   });
 });

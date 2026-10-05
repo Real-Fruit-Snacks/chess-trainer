@@ -95,7 +95,9 @@ src/
   features/     one folder per area: home, placement, learn, puzzles, drills, patterns, studies,
                 openings, classics, play, analyze, games, arcade, progress, reference, settings, lab
   store/        persisted settings, progress, repertoires, games, analyses and profiles (zustand)
-  lib/          rating maths, scheduling, imports, backups, share links, sound, dates
+  lib/          rating maths, scheduling, imports, backups, share links, sound, dates;
+                lichess/: the Lichess account sync
+  test/         test set-up and the stand-in lichess.org the sync's tests talk to
   sw/, sw.ts    the service worker and the helpers it shares with the page
 scripts/        engine and model downloads, content checks, puzzle and opening imports, build steps, CI helpers
 public/         static assets: engine and maia (downloaded), puzzles and openings (committed), icons
@@ -134,6 +136,9 @@ precache outgrows its budget.
 - Prefer no new runtime dependencies; the bundle is intentionally small.
 - The page carries a Content-Security-Policy: a call to a new origin must be added to
   `CONNECT_ORIGINS` in `scripts/lib/html.ts`, or the browser refuses it.
+- The Lichess sync is tested against a stand-in lichess.org (`src/test/fakeLichess.ts`) that answers
+  as the Lichess server does; when the sync starts using another endpoint, add it there, following
+  the server's code, and the unit and end-to-end tests can use it at once.
 - Accessibility matters: every interactive element is keyboard reachable, status changes are announced
   through `role="status"`, and the layout works from 320 px wide upwards.
 - Follow the existing style — Prettier and ESLint enforce most of it (`npm run lint:fix`, `npm run format`).

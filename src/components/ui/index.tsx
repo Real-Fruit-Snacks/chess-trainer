@@ -283,21 +283,24 @@ export function Switch({
   onChange,
   label,
   description,
+  disabled,
 }: {
   checked: boolean;
   onChange: (next: boolean) => void;
   label: ReactNode;
   description?: ReactNode;
+  disabled?: boolean;
 }) {
   const id = useId();
   const labelId = `${id}-label`;
   const descriptionId = `${id}-description`;
   return (
-    <label className="switch">
+    <label className={disabled ? 'switch switch--disabled' : 'switch'}>
       <input
         type="checkbox"
         role="switch"
         checked={checked}
+        disabled={disabled}
         aria-labelledby={labelId}
         aria-describedby={description ? descriptionId : undefined}
         onChange={(e) => onChange(e.target.checked)}

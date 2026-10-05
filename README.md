@@ -42,8 +42,9 @@ analysis and an arcade of chess games — with nothing to sign up for. It runs e
 
 - **Everything in one place.** Learn a concept, drill it, solve puzzles on it, play it against the
   engine and review the game — every part links to the others.
-- **Yours, and only yours.** No account, no server, no ads, no tracking. Progress lives on your
-  device, and a backup is a file you keep. Optional network features are off by default.
+- **Yours, and only yours.** No sign-up, no server, no ads, no tracking. Progress lives on your
+  device, and a backup is a file you keep — or connect your Lichess account to keep puzzles, games,
+  repertoires and analyses in step across your devices. Optional network features are off by default.
 - **Works everywhere.** Phones, tablets and desktops, light, dark or black, online and offline, with
   screen readers and the keyboard.
 - **Honest chess.** Every lesson task, drill position, study move and repertoire move is checked with
@@ -72,6 +73,11 @@ position.
 99 MB download), a full variation tree, a position report, game review with an evaluation graph and
 key moments explained in words — or analyze the game yourself first and let the review score what
 you found — Lichess and chess.com imports, and shareable links that carry the whole game.
+
+**Sync** — connect your Lichess account and the app keeps in step with it, both ways: puzzles you
+solve here count on Lichess (solved offline, they go up when you are back online), your Lichess
+puzzle history and its misses come here, games you play are imported to Lichess and restored on your
+other devices, and your own repertoires and saved analyses live in private Lichess studies.
 
 **Train** — coordinate, vision and endgame drills on a 41-rung ladder, "What's the threat?" (name
 the opponent's threat, then meet it — in real positions and in your own games), sixteen opening

@@ -13,6 +13,7 @@ const AnalyzePage = lazy(() => import('@/features/analyze/AnalyzePage'));
 const ProgressPage = lazy(() => import('@/features/progress/ProgressPage'));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
 const LabPage = lazy(() => import('@/features/lab/LabPage'));
+const LichessCallbackPage = lazy(() => import('@/features/settings/LichessCallbackPage'));
 const DrillsPage = lazy(() => import('@/features/drills/DrillsPage'));
 const CoordinatesDrill = lazy(() => import('@/features/drills/CoordinatesDrill'));
 const VisionDrill = lazy(() => import('@/features/drills/VisionDrill'));
@@ -92,6 +93,7 @@ export const routes: RouteObject[] = [
       { path: 'progress', element: <ProgressPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'settings/lab', element: <LabPage /> },
+      { path: 'settings/lichess', element: <LichessCallbackPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

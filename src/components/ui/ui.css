@@ -472,6 +472,16 @@ a.btn:focus {
   color: var(--text-muted);
 }
 
+/* Off for now because another setting rules it out (the description says which). */
+.switch--disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.switch--disabled input {
+  cursor: not-allowed;
+}
+
 /* Segmented control: a radio group with one tab stop and arrow keys between the options. */
 .segmented {
   display: inline-flex;

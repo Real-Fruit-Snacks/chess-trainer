@@ -10,6 +10,7 @@ import { START_FEN } from '@/chess/startFen';
 import type { Fen } from '@/chess/types';
 import type { ImportedGame } from '@/lib/gameImport';
 import { analysesSlice, parse } from './backupSchema';
+import { useLichess } from './lichess';
 import { storageKeyFor } from './profiles';
 
 /**
@@ -125,12 +126,17 @@ export const useAnalyses = create<AnalysesState>()(
       },
 
       remove: (id) => {
+        // The Lichess sync deletes its chapter too (an analysis merely missing is restored).
+        useLichess.getState().noteDeleted(`ana:${id}`);
         const items = { ...get().items };
         delete items[id];
         set({ items });
       },
 
       removeCollection: (collection) => {
+        for (const entry of Object.values(get().items)) {
+          if (entry.collection === collection) useLichess.getState().noteDeleted(`ana:${entry.id}`);
+        }
         set({
           items: Object.fromEntries(
             Object.entries(get().items).filter(([, a]) => a.collection !== collection),

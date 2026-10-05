@@ -50,6 +50,7 @@ import { PRACTICE_GROUPS, THEMES, themeDescription, themeName } from './themes';
 import { type PuzzleOutcomeEvent, usePuzzleTrainer, type VerifyMove } from './usePuzzleTrainer';
 import './puzzles.css';
 import { Icon } from '@/components/ui';
+import { LichessPending } from './LichessPending';
 
 type Mode =
   'rated' | 'daily' | 'themes' | 'openings' | 'rush' | 'blind' | 'review' | 'mine' | 'woodpecker';
@@ -195,6 +196,7 @@ export default function PuzzlesPage() {
         </div>
       </div>
 
+      <LichessPending />
       {needsOnboarding ? (
         <Onboarding />
       ) : mode === 'rush' ? (

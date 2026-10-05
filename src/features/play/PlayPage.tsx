@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
@@ -42,6 +42,8 @@ import { Notated, San } from '@/chess/San';
 import { useFocus } from '@/app/focus';
 import { handOffToAnalysis } from '@/lib/handoff';
 import { useStackedLayout } from '@/lib/useStackedLayout';
+import { maiaRatingFromLichess } from '@/lib/lichess/ratingHint';
+import { useLichess } from '@/store/lichess';
 
 /** How long a blindfold "peek" shows the pieces. */
 const PEEK_MS = 2000;
@@ -97,6 +99,8 @@ export default function PlayPage() {
     searchParams.has('level') ? 'engine' : settings.playOpponent,
   );
   const [humanRating, setHumanRating] = useState(settings.playHumanRating);
+  const lichessRatings = useLichess((s) => (s.options.rating ? s.ratings : null));
+  const lichessHint = useMemo(() => maiaRatingFromLichess(lichessRatings), [lichessRatings]);
   const humanFiles = useMaiaDownload();
   const [autoFlip, setAutoFlip] = useState(true);
   // Opening practice: follow a repertoire while the game stays in book.
@@ -578,6 +582,18 @@ export default function PlayPage() {
               to move).{' '}
               <Button size="sm" variant="ghost" onClick={() => setStartFrom(null)}>
                 Use the initial position instead
+              </Button>
+            </Alert>
+          ) : null}
+          {lichessHint &&
+          !play.suggestedRating &&
+          opponent === 'humanlike' &&
+          lichessHint.rating !== humanRating ? (
+            <Alert tone="info">
+              Your Lichess {lichessHint.perf} rating is {lichessHint.lichess}: try{' '}
+              <strong>Maia · {lichessHint.rating}</strong>.{' '}
+              <Button size="sm" onClick={() => setHumanRating(lichessHint.rating)}>
+                Use it
               </Button>
             </Alert>
           ) : null}

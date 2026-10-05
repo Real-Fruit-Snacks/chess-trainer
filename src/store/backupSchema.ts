@@ -207,7 +207,7 @@ const puzzleAttempt = struct(
   { hintLevel: literal(0, 1, 2), score: number, opening: string },
 );
 
-const gameRecord = struct(
+export const gameRecord = struct(
   {
     at: number,
     level: number,
@@ -230,6 +230,8 @@ const gameRecord = struct(
       endedAtPly: nullable(number),
       deviationPly: nullable(number),
     }),
+    // Added in 0.17: the game's id on Lichess, once sent there.
+    lichessId: string,
   },
 );
 
@@ -255,6 +257,22 @@ const ownPuzzle = struct(
       },
       { url: string },
     ),
+  },
+  { opening: string },
+);
+
+/** A puzzle missed on Lichess, in the app's form (added in 0.17). */
+const lichessPuzzle = struct(
+  {
+    id: string,
+    fen: string,
+    moves: string,
+    rating: number,
+    rd: number,
+    popularity: number,
+    plays: number,
+    themes: string,
+    url: string,
   },
   { opening: string },
 );
@@ -410,6 +428,8 @@ export const progressFields = {
     history: array(struct({ at: number, found: number, total: number })),
   }),
   blunderChecks: struct({ stopped: number, playedAnyway: number }),
+  // Added in 0.17 (export version 10).
+  lichessPuzzles: record(lichessPuzzle),
 } satisfies { [K in keyof PersistedProgress]: Schema<unknown> };
 
 export const progressSlice = slice(progressFields) as Schema<Partial<PersistedProgress>>;
@@ -503,7 +523,7 @@ export const gamesSlice = slice(gamesFields);
 /* ------------------------------------------------------------------ */
 
 /** The export format written by this build (see `exportState`). */
-export const EXPORT_VERSION = 9;
+export const EXPORT_VERSION = 10;
 
 /** Why a file was refused: not ours, ours but broken, not JSON at all, or a PGN by the look of it. */
 export type BackupProblem = 'not-a-backup' | 'damaged' | 'unreadable' | 'looks-like-pgn';

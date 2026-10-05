@@ -9,6 +9,7 @@ import {
 import type { LongColor } from '@/chess/types';
 import { newCard, type Quality, reviewCard, type SrsCard } from '@/lib/srs';
 import { parse, repertoireSlice } from './backupSchema';
+import { useLichess } from './lichess';
 import { storageKeyFor } from './profiles';
 
 export interface CustomRepertoire {
@@ -115,6 +116,8 @@ export const useRepertoire = create<RepertoireState>()(
       },
 
       removeCustom: (id) => {
+        // The Lichess sync deletes its chapter too (a repertoire merely missing is restored).
+        useLichess.getState().noteDeleted(`rep:${id}`);
         const prefix = `${id}|`;
         const cards = Object.fromEntries(
           Object.entries(get().cards).filter(([cardId]) => !cardId.startsWith(prefix)),

@@ -1,8 +1,9 @@
 # Architecture
 
 Chess Trainer is a single-page application with **no backend**. Everything — lessons, puzzles, the
-engine and the user's progress — is either shipped as static files or lives in the browser. This
-document explains the moving parts and the reasoning behind them.
+engine and the user's progress — is either shipped as static files or lives in the browser; a
+learner who connects a Lichess account has the browser keep it in step with that account directly.
+This document explains the moving parts and the reasoning behind them.
 
 ## Overview
 
@@ -43,6 +44,7 @@ document explains the moving parts and the reasoning behind them.
 │  chess/ (chess.js helpers, PGN, GameTree, geometry) components/board  │
 │  lib/ srs · puzzleReview · gameImport · clock · sound · haptics       │
 │       shareLink · shareCodes · backup · explorer · tablebase · glicko │
+│       lichess/ account sync: OAuth · outbox · studies ── lichess.org  │
 │  store/ settings · progress · repertoire · games · analyses           │
 │         profiles (namespaces the four per-learner stores)             │
 │                                                                        │
@@ -50,7 +52,8 @@ document explains the moving parts and the reasoning behind them.
 │    puzzle chunks and engine builds · COOP/COEP for threads             │
 └────────────────────────────────────────────────────────────────────────┘
         ▲ static files only (+ optional lichess.org / chess.com API calls:
-          game import, tablebase, opening explorer — each opt-in)
+          game import, tablebase, opening explorer, the Lichess account
+          sync — each opt-in)
 ┌───────┴─────────────────────────────┐
 │ GitHub Pages (dist/)                │
 │  index.html, 404.html, assets       │
@@ -610,6 +613,85 @@ html transform.
   the shared card used by Analyze and the repertoire editor, with its own switch. Off by default
   because it uses the network.
 
+## The Lichess account sync (`src/lib/lichess/`)
+
+Cross-device sync without a server of our own: the learner's Lichess account is the shared copy,
+and the browser talks to lichess.org directly. The rules below follow lila, the Lichess server —
+its source was read for every endpoint used.
+
+- **Requests** (`api.ts`). Everything goes through one queue, body reading included, because
+  Lichess asks for one request at a time. Failures come back as a `LichessError` whose kind says what
+  to do: `network` (wait for a connection), `auth`/`forbidden` (connect again), `rate-limited` (wait
+  `Retry-After`, a minute if unnamed), `invalid` (Lichess refused what was sent: not worth retrying),
+  `server`. Streams (ndjson, long PGN exports) are read as they arrive and can stop early.
+- **Sign-in** (`pkce.ts`, `auth.ts`). The authorization-code flow with PKCE (S256), which Lichess
+  offers to clients without a secret: no app registration, the client id is the site's own address,
+  and the redirect URI is `/settings/lichess` under it. The verifier and state wait in
+  local storage (30 minutes, used once, tied to the profile; not the tab's own storage, since an
+  installed app on Android finishes the sign-in in a browser tab of its own); the callback page
+  (`features/settings/LichessCallbackPage.tsx`) checks them, trades the code for a token, reads
+  `/api/account` and clears the code from the address bar. Scopes: `puzzle:read puzzle:write
+study:read study:write`. Disconnect and Reset everything revoke the token (`DELETE /api/token`). A
+  personal token can be pasted instead (`connectWithToken`): `/api/token/test` says whose it is and
+  what it allows, and it must allow those four. That is the way in for an app on the Home Screen of
+  an iPhone or iPad, which iOS sends to Safari — with its own storage — for the sign-in.
+- **State** (`store/lichess.ts`, per profile, never in a backup). The account and token; the
+  options; the **outbox** (puzzle results and game records waiting to go up — what makes offline
+  play sync later — capped at 2,000 and 200); `sent` (puzzle ids sent from here, so their rounds in
+  the history are recognised); cursors (the newest history round read, when the game exports were
+  last read); the **study links** (item key → study and chapter, with the hash of each side's version
+  at the last agreement); study stamps (`updatedAt` as last read); items Lichess refused (by content
+  hash); and the linked items the learner deleted, which the repertoire and library stores note. The
+  store is part of start-up (the progress store queues results into it), so it stays small: its
+  stored blob is repaired with the backup schema's helpers, and what only the sync changes in the
+  progress store lives with the sync (`progressSync.ts`).
+  A different Lichess user starts the bookkeeping afresh; a backup import keeps the account and the
+  outbox but restarts the matching (`restartSync`), so nothing on Lichess is deleted for items the
+  backup does not hold.
+- **Puzzles** (`puzzles.ts`). Results go up through the batch-solve endpoint (`POST
+/api/puzzle/batch/mix`, fewer than 100 per request: 50 here), win meaning solved without a hint and
+  `rated` as it was here. The history (`/api/puzzle/activity`, newest first, `since` inclusive) comes
+  down from the cursor; rounds sent from here are skipped. A missed puzzle is fetched
+  (`/api/puzzle/{id}`) and converted: the game's moves up to `initialPly` are replayed to find the
+  position before the opponent's move, which with the solution makes the app's own form — the same
+  FEN, moves and game link as the app's puzzle files, a unit test checks it on real answers. Kept
+  in `progress.lichessPuzzles` while a review card points at them (300 at most), so reviews work
+  offline; `findPuzzleById` looks there.
+- **Games** (`records.ts`, `games.ts`). A finished game is imported (`POST /api/import`), its record
+  in a `ChessTrainer` tag (form-encoded) after the other tags. Lichess keeps an imported PGN exactly
+  as sent and imports the same text once, so retries are harmless; the account's imports export
+  (`/api/games/export/imports`, newest first, the original texts) brings records back on another
+  device, read until the game log's 50 are found.
+- **Repertoires and analyses** (`studyModel.ts` without network code, `studies.ts`). One private
+  study per list, parts past 64 chapters. Each item and chapter is hashed twice — moves and
+  annotations (comments, glyphs, `%cal`/`%csl` shapes; clocks and tags left out), and moves alone —
+  over the start position's placement and side to move. `reconcile` compares each side with its own
+  hash in the link (Lichess rewrites PGNs slightly, so the two sides' hashes are never compared with
+  each other): one side changed wins (new moves update the chapter in place; a new name, side, list
+  or start replaces it); both changed keeps both; a deletion on one side deletes an unchanged item on
+  the other — on this side only a deletion the learner made (the repertoire and library stores
+  note it), so an item lost to a damaged save comes back instead; a whole study gone is recreated;
+  an unreadable study or chapter decides nothing.
+  Unlinked items are matched to identical chapters by moves, name and side (after a reinstall or an
+  import), otherwise sent or brought in. Chapters are imported in batches named by their
+  `ChapterName` tags; afterwards the touched studies are read again so each link remembers Lichess's
+  own version, and a new study's empty first chapter is deleted. Names are sent as Lichess will
+  keep them (`lichessNames.ts` ports lila's `fullCleanUp` for study names and `softCleanUp` for
+  chapter names, with their 100- and 80-character cuts), so a name never comes back changed. A list nothing changed in is not
+  read: the study stamps and the links decide that.
+- **Runs** (`sync.ts`). Send results, send games, read the history, read games (first sync, then
+  twice a day or on _Sync now_), reconcile studies, refresh the ratings (and take the puzzle rating).
+  One run at a time per tab (a call meanwhile makes one more run follow) and per profile across tabs
+  (Web Locks, when the browser has them). A part that fails without stopping the run is noted in the
+  report; offline, signed-out, rate-limited and server failures stop it with everything kept, and a
+  timer tries again. `startLichessSync` (loaded by `PlatformHooks` only while an account is connected)
+  runs it 3 s after start, on `online`, on coming back into view, 30 s after results start to wait and
+  every 15 minutes in view.
+- **Tests.** `src/test/fakeLichess.ts` is a stand-in lichess.org that answers as lila does (the OAuth
+  flow with an approval page, puzzle batches and history, imports and their export, studies with the
+  64-chapter limit, the empty first chapter and the import that stops at the first chapter it cannot
+  take). The unit tests reach it through a `fetch` stub, the end-to-end tests through page routes.
+
 ## Accessibility
 
 - Every `Board` derives a plain-language description of the last move from consecutive positions
@@ -745,5 +827,6 @@ warning gives way to a confirmation.
 
 ## Non-goals (for now)
 
-- Accounts or cross-device sync — would need a backend; `localStorage` export/import covers the basics.
+- An account or a sync server of the app's own. Cross-device sync goes through the learner's Lichess
+  account (above); backups cover the rest (lessons, flashcards, review schedules, settings).
 - Human vs human over the network — needs a relay; two people at one device can play on the Play page.

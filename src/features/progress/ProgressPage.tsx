@@ -32,6 +32,7 @@ import {
   themeBaseline,
 } from './themeReport';
 import './progress.css';
+import { useLichess } from '@/store/lichess';
 
 /** Puzzle tags that describe length or source rather than a skill. */
 const META_TAGS = ['short', 'long', 'veryLong', 'oneMove', 'master', 'masterVsMaster', 'superGM'];
@@ -43,6 +44,7 @@ function outcomeLabel(outcome: 'solved' | 'failed', hintUsed: boolean): string {
 
 export default function ProgressPage() {
   const progress = useProgress();
+  const lichessConnected = useLichess((s) => s.account !== null);
   const stats = summarizeProgress(progress);
   // "Games against the computer" means the ordinary ones — the engine's levels and the human-like
   // opponent; arcade, simul and drill games have their own cards.
@@ -100,7 +102,9 @@ export default function ProgressPage() {
         <div>
           <h1>Progress</h1>
           <p>
-            Everything is stored on this device only. Export a backup before switching browsers.
+            {lichessConnected
+              ? 'Puzzles, games, repertoires and analyses are kept in step with your Lichess account; the rest is stored on this device only — export a backup before switching browsers.'
+              : 'Everything is stored on this device only. Export a backup before switching browsers.'}
           </p>
         </div>
         <LinkButton to="/settings">
@@ -267,7 +271,23 @@ export default function ProgressPage() {
                       const tone = g.result === '1/2-1/2' ? 'neutral' : won ? 'success' : 'danger';
                       return (
                         <tr key={g.id}>
-                          <td>{formatDate(g.at, siteConfig.locale)}</td>
+                          <td>
+                            {formatDate(g.at, siteConfig.locale)}
+                            {g.lichessId ? (
+                              <>
+                                {' · '}
+                                <a
+                                  href={`https://lichess.org/${g.lichessId}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="small"
+                                  aria-label={`This game on Lichess (${formatDate(g.at, siteConfig.locale)})`}
+                                >
+                                  Lichess
+                                </a>
+                              </>
+                            ) : null}
+                          </td>
                           <td>
                             {g.source === 'humanlike'
                               ? `Human-like · ${g.opponentRating ?? ''}`

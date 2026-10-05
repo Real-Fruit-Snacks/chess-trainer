@@ -266,12 +266,15 @@ install, a **storage meter**, and backups — export or import as JSON, **share 
 another device, or open a backup file with the installed app. An import is checked field by field,
 then asks first: it shows the backup's date and what it holds (puzzle attempts, imported games, saved
 analyses, custom repertoires), offers to export the current progress, replaces everything in the
-profile at once, and can be undone from the toast that follows. Backups since 0.16 (format 9)
-keep games against the human-like opponent with its rating; since 0.15 (format 8) they carry the
+profile at once, and can be undone from the toast that follows. Backups since 0.17 (format 10)
+keep the Lichess puzzles waiting in the review queue and which games went to Lichess; since 0.16
+(format 9) they keep games against the human-like opponent with its rating; since 0.15 (format 8) they carry the
 thinking-skill records too; since 0.12 (format 7) they include the imported games and, on a device with several profiles, carry the profile's name in the
 file name. _Reset everything_ clears this profile's progress, repertoires, library and imported games
-and the device settings, a downloaded full engine included; the other profiles are kept, and the
-dialog says so.
+and the device settings, a downloaded full engine included, and disconnects the profile's Lichess
+account (withdrawing the permission); the other profiles are kept, and the dialog says so.
+**Lichess account:** connect, see what the sync does, choose what it keeps in step, and disconnect —
+see below.
 
 ### The test lab
 
@@ -293,6 +296,57 @@ _Settings → Open the test lab_ (`/settings/lab`) is a single page for checking
 - **Type and colour:** the colour tokens and the type scale.
 - **Engine:** the diagnostics panel and speed test.
 - **Errors:** a deliberate crash, to see the error page and its report link.
+
+## Lichess account sync
+
+_Settings → Lichess account_ connects the profile to a Lichess account, which then keeps the
+device in step with it — and, through it, with the learner's other devices. The sign-in happens on
+lichess.org (the OAuth authorization-code flow with PKCE, which Lichess offers to apps without a
+server): Lichess asks whether the app may read and write the puzzle activity and the studies, and
+sends the learner back to `/settings/lichess`, which finishes the connection and starts the first
+sync. A personal token made on lichess.org and pasted into the card works too — the card links to
+the page with the permissions ticked — for a window that cannot finish the sign-in: an app on the
+Home Screen of an iPhone or iPad, which iOS sends to Safari for it. Each part can be switched off:
+
+- **Puzzles.** Every Lichess puzzle solved here counts on Lichess too: rated when it was rated
+  here, a win only when solved without a hint (blind and rush solves go up unrated). Results from
+  offline play wait in an outbox on the device — the Puzzles page says how many while offline — and
+  go up in batches once it is back online. Lichess's puzzle history comes down: puzzles new to this
+  device count toward the theme statistics and the training days, and the newest misses (up to 30
+  per sync) are fetched whole and join the review queue, so they work offline too. The puzzle
+  rating follows the Lichess puzzle rating (a switch of its own); results sent from here are
+  recognised when they come back and never count twice.
+- **Games.** A game finished here (drill positions excepted) is imported to the account, where the
+  Lichess analysis board can look at it; the game log links to it. The app's record of the game
+  travels with it in a `ChessTrainer` PGN tag, so another device reads the account's imported games
+  back and restores its game log, newest first. Lichess imports the same text once, so a retried
+  upload never doubles a game.
+- **Repertoires and analyses.** Custom repertoires live as chapters of a private study named
+  _Chess Trainer · Repertoires_, saved analyses in one study per collection (_Chess Trainer ·
+  Analyses: Endgames_), continued in "(2)", "(3)" when a study reaches Lichess's 64 chapters. Each
+  side is compared with how it looked at the last sync (a hash of each side's own version, so the
+  small rewrites Lichess makes to a PGN never look like edits): new moves, comments, glyphs and
+  arrows, a new name or side, and deletions come across either way; when the same item changed on
+  both sides, both versions are kept — the Lichess one here as "… (Lichess)". Only a deletion made
+  in the app deletes on Lichess: an item that went missing on the device any other way (a damaged
+  save) comes back from its chapter, and a study deleted outright on Lichess is made again from the
+  device. An item too big for a chapter (3,000 moves) or refused by Lichess stays on the device until
+  it changes. A study nothing changed in is not read again. Names go to Lichess the way Lichess
+  keeps them — a chapter's cut to 80 characters, a collection's without emoji and symbols — while
+  the device keeps them as typed.
+- **Ratings.** The account's game ratings suggest a starting rating for the human-like opponent
+  (rapid, else blitz, else classical).
+
+The sync runs on its own a few seconds after the app opens, when the device comes back online or
+the app back into view, half a minute after results start to wait, and every 15 minutes while the
+app is on screen; _Sync now_ runs it at once. One request at a time, as Lichess asks; a pause when
+Lichess asks for one; nothing lost when it fails part-way — the outbox empties only as Lichess
+confirms. If Lichess stops accepting the sign-in, the card says so and offers to connect again.
+Results and games the device recorded without sending — before connecting, while disconnected or while that part was off — are offered after connecting and when a part is switched back on (_Send them_ / _Not now_).
+Lessons, flashcards, review schedules and settings stay on the device: a backup moves those. The
+token is kept in this profile's storage on this device, never in a backup; _Disconnect_ revokes
+it on Lichess. Importing a backup starts the matching over, so nothing on Lichess is deleted for
+items the backup does not hold.
 
 ## Reference
 
@@ -341,9 +395,10 @@ sideways.
 
 ## Privacy and network use
 
-There are no accounts and no server: everything you do is stored in your browser, on your device.
-The app talks to the network only when you ask it to — importing your games from Lichess or
-chess.com, and the opening explorer and tablebase lookups, which are off by default. Optional
+There is no sign-up and no server of the app's own: everything you do is stored in your browser, on
+your device. The app talks to the network only when you ask it to — importing your games from
+Lichess or chess.com, the opening explorer and tablebase lookups, which are off by default, and the
+Lichess account sync once you connect an account, which talks to lichess.org alone. Optional
 downloads (the full engine, the human-like opponent, the whole puzzle set) come from the app's own
 site, and the human-like opponent runs on your device like the engine: no position leaves it. Backups are
 files you keep. The page's Content-Security-Policy holds the app to that: it can connect only to

@@ -545,10 +545,12 @@ export async function findPuzzleById(
   ratingHint?: number,
   options: FindPuzzleOptions = {},
 ): Promise<Puzzle | null> {
-  if (isOwnPuzzleId(id)) {
-    const { useProgress } = await import('@/store/progress');
-    return useProgress.getState().ownPuzzles[id] ?? null;
-  }
+  const { useProgress } = await import('@/store/progress');
+  const progress = useProgress.getState();
+  if (isOwnPuzzleId(id)) return progress.ownPuzzles[id] ?? null;
+  // A puzzle missed on Lichess is kept whole for the review queue (it works offline too).
+  const fromLichess = progress.lichessPuzzles[id];
+  if (fromLichess) return fromLichess;
   const index = await loadPuzzleIndex();
   const has = (puzzles: Puzzle[]) => puzzles.some((p) => p.id === id);
   const hinted = ratingHint !== undefined && Number.isFinite(ratingHint);

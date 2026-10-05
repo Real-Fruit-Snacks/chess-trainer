@@ -6,6 +6,7 @@ import { useGames } from '@/store/games';
 import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
 import { useBackupActions } from '@/features/settings/useBackupActions';
+import { useLichess } from '@/store/lichess';
 
 /** "14 days ago", "yesterday", "today". */
 function describeDays(days: number): string {
@@ -22,6 +23,7 @@ function describeDays(days: number): string {
  */
 export function BackupNudge({ compact = false }: { compact?: boolean }) {
   const ratedAttempts = useProgress((s) => s.ratedAttempts);
+  const lichessConnected = useLichess((s) => s.account !== null);
   const lastBackupAt = useProgress((s) => s.lastBackupAt);
   const lastBackupAttempts = useProgress((s) => s.lastBackupAttempts);
   const backupSnoozedUntil = useProgress((s) => s.backupSnoozedUntil);
@@ -58,7 +60,11 @@ export function BackupNudge({ compact = false }: { compact?: boolean }) {
       <div className="row row--between" data-testid="backup-nudge">
         <span>
           <strong>Back up your progress.</strong>{' '}
-          {compact ? null : 'Everything is stored on this device only. '}
+          {compact
+            ? null
+            : lichessConnected
+              ? 'Lessons, flashcards and review schedules are stored on this device only. '
+              : 'Everything is stored on this device only. '}
           {since}
         </span>
         <span className="row">

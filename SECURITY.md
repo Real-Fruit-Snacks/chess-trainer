@@ -23,6 +23,8 @@ In scope:
 - A backup or share link that damages or replaces stored progress without the learner's confirmation
 - Service-worker or caching behaviour that could serve tampered content
 - Supply-chain issues in the build (for example the engine download checksums or the CI workflows)
+- The Lichess sign-in: anything that could leak the token, use it beyond the sync, or connect an
+  account the learner did not approve
 
 Out of scope:
 
@@ -42,6 +44,16 @@ Out of scope:
   a window opened by another site cannot keep a handle on the app's, and nothing cross-origin loads
   without opting in.
 - **No HTML from data.** Imported games, comments and share links are rendered as text, never as markup.
+- **Lichess sign-in.** The OAuth authorization-code flow with PKCE (S256) and a random `state`: the
+  verifier waits in local storage (30 minutes at most, read once, tied to the profile that started
+  it — not just this tab's storage, because an installed app on Android finishes the sign-in in a
+  browser tab of its own), the answer is refused unless its state matches, and the one-time code is removed from
+  the address bar before it is used. The token asks only for `puzzle:read puzzle:write study:read
+study:write`; it is kept in the profile's local storage on this device, sent only to lichess.org,
+  never written into a backup, an export or a link, and revoked on Lichess by Disconnect and by Reset
+  everything. A personal token pasted instead is checked with Lichess (it must allow those four
+  permissions) and kept the same way. Studies the sync creates are private, with chat, cloning and
+  sharing off.
 
 ## Supply chain
 

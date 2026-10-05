@@ -12,6 +12,7 @@ import {
   warnNewerSave,
 } from '@/lib/persistStorage';
 import type { OwnPuzzle } from '@/features/puzzles/ownPuzzles';
+import type { Puzzle } from '@/features/puzzles/puzzleService';
 import { type BlindDepth, blindLevel, nextBlindLevel } from '@/features/puzzles/blind';
 import type { OwnThreat } from '@/features/drills/threats';
 import { daysBetween, localDateKey, trainingStreak } from '@/lib/dates';
@@ -42,6 +43,7 @@ import {
 import { useRepertoire } from './repertoire';
 import { useAnalyses } from './analyses';
 import { useGames } from './games';
+import { useLichess } from './lichess';
 import { storageKeyFor } from './profiles';
 import { takeLegacyLearnerFields } from './settings';
 import {
@@ -143,6 +145,8 @@ export interface GameRecord {
     endedAtPly: number | null;
     deviationPly: number | null;
   };
+  /** The game's id on Lichess, once it has been sent there (Lichess sync). */
+  lichessId?: string;
 }
 
 export interface Streak {
@@ -366,6 +370,11 @@ export interface ProgressState {
   ownThreats: Record<string, OwnThreat>;
   selfReview: SelfReviewStats;
   blunderChecks: BlunderCheckStats;
+  /**
+   * Puzzles missed on Lichess, in the app's form, kept while they are in the
+   * review queue (so they can be reviewed here, offline too).
+   */
+  lichessPuzzles: Record<string, Puzzle>;
 
   /**
    * Sets the starting rating. `'self'` trusts the learner's own assessment
@@ -514,11 +523,12 @@ export type BackupPreview =
   | { ok: true; summary: BackupSummary; warning?: string; shape: BackupShape }
   | { ok: false; reason: string; problem: BackupProblem };
 
-const MAX_HISTORY = 500;
+export const MAX_HISTORY = 500;
 const MAX_ATTEMPTS = 300;
-const MAX_GAMES = 50;
+/** Games kept in the game log (the newest). */
+export const MAX_GAMES = 50;
 const MAX_RUSH_RUNS = 30;
-const MAX_TRAINING_DAYS = 400;
+export const MAX_TRAINING_DAYS = 400;
 /** Puzzle ids remembered as seen; the oldest are forgotten first. */
 export const MAX_SEEN = 20_000;
 /** The review queue never grows past this: the newest step-0 cards go first. */
@@ -627,6 +637,7 @@ const initialState = {
   ownThreats: {} as Record<string, OwnThreat>,
   selfReview: emptySelfReview(),
   blunderChecks: { stopped: 0, playedAnyway: 0 },
+  lichessPuzzles: {} as Record<string, Puzzle>,
 };
 
 export type PersistedProgress = typeof initialState;
@@ -645,6 +656,21 @@ function persisted(state: ProgressState): PersistedProgress {
 }
 
 const MAX_OWN_PUZZLES = 300;
+/** Lichess puzzles kept for the review queue. */
+export const MAX_LICHESS_PUZZLES = 300;
+
+/** Keeps the Lichess puzzles a review card still points at (the newest cards' first, to the cap). */
+export function keepReviewedPuzzles(
+  puzzles: Record<string, Puzzle>,
+  reviews: Record<string, PuzzleReviewCard>,
+): Record<string, Puzzle> {
+  const kept = Object.values(reviews)
+    .filter((card) => puzzles[card.id])
+    .sort((a, b) => b.addedAt - a.addedAt)
+    .slice(0, MAX_LICHESS_PUZZLES);
+  if (kept.length === Object.keys(puzzles).length) return puzzles;
+  return Object.fromEntries(kept.map((card) => [card.id, puzzles[card.id] as Puzzle]));
+}
 
 /** Recall/lesson cards get a nominal rating so the shared scheduler shape fits. */
 export const RECALL_CARD_RATING = 0;
@@ -1037,6 +1063,7 @@ export const useProgress = create<ProgressState>()(
             else delete reviews[attempt.id];
           }
 
+          const puzzleReviews = capReviews(reviews);
           set({
             puzzleRating: after,
             puzzleRd: next.rd,
@@ -1063,9 +1090,20 @@ export const useProgress = create<ProgressState>()(
             seen: pruneSeen({ ...state.seen, [attempt.id]: attempt.outcome }),
             streak: attempt.outcome === 'solved' ? nextStreak(state.streak, today) : state.streak,
             themeStats: addThemeStats(state.themeStats, attempt.themes, attempt.outcome),
-            puzzleReviews: capReviews(reviews),
+            puzzleReviews,
+            lichessPuzzles: keepReviewedPuzzles(state.lichessPuzzles, puzzleReviews),
             ...training(state.trainingDays, today),
           });
+          // Lichess sync: a clean solve is a win there; the result waits in the outbox.
+          useLichess.getState().notePuzzle(
+            {
+              id: attempt.id,
+              solved: attempt.outcome === 'solved',
+              clean: hintLevel === 0,
+              rated,
+            },
+            now,
+          );
           return { before, after, calibrationDone };
         },
 
@@ -1077,7 +1115,10 @@ export const useProgress = create<ProgressState>()(
         dismissReview: (id) => {
           const reviews = { ...get().puzzleReviews };
           delete reviews[id];
-          set({ puzzleReviews: reviews });
+          set({
+            puzzleReviews: reviews,
+            lichessPuzzles: keepReviewedPuzzles(get().lichessPuzzles, reviews),
+          });
         },
 
         bookmarkPuzzle: (meta) => {
@@ -1248,13 +1289,16 @@ export const useProgress = create<ProgressState>()(
 
         recordGame: ({ source = 'play', ...game }) => {
           const at = Date.now();
+          const record: GameRecord = { ...game, source, id: newGameId(at), at };
           set({
-            games: [{ ...game, source, id: newGameId(at), at }, ...get().games].slice(0, MAX_GAMES),
+            games: [record, ...get().games].slice(0, MAX_GAMES),
             ...training(get().trainingDays),
           });
+          // Lichess sync: the game waits in the outbox (drill positions stay on this device).
+          if (record.source !== 'drill') useLichess.getState().noteGame(record, at);
         },
 
-        recordUnratedOutcome: (id, themes, outcome, rating = 0) =>
+        recordUnratedOutcome: (id, themes, outcome, rating = 0) => {
           set({
             seen: pruneSeen({ ...get().seen, [id]: outcome }),
             themeStats: addThemeStats(get().themeStats, themes, outcome),
@@ -1269,7 +1313,11 @@ export const useProgress = create<ProgressState>()(
                     ),
                   })
                 : get().puzzleReviews,
-          }),
+          });
+          useLichess
+            .getState()
+            .notePuzzle({ id, solved: outcome === 'solved', clean: true, rated: false });
+        },
 
         recordRush: (run) =>
           set({
@@ -1324,6 +1372,10 @@ export const useProgress = create<ProgressState>()(
             },
             ...training(state.trainingDays),
           });
+          // Lichess sync: solved blind is solved; it never counts toward the Lichess rating.
+          useLichess
+            .getState()
+            .notePuzzle({ id, solved: outcome === 'solved', clean: true, rated: false }, now);
           return { before, after };
         },
 
@@ -1541,6 +1593,9 @@ export const useProgress = create<ProgressState>()(
           useAnalyses.getState().replaceState(shape.analyses ?? {});
           useGames.getState().replaceState(shape.games ?? {});
           set(next);
+          // The Lichess sync matches the new data afresh: nothing on Lichess is deleted for
+          // items the backup does not hold, and the history is read again.
+          useLichess.getState().restartSync();
           return warning ? { ok: true, summary, warning } : { ok: true, summary };
         },
 
@@ -1548,6 +1603,7 @@ export const useProgress = create<ProgressState>()(
           useRepertoire.getState().resetAll();
           useAnalyses.getState().clear();
           useGames.getState().clear();
+          useLichess.getState().forget();
           safeLocalStorage.removeItem(PRE_IMPORT_BACKUP_KEY);
           set({
             ...initialState,

@@ -10,6 +10,7 @@ import backupV6 from './fixtures/backup-v6.json';
 import backupV7 from './fixtures/backup-v7.json';
 import backupV8 from './fixtures/backup-v8.json';
 import backupV9 from './fixtures/backup-v9.json';
+import backupV10 from './fixtures/backup-v10.json';
 import { useGames } from './games';
 import {
   type PersistedProgress,
@@ -36,6 +37,7 @@ const FIXTURES = [
   ['v7 (0.12)', backupV7],
   ['v8 (0.15)', backupV8],
   ['v9 (0.16)', backupV9],
+  ['v10 (0.17)', backupV10],
 ] as const;
 
 describe('backups from earlier versions', () => {
@@ -189,6 +191,16 @@ describe('backups from earlier versions', () => {
     expect(game).toMatchObject({ source: 'humanlike', opponentRating: 1500, level: 0 });
   });
 
+  it('imports a 0.17-era backup (export v10: Lichess puzzles to review, games sent to Lichess)', () => {
+    const result = useProgress.getState().importState(backupV10);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.summary.version).toBe(10);
+    const s = useProgress.getState();
+    expect(s.lichessPuzzles['6Mhmf']).toMatchObject({ moves: 'h5d1 c4f7 e8e7 c3d5', rating: 1369 });
+    expect(s.puzzleReviews['6Mhmf']).toBeDefined();
+    expect(s.games.find((g) => g.id === 'g-humanlike-1')?.lichessId).toBe('aBcD1234');
+  });
+
   it('gives an older backup the new records empty', () => {
     expect(useProgress.getState().importState(backupV7).ok).toBe(true);
     const s = useProgress.getState();
@@ -197,6 +209,7 @@ describe('backups from earlier versions', () => {
     expect(s.ownThreats).toEqual({});
     expect(s.selfReview.games).toBe(0);
     expect(s.blunderChecks).toEqual({ stopped: 0, playedAnyway: 0 });
+    expect(s.lichessPuzzles).toEqual({});
   });
 
   it('round-trips the current export through import unchanged', () => {
@@ -258,6 +271,8 @@ describe('stored state from earlier versions', () => {
     ['v6', backupV6.progress, 6],
     ['v7', backupV7.progress, 7],
     ['v8', backupV8.progress, 8],
+    ['v8 (0.16)', backupV9.progress, 8],
+    ['v8 (0.17)', backupV10.progress, 8],
   ] as const)(
     'rehydrates a %s progress blob through the persist path',
     async (_, state, version) => {

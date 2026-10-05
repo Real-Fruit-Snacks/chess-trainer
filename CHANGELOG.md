@@ -6,6 +6,93 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-05
+
+Your Lichess account as the meeting point of your devices. Connect it once and the app keeps in step
+with it, both ways: puzzles solved here count on Lichess — offline ones go up when you are back
+online — your Lichess puzzle history comes here with its misses ready to review, games you play are
+imported to Lichess and come back on your other devices, and your own repertoires and saved analyses
+live in private Lichess studies. There is still no server of the app's own: the browser talks to
+lichess.org directly.
+
+### Added
+
+- **Settings → Lichess account.** _Connect Lichess account_ signs you in on lichess.org (the OAuth
+  flow with PKCE, so the app needs no server and no registration), which asks whether the app may
+  read and write your puzzle activity and your studies, then brings you back to Settings and runs the
+  first sync. The card shows the account and its puzzle rating, what the last sync did, what waits to
+  go up, _Sync now_, a switch for each part, and _Disconnect_, which withdraws the permission on
+  Lichess. If Lichess stops accepting the sign-in, the card says so and offers to connect again.
+  _Connect with a personal token instead_ takes a token made on lichess.org (the card links to the
+  page with the permissions ticked) and checks it — the way in for an app on the Home Screen of an
+  iPhone or iPad, which iOS sends to Safari for the sign-in.
+  Puzzle results and games the device recorded without sending — before connecting, while
+  disconnected or while that part was off — are offered after connecting and when a part is switched
+  back on.
+- **Puzzles both ways.** Every Lichess puzzle solved here goes to Lichess — rated when it was rated
+  here, a win only without a hint; blind and rush solves unrated — through an outbox that keeps
+  results played offline until the device is back online (the Puzzles page says how many wait). The
+  Lichess puzzle history comes down: puzzles new to this device count in the theme statistics and the
+  training days, and the newest misses (up to 30 a sync) are fetched whole and join the review queue,
+  where they work offline. The puzzle rating follows your Lichess puzzle rating (a switch of its own).
+  Results sent from here are recognised when they come back and never count twice.
+- **Games both ways.** A game finished here — against the engine, the human-like opponent, in the
+  arcade or the simul; drill positions stay on the device — is imported to your Lichess account,
+  where its analysis board can look at it, and the game log links to it. The app's record of the game
+  travels in the PGN, so your other devices bring it back into their game logs. Lichess imports the
+  same text only once, so a retried upload never doubles a game.
+- **Repertoires and analyses in private studies.** Custom repertoires become the chapters of _Chess
+  Trainer · Repertoires_, saved analyses of one study per collection (_Chess Trainer · Analyses:
+  Endgames_), continued in "(2)" past Lichess's 64 chapters. New moves, comments, glyphs and arrows,
+  a new name or side, and deletions come across either way; when the same item changed on both sides
+  since the last sync, both versions are kept, the Lichess one as "… (Lichess)". Only a deletion made
+  in the app deletes on Lichess — an item that went missing any other way (a damaged save) comes back
+  from its chapter — and a whole study deleted on Lichess is made again from the device rather than
+  taken as a deletion. An item too big for a chapter (3,000 moves) or refused by Lichess stays on the
+  device, and the card names it.
+- **The sync runs on its own** a few seconds after the app opens, when the device comes back online or
+  the app back into view, half a minute after results start to wait, and every quarter of an hour on
+  screen: one request at a time, as Lichess asks, pausing when Lichess asks for a pause, never two
+  runs at once (across tabs too), and nothing lost when it stops part-way.
+- **The human-like opponent's rating from Lichess.** With an account connected, the game setup
+  suggests the Maia rating nearest your Lichess rapid rating (else blitz, else classical).
+- The FAQ says what connecting does and what leaves the device.
+
+### Changed
+
+- Backups are export format 10: they keep the Lichess puzzles waiting in the review queue and which
+  games went to Lichess. Backups from every earlier format import as before. The Lichess connection
+  is never part of a backup; importing one starts the matching over, so nothing on Lichess is deleted
+  for items the backup does not hold.
+- _Reset everything_ also disconnects the profile's Lichess account and withdraws its permission.
+- Connecting fills in the Lichess name the game importer uses, when none was set.
+- The privacy wording in Settings, the FAQ and the docs covers the sync: no sign-up and no server of
+  the app's own, and the Lichess sync talks to lichess.org alone. With an account connected, Progress
+  and the backup reminder say what is kept in step and what only a backup moves.
+
+### Testing
+
+- A stand-in lichess.org (`src/test/fakeLichess.ts`) that answers as lila does — the OAuth code flow
+  with PKCE and its approval page, puzzle batches and history, game imports and their export, studies
+  with their 64-chapter limit, the empty first chapter, the import that stops at the first chapter it
+  cannot take, and the 400 for a chapter that is gone — shared by the unit and end-to-end tests.
+- Unit tests for the requests (one at a time, the kinds of failure, streams that stop early), the
+  sign-in (the RFC 7636 example, a refused or stale or foreign answer, a wrong verifier, revoking), a
+  personal token (accepted; malformed, unknown or short of permissions turned down), the connection
+  store (repair, caps, a different account starting afresh, the backlog), the puzzle
+  conversion — seven real Lichess answers come out exactly as the app's own puzzle files have them —
+  the game records, the studies model (names sent as Lichess keeps them — a port of its clean-up of
+  study and chapter names — hashes that settle after one rewrite and survive Lichess's way of writing
+  a PGN, every reconcile case) and the study sync against the stand-in (first upload, a second
+  device's restore, edits and deletions both ways, an item lost to a damaged save restored, both sides
+  changed, a deleted study, an unreadable chapter, too big, refused, a full study, a full library,
+  after a backup import, a dropped connection), the sync runs (offline, signed out, a pause, a refused
+  batch, the parts switched off, a disconnection mid-run, one run at a time, the timers), the Settings
+  card and its token form, the callback page and the 0.17 backup fixture.
+- End to end in every browser: connecting through the approval page and disconnecting, connecting
+  with a personal token, a cancelled connection, a puzzle solved offline going up once back online,
+  and another device's repertoire, analysis, game and missed puzzle coming in.
+
 ## [0.16.0] - 2026-10-05
 
 An opponent that plays like a person. The engine levels are Stockfish held back by shallow searches

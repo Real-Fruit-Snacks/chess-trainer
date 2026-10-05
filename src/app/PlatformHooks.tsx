@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { FILLER_PREFIX, PROBE_KEY } from '@/features/lab/labKeys';
 import { consumeLaunchFiles } from '@/lib/launchQueue';
 import { removeFullEngine } from '@/engine/fullEngine';
+import { useLichess } from '@/store/lichess';
 import { useSettings } from '@/store/settings';
 import { syncIsolationFlag } from '@/sw/isolation';
 import { useAppBadge } from './useAppBadge';
@@ -29,14 +30,16 @@ function hasLabLeftovers(): boolean {
  * are checked and confirmed like any other import, never applied on their own.
  * Also tidies up after the test lab, whose storage filler must not outlive it,
  * keeps the service worker's isolation flag in step with the threads
- * setting, and clears away a full engine that is switched off. The import
- * dialog and the lab code load only when they are needed.
+ * setting, and clears away a full engine that is switched off. While a
+ * Lichess account is connected, the account sync runs on its own. The import
+ * dialog, the lab code and the sync load only when they are needed.
  */
 export function PlatformHooks() {
   const due = useDueCount();
   useAppBadge(due.total);
   const [launchFile, setLaunchFile] = useState<File | null>(null);
   const engineThreads = useSettings((s) => s.engineThreads);
+  const lichessConnected = useLichess((s) => s.account !== null && !s.needsReconnect);
 
   // The service worker reads the threads choice from its own flag: a save from before
   // threads were the default, or a change made in another tab, brings it in line.
@@ -61,6 +64,21 @@ export function PlatformHooks() {
   useEffect(() => {
     consumeLaunchFiles((file) => setLaunchFile(file));
   }, []);
+
+  useEffect(() => {
+    if (!lichessConnected) return;
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    void import('@/lib/lichess/sync')
+      .then((sync) => {
+        if (!cancelled) stop = sync.startLichessSync();
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [lichessConnected]);
 
   if (!launchFile) return null;
   return (

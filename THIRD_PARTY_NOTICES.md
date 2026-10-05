@@ -23,6 +23,8 @@ development-time tools only.
 | [Lichess tablebase API](https://github.com/lichess-org/lila-tablebase) (optional, network)                                                                                                                                                          | Service — not bundled             | Seven-piece endgame lookups when enabled in settings                                |
 | [Lichess opening explorer API](https://lichess.org/api#tag/Opening-Explorer) (optional, network)                                                                                                                                                    | Service — not bundled             | Master and community game statistics per position when enabled in settings          |
 | [Lichess](https://lichess.org/api) and [chess.com](https://www.chess.com/news/view/published-data-api) public game APIs (optional, network)                                                                                                         | Services — not bundled            | Importing the learner's own games on request                                        |
+| [Lichess API](https://lichess.org/api): OAuth, puzzle activity and results, game import and export, studies (optional, network)                                                                                                                     | Service — not bundled             | The account sync, once the learner connects an account                              |
+| [scalalib](https://github.com/ornicar/scalalib) by Thibault Duplessis: the name clean-up rules of `StringOps`, ported to TypeScript (`src/lib/lichess/lichessNames.ts`)                                                                             | MIT                               | Names sent to Lichess already as Lichess keeps them                                 |
 
 The "Letters" piece set (`src/components/board/pieces-letters.css`), the sounds, the lessons, courses,
 endgame drills and the study annotations are original work of this project and covered by its licence.
@@ -52,6 +54,26 @@ ONNX Runtime Web is MIT-licensed (© Microsoft Corporation; the build keeps its 
 human-like opponent's worker script). Its WebAssembly build contains the open-source components
 listed in ONNX Runtime's
 [third-party notices](https://github.com/microsoft/onnxruntime/blob/v1.30.0/ThirdPartyNotices.txt).
+
+The rules by which Lichess cleans study and chapter names come from scalalib (MIT), whose notice
+follows:
+
+> Copyright (c) Thibault Duplessis
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+> associated documentation files (the "Software"), to deal in the Software without restriction,
+> including without limitation the rights to use, copy, modify, merge, publish, distribute,
+> sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or
+> substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+> NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+> NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+> OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+> CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Development tools (not shipped)
 

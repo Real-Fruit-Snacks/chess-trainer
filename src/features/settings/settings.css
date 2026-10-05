@@ -161,3 +161,11 @@
 .settings__fieldset:disabled .switch {
   cursor: not-allowed;
 }
+
+/* What the Lichess sync keeps in step, before an account is connected. */
+.settings__list {
+  margin: 0;
+  padding-left: 1.2em;
+  display: grid;
+  gap: var(--space-1);
+}

@@ -42,6 +42,9 @@ import {
   type ReviewDepth,
   useSettings,
 } from '@/store/settings';
+import { revokeLichessToken } from '@/lib/lichess/auth';
+import { useLichess } from '@/store/lichess';
+import { LichessCard } from './LichessCard';
 import { ProfilesCard } from './ProfilesCard';
 import { useBackupActions } from './useBackupActions';
 import { useImportBackup } from './useImportBackup';
@@ -112,8 +115,9 @@ export default function SettingsPage() {
       <div className="page-header">
         <h1>Settings</h1>
         <p>
-          Appearance, play, engine and analysis, your puzzle rating, profiles, backups and the app
-          itself. Everything is stored on this device only.
+          Appearance, play, engine and analysis, your puzzle rating, your Lichess account, profiles,
+          backups and the app itself. Everything is stored on this device — and in your Lichess
+          account, if you connect one.
         </p>
       </div>
 
@@ -440,6 +444,7 @@ export default function SettingsPage() {
           </Card>
         </div>
         <div className="stack">
+          <LichessCard />
           <ProfilesCard />
           <Card>
             <h2 style={{ fontSize: '1.15rem' }}>Engine & analysis</h2>
@@ -557,8 +562,9 @@ export default function SettingsPage() {
                 </div>
               </div>
               <p className="small muted" style={{ margin: 0 }}>
-                No account, no server, no tracking: everything stays in this browser. The{' '}
-                <Link to="/reference#faq">FAQ</Link> explains what leaves your device and when.
+                No sign-up, no server of our own, no tracking: everything stays in this browser
+                unless you connect your Lichess account. The <Link to="/reference#faq">FAQ</Link>{' '}
+                explains what leaves your device and when.
               </p>
               <StorageUsage />
               <div className="settings__row">
@@ -620,6 +626,9 @@ export default function SettingsPage() {
               variant="danger"
               data-testid="reset-confirm"
               onClick={() => {
+                // The Lichess permission is withdrawn too: the reset forgets the connection.
+                const lichessToken = useLichess.getState().account?.token;
+                if (lichessToken) void revokeLichessToken(lichessToken);
                 progress.resetAll();
                 settings.reset();
                 setConfirmReset(false);
@@ -634,8 +643,9 @@ export default function SettingsPage() {
         <p className="muted">
           This deletes the puzzle rating, lesson progress, repertoires, analysis library, game
           history and imported games of this profile, and every device setting: the engine goes back
-          to its defaults, and a downloaded full engine is deleted. Export a backup first if you
-          want to keep them.
+          to its defaults, and a downloaded full engine is deleted. A connected Lichess account is
+          disconnected (what was synced stays on Lichess). Export a backup first if you want to keep
+          them.
         </p>
         <p className="muted">
           Kept:{' '}
