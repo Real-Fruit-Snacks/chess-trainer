@@ -31,9 +31,19 @@ describe('postbuild', () => {
     expect(readFileSync(join(dist, 'licence-agpl.txt'), 'utf8')).toContain(
       'GNU AFFERO GENERAL PUBLIC LICENSE',
     );
+    // The Chessnut piece set is Apache-2.0, which asks for its licence to travel with it.
+    expect(readFileSync(join(dist, 'licence-apache.txt'), 'utf8')).toContain(
+      'Apache License\n                           Version 2.0',
+    );
     expect(readFileSync(join(dist, 'notices.txt'), 'utf8')).toContain('Colin M.L. Burnett');
     expect(readFileSync(join(dist, 'notices.txt'), 'utf8')).toContain('Maia-3');
-    expect(result.licences).toEqual(['licence.txt', 'licence-agpl.txt', 'notices.txt']);
+    expect(readFileSync(join(dist, 'notices.txt'), 'utf8')).toContain('CC BY-NC-SA 4.0');
+    expect(result.licences).toEqual([
+      'licence.txt',
+      'licence-agpl.txt',
+      'licence-apache.txt',
+      'notices.txt',
+    ]);
 
     expect(result.maps.sort()).toEqual([join('assets', 'index-abc.js.map'), 'sw.js.map']);
     expect(existsSync(join(dist, 'assets', 'index-abc.js.map'))).toBe(false);

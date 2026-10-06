@@ -1,7 +1,7 @@
 import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Board } from '@/components/board/Board';
-import { BOARD_PALETTES, boardBackground } from '@/components/board/boardThemes';
+import { BOARD_PALETTES, boardPreview } from '@/components/board/boardThemes';
 import { PIECE_SETS, type PieceSet } from '@/components/board/pieceSets';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import {
@@ -538,7 +538,7 @@ export default function LabPage() {
 
         <Card id="lab-board" data-testid="lab-board">
           <h2>Board</h2>
-          <h3>Board colours</h3>
+          <h3>Board themes</h3>
           <div className="row">
             {palettes.map((theme) => (
               <button
@@ -551,7 +551,7 @@ export default function LabPage() {
               >
                 <span
                   className="lab__palette-swatch"
-                  style={{ '--board-bg': boardBackground(theme) } as CSSProperties}
+                  style={{ '--board-bg': boardPreview(theme) } as CSSProperties}
                   aria-hidden="true"
                 />
                 <span className="small">{BOARD_PALETTES[theme].label}</span>

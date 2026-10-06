@@ -131,3 +131,22 @@
 .clickboard__square--last {
   background-image: linear-gradient(rgba(255, 204, 0, 0.42), rgba(255, 204, 0, 0.42));
 }
+
+/* A textured board: its picture (over its flat colours) behind the squares, which only tint. */
+.clickboard--texture {
+  background-image: var(--board-bg);
+  background-size: 100% 100%;
+}
+
+.clickboard--texture .clickboard__square--light,
+.clickboard--texture .clickboard__square--dark {
+  background-color: transparent;
+}
+
+.clickboard--texture .clickboard__square.clickboard__square--correct {
+  background-color: color-mix(in srgb, var(--success) 55%, transparent);
+}
+
+.clickboard--texture .clickboard__square.clickboard__square--wrong {
+  background-color: color-mix(in srgb, var(--danger) 60%, transparent);
+}

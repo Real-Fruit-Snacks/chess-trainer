@@ -1,20 +1,20 @@
 /**
- * The app's piece sets and the CSS that carries them (see scripts/generate-pieces.mjs, which
- * writes it, and pieces.test.ts, which checks the written files are current).
+ * The app's piece sets and the CSS that carries them (scripts/generate-pieces.mjs writes it,
+ * pieces.test.ts checks the written files are current). The sets themselves live in
+ * src/components/board/pieces/, one folder of twelve SVGs each, with their sources and licences.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as bold from './bold.mjs';
-import * as letters from './letters.mjs';
-import * as modern from './modern.mjs';
-import * as pixel from './pixel.mjs';
-import * as staunton from './staunton.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
+/** Where the sets' SVGs are and where their stylesheets are written. */
+export const PIECES_DIR = join(ROOT, 'src', 'components', 'board', 'pieces');
+
 export const ROLES = ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'];
 export const COLORS = ['white', 'black'];
+const LETTER = { king: 'K', queen: 'Q', rook: 'R', bishop: 'B', knight: 'N', pawn: 'P' };
 
 /* ------------------------------------------------------------------ */
 /* Classic: the cburnett set that ships with Chessground, re-emitted   */
@@ -36,47 +36,38 @@ function classicUri(role, color) {
 
 /**
  * A data URI for an SVG inside a single-quoted CSS url(): only the characters that would end
- * the string or confuse the URL parser are escaped, which keeps the CSS small.
+ * the string, break the line or confuse the URL parser are escaped, which keeps the CSS small.
  */
-function svgUri(svg) {
+export function svgUri(svg) {
   if (svg.includes("'")) throw new Error('an SVG for a CSS url() must not contain single quotes');
-  return `data:image/svg+xml,${svg.replace(/[%#<>]/g, (c) => encodeURIComponent(c))}`;
+  return `data:image/svg+xml,${svg.replace(/[%#<>\r\n]/g, (c) => encodeURIComponent(c))}`;
 }
 
+/** The file of one piece of a set, as Lichess names it: wK.svg is the white king. */
+export function pieceFile(id, role, color) {
+  return join(PIECES_DIR, id, `${color[0]}${LETTER[role]}.svg`);
+}
+
+/**
+ * Every set the app offers, Classic first. A set's description heads its stylesheet; see
+ * src/components/board/pieces/README.md for the sources and licences.
+ */
 export const SETS = [
   {
     id: 'classic',
     uri: classicUri,
     description:
-      "Colin M.L. Burnett's figurines, from the Chessground package (see THIRD_PARTY_NOTICES.md).",
+      "Colin M.L. Burnett's figurines (cburnett, CC BY-SA 3.0), from the Chessground package.",
     isDefault: true,
   },
-  {
-    id: 'staunton',
-    draw: staunton.draw,
-    description: 'original tournament shapes with a heavier line, crisp on a phone.',
-  },
-  {
-    id: 'bold',
-    draw: bold.draw,
-    description:
-      'original big, simple shapes with a heavy outline; black pieces carry a light rim.',
-  },
-  {
-    id: 'modern',
-    draw: modern.draw,
-    description: 'original plain geometry with one line weight.',
-  },
-  {
-    id: 'pixel',
-    draw: pixel.draw,
-    description: 'an original 8-bit set drawn on a 16×16 grid, with crisp edges at any size.',
-  },
-  {
-    id: 'letters',
-    draw: letters.draw,
-    description: "the piece's initial, drawn as paths so it looks the same on every device.",
-  },
+  { id: 'merida', description: 'by Armando Hernandez Marroquin, GPL-2.0-or-later.' },
+  { id: 'chessnut', description: 'by Alexis Luengas, Apache-2.0.' },
+  { id: 'mpchess', description: 'by Maxime Chupin, GPL-3.0-or-later.' },
+  { id: 'celtic', description: 'by Maurizio Monge, MIT.' },
+  { id: 'california', description: 'by Jerry S., CC BY-NC-SA 4.0: non-commercial use only.' },
+  { id: 'maestro', description: 'by sadsnake1, CC BY-NC-SA 4.0: non-commercial use only.' },
+  { id: 'staunty', description: 'by sadsnake1, CC BY-NC-SA 4.0: non-commercial use only.' },
+  { id: 'cardinal', description: 'by sadsnake1, CC BY-NC-SA 4.0: non-commercial use only.' },
 ];
 
 /**
@@ -86,11 +77,10 @@ export const SETS = [
  *   description: string,
  *   isDefault?: boolean,
  *   uri?: (role: string, color: string) => string,
- *   draw?: (role: string, color: string) => string,
  * }} set
  */
-export function pieceCss({ id, uri, draw, description, isDefault = false }) {
-  const uriOf = uri ?? ((role, color) => svgUri(draw(role, color)));
+export function pieceCss({ id, uri, description, isDefault = false }) {
+  const uriOf = uri ?? ((role, color) => svgUri(readFileSync(pieceFile(id, role, color), 'utf8')));
   const rules = [];
   for (const color of COLORS) {
     for (const role of ROLES) {
@@ -104,12 +94,12 @@ export function pieceCss({ id, uri, draw, description, isDefault = false }) {
       );
     }
   }
-  return (
-    `/*\n * "${id[0].toUpperCase()}${id.slice(1)}" piece set: ${description}\n` +
-    ` * Generated by scripts/generate-pieces.mjs — edit the script, not this file.\n` +
-    ` * Selected with data-pieces="${id}" on <html> (see components/board/pieceSets.ts);\n` +
-    ` * .piece-preview.pieces-${id} shows it inside one element.\n */\n` +
-    rules.join('\n\n') +
-    '\n'
+  const lines = [`"${id[0].toUpperCase()}${id.slice(1)}" piece set: ${description}`];
+  if (!isDefault) lines.push('From the Lichess repository: see README.md beside this file.');
+  lines.push(
+    'Generated by scripts/generate-pieces.mjs — edit the script or the SVGs, not this file.',
+    `Selected with data-pieces="${id}" on <html> (see components/board/pieceSets.ts);`,
+    `.piece-preview.pieces-${id} shows it inside one element.`,
   );
+  return `/*\n${lines.map((line) => ` * ${line}`).join('\n')}\n */\n${rules.join('\n\n')}\n`;
 }

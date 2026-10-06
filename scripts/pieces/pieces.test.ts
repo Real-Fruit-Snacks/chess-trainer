@@ -1,71 +1,71 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { COLORS, pieceCss, ROLES, SETS } from './index.mjs';
-import { MASKS } from './pixel.mjs';
+import { COLORS, PIECES_DIR, pieceCss, pieceFile, ROLES, SETS, svgUri } from './index.mjs';
 
-const BOARD = join(process.cwd(), 'src', 'components', 'board');
-
-/** The elements of an SVG, checked to open and close in order. */
-function elements(svg: string): string[] {
-  const stack: string[] = [];
-  const seen: string[] = [];
-  for (const [, close, name, , selfClosing] of svg.matchAll(/<(\/?)([a-z]+)([^<>]*?)(\/?)>/g)) {
-    if (close) {
-      expect(stack.pop()).toBe(name);
-    } else {
-      seen.push(name ?? '');
-      if (!selfClosing) stack.push(name ?? '');
-    }
-  }
-  expect(stack).toEqual([]);
-  return seen;
-}
+const read = (...path: string[]) => readFileSync(join(process.cwd(), ...path), 'utf8');
 
 describe('piece sets', () => {
-  it('match the sets the app offers, and the app loads every one', () => {
-    const settings = readFileSync(join(process.cwd(), 'src', 'store', 'settings.ts'), 'utf8');
-    const ids = /PIECE_SET_IDS = \[([^\]]+)\]/.exec(settings)?.[1]?.match(/[a-z]+/g);
-    expect(ids).toEqual(SETS.map((set) => set.id));
-    const main = readFileSync(join(process.cwd(), 'src', 'main.tsx'), 'utf8');
-    for (const { id } of SETS) expect(main).toContain(`@/components/board/pieces-${id}.css`);
+  it('match the sets the app offers and loads', () => {
+    const ids = SETS.map((set) => set.id);
+    const settings = read('src', 'store', 'settings.ts');
+    expect(/PIECE_SET_IDS = \[([^\]]+)\]/.exec(settings)?.[1]?.match(/[a-z]+/g)).toEqual(ids);
+    // Classic is bundled; every other set has a loader for its stylesheet.
+    expect(read('src', 'main.tsx')).toContain("import '@/components/board/pieces/classic.css';");
+    const styles = read('src', 'components', 'board', 'pieceStyles.ts');
+    for (const id of ids.slice(1)) {
+      expect(styles).toContain(`${id}: () => import('./pieces/${id}.css')`);
+    }
+    // Each stylesheet in the folder is one of the sets: none is left over from a removed set.
+    const sheets = readdirSync(PIECES_DIR).filter((file) => file.endsWith('.css'));
+    expect(sheets.sort()).toEqual(ids.map((id) => `${id}.css`).sort());
   });
 
-  it('are written out: the stylesheets match the drawings (run npm run pieces:generate)', () => {
+  it('are written out: the stylesheets match the SVGs (run npm run pieces:generate)', () => {
     for (const set of SETS) {
-      expect(readFileSync(join(BOARD, `pieces-${set.id}.css`), 'utf8'), set.id).toBe(pieceCss(set));
+      expect(readFileSync(join(PIECES_DIR, `${set.id}.css`), 'utf8'), set.id).toBe(pieceCss(set));
     }
   });
 
-  it('draw every piece in both colours as a well-formed SVG', () => {
-    for (const set of SETS) {
-      if (!set.draw) continue;
-      const drawings = new Set<string>();
+  it('have all twelve pieces, each a plain SVG with nothing to fetch or run', () => {
+    for (const set of SETS.filter((s) => s.id !== 'classic')) {
+      const files = new Set<string>();
       for (const color of COLORS) {
         for (const role of ROLES) {
-          const svg: string = set.draw(role, color);
-          const where = `${set.id} ${color} ${role}`;
-          expect(svg, where).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="/);
-          expect(svg, where).not.toMatch(/NaN|undefined|Infinity|'/);
-          expect(elements(svg)[0], where).toBe('svg');
-          drawings.add(svg);
+          const file = pieceFile(set.id, role, color);
+          expect(existsSync(file), file).toBe(true);
+          const svg = readFileSync(file, 'utf8');
+          expect(svg, file).toMatch(/^<svg\b[^>]*xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+          expect(svg, file).not.toMatch(/<script|\son[a-z]+=|javascript:|href="(?!#)/i);
+          files.add(svg);
         }
       }
-      // Twelve different pictures: no piece borrows another's.
-      expect(drawings.size, set.id).toBe(12);
+      expect(files.size, set.id).toBe(12);
     }
   });
 
-  it("keep the pixel set on its grid, every outline but the knight's symmetric", () => {
-    for (const [role, rows] of Object.entries(MASKS)) {
-      expect(rows, role).toHaveLength(16);
-      for (const row of rows) expect(row, role).toMatch(/^[.#x]{16}$/);
-      if (role === 'knight') continue;
-      // The bishop's slit runs one way; the outline itself is mirror-symmetric.
-      for (const row of rows.map((r) => r.replace(/x/g, '#'))) {
-        expect([...row].reverse().join(''), role).toBe(row);
-      }
+  it('credit every set with its licence, the non-commercial ones flagged', () => {
+    const readme = read('src', 'components', 'board', 'pieces', 'README.md');
+    const notices = read('THIRD_PARTY_NOTICES.md');
+    const registry = read('src', 'components', 'board', 'pieceSets.ts');
+    for (const set of SETS) {
+      const name =
+        set.id === 'mpchess' ? 'MPChess' : `${set.id[0]?.toUpperCase()}${set.id.slice(1)}`;
+      expect(readme, set.id).toContain(`| ${name} `);
+      expect(notices, set.id).toContain(name);
+      expect(registry, set.id).toContain(`  ${set.id}: {`);
     }
+    for (const set of SETS.filter((s) => s.description.includes('NC'))) {
+      expect(set.description).toContain('non-commercial use only');
+    }
+    expect(readme).toContain('may not be used commercially');
+  });
+
+  it('escape what a CSS string or URL cannot hold', () => {
+    expect(svgUri('<svg a="b"><path fill="#fff" d="M0 0\n"/></svg>')).toBe(
+      'data:image/svg+xml,%3Csvg a="b"%3E%3Cpath fill="%23fff" d="M0 0%0A"/%3E%3C/svg%3E',
+    );
+    expect(() => svgUri("<svg a='b'/>")).toThrow(/single quotes/);
   });
 });

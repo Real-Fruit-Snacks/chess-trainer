@@ -8,7 +8,7 @@ import {
 } from 'react';
 import type { LongColor } from '@/chess/types';
 import { useSettings } from '@/store/settings';
-import { BOARD_PALETTES } from './boardThemes';
+import { BOARD_PALETTES, boardBackground } from './boardThemes';
 import { defaultCursor, isDarkSquare, moveCursor, squareFromKeys } from './keyboard';
 import './click-board.css';
 
@@ -97,10 +97,16 @@ export const ClickBoard = memo(function ClickBoard({
   return (
     <div
       ref={rootRef}
-      className={`clickboard cg-wrap${coordinates ? ' clickboard--coords' : ''}`}
+      className={`clickboard cg-wrap${coordinates ? ' clickboard--coords' : ''}${palette.image ? ' clickboard--texture' : ''}`}
       role="group"
       aria-label={ariaLabel}
-      style={{ '--light': palette.light, '--dark': palette.dark } as CSSProperties}
+      style={
+        {
+          '--light': palette.light,
+          '--dark': palette.dark,
+          ...(palette.image ? { '--board-bg': boardBackground(theme) } : {}),
+        } as CSSProperties
+      }
       onKeyDown={onKeyDown}
     >
       {ranks.map((rank) => (

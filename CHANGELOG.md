@@ -6,6 +6,74 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-06
+
+The pieces and the boards now come from the open collections Lichess publishes: eight of its best
+piece sets join Classic, the sets drawn for 0.19 are gone, and every one of its 25 boards can be
+chosen.
+
+### Added
+
+- **Eight piece sets from the Lichess collection**, chosen beside the 0.19 sets on the same boards
+  and measured the same way: **Merida**, **Chessnut**, **MPChess** and **Celtic**, which anyone may
+  use, and **California**, **Maestro**, **Staunty** and **Cardinal**, which are CC BY-NC-SA 4.0 and so
+  for non-commercial use only. The SVGs are copied unchanged. Each set's author and licence show
+  under the picker in Settings and in the footer while it is chosen, and Chessnut's Apache licence
+  ships with the site (`licence-apache.txt`).
+- **Every Lichess board, 25 in all.** Twenty are Lichess's pictures, copied unchanged: Wood (and
+  Wood 2, 3 and 4), Maple and Maple 2, Horsey, Leather, Blue 2, Blue 3, Canvas, Blue marble, Marble,
+  Green plastic, Olive, Grey, Metal, Newspaper, Purple diagonal and Pink. The other five (Brown,
+  Blue, IC, Green and Purple) are flat, drawn from their colours. Ice, Walnut and High contrast
+  stay, for 28 board themes. A picture is downloaded the first time its board is shown and drawn on
+  every board, the drills' and the board editor's included; until it arrives, or offline before it
+  was ever fetched, the board shows the picture's colours. The pictures are under the AGPL-3.0,
+  credited with their authors under the board picker and in the third-party notices.
+
+### Changed
+
+- Every set but Classic loads the first time it is shown, so a visitor downloads only the set they
+  use: the stylesheet every page waits for drops from 17 KB to 11 KB compressed. The service worker
+  still keeps every set for offline use, and its precache budget rises from 6.5 to 6.75 MB to hold
+  them. Until a set's stylesheet arrives (or offline, before it was ever fetched) the board shows
+  Classic.
+- The footer credits the chosen piece set — its name, author and licence — rather than always the
+  classic one.
+- Green, Grey, Olive and Purple are now Lichess's: Grey and Olive its pictures, Green and Purple its
+  colours. A device that had one of them chosen keeps it, in its new look.
+- The board pickers in Settings and the Lab show each textured board as a 128-pixel preview (about
+  50 KB for all twenty; `npm run boards:thumbs` makes them), so opening Settings never downloads the
+  full pictures (1.9 MB). The board setting is called Board theme, and each of its swatches is the
+  board's corner, two squares by two, rather than a diagonal split of its colours.
+- The service worker keeps the board pictures it has shown in a cache of their own
+  (`chess-trainer-boards`) rather than precaching them, so installing the app costs nothing more
+  and the chosen board works offline.
+- The start-up code budget rises from 42 to 43 KB: the settings check the 28 board themes and nine
+  piece sets as the app starts.
+- README, FEATURES, ARCHITECTURE, CONTRIBUTING and the third-party notices describe the sets and
+  the boards, their licences and what the non-commercial four sets mean for anyone who would sell
+  the app.
+
+### Removed
+
+- The Staunton, Bold, Modern, Pixel and Letters sets drawn for 0.19. A device that had one of them
+  chosen shows Classic.
+
+### Testing
+
+- Unit tests: the stylesheets match the SVGs; every set has its twelve pieces, with no scripts or
+  outside links in them; the list of sets matches the settings, the loaders and the credits; every
+  set is credited with its licence, the non-commercial ones flagged; the Apache licence ships with
+  the site. Every textured board has its picture and its preview and nothing else is in the
+  folder; the pictures are square (so they fit the 64 squares) and the SVG one has nothing to fetch
+  or run; a flat board is a checkerboard of its colours with a light corner square; a textured one
+  is layered over its colours; the themes match the settings, and choosing one in Settings credits
+  its authors and links its licence.
+- End to end: a chosen set loads only its own stylesheet, shows on the board, is kept across a
+  reload and is credited in the footer with its licence; the picker loads every set; a set removed
+  after 0.19 falls back to Classic. The board picker fetches the previews only; a chosen textured
+  board draws its picture on the analysis board and the drills' board; a flat board fetches
+  nothing; the picture is kept by the service worker, served offline, and not precached.
+
 ## [0.19.0] - 2026-10-06
 
 New piece sets, all drawn for this project and judged by how quickly the pieces tell apart: two new

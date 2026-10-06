@@ -47,12 +47,19 @@
   gap: var(--space-2);
 }
 
+/* Each board as its top-left corner, two squares by two (a8 light), edge to edge. */
 .swatch {
+  --sw-squares: conic-gradient(
+    var(--sw-dark) 0 25%,
+    var(--sw-light) 0 50%,
+    var(--sw-dark) 0 75%,
+    var(--sw-light) 0
+  );
   width: 36px;
   height: 36px;
   border-radius: var(--radius-sm);
   border: 2px solid transparent;
-  background: linear-gradient(135deg, var(--sw-light) 50%, var(--sw-dark) 50%);
+  background: var(--sw-squares) border-box;
 }
 
 @media (pointer: coarse) {
@@ -60,6 +67,13 @@
     width: 40px;
     height: 40px;
   }
+}
+
+/* A textured board: the same corner of its preview, over its colours while the preview loads. */
+.swatch--texture {
+  background:
+    var(--sw-image) 0 0 / 400% 400% no-repeat border-box,
+    var(--sw-squares) border-box;
 }
 
 .swatch[aria-pressed='true'] {

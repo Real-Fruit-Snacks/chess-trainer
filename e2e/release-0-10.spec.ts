@@ -74,36 +74,49 @@ test.describe('colour scheme and board', () => {
     const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(background).toBe('rgb(0, 0, 0)');
 
-    // The picker shows every set at once, each drawn in its own style.
+    // The picker shows every set at once, each drawn in its own style (the sets' stylesheets
+    // load with the picker, so the strips are awaited).
     const picker = page.getByRole('group', { name: 'Piece set' });
-    const sets = ['classic', 'staunton', 'bold', 'modern', 'pixel', 'letters'];
+    const sets = [
+      'classic',
+      'merida',
+      'chessnut',
+      'mpchess',
+      'celtic',
+      'california',
+      'maestro',
+      'staunty',
+      'cardinal',
+    ];
     await expect(picker.getByRole('button')).toHaveCount(sets.length);
     const strip = (set: string) => picker.locator(`.pieces-${set} piece.white.knight`);
-    const images = await Promise.all(
-      sets.map((set) => strip(set).evaluate((el) => getComputedStyle(el).backgroundImage)),
-    );
-    expect(new Set(images).size).toBe(sets.length);
+    const knights = () =>
+      Promise.all(
+        sets.map((set) => strip(set).evaluate((el) => getComputedStyle(el).backgroundImage)),
+      );
+    await expect.poll(async () => new Set(await knights()).size).toBe(sets.length);
+    const images = await knights();
     for (const image of images) expect(image).toContain('data:image/svg+xml');
 
-    await page.getByTestId('pieces-pixel').click();
-    await expect(page.locator('html')).toHaveAttribute('data-pieces', 'pixel');
+    await page.getByTestId('pieces-merida').click();
+    await expect(page.locator('html')).toHaveAttribute('data-pieces', 'merida');
     await page
-      .getByRole('group', { name: 'Board colours' })
+      .getByRole('group', { name: 'Board theme' })
       .getByRole('button', { name: 'Ice' })
       .click();
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'black');
-    await expect(page.locator('html')).toHaveAttribute('data-pieces', 'pixel');
-    await expect(page.getByTestId('pieces-pixel')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('html')).toHaveAttribute('data-pieces', 'merida');
+    await expect(page.getByTestId('pieces-merida')).toHaveAttribute('aria-pressed', 'true');
 
-    // The board shows the chosen set: the knight on the board is the pixel knight. (The board's
+    // The board shows the chosen set: the knight on the board is the Merida knight. (The board's
     // own stylesheet comes with its code-split chunk, so its styles are awaited, not read once.)
     await page.goto('/analyze');
     await expectBoard(page);
     const boardKnight = page.locator('cg-board piece.white.knight').first();
     await expect
       .poll(() => boardKnight.evaluate((el) => getComputedStyle(el).backgroundImage))
-      .toBe(images[sets.indexOf('pixel')]);
+      .toBe(images[sets.indexOf('merida')]);
     await expect
       .poll(async () =>
         decodeURIComponent(

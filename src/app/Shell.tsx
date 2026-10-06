@@ -1,6 +1,7 @@
 import {
   type KeyboardEvent,
   type FocusEvent,
+  lazy,
   Suspense,
   useEffect,
   useId,
@@ -24,6 +25,21 @@ import { useShortcutsDialog } from './useShortcutsDialog';
 import './shell.css';
 import { useFocus } from './focus';
 import { navSection } from './navSection';
+
+/**
+ * The piece set's credit, in its own chunk: every set's author and licence. Until it arrives the
+ * footer shows the default set's credit, the same words for most visitors, so nothing reflows.
+ */
+const PieceCredit = lazy(() => import('@/components/board/PieceCredit'));
+
+const CLASSIC_CREDIT = (
+  <>
+    Pieces (Classic): Colin M.L. Burnett,{' '}
+    <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noreferrer">
+      CC BY-SA 3.0
+    </a>
+  </>
+);
 
 interface NavItem {
   to: string;
@@ -474,14 +490,10 @@ export function Shell() {
             >
               AGPL-3.0
             </a>
-            ) · Board: Chessground (GPL-3.0) · Pieces (Classic): Colin M.L. Burnett,{' '}
-            <a
-              href="https://creativecommons.org/licenses/by-sa/3.0/"
-              target="_blank"
-              rel="noreferrer"
-            >
-              CC BY-SA 3.0
-            </a>{' '}
+            ) · Board: Chessground (GPL-3.0) ·{' '}
+            <Suspense fallback={CLASSIC_CREDIT}>
+              <PieceCredit />
+            </Suspense>{' '}
             · Puzzles and openings: Lichess (CC0) · Runs entirely in your browser
             {/* Touch screens have no keyboard to take shortcuts from. */}
             <span className="keyboard-only">

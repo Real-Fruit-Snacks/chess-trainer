@@ -257,6 +257,8 @@ export default defineConfig(({ mode }) => {
             '**/engine/stockfish-19-single.wasm',
             '**/engine/version.json',
             '**/puzzles/b*-@(0[1-9]|[1-9][0-9]).json',
+            // The textured boards' pictures (about 2 MB): cached once a board is shown.
+            '**/boards/**',
             // The human-like opponent (about 25 MB): downloaded only when the learner asks for it.
             '**/maia/**',
           ],

@@ -4,6 +4,7 @@
 
 # Binary files are never touched.
 *.png binary
+*.jpg binary
 *.webp binary
 *.ico binary
 *.wasm binary

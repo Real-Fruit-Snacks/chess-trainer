@@ -174,21 +174,40 @@ describe('SettingsPage', () => {
     expect(sample.querySelectorAll('piece')).toHaveLength(0);
     expect(sample).toHaveTextContent('2. Nf3 Nc6 3. Bb5');
 
-    // The piece-set picker shows every set and selects one.
+    // The piece-set picker shows every set and selects one, crediting its author and licence.
     const pieces = screen.getByRole('group', { name: 'Piece set' });
-    expect(within(pieces).getAllByRole('button')).toHaveLength(6);
+    expect(within(pieces).getAllByRole('button')).toHaveLength(9);
     expect(within(pieces).getByRole('button', { name: 'Classic' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    fireEvent.click(within(pieces).getByRole('button', { name: 'Pixel' }));
-    expect(useSettings.getState().pieceSet).toBe('pixel');
-    expect(screen.getByText(/8-bit set/)).toBeInTheDocument();
-
-    // Nine board palettes.
+    fireEvent.click(within(pieces).getByRole('button', { name: 'Merida' }));
+    expect(useSettings.getState().pieceSet).toBe('merida');
     expect(
-      within(screen.getByRole('group', { name: 'Board colours' })).getAllByRole('button'),
-    ).toHaveLength(9);
+      screen.getByText(/Merida chess font\. By Armando Hernandez Marroquin/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'GPL-2.0+' })).toHaveAttribute(
+      'href',
+      'https://www.gnu.org/licenses/old-licenses/gpl-2.0.html',
+    );
+
+    // Every board theme: Lichess's 25 and the app's own three. A textured board's swatch shows
+    // its small preview, and choosing it credits the picture's authors and licence.
+    const boards = screen.getByRole('group', { name: 'Board theme' });
+    expect(within(boards).getAllByRole('button')).toHaveLength(28);
+    const wood = within(boards).getByRole('button', { name: 'Wood' });
+    expect(wood).toHaveClass('swatch--texture');
+    expect(wood.style.getPropertyValue('--sw-image')).toBe('url("/boards/thumbs/wood.jpg")');
+    expect(within(boards).getByRole('button', { name: 'Brown' })).not.toHaveClass(
+      'swatch--texture',
+    );
+    fireEvent.click(wood);
+    expect(useSettings.getState().boardTheme).toBe('wood');
+    expect(screen.getByText(/by the lila authors and pirouetti/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'AGPL-3.0' })).toHaveAttribute(
+      'href',
+      '/licence-agpl.txt',
+    );
 
     // The board switches and segmented controls.
     fireEvent.click(screen.getByRole('switch', { name: 'Highlight the last move and check' }));

@@ -42,14 +42,15 @@ describe('colour scheme', () => {
 
   it('always names the piece set on <html>, the classic one included', () => {
     const root = document.createElement('html');
-    applyPieceSet('pixel', root);
-    expect(root.dataset.pieces).toBe('pixel');
+    applyPieceSet('merida', root);
+    expect(root.dataset.pieces).toBe('merida');
     applyPieceSet('classic', root);
     expect(root.dataset.pieces).toBe('classic');
-    applyPieceSet('staunton', root);
-    expect(root.dataset.pieces).toBe('staunton');
-    // A set this version does not know (an edited settings blob) shows the classic pieces.
-    applyPieceSet('tiles' as never, root);
+    applyPieceSet('maestro', root);
+    expect(root.dataset.pieces).toBe('maestro');
+    // A set this version no longer has (one of 0.19's own sets, from an old settings blob)
+    // shows the classic pieces.
+    applyPieceSet('staunton' as never, root);
     expect(root.dataset.pieces).toBe('classic');
   });
 });

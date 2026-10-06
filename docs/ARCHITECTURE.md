@@ -49,7 +49,7 @@ This document explains the moving parts and the reasoning behind them.
 │         profiles (namespaces the four per-learner stores)             │
 │                                                                        │
 │  Service worker (src/sw.ts, Workbox) ── precache · runtime caches for  │
-│    puzzle chunks and engine builds · COOP/COEP for threads             │
+│    puzzle chunks, board pictures and engine builds · COOP/COEP         │
 └────────────────────────────────────────────────────────────────────────┘
         ▲ static files only (+ optional lichess.org / chess.com API calls:
           game import, tablebase, opening explorer, the Lichess account
@@ -58,7 +58,8 @@ This document explains the moving parts and the reasoning behind them.
 │ GitHub Pages (dist/)                │
 │  index.html, 404.html, assets       │
 │  engine/*.wasm, puzzles/*.json,     │
-│  openings/openings.json             │
+│  openings/openings.json,            │
+│  boards/ (the board pictures)       │
 │  maia/ (the human-like opponent,    │
 │  downloaded on request)             │
 └─────────────────────────────────────┘
@@ -79,8 +80,8 @@ This document explains the moving parts and the reasoning behind them.
 - `VITE_BASE_PATH` sets the URL prefix. The deploy workflow derives it from `actions/configure-pages`,
   so the same code works at `https://user.github.io/` and `https://user.github.io/repo/`.
 - `scripts/postbuild.mjs` copies `index.html` to `404.html` (deep links on Pages), writes `.nojekyll`,
-  ships the licences and the third-party notices as `licence.txt`, `licence-agpl.txt` (Maia-3's
-  licence, from `LICENSES/AGPL-3.0.txt`) and `notices.txt` (the footer links them; they are not
+  ships the licences and the third-party notices as `licence.txt`, `licence-agpl.txt` (the
+  licence of Maia-3 and of the board pictures, from `LICENSES/AGPL-3.0.txt`) and `notices.txt` (the footer links them; they are not
   precached) and moves the source maps out of `dist/` into `sourcemaps/`. The build
   writes hidden maps (no `sourceMappingURL`), so they are never deployed or precached; the deploy
   workflow keeps them as an artifact per commit, which crash reports name.
@@ -265,9 +266,15 @@ that predicts the move a player of a given rating makes, run by
 `Board.tsx` wraps [Chessground](https://github.com/lichess-org/chessground), the board used by
 Lichess. The instance is created once per mount and reconfigured through `api.set()` on prop changes,
 which keeps piece animations intact. `viewOnly` is the only creation-time prop (it changes which DOM
-events Chessground binds), so toggling it recreates the board. Board colours come from a CSS variable
-holding an SVG data URI generated in `boardThemes.ts`; piece sprites come from the piece-set
-stylesheets described below (the default Classic set is Colin M.L. Burnett's cburnett figurines,
+events Chessground binds), so toggling it recreates the board. The board's look is a CSS variable
+(`--board-bg`) set from `boardThemes.ts`. A flat board is an SVG checkerboard (a data URI) drawn
+from its two colours. A textured board — one of Lichess's twenty pictures, in `public/boards/` —
+layers its picture over that checkerboard, so the board keeps its colours while the picture loads,
+or if it cannot; the pictures are square and map onto the 64 squares exactly, in either orientation
+(a8 and h1 are both light). The pickers in Settings and the Lab show 128-pixel previews
+(`public/boards/thumbs/`, made by `npm run boards:thumbs`), so opening Settings fetches about 50 KB
+rather than every picture (1.9 MB); `ClickBoard` draws the same picture behind squares that only
+tint it. Piece sprites come from the piece-set stylesheets described below (the default Classic set is Colin M.L. Burnett's cburnett figurines,
 CC BY-SA 3.0, credited in the footer).
 
 The board is deliberately "dumb": it reports `onMove(from, to)` and renders whatever `fen`, `dests`,
@@ -300,12 +307,18 @@ region, and a view-only board (`role="img"`) carries the same description as `ar
 promotion picker is a modal dialog with a focus trap that gives focus back on close; `ClickBoard` (the
 drills and the board editor) is one `role="group"` tab stop with a roving tabindex and the same arrow
 keys, and marks the selected square with `aria-pressed`. Piece sets are chosen with a `data-pieces` attribute on
-`<html>`; every set is a stylesheet of inline SVG with the same selectors (`pieces-*.css`, written by
-`scripts/generate-pieces.mjs`: the cburnett figurines re-emitted from the Chessground package, and the
-original Staunton, Bold, Modern, Pixel and Letters sets drawn in `scripts/pieces/` — one module per set
-on a shared 100×100 grid, symmetric pieces drawn as half a profile and mirrored, the pixel set as
-16×16 masks with an automatic outline; `scripts/pieces/pieces.test.ts` checks the stylesheets match
-the drawings). A more specific
+`<html>`; every set is a stylesheet of inline SVG with the same selectors
+(`src/components/board/pieces/<set>.css`, written by `scripts/generate-pieces.mjs`: the cburnett
+figurines re-emitted from the Chessground package, and eight sets whose SVGs sit unchanged beside
+their stylesheets, copied from the Lichess repository with their sources and licences in
+`pieces/README.md`; `scripts/pieces/pieces.test.ts` checks the stylesheets match the SVGs). Classic is
+bundled with the app as the default and the fallback; every other set's stylesheet is a separate
+chunk that `pieceStyles.ts` loads the first time the set is shown — when `applyPieceSet()` names it
+(at start-up and on every change) or when a picker shows all of them, one at a time as the browser
+is idle — so a visitor downloads only
+the set they use, and the board shows Classic until it arrives. The service worker precaches every
+set for offline use. The footer's credit for the chosen set is its own small chunk
+(`PieceCredit.tsx`). A more specific
 `.piece-preview.pieces-<set>` selector lets a picker show every set at once. The drag feel comes
 from settings too: `draggable`/`selectable` follow the move method, the magnifier is a `scale` on
 `piece.dragging`, and the drag target is an overlay the board positions straight from pointer
@@ -566,9 +579,11 @@ serves `index.html` for navigations to the app's own routes so deep links work o
 `src/sw/appRoutes.ts` keeps a sibling site on the same origin out of it; a test checks it against
 `routes.tsx`), caches the remaining puzzle chunks (`chess-trainer-puzzles`, stale-while-revalidate — the
 chunk names carry no hash) and the threaded engine build on first use (`chess-trainer-engine`,
-cache-first, which also serves the full engine once the page has stored it), applies the
+cache-first, which also serves the full engine once the page has stored it) and the textured
+boards' pictures and previews as they are shown (`chess-trainer-boards`, stale-while-revalidate, at
+most 60, so the chosen board works offline; they are not precached), applies the
 cross-origin-isolation headers described above unless threads are switched off, and adds
-`Content-Security-Policy: frame-ancestors 'none'` to every page it serves. Both runtime caches keep
+`Content-Security-Policy: frame-ancestors 'none'` to every page it serves. The runtime caches keep
 only complete responses of the expected content type (`src/sw/cacheable.ts`, and the same check in
 `fetchBuild`), so a captive portal's HTML can never poison a file; puzzle chunks expire, engine files
 go when a newer engine replaces them. The human-like opponent's files are neither precached nor

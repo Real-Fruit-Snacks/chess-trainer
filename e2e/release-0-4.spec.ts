@@ -580,32 +580,37 @@ test.describe('shareable analysis links', () => {
 });
 
 test.describe('settings: piece set, sound theme and engine diagnostics', () => {
-  test('the Letters piece set applies everywhere and persists', async ({ page }) => {
+  test('a chosen piece set applies everywhere and persists', async ({ page }) => {
     await page.goto('/settings');
     await page
       .getByRole('group', { name: 'Piece set' })
-      .getByRole('button', { name: 'Letters' })
+      .getByRole('button', { name: 'California' })
       .click();
-    await expect(page.locator('html')).toHaveAttribute('data-pieces', 'letters');
+    await expect(page.locator('html')).toHaveAttribute('data-pieces', 'california');
     await page
       .getByRole('radiogroup', { name: 'Sound theme' })
       .getByRole('radio', { name: 'Soft' })
       .click();
     await page.goto('/analyze');
     await expectBoard(page);
-    await expect(page.locator('html')).toHaveAttribute('data-pieces', 'letters');
-    const image = await page
-      .locator('cg-board piece.white.king')
-      .first()
-      .evaluate((el) => getComputedStyle(el).backgroundImage);
-    expect(image).toContain('data:image/svg+xml');
+    await expect(page.locator('html')).toHaveAttribute('data-pieces', 'california');
+    // California's own king, not the Classic one the board shows until its stylesheet is in
+    // (Classic's pieces are base64 data URIs, the other sets' plain SVG).
+    await expect
+      .poll(() =>
+        page
+          .locator('cg-board piece.white.king')
+          .first()
+          .evaluate((el) => getComputedStyle(el).backgroundImage),
+      )
+      .toContain('data:image/svg+xml,');
     const settings = await page.evaluate(() => {
       const raw = localStorage.getItem('chess-trainer:settings');
       return raw
         ? (JSON.parse(raw) as { state: { pieceSet: string; soundTheme: string } }).state
         : null;
     });
-    expect(settings).toMatchObject({ pieceSet: 'letters', soundTheme: 'soft' });
+    expect(settings).toMatchObject({ pieceSet: 'california', soundTheme: 'soft' });
   });
 
   test('the diagnostics panel reports the environment and benchmarks the engine', async ({

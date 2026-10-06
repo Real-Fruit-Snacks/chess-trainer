@@ -7,7 +7,7 @@ import {
   type OfferState,
   useInstall,
 } from '@/app/pwa';
-import { BOARD_PALETTES } from '@/components/board/boardThemes';
+import { BOARD_PALETTES, boardThumbnail } from '@/components/board/boardThemes';
 import { PIECE_SETS } from '@/components/board/pieceSets';
 import { PieceSetPicker } from '@/components/board/PieceSetPicker';
 import { San } from '@/chess/San';
@@ -198,32 +198,50 @@ export default function SettingsPage() {
             <h2 style={{ fontSize: '1.15rem' }}>Board</h2>
             <div className="settings__group">
               <div className="settings__row">
-                <span>Board colours</span>
-                <div className="swatches" role="group" aria-label="Board colours">
-                  {(Object.keys(BOARD_PALETTES) as BoardTheme[]).map((theme) => (
-                    <button
-                      key={theme}
-                      type="button"
-                      className="swatch"
-                      aria-label={BOARD_PALETTES[theme].label}
-                      aria-pressed={settings.boardTheme === theme}
-                      title={BOARD_PALETTES[theme].hint ?? BOARD_PALETTES[theme].label}
-                      style={
-                        {
-                          '--sw-light': BOARD_PALETTES[theme].light,
-                          '--sw-dark': BOARD_PALETTES[theme].dark,
-                        } as CSSProperties
-                      }
-                      onClick={() => settings.update({ boardTheme: theme })}
-                    />
-                  ))}
+                <span>Board theme</span>
+                <div className="swatches" role="group" aria-label="Board theme">
+                  {(Object.keys(BOARD_PALETTES) as BoardTheme[]).map((theme) => {
+                    const thumb = boardThumbnail(theme);
+                    return (
+                      <button
+                        key={theme}
+                        type="button"
+                        className={thumb ? 'swatch swatch--texture' : 'swatch'}
+                        aria-label={BOARD_PALETTES[theme].label}
+                        aria-pressed={settings.boardTheme === theme}
+                        title={BOARD_PALETTES[theme].hint ?? BOARD_PALETTES[theme].label}
+                        style={
+                          {
+                            '--sw-light': BOARD_PALETTES[theme].light,
+                            '--sw-dark': BOARD_PALETTES[theme].dark,
+                            ...(thumb ? { '--sw-image': thumb } : {}),
+                          } as CSSProperties
+                        }
+                        onClick={() => settings.update({ boardTheme: theme })}
+                      />
+                    );
+                  })}
                 </div>
               </div>
               <p className="small muted" style={{ margin: 0 }}>
                 {BOARD_PALETTES[settings.boardTheme].label}
                 {BOARD_PALETTES[settings.boardTheme].hint
                   ? ` — ${BOARD_PALETTES[settings.boardTheme].hint}`
-                  : ''}
+                  : null}
+                {BOARD_PALETTES[settings.boardTheme].image ? (
+                  <>
+                    {' '}
+                    — from Lichess, by the lila authors and pirouetti (
+                    <a
+                      href={`${import.meta.env.BASE_URL}licence-agpl.txt`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      AGPL-3.0
+                    </a>
+                    ). The picture downloads once, then works offline.
+                  </>
+                ) : null}
               </p>
               <div className="settings__row settings__row--stack">
                 <span>Pieces</span>
@@ -233,7 +251,11 @@ export default function SettingsPage() {
                 />
               </div>
               <p className="small muted" style={{ margin: 0 }}>
-                {PIECE_SETS[settings.pieceSet].hint}
+                {PIECE_SETS[settings.pieceSet].hint} By {PIECE_SETS[settings.pieceSet].author} (
+                <a href={PIECE_SETS[settings.pieceSet].licenceUrl} target="_blank" rel="noreferrer">
+                  {PIECE_SETS[settings.pieceSet].licence}
+                </a>
+                ).
               </p>
               <Switch
                 checked={settings.showCoordinates}

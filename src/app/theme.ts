@@ -48,10 +48,13 @@ export function useColorScheme(): void {
  * shows while the attribute is missing.
  */
 export function applyPieceSet(set: PieceSet, root: HTMLElement = document.documentElement): void {
-  root.setAttribute(
-    'data-pieces',
-    (PIECE_SET_IDS as readonly string[]).includes(set) ? set : 'classic',
-  );
+  const known = (PIECE_SET_IDS as readonly string[]).includes(set);
+  root.setAttribute('data-pieces', known ? set : 'classic');
+  // Every set but Classic has its own stylesheet, fetched the first time the set is shown. Until
+  // it arrives (or if it cannot, offline before the first fetch) the board shows Classic.
+  if (known && set !== 'classic') {
+    void import('@/components/board/pieceStyles').then((styles) => styles.loadPieceSet(set));
+  }
 }
 
 /** Keeps the piece set on <html> in step with the settings. */

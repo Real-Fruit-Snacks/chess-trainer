@@ -15,11 +15,30 @@ export const COLOR_SCHEMES = ['system', 'light', 'dark', 'black'] as const;
 export type ColorScheme = (typeof COLOR_SCHEMES)[number];
 export const BOARD_THEMES = [
   'brown',
-  'green',
+  'wood',
+  'wood2',
+  'wood3',
+  'wood4',
+  'maple',
+  'maple2',
+  'horsey',
+  'leather',
   'blue',
-  'grey',
-  'purple',
+  'blue2',
+  'blue3',
+  'canvas',
+  'blue-marble',
+  'ic',
+  'green',
+  'marble',
+  'green-plastic',
   'olive',
+  'grey',
+  'metal',
+  'newspaper',
+  'purple',
+  'purple-diag',
+  'pink',
   'ice',
   'walnut',
   'contrast',
@@ -32,7 +51,17 @@ export const PLAY_OPPONENTS = ['engine', 'humanlike', 'human'] as const;
 export type PlayOpponent = (typeof PLAY_OPPONENTS)[number];
 export const REVIEW_DEPTH_IDS = ['fast', 'balanced', 'thorough'] as const;
 export type ReviewDepth = (typeof REVIEW_DEPTH_IDS)[number];
-export const PIECE_SET_IDS = ['classic', 'staunton', 'bold', 'modern', 'pixel', 'letters'] as const;
+export const PIECE_SET_IDS = [
+  'classic',
+  'merida',
+  'chessnut',
+  'mpchess',
+  'celtic',
+  'california',
+  'maestro',
+  'staunty',
+  'cardinal',
+] as const;
 export type PieceSet = (typeof PIECE_SET_IDS)[number];
 export const SOUND_THEMES = ['standard', 'soft', 'retro'] as const;
 export type SoundTheme = (typeof SOUND_THEMES)[number];

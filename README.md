@@ -164,9 +164,12 @@ is written and verified. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 Chess Trainer is licensed under the [GNU General Public License v3.0 or later](LICENSE). It bundles
 GPL-licensed components that are inseparable from the delivered app (Chessground for the board,
 Stockfish for the engine), so a copyleft licence for the whole is the honest choice. The human-like
-opponent's model, Maia-3, is under the GNU Affero General Public License v3, which the GPL v3 allows
-the app to be combined with ([LICENSES/AGPL-3.0.txt](LICENSES/AGPL-3.0.txt)). Third-party components
+opponent's model, Maia-3, and Lichess's board pictures are under the GNU Affero General Public
+License v3, which the GPL v3 allows the app to be combined with
+([LICENSES/AGPL-3.0.txt](LICENSES/AGPL-3.0.txt)). Third-party components
 and their licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The built site
-ships the texts (`licence.txt`, `licence-agpl.txt` and `notices.txt`) and links them from the footer
-of every page, next to the credits the components ask for — among them the classic piece set's, by
-Colin M.L. Burnett under CC BY-SA 3.0.
+ships the texts (`licence.txt`, `licence-agpl.txt`, `licence-apache.txt` and `notices.txt`) and links
+them from the footer of every page, next to the credits the components ask for — among them the
+chosen piece set's. The piece sets come from the Lichess collection under their own licences; four of
+them (California, Maestro, Staunty and Cardinal) are CC BY-NC-SA 4.0 and may not be used commercially,
+so a commercial fork must remove them (see THIRD_PARTY_NOTICES.md).

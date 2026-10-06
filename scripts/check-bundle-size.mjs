@@ -31,10 +31,18 @@ const BUDGETS = [
   { name: 'threat positions', match: /^threat-positions-/, limitBytes: 90 * KB },
   { name: 'any other chunk', match: /./, limitBytes: 40 * KB },
 ];
-/** The code that runs before the first page: the entry and its static imports, React aside. */
-const STARTUP_LIMIT_BYTES = 42 * KB;
-/** The service worker precaches this much at install: keep first loads honest. */
-const PRECACHE_LIMIT_BYTES = 6.5 * KB * KB;
+/**
+ * The code that runs before the first page: the entry and its static imports, React aside. (0.20
+ * reached 42 KB, the earlier limit, as the settings came to check 28 board themes and nine piece
+ * sets at start-up.)
+ */
+const STARTUP_LIMIT_BYTES = 43 * KB;
+/**
+ * The service worker precaches this much at install: keep first loads honest. (0.20 raised it from
+ * 6.5 MB for the eight piece sets from Lichess, about 0.27 MB of stylesheets, so every set works
+ * offline from the first visit; the page itself loads only the chosen one.)
+ */
+const PRECACHE_LIMIT_BYTES = 6.75 * KB * KB;
 
 function gzipSize(file) {
   return gzipSync(readFileSync(file), { level: 9 }).length;

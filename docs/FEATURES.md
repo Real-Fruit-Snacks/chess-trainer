@@ -253,10 +253,12 @@ of lessons and themes. Rows resting on fewer than 3 games or 20 reviewed moves a
 
 **Appearance:** the colour scheme (system, light, dark, or black for OLED screens), **move
 notation** — figurines drawn from the piece set (♘f3) or letters (Nf3), everywhere a move is
-written — and the sounds. **Board:** nine board colours, six piece sets (the classic cburnett
-figurines; Staunton, tournament shapes with a heavier line; Bold, big simple shapes with a heavy
-outline; Modern, plain geometry; Pixel, 8-bit figurines; and Letters, each piece drawn as its letter)
-shown as strips to pick from, coordinates, legal-move dots, last-move and check highlights, animation, a
+written — and the sounds. **Board:** every Lichess board — the flat Brown, Blue, Green, IC and
+Purple, and twenty pictures from Wood and Maple to Marble, Metal and Newspaper (each downloaded the
+first time it is chosen, then kept for offline use; the picker shows small previews) — plus the
+app's own Ice, Walnut and colour-blind-safe High contrast; nine piece sets from the Lichess collection
+(the classic cburnett figurines, Merida, Chessnut, MPChess, Celtic, California, Maestro, Staunty and
+Cardinal, each credited with its author and licence) shown as strips to pick from, coordinates, legal-move dots, last-move and check highlights, animation, a
 **magnified dragged piece** with a circle or square **drag target**, moving by tap, drag or either,
 and captured material beside the player bars as the difference, every capture, or nothing.
 **Play:** defaults plus **focus mode**, which hides the header and navigation while you play the
@@ -297,7 +299,7 @@ _Settings → Open the test lab_ (`/settings/lab`) is a single page for checking
   to hand; the vibration patterns shown follow the theme.
 - **Icons:** every icon at 16, 20, 24 and 32 px, on light or dark.
 - **Controls and feedback:** every button, input, badge, stat, alert, toast and the dialog.
-- **Board:** the board colours, the piece sets, highlights, arrows, check and the promotion menu.
+- **Board:** the board themes, the piece sets, highlights, arrows, check and the promotion menu.
 - **Type and colour:** the colour tokens and the type scale.
 - **Engine:** the diagnostics panel and speed test.
 - **Errors:** a deliberate crash, to see the error page and its report link.
@@ -387,7 +389,7 @@ square — the letters never trigger page shortcuts) with a "describe position" 
 descriptions of view-only diagrams, keyboard shortcuts (press `?`; the single-letter ones can be
 switched off in Settings for speech input and switch devices, while Enter, Space and the arrows keep
 working), focus management, a
-colour-blind-safe high-contrast board theme, the high-legibility **Bold** and **Letters** piece sets, a soft sound
+colour-blind-safe high-contrast board theme, high-contrast piece sets (**MPChess** and **California**), a soft sound
 theme, reduced-motion support, a visible focus ring on every surface (and Windows High Contrast
 styles) and WCAG-AA text contrast — checked by an automated axe-core sweep of every page, one of each
 parameterised route included, in all three colour schemes.
@@ -440,8 +442,9 @@ suite on every run.
   worker and the puzzle database is a set of JSON chunks fetched on demand.
 - **Free software.** GPL-3.0-or-later. The site ships its licences and the third-party notices
   (`licence.txt`, `licence-agpl.txt`, `notices.txt`), linked from the footer of every page with the
-  credits: Stockfish and Chessground (GPL-3.0), Maia-3 (AGPL-3.0), the Classic pieces (Colin M.L.
-  Burnett, CC BY-SA 3.0) and the Lichess puzzles and openings (CC0).
+  credits: Stockfish and Chessground (GPL-3.0), Maia-3 (AGPL-3.0), the chosen piece set (the
+  Classic pieces by default: Colin M.L. Burnett, CC BY-SA 3.0) and the Lichess puzzles and openings
+  (CC0). The textured boards (Lichess, AGPL-3.0) are credited under the board picker.
 - **Engine.** [Stockfish.js](https://github.com/nmrugg/stockfish.js) 19. The lite build, with
   Stockfish's small network (about 2 MB), runs by default and is far stronger than any human; the
   lowest playing levels are weakened in software (shallow search, sampling among several candidate

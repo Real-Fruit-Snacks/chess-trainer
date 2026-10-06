@@ -6,7 +6,7 @@
  * - Serves `index.html` for navigations to the app's own routes, so deep links
  *   boot the SPA offline — and only for those, so another site on the same
  *   origin is left alone.
- * - Caches puzzle chunks and the threaded engine build as they are fetched,
+ * - Caches puzzle chunks, board pictures and the threaded engine build as they are fetched,
  *   and serves the full engine from the same cache once the page has
  *   downloaded it. Only complete responses of the right type are kept, so a
  *   captive portal's HTML answer can never poison a file; puzzle chunks
@@ -112,6 +112,21 @@ registerRoute(
     plugins: [
       cacheable('application/json', 'text/json'),
       new ExpirationPlugin({ maxEntries: 400, maxAgeSeconds: 90 * DAY }),
+      isolationPlugin,
+    ],
+  }),
+);
+
+// The textured boards' pictures (public/boards/) are fetched only once a board is chosen (and
+// their small previews when a picker shows them), then kept for offline use. Names carry no
+// hash, so a cached picture is served at once and refreshed in the background.
+registerRoute(
+  ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith(`${BASE}boards/`),
+  new StaleWhileRevalidate({
+    cacheName: 'chess-trainer-boards',
+    plugins: [
+      cacheable('image/'),
+      new ExpirationPlugin({ maxEntries: 60, maxAgeSeconds: 365 * DAY }),
       isolationPlugin,
     ],
   }),
