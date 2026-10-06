@@ -41,8 +41,11 @@ async function standIn(page: Page): Promise<FakeLichess> {
   return fake;
 }
 
-/** An onboarded learner, connected to the stand-in's account when a token is given. */
-async function seed(page: Page, token?: string) {
+/**
+ * An onboarded learner, connected to the stand-in's account when a token is
+ * given (`lichess`: more of the connection's stored state).
+ */
+async function seed(page: Page, token?: string, lichess: Record<string, unknown> = {}) {
   await page.addInitScript(
     ([progressKey, progressBlob, lichessKey, lichessBlob]) => {
       if (localStorage.getItem(progressKey)) return;
@@ -65,6 +68,7 @@ async function seed(page: Page, token?: string) {
               },
               syncedUser: 'Learner',
               backlog: 'done',
+              ...lichess,
             },
             version: 1,
           })
@@ -273,4 +277,29 @@ test('another device’s repertoires, analyses, games and missed puzzles come in
   await page.goto('puzzles?id=6Mhmf');
   await expectBoard(page);
   await expect(page.getByLabel('Puzzle 6Mhmf, white to move')).toBeVisible();
+});
+
+test('an account 0.17.0 signed out by mistake carries on, its study read all the same', async ({
+  page,
+}) => {
+  const fake = await standIn(page);
+  // 0.17.0 made its studies with sharing set to nobody: Lichess refuses even the owner's export.
+  fake.addStudy(
+    'Chess Trainer · Repertoires',
+    [{ name: 'Caro-Kann', pgn: '1. e4 c6 2. d4 d5 3. Nc3 dxe4 *', orientation: 'black' }],
+    'private',
+    'nobody',
+  );
+  // …and took that refusal for a lost sign-in.
+  await seed(page, fake.issueToken(), { needsReconnect: true });
+
+  await page.goto('settings');
+  await expect(page.getByTestId('lichess-status')).toContainText('Synced just now.');
+  await expect(lichessCard(page)).not.toContainText('no longer accepts');
+  expect(fake.requests).toContain('POST /api/token/test');
+  expect(fake.requests.some((r) => r.startsWith('GET /api/study/by/Learner/export.pgn'))).toBe(
+    true,
+  );
+  await page.goto('openings');
+  await expect(page.getByText('Caro-Kann').first()).toBeVisible();
 });

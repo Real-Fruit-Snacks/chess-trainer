@@ -17,7 +17,8 @@ const clearLabStorage = vi.hoisted(() => vi.fn(() => 1));
 vi.mock('@/features/lab/storageTest', () => ({ clearLabStorage }));
 const stopSync = vi.hoisted(() => vi.fn());
 const startLichessSync = vi.hoisted(() => vi.fn(() => stopSync));
-vi.mock('@/lib/lichess/sync', () => ({ startLichessSync }));
+const recheckSignIn = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock('@/lib/lichess/sync', () => ({ startLichessSync, recheckSignIn }));
 
 import { useLichess } from '@/store/lichess';
 import { PlatformHooks } from './PlatformHooks';
@@ -89,6 +90,28 @@ describe('PlatformHooks', () => {
     await waitFor(() => expect(startLichessSync).toHaveBeenCalledTimes(1));
     act(() => useLichess.getState().setNeedsReconnect(true));
     expect(stopSync).toHaveBeenCalledTimes(1);
+    // A refusal during the session is not looked at again until the app opens next time.
+    await act(() => new Promise<void>((r) => setTimeout(r, 0)));
+    expect(recheckSignIn).not.toHaveBeenCalled();
+    act(() => useLichess.getState().forget());
+  });
+
+  it('looks again at a sign-in marked as refused as the app opens', async () => {
+    useLichess
+      .getState()
+      .connect(
+        { id: 'learner', username: 'Learner', token: 'lip_x', expiresAt: null },
+        { puzzle: null, bullet: null, blitz: null, rapid: null, classical: null, at: 0 },
+      );
+    useLichess.getState().setNeedsReconnect(true);
+    startLichessSync.mockClear();
+    recheckSignIn.mockClear();
+    render(<PlatformHooks />);
+    await waitFor(() => expect(recheckSignIn).toHaveBeenCalledTimes(1));
+    expect(startLichessSync).not.toHaveBeenCalled();
+    // Still good after all: the mark goes, and the sync starts.
+    act(() => useLichess.getState().setNeedsReconnect(false));
+    await waitFor(() => expect(startLichessSync).toHaveBeenCalledTimes(1));
     act(() => useLichess.getState().forget());
   });
 });

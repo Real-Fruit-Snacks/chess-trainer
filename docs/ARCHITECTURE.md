@@ -621,9 +621,11 @@ its source was read for every endpoint used.
 
 - **Requests** (`api.ts`). Everything goes through one queue, body reading included, because
   Lichess asks for one request at a time. Failures come back as a `LichessError` whose kind says what
-  to do: `network` (wait for a connection), `auth`/`forbidden` (connect again), `rate-limited` (wait
-  `Retry-After`, a minute if unnamed), `invalid` (Lichess refused what was sent: not worth retrying),
-  `server`. Streams (ndjson, long PGN exports) are read as they arrive and can stop early.
+  to do: `network` (wait for a connection), `auth` and `forbidden` (connect again: a 401 means the
+  token is gone, a 403 whose body says "Missing scope" that a permission is), `refused` (any other
+  403: Lichess refuses the request itself, and the sign-in is fine), `rate-limited` (wait
+  `Retry-After`, a minute if unnamed), `invalid` (Lichess refused what was sent: not worth
+  retrying), `server`. Streams (ndjson, long PGN exports) are read as they arrive and can stop early.
 - **Sign-in** (`pkce.ts`, `auth.ts`). The authorization-code flow with PKCE (S256), which Lichess
   offers to clients without a secret: no app registration, the client id is the site's own address,
   and the redirect URI is `/settings/lichess` under it. The verifier and state wait in
@@ -663,7 +665,16 @@ study:read study:write`. Disconnect and Reset everything revoke the token (`DELE
   (`/api/games/export/imports`, newest first, the original texts) brings records back on another
   device, read until the game log's 50 are found.
 - **Repertoires and analyses** (`studyModel.ts` without network code, `studies.ts`). One private
-  study per list, parts past 64 chapters. Each item and chapter is hashed twice — moves and
+  study per list, parts past 64 chapters, made with chat and cloning off and sharing — which governs
+  export too — left to the owner: lila's study export (`/api/study/{id}.pgn`) checks that setting
+  even for the owner, and "nobody" refuses everyone. 0.17.0 made its studies so, and the API cannot
+  change a study's settings, so a study whose export is refused is read from the export of all the
+  account's studies (`/api/study/by/{user}/export.pgn`, which does not check it): the most recently
+  updated study first, each with its chapters in a row, so reading stops once the wanted studies
+  have gone by, and a study counts as read only once all its chapters have come. A run stopped
+  before it read back what it sent leaves its links waiting for Lichess's version of their
+  chapters; the next run settles them and removes the new study's empty first chapter from what it
+  read. Each item and chapter is hashed twice — moves and
   annotations (comments, glyphs, `%cal`/`%csl` shapes; clocks and tags left out), and moves alone —
   over the start position's placement and side to move. `reconcile` compares each side with its own
   hash in the link (Lichess rewrites PGNs slightly, so the two sides' hashes are never compared with
@@ -686,11 +697,14 @@ study:read study:write`. Disconnect and Reset everything revoke the token (`DELE
   report; offline, signed-out, rate-limited and server failures stop it with everything kept, and a
   timer tries again. `startLichessSync` (loaded by `PlatformHooks` only while an account is connected)
   runs it 3 s after start, on `online`, on coming back into view, 30 s after results start to wait and
-  every 15 minutes in view.
+  every 15 minutes in view. A sign-in marked as refused is looked at again once as the app opens
+  (`recheckSignIn`): when `/api/token/test` still knows the token, for this account and with all four
+  scopes, the mark goes and the sync starts.
 - **Tests.** `src/test/fakeLichess.ts` is a stand-in lichess.org that answers as lila does (the OAuth
   flow with an approval page, puzzle batches and history, imports and their export, studies with the
-  64-chapter limit, the empty first chapter and the import that stops at the first chapter it cannot
-  take). The unit tests reach it through a `fetch` stub, the end-to-end tests through page routes.
+  64-chapter limit, the empty first chapter, the import that stops at the first chapter it cannot
+  take, and the sharing setting a study's own export checks). The unit tests reach it through a
+  `fetch` stub, the end-to-end tests through page routes.
 
 ## Accessibility
 

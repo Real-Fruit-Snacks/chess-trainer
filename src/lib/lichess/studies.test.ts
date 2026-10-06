@@ -76,6 +76,8 @@ const analyses = () => Object.values(useAnalyses.getState().items);
 const moves = (pgn: string) => treeContent(pgn)?.movesHash;
 const studyReads = () =>
   lichess.fake.requests.filter((r) => /^GET \/api\/study\/\w{8}\.pgn/.test(r));
+const accountExports = () =>
+  lichess.fake.requests.filter((r) => /^GET \/api\/study\/by\/\w+\/export\.pgn/.test(r)).length;
 
 /** A second device on the same account: nothing local, nothing remembered. */
 function becomeNewDevice() {
@@ -370,6 +372,80 @@ describe('repertoires and analyses in private studies', () => {
     });
     expect(await sync()).toMatchObject({ pushed: 1 });
     expect(study(REPERTOIRES).chapters.map((c) => c.movetext.includes('4. c3'))).toEqual([true]);
+  });
+
+  it('makes its studies for its owner alone to share and export, and reads each on its own', async () => {
+    addRep('Italian', ITALIAN);
+    addAnalysis('K+P', ENDGAME, 'Endgames');
+    await sync();
+    expect(lichess.fake.studies.map((s) => [s.visibility, s.shareable])).toEqual([
+      ['private', 'owner'],
+      ['private', 'owner'],
+    ]);
+    becomeNewDevice();
+    expect(await sync()).toMatchObject({ pulled: 2 });
+    expect(accountExports()).toBe(0);
+  });
+
+  it('reads the studies 0.17.0 made from the account’s export, and tidies what its stopped run left', async () => {
+    addRep('Italian', ITALIAN);
+    addRep('Caro-Kann', CARO, 'black');
+    // As 0.17.0 went: the chapters went up, then reading them back failed and the run stopped.
+    lichess.fake.failNext(/^GET \/api\/study\/\w{8}\.pgn$/, 503);
+    await expect(sync()).rejects.toMatchObject({ kind: 'server' });
+    // …and its study had sharing set to nobody, which stops even its owner's export of it.
+    study(REPERTOIRES).shareable = 'nobody';
+    // A study of the learner's own, changed since, comes first in the account's export.
+    lichess.fake.addStudy('My openings', [{ name: 'Sicilian', pgn: '1. e4 c5 *' }]);
+    expect(chapterNames(REPERTOIRES)).toEqual(['Chapter 1', 'Italian', 'Caro-Kann']);
+    expect(
+      Object.values(useLichess.getState().links).map((l) => l.remoteHash.startsWith('?')),
+    ).toEqual([true, true]);
+
+    expect(await sync()).toMatchObject({ pulled: 0, pushed: 0, skipped: false });
+    expect(accountExports()).toBe(1);
+    // Lichess's own version of each chapter is known now, and the empty first chapter is gone.
+    expect(
+      Object.values(useLichess.getState().links).some((l) => l.remoteHash.startsWith('?')),
+    ).toBe(false);
+    expect(chapterNames(REPERTOIRES)).toEqual(['Italian', 'Caro-Kann']);
+    expect(reps().map((r) => r.name)).toEqual(['Italian', 'Caro-Kann']);
+
+    // From then on it syncs as any other: read once more after the tidying, then skipped…
+    expect(await sync()).toMatchObject({ pulled: 0, pushed: 0, skipped: false });
+    expect(await sync()).toMatchObject({ skipped: true });
+    // …and edits come both ways.
+    const chapter = study(REPERTOIRES).chapters[0];
+    lichess.fake.editChapter(study(REPERTOIRES).id, chapter?.id ?? '', {
+      pgn: `${ITALIAN.slice(0, -1)} 4. b4 *`,
+    });
+    expect(await sync()).toMatchObject({ pulled: 1 });
+    expect(reps()[0]?.pgn).toContain('4. b4');
+    useRepertoire
+      .getState()
+      .updateCustom(reps()[1]?.id ?? '', { pgn: `${CARO.slice(0, -1)} 4. Nxe4 *` });
+    expect(await sync()).toMatchObject({ pushed: 1 });
+    expect(study(REPERTOIRES).chapters[1]?.movetext).toContain('4. Nxe4');
+    // The learner's own study was left alone.
+    expect(study('My openings').chapters.map((c) => c.name)).toEqual(['Sicilian']);
+  });
+
+  it('leaves for the next sync a study Lichess will not export that the account’s export lacks', async () => {
+    addRep('Italian', ITALIAN);
+    await sync();
+    study(REPERTOIRES).shareable = 'nobody';
+    lichess.fake.editChapter(study(REPERTOIRES).id, study(REPERTOIRES).chapters[0]?.id ?? '', {
+      pgn: `${ITALIAN.slice(0, -1)} 4. b4 *`,
+    });
+    lichess.fake.failNext(/^GET \/api\/study\/by\/\w+\/export\.pgn$/, 200, {
+      headers: { 'content-type': 'application/x-chess-pgn' },
+      body: '',
+    });
+    // Nothing read, so nothing decided: no item goes, and the edit waits.
+    expect(await sync()).toMatchObject({ pulled: 0, pushed: 0 });
+    expect(reps()[0]?.pgn).not.toContain('4. b4');
+    expect(await sync()).toMatchObject({ pulled: 1 });
+    expect(reps()[0]?.pgn).toContain('4. b4');
   });
 
   it('stops on a dropped connection with what came down saved, and finishes next time', async () => {

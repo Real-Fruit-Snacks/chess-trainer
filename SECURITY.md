@@ -52,8 +52,8 @@ Out of scope:
 study:write`; it is kept in the profile's local storage on this device, sent only to lichess.org,
   never written into a backup, an export or a link, and revoked on Lichess by Disconnect and by Reset
   everything. A personal token pasted instead is checked with Lichess (it must allow those four
-  permissions) and kept the same way. Studies the sync creates are private, with chat, cloning and
-  sharing off.
+  permissions) and kept the same way. Studies the sync creates are private, with chat and cloning
+  off, and only their owner may share or export them.
 
 ## Supply chain
 

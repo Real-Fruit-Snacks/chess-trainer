@@ -6,6 +6,48 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-10-05
+
+The Lichess account sync stays connected: 0.17.0 could ask to connect again seconds after every
+sign-in.
+
+### Fixed
+
+- **Lichess account:** connecting no longer ends, seconds later, in “Lichess no longer accepts this
+  device’s sign-in”. The private studies 0.17.0 made for repertoires and analyses had their sharing
+  set to nobody, and Lichess refuses to export such a study to anyone, its owner included; the app
+  took that refusal for a lost sign-in. Studies are now made with sharing and export left to their
+  owner (still private, chat and cloning off). The studies 0.17.0 made — Lichess’s API cannot change
+  their settings — are read through the export of all the account’s studies instead, and the empty
+  first chapter a stopped sync left in one is removed.
+- Only a sign-in Lichess no longer knows, or one short of a permission the sync needs, asks to
+  connect again. Anything else Lichess refuses is noted in the card, and the rest of the sync goes
+  on.
+- A sign-in marked as refused is checked with Lichess again when the app opens: an account 0.17.0
+  signed out by mistake carries on syncing by itself, with nothing lost.
+
+### Changed
+
+- The README’s statements were checked against the app: all 48,000 puzzles offline takes
+  _Download every puzzle_ in Settings; a fork has to enable its workflows before the site deploys;
+  what CI runs is listed in full.
+
+### Testing
+
+- The stand-in Lichess keeps to lila’s study settings: creating a study takes all five “who may”
+  settings, a study’s own export refuses a viewer its sharing setting does not allow — “nobody”
+  refuses its owner too — while the export of all an account’s studies does not ask, and listing
+  studies needs the study permission.
+- Unit tests: a 403 that names a missing permission against one that refuses the request itself;
+  studies made for their owner to export; a study made by 0.17.0 read through the account’s export
+  (the account’s other studies left alone) and tidied, then kept in step both ways; such a study
+  missing from that export left for the next sync, deciding nothing; a sign-in short of a permission
+  asking to connect again, another refusal noted with the rest of the run going on; the sign-in
+  checked again as the app opens, the mark lifted only for a token Lichess still knows with every
+  permission.
+- End to end in every browser: an account 0.17.0 signed out by mistake carries on by itself as the
+  app opens, its study read all the same.
+
 ## [0.17.0] - 2026-10-05
 
 Your Lichess account as the meeting point of your devices. Connect it once and the app keeps in step

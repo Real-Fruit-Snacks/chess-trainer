@@ -321,28 +321,31 @@ Home Screen of an iPhone or iPad, which iOS sends to Safari for it. Each part ca
   travels with it in a `ChessTrainer` PGN tag, so another device reads the account's imported games
   back and restores its game log, newest first. Lichess imports the same text once, so a retried
   upload never doubles a game.
-- **Repertoires and analyses.** Custom repertoires live as chapters of a private study named
-  _Chess Trainer · Repertoires_, saved analyses in one study per collection (_Chess Trainer ·
-  Analyses: Endgames_), continued in "(2)", "(3)" when a study reaches Lichess's 64 chapters. Each
-  side is compared with how it looked at the last sync (a hash of each side's own version, so the
-  small rewrites Lichess makes to a PGN never look like edits): new moves, comments, glyphs and
-  arrows, a new name or side, and deletions come across either way; when the same item changed on
-  both sides, both versions are kept — the Lichess one here as "… (Lichess)". Only a deletion made
-  in the app deletes on Lichess: an item that went missing on the device any other way (a damaged
-  save) comes back from its chapter, and a study deleted outright on Lichess is made again from the
-  device. An item too big for a chapter (3,000 moves) or refused by Lichess stays on the device until
-  it changes. A study nothing changed in is not read again. Names go to Lichess the way Lichess
-  keeps them — a chapter's cut to 80 characters, a collection's without emoji and symbols — while
-  the device keeps them as typed.
+- **Repertoires and analyses.** Custom repertoires live as chapters of a private study (only you may
+  share or export it) named _Chess Trainer · Repertoires_, saved analyses in one study per
+  collection (_Chess Trainer · Analyses: Endgames_), continued in "(2)", "(3)" when a study reaches
+  Lichess's 64 chapters. Each side is compared with how it looked at the last sync (a hash of each
+  side's own version, so the small rewrites Lichess makes to a PGN never look like edits): new
+  moves, comments, glyphs and arrows, a new name or side, and deletions come across either way; when
+  the same item changed on both sides, both versions are kept — the Lichess one here as "…
+  (Lichess)". Only a deletion made in the app deletes on Lichess: an item that went missing on the
+  device any other way (a damaged save) comes back from its chapter, and a study deleted outright on
+  Lichess is made again from the device. An item too big for a chapter (3,000 moves) or refused by
+  Lichess stays on the device until it changes. A study nothing changed in is not read again. Names
+  go to Lichess the way Lichess keeps them — a chapter's cut to 80 characters, a collection's
+  without emoji and symbols — while the device keeps them as typed.
 - **Ratings.** The account's game ratings suggest a starting rating for the human-like opponent
   (rapid, else blitz, else classical).
 
-The sync runs on its own a few seconds after the app opens, when the device comes back online or
-the app back into view, half a minute after results start to wait, and every 15 minutes while the
-app is on screen; _Sync now_ runs it at once. One request at a time, as Lichess asks; a pause when
-Lichess asks for one; nothing lost when it fails part-way — the outbox empties only as Lichess
-confirms. If Lichess stops accepting the sign-in, the card says so and offers to connect again.
-Results and games the device recorded without sending — before connecting, while disconnected or while that part was off — are offered after connecting and when a part is switched back on (_Send them_ / _Not now_).
+The sync runs on its own a few seconds after the app opens, when the device comes back online or the
+app back into view, half a minute after results start to wait, and every 15 minutes while the app is
+on screen; _Sync now_ runs it at once. One request at a time, as Lichess asks; a pause when Lichess
+asks for one; nothing lost when it fails part-way — the outbox empties only as Lichess confirms. If
+Lichess stops accepting the sign-in (withdrawn, lapsed, or short of a permission), the card says so
+and offers to connect again — the sign-in is checked once more when the app opens; anything else
+Lichess refuses is noted in the card while the rest of the sync goes on. Results and games the
+device recorded without sending — before connecting, while disconnected or while that part was off —
+are offered after connecting and when a part is switched back on (_Send them_ / _Not now_).
 Lessons, flashcards, review schedules and settings stay on the device: a backup moves those. The
 token is kept in this profile's storage on this device, never in a backup; _Disconnect_ revokes
 it on Lichess. Importing a backup starts the matching over, so nothing on Lichess is deleted for

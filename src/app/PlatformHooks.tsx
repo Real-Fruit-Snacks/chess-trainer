@@ -31,8 +31,9 @@ function hasLabLeftovers(): boolean {
  * Also tidies up after the test lab, whose storage filler must not outlive it,
  * keeps the service worker's isolation flag in step with the threads
  * setting, and clears away a full engine that is switched off. While a
- * Lichess account is connected, the account sync runs on its own. The import
- * dialog, the lab code and the sync load only when they are needed.
+ * Lichess account is connected, the account sync runs on its own; a sign-in
+ * marked as refused is checked again as the app opens. The import dialog, the
+ * lab code and the sync load only when they are needed.
  */
 export function PlatformHooks() {
   const due = useDueCount();
@@ -79,6 +80,14 @@ export function PlatformHooks() {
       stop?.();
     };
   }, [lichessConnected]);
+
+  // A sign-in marked as refused is looked at again once as the app opens: still good after
+  // all, the mark goes and the sync above starts.
+  useEffect(() => {
+    const lichess = useLichess.getState();
+    if (!lichess.account || !lichess.needsReconnect) return;
+    void import('@/lib/lichess/sync').then((sync) => sync.recheckSignIn()).catch(() => undefined);
+  }, []);
 
   if (!launchFile) return null;
   return (

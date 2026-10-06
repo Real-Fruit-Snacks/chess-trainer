@@ -77,7 +77,13 @@ describe('Lichess requests', () => {
     const statuses: Record<string, Response> = {};
     respondWith((url) => statuses[new URL(url).pathname] ?? new Response('', { status: 500 }));
     statuses['/401'] = new Response('{"error":"No such token"}', { status: 401 });
-    statuses['/403'] = new Response('', { status: 403 });
+    // What lila answers when the token lacks a permission…
+    statuses['/403'] = new Response('{"error":"Missing scope: study:read"}', { status: 403 });
+    // …and when it refuses the request itself (a study whose sharing is set to nobody).
+    statuses['/403b'] = new Response('{"error":"This study is now private"}', { status: 403 });
+    statuses['/403c'] = new Response(`<!doctype html><html>${' '.repeat(300)}</html>`, {
+      status: 403,
+    });
     statuses['/404'] = new Response('{"error":"Not found"}', { status: 404 });
     statuses['/429'] = new Response('', { status: 429, headers: { 'Retry-After': '90' } });
     statuses['/429b'] = new Response('', { status: 429 });
@@ -85,6 +91,13 @@ describe('Lichess requests', () => {
 
     expect((await failure(lichessJson('/401'))).kind).toBe('auth');
     expect((await failure(lichessJson('/403'))).kind).toBe('forbidden');
+    const refused = await failure(lichessJson('/403b'));
+    expect([refused.kind, refused.message]).toEqual([
+      'refused',
+      'Lichess refused: This study is now private',
+    ]);
+    const page = await failure(lichessJson('/403c'));
+    expect([page.kind, page.message]).toEqual(['refused', 'Lichess refused this request.']);
     const notFound = await failure(lichessJson('/404'));
     expect([notFound.kind, notFound.message]).toEqual(['not-found', 'Not found']);
     const slow = await failure(lichessJson('/429'));
@@ -99,6 +112,7 @@ describe('Lichess requests', () => {
     expect(isTransient(server)).toBe(true);
     expect(isTransient(slow)).toBe(true);
     expect(isTransient(invalid)).toBe(false);
+    expect(isTransient(refused)).toBe(false);
     expect(isTransient(new Error('x'))).toBe(false);
   });
 

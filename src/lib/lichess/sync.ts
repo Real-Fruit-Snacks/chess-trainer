@@ -4,7 +4,7 @@ import { onLichessQueue, useLichess } from '@/store/lichess';
 import { ACTIVE_PROFILE_ID } from '@/store/profiles';
 import { useProgress } from '@/store/progress';
 import { LichessError } from './api';
-import { fetchAccount } from './auth';
+import { fetchAccount, LICHESS_SCOPES, testToken } from './auth';
 import { importGame, readImportedRecords } from './games';
 import {
   adoptLichessRating,
@@ -356,6 +356,31 @@ export function syncNow(options: { force?: boolean } = {}): Promise<void> {
     }
   })();
   return running;
+}
+
+/**
+ * Looks again, as the app opens, at a sign-in marked as refused: when Lichess
+ * still knows the token — this account's, with every permission the sync
+ * needs — the mark goes and syncing resumes. (0.17.0 took Lichess's refusal to
+ * export a study for a refused sign-in.) Offline, or on any failure, the mark
+ * stays, and Settings goes on offering to connect again.
+ */
+export async function recheckSignIn(): Promise<void> {
+  const account = useLichess.getState().account;
+  if (!account || !useLichess.getState().needsReconnect) return;
+  let info: Awaited<ReturnType<typeof testToken>>;
+  try {
+    info = await testToken(account.token);
+  } catch {
+    return;
+  }
+  if (info?.userId !== account.id) return;
+  const { scopes } = info;
+  if (!LICHESS_SCOPES.every((scope) => scopes.includes(scope))) return;
+  const lichess = useLichess.getState();
+  if (lichess.account?.token === account.token && lichess.needsReconnect) {
+    lichess.setNeedsReconnect(false);
+  }
 }
 
 /** After results start to wait, how soon they go (more join them meanwhile). */

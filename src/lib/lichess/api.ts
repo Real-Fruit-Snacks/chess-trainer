@@ -16,6 +16,11 @@ export type LichessErrorKind =
   | 'auth'
   /** The token lacks a permission the request needs. */
   | 'forbidden'
+  /**
+   * Lichess will not do this for this account (an HTTP 403 that is not about
+   * the token's permissions): the sign-in itself is fine.
+   */
+  | 'refused'
   | 'not-found'
   /** Too many requests: try again after `retryAfterSec`. */
   | 'rate-limited'
@@ -102,11 +107,19 @@ export async function errorFor(res: Response): Promise<LichessError> {
     case 401:
       return new LichessError('Lichess no longer accepts this device’s sign-in.', 'auth', 401);
     case 403:
-      return new LichessError(
-        'Lichess refused: the sign-in lacks a permission this needs.',
-        'forbidden',
-        403,
-      );
+      // Lichess says "Missing scope: …" when the token lacks a permission; any other 403
+      // refuses the request itself (a study that may not be exported, say), not the sign-in.
+      return detail !== null && /missing scope/i.test(detail)
+        ? new LichessError(
+            'Lichess refused: the sign-in lacks a permission this needs.',
+            'forbidden',
+            403,
+          )
+        : new LichessError(
+            detail ? `Lichess refused: ${detail}` : 'Lichess refused this request.',
+            'refused',
+            403,
+          );
     case 404:
       return new LichessError(detail ?? 'Not found on Lichess.', 'not-found', 404);
     case 429:

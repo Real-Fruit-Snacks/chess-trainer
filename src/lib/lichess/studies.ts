@@ -1,7 +1,14 @@
 import { DEFAULT_COLLECTION, MAX_ANALYSES, useAnalyses } from '@/store/analyses';
 import { type StudyLink, useLichess } from '@/store/lichess';
 import { useRepertoire } from '@/store/repertoire';
-import { LichessError, lichessJson, lichessNdjson, lichessSend, lichessText } from './api';
+import {
+  LichessError,
+  lichessJson,
+  lichessNdjson,
+  lichessSend,
+  lichessText,
+  lichessTextStream,
+} from './api';
 import {
   type AppStudy,
   chapterPgn,
@@ -29,9 +36,10 @@ import {
  * Keeping custom repertoires and saved analyses in step with private Lichess
  * studies: reads the app's studies, decides with `reconcile`, applies what
  * comes down to the local stores and sends what goes up. Studies are created
- * when a list needs one (private, chat off), filled in batches (Lichess names
- * each chapter from its `ChapterName` tag), and read again afterwards so the
- * links remember Lichess's own version of every chapter.
+ * when a list needs one (private, chat off, shared and exported by their owner
+ * only), filled in batches (Lichess names each chapter from its `ChapterName`
+ * tag), and read again afterwards so the links remember Lichess's own version
+ * of every chapter.
  */
 
 export interface StudySyncResult {
@@ -110,13 +118,120 @@ export async function listAppStudies(token: string, username: string): Promise<A
   return studies;
 }
 
+/** How every study export is asked for: no clocks; comments, variations and each side. */
+const EXPORT_QUERY = { clocks: false, comments: true, variations: true, orientation: true };
+
 async function readStudy(token: string, study: AppStudy): Promise<StudyExport> {
   const text = await lichessText(`/api/study/${study.id}.pgn`, {
     token,
     accept: 'application/x-chess-pgn',
-    query: { clocks: false, comments: true, variations: true, orientation: true },
+    query: EXPORT_QUERY,
   });
   return chaptersFromExport(study, text);
+}
+
+/**
+ * How long the export of all the account's studies may take to read: Lichess
+ * sends it about twenty chapters a second, and the studies wanted may come
+ * after many others.
+ */
+const ACCOUNT_EXPORT_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Lichess ends every chapter of an export with two empty lines. */
+const CHAPTER_END = '\n\n\n';
+const CHAPTER_URL_TAG = /\[ChapterURL "[^"]*\/study\/([A-Za-z0-9]{8})\/[A-Za-z0-9]{8}"\]/;
+
+/**
+ * Studies read from the export of all the account's studies: the way to read
+ * a study Lichess will not export on its own. Lichess refuses the export of a
+ * study whose sharing is set to nobody — even to its owner — and 0.17.0 made
+ * its studies so; that setting cannot be changed through Lichess's API.
+ * Lichess sends the most recently updated study first, each with all its
+ * chapters in a row, so reading stops once every study wanted has gone by. A
+ * study counts as read only once all its chapters have come (a study missing
+ * from the export, or cut off, is left for the next sync).
+ */
+async function readFromAccountExport(
+  token: string,
+  username: string,
+  studies: readonly AppStudy[],
+): Promise<Map<string, StudyExport>> {
+  const wanted = new Set(studies.map((s) => s.id));
+  const complete = new Set<string>();
+  const kept: string[] = [];
+  let current: string | null = null;
+  let stopped = false;
+  let rest = '';
+  // One chapter (or, when a comment holds two empty lines, a piece of one: it belongs to the
+  // study whose chapter came last, and joins it again when the pieces are put back together).
+  const take = (chunk: string) => {
+    const id = CHAPTER_URL_TAG.exec(chunk)?.[1] ?? null;
+    if (id !== null && id !== current) {
+      if (current !== null && wanted.has(current)) complete.add(current);
+      current = id;
+      if (!wanted.has(id) && complete.size === wanted.size) {
+        stopped = true;
+        return;
+      }
+    }
+    if (current !== null && wanted.has(current)) kept.push(chunk);
+  };
+  const finished = await lichessTextStream(
+    `/api/study/by/${encodeURIComponent(username)}/export.pgn`,
+    (piece) => {
+      rest += piece;
+      const chunks = rest.split(CHAPTER_END);
+      rest = chunks.pop() ?? '';
+      for (const chunk of chunks) {
+        take(chunk);
+        if (stopped) return false;
+      }
+      return true;
+    },
+    {
+      token,
+      accept: 'application/x-chess-pgn',
+      query: EXPORT_QUERY,
+      timeoutMs: ACCOUNT_EXPORT_TIMEOUT_MS,
+    },
+  );
+  if (finished && !stopped) {
+    if (rest.trim()) take(rest);
+    if (!stopped && current !== null && wanted.has(current)) complete.add(current);
+  }
+  const text = kept.join(CHAPTER_END);
+  return new Map(
+    studies.filter((s) => complete.has(s.id)).map((s) => [s.id, chaptersFromExport(s, text)]),
+  );
+}
+
+/**
+ * Reads studies, each on its own; those Lichess will not export on their own
+ * are read together from the account's export of all its studies. A study
+ * deleted meanwhile is left out (it is read next time); any other failure
+ * stops the reading.
+ */
+async function readStudies(
+  token: string,
+  username: string,
+  studies: readonly AppStudy[],
+): Promise<Map<string, StudyExport>> {
+  const read = new Map<string, StudyExport>();
+  const refused: AppStudy[] = [];
+  for (const study of studies) {
+    try {
+      read.set(study.id, await readStudy(token, study));
+    } catch (err) {
+      if (err instanceof LichessError && err.kind === 'refused') refused.push(study);
+      else if (!(err instanceof LichessError) || err.kind !== 'not-found') throw err;
+    }
+  }
+  if (refused.length > 0) {
+    for (const [id, exported] of await readFromAccountExport(token, username, refused)) {
+      read.set(id, exported);
+    }
+  }
+  return read;
 }
 
 async function createStudy(token: string, name: string): Promise<string> {
@@ -128,7 +243,9 @@ async function createStudy(token: string, name: string): Promise<string> {
       computer: 'everyone',
       explorer: 'everyone',
       cloneable: 'nobody',
-      shareable: 'nobody',
+      // Only the owner may share and export it: with "nobody", Lichess refuses even the
+      // owner's export, and the app reads its studies through that export.
+      shareable: 'owner',
       chat: 'nobody',
       sticky: 'false',
       description: 'false',
@@ -375,18 +492,14 @@ export async function syncStudies(
   onStep('Reading your repertoires and analyses on Lichess');
   const chapters: RemoteChapter[] = [];
   const unreadable: string[] = [];
-  const read = new Set<string>();
+  const exports = await readStudies(token, username, studies);
   for (const study of studies) {
-    try {
-      const exported = await readStudy(token, study);
-      chapters.push(...exported.chapters);
-      unreadable.push(...exported.unreadable);
-      read.add(study.id);
-    } catch (err) {
-      // A study deleted meanwhile is left for next time; anything else stops the sync.
-      if (!(err instanceof LichessError) || err.kind !== 'not-found') throw err;
-    }
+    const exported = exports.get(study.id);
+    if (!exported) continue;
+    chapters.push(...exported.chapters);
+    unreadable.push(...exported.unreadable);
   }
+  const read = new Set(exports.keys());
   // Chapters nothing is decided about: unreadable here, or holding an item that stays here.
   const frozen = new Set(unreadable);
   for (const key of heldKeys) {
@@ -524,40 +637,66 @@ export async function syncStudies(
     }
   }
 
-  // Read the studies that changed, so each link holds Lichess's own version of its chapter,
-  // and drop the empty chapter a new study starts with.
-  if (touched.size > 0) onStep('Checking your studies on Lichess');
-  for (const study of studies.filter((s) => touched.has(s.id))) {
-    let fresh: StudyExport;
-    try {
-      fresh = await readStudy(token, study);
-    } catch (err) {
-      if (!(err instanceof LichessError) || err.kind !== 'not-found') throw err;
-      continue;
-    }
+  /**
+   * Each link takes Lichess's own version of its chapter, and the empty chapter
+   * a new study starts with goes (when other chapters stay).
+   */
+  const settle = async (studyId: string, exported: StudyExport): Promise<boolean> => {
     const keyOf = new Map(
       Object.entries(links)
-        .filter(([, link]) => link.studyId === study.id)
+        .filter(([, link]) => link.studyId === studyId)
         .map(([key, link]) => [link.chapterId, key]),
     );
     const staying =
-      fresh.chapters.filter((c) => !c.blank || keyOf.has(c.chapterId)).length +
-      fresh.unreadable.length;
-    for (const chapter of fresh.chapters) {
+      exported.chapters.filter((c) => !c.blank || keyOf.has(c.chapterId)).length +
+      exported.unreadable.length;
+    let changed = false;
+    for (const chapter of exported.chapters) {
       const key = keyOf.get(chapter.chapterId);
       const link = key ? links[key] : undefined;
       if (key && link) {
         if (link.remoteHash.startsWith('?')) links[key] = { ...link, remoteHash: chapter.hash };
       } else if (chapter.blank && staying > 0) {
-        await deleteChapter(token, study.id, chapter.chapterId);
+        await deleteChapter(token, studyId, chapter.chapterId);
+        changed = true;
       }
+    }
+    return changed;
+  };
+
+  // Read the studies that changed, so each link holds Lichess's own version of its chapter.
+  if (touched.size > 0) onStep('Checking your studies on Lichess');
+  const fresh = await readStudies(
+    token,
+    username,
+    studies.filter((s) => touched.has(s.id)),
+  );
+  for (const study of studies) {
+    const exported = fresh.get(study.id);
+    if (exported) await settle(study.id, exported);
+  }
+
+  // A run that stopped before reading back what it had sent (its links still waited for
+  // Lichess's version of their chapters) left that tidying undone: it is done now, from what
+  // was read at the start, for the studies this run did not change.
+  const tidied = new Set<string>();
+  for (const studyId of new Set(
+    Object.values(store.links)
+      .filter((link) => link.remoteHash.startsWith('?'))
+      .map((link) => link.studyId),
+  )) {
+    const exported = exports.get(studyId);
+    if (exported && !touched.has(studyId) && (await settle(studyId, exported))) {
+      tidied.add(studyId);
     }
   }
 
   // The stamps to compare with next time. Studies changed just now are left out: Lichess
   // records the change a few seconds later, so they are read once more next time.
   const studyStamps = Object.fromEntries(
-    studies.filter((s) => read.has(s.id) && !touched.has(s.id)).map((s) => [s.id, s.updatedAt]),
+    studies
+      .filter((s) => read.has(s.id) && !touched.has(s.id) && !tidied.has(s.id))
+      .map((s) => [s.id, s.updatedAt]),
   );
   save({ studyStamps });
   return {

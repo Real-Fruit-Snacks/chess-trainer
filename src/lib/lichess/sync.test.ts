@@ -9,6 +9,7 @@ import { pgnForLichess } from './records';
 import {
   GAMES_PULL_INTERVAL_MS,
   QUEUE_DELAY_MS,
+  recheckSignIn,
   startLichessSync,
   syncNow,
   useLichessSync,
@@ -187,6 +188,50 @@ describe('the account sync', () => {
     const before = lichess.fake.requests.length;
     await syncNow();
     expect(lichess.fake.requests.length).toBe(before);
+  });
+
+  it('asks for a new connection when the sign-in lacks a permission', async () => {
+    lichess.fake.tokens.set(token, ['puzzle:read', 'puzzle:write']);
+    await syncNow();
+    expect(useLichessSync.getState().phase).toBe('signed-out');
+    expect(useLichess.getState().needsReconnect).toBe(true);
+  });
+
+  it('stays connected when Lichess refuses a request for another reason, and notes it', async () => {
+    useProgress.getState().recordGame(otherDeviceGame('g-here', Date.UTC(2026, 8, 1)));
+    // A 403 page that is not about the token's permissions.
+    lichess.fake.failNext(/^GET \/api\/games\/export\/imports$/, 403, {
+      headers: { 'content-type': 'text/html' },
+      body: `<!doctype html><html><body>${'Forbidden. '.repeat(40)}</body></html>`,
+    });
+    await syncNow();
+    const status = useLichessSync.getState();
+    expect(useLichess.getState().needsReconnect).toBe(false);
+    expect(status.phase).toBe('done');
+    expect(status.report?.problems).toEqual(['Games: Lichess refused this request.']);
+    // The rest of the run went on: the game went up, the ratings were read.
+    expect(status.report?.gamesSent).toBe(1);
+    expect(requests(/^GET \/api\/account$/)).toBe(1);
+  });
+
+  it('looks again at a sign-in marked as refused, and lifts the mark only if it is still good', async () => {
+    useLichess.getState().setNeedsReconnect(true);
+    // Offline: the mark stays.
+    lichess.offline = true;
+    await recheckSignIn();
+    expect(useLichess.getState().needsReconnect).toBe(true);
+    lichess.offline = false;
+    // A token short of a permission, or gone: the mark stays.
+    lichess.fake.tokens.set(token, ['puzzle:read', 'puzzle:write', 'study:read']);
+    await recheckSignIn();
+    expect(useLichess.getState().needsReconnect).toBe(true);
+    lichess.fake.tokens.delete(token);
+    await recheckSignIn();
+    expect(useLichess.getState().needsReconnect).toBe(true);
+    // Still good: the mark goes.
+    lichess.fake.tokens.set(token, ['puzzle:read', 'puzzle:write', 'study:read', 'study:write']);
+    await recheckSignIn();
+    expect(useLichess.getState().needsReconnect).toBe(false);
   });
 
   it('pauses when Lichess asks, for as long as it asks', async () => {

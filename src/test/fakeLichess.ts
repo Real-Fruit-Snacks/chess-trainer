@@ -18,6 +18,10 @@
  *   field (first chapter only), else its `ChapterName` tag, else the players,
  *   else the event; exports carry `ChapterName`, `ChapterURL` and the
  *   orientation, and write comments `{ like this }` on one long line.
+ * - Study settings: creating a study takes all five "who may" settings; a
+ *   study's own export needs its viewer to be allowed to share it (sharing
+ *   set to nobody refuses everyone, its owner too, with a 403 page), while the
+ *   export of all an account's studies does not ask.
  * - Names: a study's is cleaned like a public text and cut to 100 characters,
  *   a chapter's cleaned more gently and cut to 80 (`lichessNames.ts`).
  */
@@ -49,11 +53,17 @@ export interface FakeChapter {
   movetext: string;
 }
 
+/** Who may do something with a study (lila's `Settings.UserSelection`). */
+export type FakeUserSelection = 'nobody' | 'owner' | 'contributor' | 'member' | 'everyone';
+const USER_SELECTIONS: readonly string[] = ['nobody', 'owner', 'contributor', 'member', 'everyone'];
+
 export interface FakeStudy {
   id: string;
   name: string;
   ownerId: string;
   visibility: 'public' | 'unlisted' | 'private';
+  /** Who may share and export it (a study made on lichess.org starts with everyone). */
+  shareable: FakeUserSelection;
   createdAt: number;
   updatedAt: number;
   chapters: FakeChapter[];
@@ -242,6 +252,7 @@ export class FakeLichess {
     name: string,
     chapters: { name: string; pgn: string; orientation?: 'white' | 'black' }[] = [],
     visibility: FakeStudy['visibility'] = 'private',
+    shareable: FakeUserSelection = 'everyone',
   ): FakeStudy {
     const at = this.tick();
     const study: FakeStudy = {
@@ -249,6 +260,7 @@ export class FakeLichess {
       name: studyNameOf(name),
       ownerId: this.userId,
       visibility,
+      shareable,
       createdAt: at,
       updatedAt: at,
       chapters: [],
@@ -354,6 +366,9 @@ export class FakeLichess {
     if (m === 'GET' && path === '/api/games/export/imports') return this.exportImports(req);
     if (m === 'GET' && (match = /^\/api\/study\/by\/([\w-]+)$/.exec(path))) {
       return this.listStudies(req, match[1] ?? '');
+    }
+    if (m === 'GET' && (match = /^\/api\/study\/by\/([\w-]+)\/export\.pgn$/.exec(path))) {
+      return this.exportAccountStudies(req, match[1] ?? '', url);
     }
     if (m === 'POST' && path === '/api/study') return this.createStudy(req);
     if (m === 'GET' && (match = /^\/api\/study\/(\w{8})\.pgn$/.exec(path))) {
@@ -595,8 +610,7 @@ export class FakeLichess {
   }
 
   private listStudies(req: FakeRequest, username: string): FakeResponse {
-    const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
-    const viewer = token && this.tokens.get(token)?.includes('study:read') ? this.userId : null;
+    const viewer = this.studyViewer(req);
     const lines = this.studies
       .filter((s) => s.ownerId === username.toLowerCase())
       .filter((s) => s.visibility === 'public' || viewer === s.ownerId)
@@ -617,12 +631,19 @@ export class FakeLichess {
     if (visibility !== 'public' && visibility !== 'unlisted' && visibility !== 'private') {
       return fail(400, 'Invalid visibility');
     }
+    // Lila's form wants every one of these, each one of its user selections.
+    for (const field of ['computer', 'explorer', 'cloneable', 'shareable', 'chat']) {
+      if (!USER_SELECTIONS.includes(form.get(field) ?? '')) {
+        return json({ [field]: ['error.required'] }, 400);
+      }
+    }
     const at = this.tick();
     const study: FakeStudy = {
       id: this.nextId('st'),
       name,
       ownerId: userId,
       visibility,
+      shareable: form.get('shareable') as FakeUserSelection,
       createdAt: at,
       updatedAt: at,
       chapters: [this.blankChapter()],
@@ -631,8 +652,25 @@ export class FakeLichess {
     return json({ id: study.id });
   }
 
-  private exportStudy(req: FakeRequest, id: string, url: URL): FakeResponse {
-    const study = this.ownStudy(req, id, 'study:read');
+  /** Who is asking with study access: null without a token (as lila's `AnonOrScoped`). */
+  private studyViewer(req: FakeRequest): string | null {
+    return req.headers.authorization ? this.user(req, 'study:read') : null;
+  }
+
+  /** Lila's page for a study the viewer may not see or export. */
+  private privateStudyPage(status: 401 | 403): FakeResponse {
+    return answer(
+      status,
+      `<!doctype html><html lang="en"><head><title>Private study • lichess.org</title></head><body>
+<main class="page-small box box-pad"><h1 class="box__top">Private study</h1>
+<p>Sorry! This study is private, you cannot access it. Ask the study owner to invite you.</p>
+</main></body></html>`,
+      'text/html',
+    );
+  }
+
+  /** A study's chapters as lila exports them. */
+  private renderStudy(study: FakeStudy, url: URL): string {
     const orientation = url.searchParams.get('orientation') === 'true';
     const date = new Date(study.createdAt).toISOString().slice(0, 10).replace(/-/g, '.');
     const games = study.chapters.map((chapter) => {
@@ -654,7 +692,41 @@ export class FakeLichess {
       const head = tags.map(([k, v]) => `[${k} "${v.replace(/"/g, '\\"')}"]`).join('\n');
       return `${head}\n\n${chapter.movetext ? `${chapter.movetext} ` : ' '}*`;
     });
-    return answer(200, games.map((g) => `${g}\n\n\n`).join(''), 'application/x-chess-pgn');
+    return games.map((g) => `${g}\n\n\n`).join('');
+  }
+
+  /**
+   * One study's export (lila's `apiPgn`): a private study only for its members
+   * (here, its owner), and then only if its sharing setting allows the viewer —
+   * "nobody" allows no one, the owner included.
+   */
+  private exportStudy(req: FakeRequest, id: string, url: URL): FakeResponse {
+    const viewer = this.studyViewer(req);
+    const study = this.studies.find((s) => s.id === id);
+    if (!study) return fail(404, 'Study not found');
+    const member = viewer !== null && viewer === study.ownerId;
+    if (study.visibility === 'private' && !member) {
+      return this.privateStudyPage(viewer === null ? 401 : 403);
+    }
+    const allowed = study.shareable === 'everyone' || (study.shareable !== 'nobody' && member);
+    if (!allowed) return this.privateStudyPage(403);
+    return answer(200, this.renderStudy(study, url), 'application/x-chess-pgn');
+  }
+
+  /**
+   * Every study of an account (lila's `apiExportPgn`), the most recently
+   * updated first: its private ones for the account itself. It does not look
+   * at the sharing settings.
+   */
+  private exportAccountStudies(req: FakeRequest, username: string, url: URL): FakeResponse {
+    const viewer = this.studyViewer(req);
+    const ownerId = username.toLowerCase();
+    const text = this.studies
+      .filter((s) => s.ownerId === ownerId && (s.visibility === 'public' || viewer === ownerId))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((s) => this.renderStudy(s, url))
+      .join('');
+    return answer(200, text, 'application/x-chess-pgn');
   }
 
   /** A chapter from one game of an import, or the reason Lichess would not take it. */

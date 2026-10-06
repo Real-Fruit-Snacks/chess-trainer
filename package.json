@@ -1,8 +1,8 @@
 {
   "name": "chess-trainer",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "private": true,
-  "description": "Learn, practice and solve chess puzzles at any level — a fully static, installable web app built for GitHub Pages.",
+  "description": "Learn, practise and solve chess puzzles at any level — a fully static, installable web app built for GitHub Pages.",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "engines": {
