@@ -38,19 +38,7 @@ export default function StudiesPage() {
               className={`card card--interactive study-card${result?.solvedAt ? ' study-card--done' : ''}`}
               data-testid={`study-${study.id}`}
             >
-              <div className="row row--between">
-                <span className="card__title">{study.title}</span>
-                <span className="row" style={{ gap: 4 }}>
-                  {result?.solvedAt ? (
-                    <Badge tone="success">{result.clean ? 'Solved' : 'Solved with help'}</Badge>
-                  ) : (
-                    <Difficulty level={study.difficulty} />
-                  )}
-                  <Badge tone={study.goal === 'win' ? 'accent' : 'info'}>
-                    {study.goal === 'win' ? 'Win' : 'Draw'}
-                  </Badge>
-                </span>
-              </div>
+              <span className="card__title">{study.title}</span>
               <span className="small muted">
                 {study.composer}
                 {study.year ? `, ${study.year}` : ''} · {study.line.length} move
@@ -63,6 +51,19 @@ export default function StudiesPage() {
                   </span>
                 ))}
               </span>
+              {/* The goal and the result at the foot, so the title has the card's whole width. */}
+              <div className="card__foot">
+                <span className="row">
+                  <Badge tone={study.goal === 'win' ? 'accent' : 'info'}>
+                    {study.goal === 'win' ? 'Win' : 'Draw'}
+                  </Badge>
+                </span>
+                {result?.solvedAt ? (
+                  <Badge tone="success">{result.clean ? 'Solved' : 'Solved with help'}</Badge>
+                ) : (
+                  <Difficulty level={study.difficulty} />
+                )}
+              </div>
             </Link>
           );
         })}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
-import { Badge, Button, Card, Kbd, LinkButton, Icon, NotFound } from '@/components/ui';
+import { Button, Card, Kbd, LinkButton, Icon, NotFound } from '@/components/ui';
 import { dueReviews } from '@/lib/puzzleReview';
 import { pageShortcutKey } from '@/lib/shortcutKey';
 import { useNow } from '@/lib/useNow';
@@ -15,6 +15,7 @@ import { COURSE_PARAM, courseStatus, nextInCourse } from './courseProgress';
 import { type Course, getCourse } from './courses';
 import { getLesson, nextLesson } from './lessons';
 import { renderInline } from './inline';
+import { LessonDoneButton } from './LessonDone';
 import { LessonText } from './LessonText';
 import { type Lesson, LEVEL_LABELS } from './model';
 import { firstUnfinishedStep, lessonStepKeys, taskStepKeys } from './stepKeys';
@@ -144,33 +145,37 @@ function LessonView({ lesson }: { lesson: Lesson }) {
 
   if (finished) {
     const completed = progress?.completedAt != null;
+    // Marked done without the steps: say so, and what doing them would add.
+    const marked = completed && progress.marked === true;
     const open = lesson.steps.filter((_, i) => !stepsDone.has(keys[i] as number | string));
     const openTasks = open.filter((s) => s.task).length;
     const firstOpen = firstUnfinishedStep(lesson, progress?.stepsDone);
     return (
       <div>
-        <LessonHeader lesson={lesson} course={course} />
+        <LessonHeader lesson={lesson} course={course} done={completed} />
         <Card className="lesson__complete">
           <div className="lesson__complete-icon" aria-hidden="true">
             <Icon name={completed ? 'award' : 'flag'} size={40} />
           </div>
           <h2 ref={endRef} tabIndex={-1} data-testid="lesson-end-title">
-            {completed ? 'Lesson complete' : 'End of lesson'}
+            {marked ? 'Marked as done' : completed ? 'Lesson complete' : 'End of lesson'}
           </h2>
           <p className="muted">
-            {completed
-              ? lesson.practiceThemes?.length || lesson.practiceDrills?.length
-                ? 'Nice work. Cement the idea with some practice.'
-                : 'Nice work. Keep going with the next lesson.'
-              : `You reached the end with ${
-                  openTasks > 0
-                    ? `${openTasks} task${openTasks === 1 ? '' : 's'} still to solve`
-                    : `${open.length} step${open.length === 1 ? '' : 's'} still to read`
-                }. The lesson counts as complete once every step is done.`}
+            {marked
+              ? 'You marked this lesson as done. Doing every step completes it for real and brings its positions back for recall.'
+              : completed
+                ? lesson.practiceThemes?.length || lesson.practiceDrills?.length
+                  ? 'Nice work. Cement the idea with some practice.'
+                  : 'Nice work. Keep going with the next lesson.'
+                : `You reached the end with ${
+                    openTasks > 0
+                      ? `${openTasks} task${openTasks === 1 ? '' : 's'} still to solve`
+                      : `${open.length} step${open.length === 1 ? '' : 's'} still to read`
+                  }. The lesson counts as complete once every step is done.`}
           </p>
           <div className="row" style={{ justifyContent: 'center' }}>
-            {!completed ? (
-              <Button variant="primary" onClick={() => goTo(firstOpen)}>
+            {!completed || (marked && open.length > 0) ? (
+              <Button variant={marked ? 'secondary' : 'primary'} onClick={() => goTo(firstOpen)}>
                 Go to step {firstOpen + 1}
               </Button>
             ) : null}
@@ -228,7 +233,7 @@ function LessonView({ lesson }: { lesson: Lesson }) {
 
   return (
     <div>
-      <LessonHeader lesson={lesson} course={course} />
+      <LessonHeader lesson={lesson} course={course} done={progress?.completedAt != null} />
 
       <div className="trainer">
         <div className="trainer__board" style={{ position: 'relative' }}>
@@ -340,20 +345,26 @@ function LessonView({ lesson }: { lesson: Lesson }) {
             </div>
           </Card>
 
-          <p className="small faint">
-            <Kbd>←</Kbd> <Kbd>→</Kbd> to move between steps · Problems with this lesson?{' '}
-            <a
-              href={`${siteConfig.repositoryUrl}/issues/new?template=lesson_proposal.yml&title=${encodeURIComponent(`Lesson feedback: ${lesson.title}`)}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Tell us<span className="sr-only"> (opens in a new tab)</span>
-            </a>
-            {' · '}
-            <Link to={`/analyze?fen=${encodeURIComponent(state.fen)}`}>Analyze position</Link>
-            {' · '}
-            <Link to={`/play?fen=${encodeURIComponent(state.fen)}`}>Play it out</Link>
-          </p>
+          <div className="lesson__foot">
+            <p className="small faint keyboard-only">
+              <Kbd>←</Kbd> <Kbd>→</Kbd> to move between steps
+            </p>
+            <p className="small faint">
+              Problems with this lesson?{' '}
+              <a
+                href={`${siteConfig.repositoryUrl}/issues/new?template=lesson_proposal.yml&title=${encodeURIComponent(`Lesson feedback: ${lesson.title}`)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Tell us<span className="sr-only"> (opens in a new tab)</span>
+              </a>
+              {/* A no-break space keeps each dot at the end of a line, never at the start. */}
+              {'\u00a0· '}
+              <Link to={`/analyze?fen=${encodeURIComponent(state.fen)}`}>Analyze position</Link>
+              {'\u00a0· '}
+              <Link to={`/play?fen=${encodeURIComponent(state.fen)}`}>Play it out</Link>
+            </p>
+          </div>
         </aside>
       </div>
     </div>
@@ -409,22 +420,31 @@ function RecallNote({ scheduled }: { scheduled: boolean }) {
   );
 }
 
-function LessonHeader({ lesson, course }: { lesson: Lesson; course: Course | null }) {
+function LessonHeader({
+  lesson,
+  course,
+  done,
+}: {
+  lesson: Lesson;
+  course: Course | null;
+  done: boolean;
+}) {
   return (
     <div className="page-header">
-      <div className="row" style={{ marginBottom: 6 }}>
-        {course ? (
-          <Link to={`/learn/course/${course.id}`} className="small" data-testid="back-to-course">
-            ← Back to course: {course.title}
-          </Link>
-        ) : (
-          <Link to="/learn" className="small">
-            ← All lessons
-          </Link>
-        )}
-        <Badge>{LEVEL_LABELS[lesson.level].title}</Badge>
-        <Badge>{lesson.category}</Badge>
-        <span className="small muted">{lesson.minutes} min</span>
+      <div className="lesson__crumbs">
+        {/* The way back: to the course the lesson was opened from, or to all lessons. */}
+        <p className="card__eyebrow">
+          <Link to="/learn">Learn</Link> /{' '}
+          {course ? (
+            <Link to={`/learn/course/${course.id}`} data-testid="back-to-course">
+              {course.title}
+            </Link>
+          ) : (
+            LEVEL_LABELS[lesson.level].title
+          )}{' '}
+          · {lesson.minutes} min
+        </p>
+        <LessonDoneButton lessonId={lesson.id} title={lesson.title} done={done} />
       </div>
       <h1>{lesson.title}</h1>
       <p>{lesson.summary}</p>

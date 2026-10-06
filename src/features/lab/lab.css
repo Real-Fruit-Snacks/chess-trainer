@@ -40,6 +40,11 @@
   word-break: break-word;
 }
 
+/* The Yes/No column is as narrow as its pill. */
+.lab__table td:has(> .badge) {
+  width: 1%;
+}
+
 .lab__table td.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -185,4 +190,16 @@
 .lab__slider {
   max-width: 420px;
   margin: var(--space-3) 0;
+}
+
+/* Touch screens: the section links are finger-sized. */
+@media (pointer: coarse) {
+  .lab__nav {
+    row-gap: 0;
+  }
+
+  .lab__nav a {
+    display: inline-block;
+    padding: 9px 0;
+  }
 }

@@ -51,11 +51,31 @@
     box-shadow var(--transition);
 }
 
-.lesson-card:hover {
+/* The card and its done check (a button beside the link) lift together. */
+.lesson-card__item {
+  position: relative;
+}
+
+.lesson-card__item:hover > .lesson-card {
   border-color: var(--accent);
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
   color: inherit;
+}
+
+.lesson-card__item > .lesson-check {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  transition:
+    transform var(--transition),
+    border-color var(--transition),
+    background var(--transition),
+    color var(--transition);
+}
+
+.lesson-card__item:hover > .lesson-check {
+  transform: translateY(-2px);
 }
 
 .lesson-card--done {
@@ -105,16 +125,77 @@
 
 .lesson-card__footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  /* As tall as the done check that sits at its right end. */
+  min-height: 28px;
+}
+
+/*
+ * The round check beside a lesson (Learn page, course page): ticked and filled
+ * once the lesson is done; a tap marks it done or not done. The circle is 28px,
+ * the target round it 40px.
+ */
+.lesson-check {
+  position: relative;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: var(--surface);
+  color: transparent;
+}
+
+.lesson-check::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+}
+
+.lesson-check:hover {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.lesson-check.is-done {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--accent-contrast);
+}
+
+.lesson-check.is-done:hover {
+  background: color-mix(in srgb, var(--success) 80%, var(--surface));
+  color: var(--accent-contrast);
+}
+
+.lesson-check:focus-visible {
+  border-radius: 50%;
 }
 
 /* ---------- Lesson page ---------- */
-.lesson__nav {
+/* The way back (Learn / the course) and the lesson's done switch, above the title. */
+.lesson__crumbs {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-1);
+}
+
+.lesson__crumbs .card__eyebrow {
+  margin: 0;
+}
+
+.lesson__nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
   margin-bottom: var(--space-3);
 }
 
@@ -134,14 +215,27 @@
 }
 
 .lesson__stepdot {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--surface);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--text-muted);
+}
+
+/* Touch screens: a dot a finger can hit. */
+@media (pointer: coarse) {
+  .lesson__steps {
+    gap: 6px;
+  }
+
+  .lesson__stepdot {
+    width: 30px;
+    height: 30px;
+    font-size: 0.75rem;
+  }
 }
 
 .lesson__stepdot[aria-current='step'] {
@@ -175,6 +269,10 @@
   margin-top: var(--space-3);
 }
 
+.lesson__foot p {
+  margin: 0 0 var(--space-1);
+}
+
 .lesson__complete {
   text-align: center;
   padding: var(--space-5);
@@ -189,10 +287,42 @@
   margin-bottom: var(--space-6);
 }
 
-.learn__course {
+/* The three courses share the row (four columns left an empty one). */
+.learn__courses .learn__grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.card.learn__course {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+.learn__course p {
+  margin: 0;
+}
+
+.learn__course-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.learn__course-progress .progress {
+  flex: 1;
+}
+
+.learn__course-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* What the course goes on with, at the bottom of the card. */
+.learn__course-next {
+  margin-top: auto;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--accent);
 }
 
 .course__summary {
@@ -254,8 +384,13 @@
   border-color: transparent;
 }
 
+.course__unit-text {
+  min-width: 0;
+}
+
+/* Under the blurb, where it has the width of the text (beside the title it was squeezed). */
 .course__lock {
-  margin-left: auto;
+  margin-top: var(--space-2);
 }
 
 .course__items {
@@ -267,39 +402,78 @@
   gap: var(--space-1);
 }
 
-.course__item {
+/* A course step: its check (a button for a lesson, which can be marked done) and its link,
+   which covers the rest of the row. */
+.course__row {
+  position: relative;
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  color: inherit;
-  text-decoration: none;
 }
 
-.course__item:hover {
+.course__row:hover {
   background: var(--surface-2);
 }
 
-.course__item.is-done .course__item-title {
-  text-decoration: line-through;
-  color: var(--text-muted);
+.course__row > .lesson-check {
+  z-index: 1;
 }
 
-.course__check {
-  flex: none;
-  width: 1.4em;
-  text-align: center;
-  color: var(--success);
-  font-weight: 700;
-}
-
-.course__item-body {
+.course__item {
   display: flex;
   flex-direction: column;
   gap: 2px;
   flex: 1;
   min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.course__item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.course__item:hover {
+  color: inherit;
+}
+
+/* The focus ring goes round the whole row, not round the text. */
+.course__item:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.course__row:has(.course__item:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px var(--focus-halo);
+}
+
+.course__row.is-done .course__item-title {
+  color: var(--text-muted);
+}
+
+/* The status circle of a step that is measured, not marked (drills, checkpoints, games). */
+.course__status {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  color: transparent;
+}
+
+.course__status.is-done {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--accent-contrast);
 }
 
 .course__item-title {

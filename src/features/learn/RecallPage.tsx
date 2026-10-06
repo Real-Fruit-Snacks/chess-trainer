@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { Badge, Button, Card, Kbd, LinkButton } from '@/components/ui';
@@ -50,6 +51,9 @@ export default function RecallPage() {
     return (
       <div>
         <div className="page-header">
+          <p className="card__eyebrow">
+            <Link to="/learn">Learn</Link> / Lesson recall
+          </p>
           <h1>Recall</h1>
           <p>Lesson positions come back a few days after you learn them, then further apart.</p>
         </div>
@@ -79,6 +83,9 @@ export default function RecallPage() {
     <div>
       <div className="page-header page-header--lean row row--between">
         <div>
+          <p className="card__eyebrow">
+            <Link to="/learn">Learn</Link> / Lesson recall
+          </p>
           <h1>Recall</h1>
           <p>
             {due.length} due · from <strong>{resolved.title}</strong>

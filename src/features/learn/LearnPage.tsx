@@ -8,6 +8,7 @@ import { type LessonProgress, useProgress } from '@/store/progress';
 import { CoursesSection } from './CoursesSection';
 import { lessons, lessonsByLevel } from './lessons';
 import { LEVEL_LABELS, type Lesson, type LessonLevel } from './model';
+import { LessonCheck } from './LessonDone';
 import { countStepsDone } from './stepKeys';
 import './learn.css';
 
@@ -85,7 +86,7 @@ export default function LearnPage() {
                 const total = lesson.steps.length;
                 const status = state?.completedAt ? 'done' : done > 0 ? 'started' : 'new';
                 return (
-                  <li key={lesson.id}>
+                  <li key={lesson.id} className="lesson-card__item">
                     <Link
                       to={`/learn/${lesson.id}`}
                       className={`lesson-card lesson-card--${status}`}
@@ -99,7 +100,9 @@ export default function LearnPage() {
                       <p className="lesson-card__summary">{lesson.summary}</p>
                       <div className="lesson-card__footer">
                         {status === 'done' ? (
-                          <Badge tone="success">Completed</Badge>
+                          <Badge tone="success">
+                            {state?.marked ? 'Marked done' : 'Completed'}
+                          </Badge>
                         ) : status === 'started' ? (
                           <Badge tone="accent">
                             {done}/{total} steps
@@ -107,11 +110,14 @@ export default function LearnPage() {
                         ) : (
                           <Badge>{total} steps</Badge>
                         )}
-                        {lesson.steps.some((s) => s.task) ? (
-                          <span className="small faint">Interactive</span>
-                        ) : null}
                       </div>
                     </Link>
+                    {/* Beside the link, not inside it: a button cannot sit in a link. */}
+                    <LessonCheck
+                      lessonId={lesson.id}
+                      title={lesson.title}
+                      done={status === 'done'}
+                    />
                   </li>
                 );
               })}

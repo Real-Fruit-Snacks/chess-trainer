@@ -292,8 +292,8 @@ export default function DailyOpeningPage() {
                               onClick={() => submit(line)}
                             >
                               {displayOpeningName(line.name)}{' '}
-                              <span className="small muted">
-                                · {line.eco} · {line.moves.length} moves
+                              <span className="small muted arcade__option-meta">
+                                {line.eco} · {line.moves.length} moves
                               </span>
                             </button>
                           </li>

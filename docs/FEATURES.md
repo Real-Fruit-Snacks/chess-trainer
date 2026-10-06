@@ -16,6 +16,10 @@ The complete reference of what Chess Trainer does, section by section. For how i
 - **Lesson recall** brings the moves you learned back a few days later, then further apart; once a
   lesson has scheduled positions it is one click from Learn and from the end of every lesson, and
   showing the answer counts as a miss.
+- **Mark a lesson as done** without working through it — from its card on Learn, its row in a
+  course, or its own page — when you know it already; it then counts as completed in courses, on
+  Learn and for the next lesson, but not as training (no streak day, no recall). Marking it not done
+  starts it again; both come with an Undo. Doing every step later completes it for real.
 - A **mating patterns** gallery: the nineteen named mates as minimal diagrams, each with a drill and
   the library's puzzles of that shape.
 

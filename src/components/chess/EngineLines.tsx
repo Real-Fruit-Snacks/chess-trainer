@@ -134,15 +134,12 @@ export function EngineStatus({
     <div className="engine-status">
       <span>{name}</span>
       <span>
-        {loading ? (
-          'loading engine…'
-        ) : (
-          <>
-            {depth ? `depth ${depth}` : ''}
-            {knps ? ` · ${knps}` : ''}
-            {thinking ? ' · thinking' : ' · idle'}
-          </>
-        )}
+        {loading
+          ? 'loading engine…'
+          : // The parts there are, joined: "depth 18 · 950 kN/s · idle", or just "idle".
+            [depth ? `depth ${depth}` : '', knps, thinking ? 'thinking' : 'idle']
+              .filter(Boolean)
+              .join(' · ')}
       </span>
     </div>
   );

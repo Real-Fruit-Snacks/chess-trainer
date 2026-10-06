@@ -12,9 +12,15 @@
 }
 
 @media (min-width: 900px) {
+  /* The player bars above and below the board take 40px more of the height: the board, and
+     so its column (see .trainer in global.css), is that much narrower. */
+  .trainer:has(> .play__boardcol) {
+    --trainer-board: max(420px, calc(100dvh - var(--header-height) - 230px));
+  }
+
   .play__boardcol {
     margin: 0;
-    max-width: max(420px, calc(100dvh - var(--header-height) - 230px));
+    max-width: var(--trainer-board, max(420px, calc(100dvh - var(--header-height) - 230px)));
   }
 }
 

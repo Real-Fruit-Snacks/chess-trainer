@@ -128,7 +128,11 @@ export default function HandAndBrainPage() {
   /** The status line and the Brain's piece buttons: beside the board, or under it on a phone. */
   const calls = (
     <>
-      <p className="arcade__status" role="status" data-testid="hb-status">
+      <p
+        className={`arcade__status${!hb.started || over ? ' arcade__status--idle' : ''}`}
+        role="status"
+        data-testid="hb-status"
+      >
         {status}
       </p>
       {hb.role === 'brain' && hb.started && !over ? (

@@ -79,6 +79,19 @@
   margin: var(--space-4) 0 var(--space-6);
 }
 
+/* Wide screens: the nine features in three rows of three, the three levels side by side
+   (four columns left a lone card on a last row, or an empty fourth column). */
+@media (min-width: 900px) {
+  .home__features,
+  .home__levels {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.home__left {
+  white-space: nowrap;
+}
+
 .feature {
   display: flex;
   flex-direction: column;

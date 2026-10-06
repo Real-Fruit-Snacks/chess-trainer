@@ -1,11 +1,35 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { formatDate } from '@/lib/dates';
 import type { RatingPoint } from '@/store/progress';
 import './progress.css';
 
-const WIDTH = 640;
+/** The drawing's width before the chart has been measured (and where it cannot be). */
+const DEFAULT_WIDTH = 640;
+const MIN_WIDTH = 240;
 const HEIGHT = 220;
 const PAD = { top: 16, right: 16, bottom: 28, left: 44 };
+
+/**
+ * The chart's width on screen, in CSS pixels. The drawing is made at that width, one unit
+ * to the pixel, so the axis labels keep their size on a phone instead of shrinking with a
+ * drawing scaled down to fit.
+ */
+function useWidth(ref: React.RefObject<HTMLElement | null>): number {
+  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const measure = () => {
+      const measured = Math.round(element.getBoundingClientRect().width);
+      if (measured > 0) setWidth(Math.max(MIN_WIDTH, measured));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return width;
+}
 
 /**
  * Single-series line chart of puzzle rating over time. Inline SVG, hover
@@ -15,6 +39,8 @@ const PAD = { top: 16, right: 16, bottom: 28, left: 44 };
 export function RatingChart({ points, locale }: { points: RatingPoint[]; locale: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const gradientId = useId();
+  const figureRef = useRef<HTMLElement>(null);
+  const width = useWidth(figureRef);
 
   const model = useMemo(() => {
     if (points.length < 2) return null;
@@ -27,7 +53,7 @@ export function RatingChart({ points, locale }: { points: RatingPoint[]; locale:
     const pad = Math.max(25, Math.round((rawMax - rawMin) * 0.15));
     const minY = Math.floor((rawMin - pad) / 50) * 50;
     const maxY = Math.ceil((rawMax + pad) / 50) * 50;
-    const innerW = WIDTH - PAD.left - PAD.right;
+    const innerW = width - PAD.left - PAD.right;
     const innerH = HEIGHT - PAD.top - PAD.bottom;
     const x = (t: number) =>
       PAD.left + (maxX === minX ? innerW / 2 : ((t - minX) / (maxX - minX)) * innerW);
@@ -40,11 +66,11 @@ export function RatingChart({ points, locale }: { points: RatingPoint[]; locale:
     const step = (maxY - minY) / 4;
     const gridlines = Array.from({ length: 5 }, (_, i) => Math.round(minY + i * step));
     return { coords, path, area, minY, maxY, gridlines, y, innerW, innerH };
-  }, [points]);
+  }, [points, width]);
 
   if (!model) {
     return (
-      <p className="small muted">
+      <p className="small muted" ref={figureRef as React.RefObject<HTMLParagraphElement>}>
         Solve a few rated puzzles and your rating history will appear here.
       </p>
     );
@@ -54,7 +80,7 @@ export function RatingChart({ points, locale }: { points: RatingPoint[]; locale:
     const svg = event.currentTarget;
     const rect = svg.getBoundingClientRect();
     const clientX = 'touches' in event ? (event.touches[0]?.clientX ?? 0) : event.clientX;
-    const px = ((clientX - rect.left) / rect.width) * WIDTH;
+    const px = ((clientX - rect.left) / rect.width) * width;
     let best = 0;
     let bestDist = Infinity;
     model.coords.forEach((c, i) => {
@@ -72,9 +98,9 @@ export function RatingChart({ points, locale }: { points: RatingPoint[]; locale:
   const last = points[points.length - 1];
 
   return (
-    <figure className="ratingchart">
+    <figure className="ratingchart" ref={figureRef}>
       <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        viewBox={`0 0 ${width} ${HEIGHT}`}
         role="img"
         aria-label={`Puzzle rating over time, from ${first?.rating ?? ''} to ${last?.rating ?? ''}`}
         onMouseMove={onMove}
@@ -93,7 +119,7 @@ export function RatingChart({ points, locale }: { points: RatingPoint[]; locale:
           <g key={g}>
             <line
               x1={PAD.left}
-              x2={WIDTH - PAD.right}
+              x2={width - PAD.right}
               y1={model.y(g)}
               y2={model.y(g)}
               className="ratingchart__grid"
@@ -132,7 +158,7 @@ export function RatingChart({ points, locale }: { points: RatingPoint[]; locale:
         <text x={PAD.left} y={HEIGHT - 8} className="ratingchart__tick">
           {first ? formatDate(first.at, locale) : ''}
         </text>
-        <text x={WIDTH - PAD.right} y={HEIGHT - 8} textAnchor="end" className="ratingchart__tick">
+        <text x={width - PAD.right} y={HEIGHT - 8} textAnchor="end" className="ratingchart__tick">
           {last ? formatDate(last.at, locale) : ''}
         </text>
       </svg>

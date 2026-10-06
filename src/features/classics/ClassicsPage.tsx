@@ -119,8 +119,21 @@ export default function ClassicsPage() {
               to={`/classics/${game.id}`}
               className="card card--interactive classic-card"
             >
-              <div className="row row--between">
-                <span className="card__title">{game.title}</span>
+              <span className="card__title">{game.title}</span>
+              <span className="classic-card__players">
+                {game.white} – {game.black}
+              </span>
+              <span className="small muted">
+                {game.event} {game.year} · {game.result}
+                {era ? ` · ${era.label}` : ''}
+              </span>
+              <p className="small muted" style={{ margin: 0 }}>
+                {game.intro}
+              </p>
+              {/* The side you play and the result or difficulty at the foot, so the title has
+                  the card's whole width. */}
+              <div className="card__foot">
+                <span className="small faint">You play {game.guessColor}</span>
                 {result ? (
                   <Badge tone="success">
                     {result.score}/{result.maxScore}
@@ -129,16 +142,6 @@ export default function ClassicsPage() {
                   <Difficulty level={game.difficulty} />
                 )}
               </div>
-              <span className="classic-card__players">
-                {game.white} – {game.black}
-              </span>
-              <span className="small muted">
-                {game.event} {game.year} · {game.result} · you play {game.guessColor}
-                {era ? ` · ${era.label}` : ''}
-              </span>
-              <p className="small muted" style={{ margin: 0 }}>
-                {game.intro}
-              </p>
             </Link>
           );
         })}

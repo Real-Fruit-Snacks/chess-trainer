@@ -48,7 +48,7 @@ test.describe('puzzle library', () => {
     await expect(page.getByText(/Rating \d{4}/)).toBeVisible();
     await page.goto('/puzzles/themes');
     // Every theme card carries its puzzle count; common themes now have five figures.
-    await expect(page.locator('.badge', { hasText: /^\d{5}$/ }).first()).toBeVisible();
+    await expect(page.locator('.badge', { hasText: /^\d{2},\d{3}$/ }).first()).toBeVisible();
   });
 });
 

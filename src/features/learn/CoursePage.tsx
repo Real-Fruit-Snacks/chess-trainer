@@ -5,6 +5,7 @@ import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
 import { courseStatus } from './courseProgress';
+import { LessonCheck } from './LessonDone';
 import { getCourse } from './courses';
 import { LEVEL_LABELS } from './model';
 import './learn.css';
@@ -33,13 +34,10 @@ export default function CoursePage() {
 
   return (
     <div className="course">
-      <p className="small">
-        <Link to="/learn">Learn</Link> / Courses
-      </p>
       <div className="page-header">
-        <div className="row">
-          <Badge tone="accent">{LEVEL_LABELS[course.level].title}</Badge>
-        </div>
+        <p className="card__eyebrow">
+          <Link to="/learn">Learn</Link> / {LEVEL_LABELS[course.level].title} course
+        </p>
         <h1>{course.title}</h1>
         <p>{course.blurb}</p>
       </div>
@@ -78,40 +76,53 @@ export default function CoursePage() {
               <span className="course__unit-number" aria-hidden="true">
                 {unit.done ? <Icon name="check" size={16} /> : index + 1}
               </span>
-              <div>
+              <div className="course__unit-text">
                 <h2>{unit.unit.title}</h2>
                 <p className="small muted">{unit.unit.blurb}</p>
+                {!unit.unlocked ? (
+                  <Badge tone="neutral" className="course__lock">
+                    Up next after unit {index}
+                  </Badge>
+                ) : null}
               </div>
-              {!unit.unlocked ? (
-                <Badge tone="neutral" className="course__lock">
-                  Up next after unit {index}
-                </Badge>
-              ) : null}
             </div>
             <ul className="course__items" role="list">
               {unit.items.map((item) => (
-                <li key={`${item.item.type}:${item.to}`}>
+                <li
+                  key={`${item.item.type}:${item.to}`}
+                  className={`course__row${item.done ? ' is-done' : ''}`}
+                >
+                  {item.item.type === 'lesson' ? (
+                    // A lesson can be marked done (or not done) from here.
+                    <LessonCheck
+                      lessonId={item.item.id}
+                      title={item.title.replace(/^Lesson: /, '')}
+                      done={item.done}
+                    />
+                  ) : (
+                    <span
+                      className={`course__status${item.done ? ' is-done' : ''}`}
+                      aria-hidden="true"
+                    >
+                      <Icon name="check" size={14} />
+                    </span>
+                  )}
                   <Link
                     to={item.to}
-                    className={`course__item${item.done ? ' is-done' : ''}`}
+                    className="course__item"
                     // The name carries what the row shows: the title, whether it is
                     // done, and the detail ("3 of 5 solved", "5 min · Rules").
                     aria-label={`${item.title}${item.done ? ' (done)' : ''}, ${item.detail}`}
                   >
-                    <span className="course__check" aria-hidden="true">
-                      <Icon name={item.done ? 'check' : 'circle'} size={16} />
-                    </span>
-                    <span className="course__item-body">
-                      <span className="course__item-title">{item.title}</span>
-                      <span className="small muted">{item.detail}</span>
-                      {item.progress && !item.done ? (
-                        <ProgressBar
-                          value={item.progress.value}
-                          max={item.progress.target}
-                          label={`${item.title} progress`}
-                        />
-                      ) : null}
-                    </span>
+                    <span className="course__item-title">{item.title}</span>
+                    <span className="small muted">{item.detail}</span>
+                    {item.progress && !item.done ? (
+                      <ProgressBar
+                        value={item.progress.value}
+                        max={item.progress.target}
+                        label={`${item.title} progress`}
+                      />
+                    ) : null}
                   </Link>
                 </li>
               ))}

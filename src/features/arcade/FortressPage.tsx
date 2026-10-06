@@ -258,7 +258,7 @@ export default function FortressPage() {
             >
               <span style={{ width: `${bar * 100}%` }} />
             </div>
-            <div className="arcade__scoreline" style={{ margin: '8px 0 0' }}>
+            <div className="arcade__scoreline arcade__scoreline--panel">
               <Stat value={`${fortress.movesMade}/${HOLD_MOVES}`} label="Moves held" />
               <Stat
                 value={<span data-testid="fortress-eval">{evaluation}</span>}
@@ -266,7 +266,11 @@ export default function FortressPage() {
               />
               <Stat value={fortress.lives} label="Lives" />
             </div>
-            <p className="arcade__status" role="status" data-testid="fortress-status">
+            <p
+              className={`arcade__status${phase === 'playing' ? '' : ' arcade__status--idle'}`}
+              role="status"
+              data-testid="fortress-status"
+            >
               {phase === 'playing'
                 ? fortress.busy === 'opponent'
                   ? 'The attacker is thinking…'

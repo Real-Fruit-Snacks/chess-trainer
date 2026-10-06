@@ -4,3 +4,8 @@
  * placeholders read the same everywhere.
  */
 export const NONE = '—';
+
+/** A count for display, with thousands separators ("24,128"), in the given locale. */
+export function formatCount(count: number, locale = 'en-GB'): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(count);
+}

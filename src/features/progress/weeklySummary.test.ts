@@ -29,6 +29,8 @@ describe('weeklySummary', () => {
           a: { stepsDone: [], completedAt: now - 3 * DAY_MS, lastVisitedAt: now },
           b: { stepsDone: [], completedAt: now - 10 * DAY_MS, lastVisitedAt: now },
           c: { stepsDone: [], completedAt: null, lastVisitedAt: now },
+          // Marked done without its steps: not training, so not in the figures.
+          d: { stepsDone: [], completedAt: now - DAY_MS, lastVisitedAt: 0, marked: true },
         },
         games: [
           {

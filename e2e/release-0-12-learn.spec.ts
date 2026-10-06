@@ -99,7 +99,8 @@ test.describe('courses', () => {
     await page.getByTestId('course-continue').click();
     await expect(page).toHaveURL(/\/learn\/the-board\?course=first-steps/);
     const back = page.getByTestId('back-to-course');
-    await expect(back).toHaveText('← Back to course: First steps');
+    await expect(back).toHaveText('First steps');
+    await expect(back).toHaveAttribute('href', '/learn/course/first-steps');
 
     // Work through the lesson with "Show answer", then look at the closing card.
     await expectBoard(page);

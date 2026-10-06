@@ -55,7 +55,8 @@ entirely in your browser, installs as an app and keeps working on a plane.
 ## Highlights
 
 **Learn** — 75 interactive lessons in three courses, a placement quiz that picks your starting
-point, spaced recall of what you learned, and a gallery of the nineteen named mates.
+point, spaced recall of what you learned, lessons you already know marked done in a tap, and a
+gallery of the nineteen named mates.
 
 **Puzzles** — 48,000 engine-verified tactics across eight rating bands, a Glicko-2 rating with
 calibration, daily puzzle, Puzzle Rush, blind puzzles (the line in notation only, the board frozen

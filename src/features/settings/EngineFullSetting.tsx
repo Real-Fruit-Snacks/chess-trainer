@@ -86,7 +86,7 @@ export function EngineFullSetting() {
 
   let status: string;
   if (!enabled) {
-    status = `Off — the lite engine runs, with Stockfish's small network. Switching this on downloads the large one once (${FULL_ENGINE_MB} MB) and keeps it offline.`;
+    status = `Off — the lite engine runs, with Stockfish’s small network. Switching this on downloads the large one once (${FULL_ENGINE_MB} MB) and keeps it offline.`;
   } else if (progress) {
     status = `Downloading the full engine: ${Math.round(progress.received / MB)} of ${Math.round((progress.total || FULL_ENGINE_MB * MB) / MB)} MB. The lite engine runs until it is done.`;
   } else if (target.kind === 'unsupported') {

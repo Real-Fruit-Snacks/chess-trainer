@@ -208,8 +208,11 @@ function SimulSetupCard({ simul }: { simul: UseSimul }) {
         <ul className="simul__list">
           <li>Every board is its own game against Stockfish.</li>
           <li>
-            The big board is the one you are playing. Tap a small board to switch, or press{' '}
-            <Kbd>N</Kbd> for the next one waiting for you.
+            The big board is the one you are playing. Tap a small board to switch
+            <span className="keyboard-only">
+              , or press <Kbd>N</Kbd> for the next one waiting for you
+            </span>
+            .
           </li>
           <li>
             With clocks, every board has a clock for you and one for the engine. Yours runs wherever

@@ -84,7 +84,7 @@ test.describe('Glicko-2 puzzle rating', () => {
     const scales = page.getByTestId('rating-scales');
     await expect(scales).toContainText('Lichess');
     await expect(scales).toContainText(/1,0[05]0–1,3[05]0/); // ≈ 1,200 ± 150
-    await expect(scales).toContainText('below 1000'); // FIDE
+    await expect(scales).toContainText('below 1,000'); // FIDE
     await page.goto('/settings');
     await page.getByLabel('Start again from').selectOption('calibrate');
     // Picking alone changes nothing: the reset is a button with a confirmation.

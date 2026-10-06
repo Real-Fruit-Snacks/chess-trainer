@@ -204,7 +204,7 @@ export default function HomePage() {
                     : 'Train a little every day to start a streak'}
               </p>
             </div>
-            <span className="small muted">
+            <span className="small muted home__left">
               ~{minutesLeft}
               {moreThan ? '+' : ''} min left
             </span>
@@ -292,9 +292,9 @@ export default function HomePage() {
             <h2 id="your-progress" style={{ margin: 0 }}>
               Your progress
             </h2>
-            <Link to="/progress" className="small">
-              Details →
-            </Link>
+            <LinkButton variant="ghost" size="sm" to="/progress">
+              Details
+            </LinkButton>
           </div>
           <div className="home__stats">
             <Stat
@@ -331,7 +331,7 @@ export default function HomePage() {
 
       <section className="home__how">
         <h2>Built for every level</h2>
-        <div className="grid grid--cards">
+        <div className="grid grid--cards home__levels">
           <div className="card">
             <p className="card__eyebrow">New to chess</p>
             <p className="small">

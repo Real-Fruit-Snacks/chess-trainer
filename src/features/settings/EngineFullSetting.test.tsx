@@ -78,7 +78,7 @@ describe('EngineFullSetting', () => {
     render(<EngineFullSetting />);
     expect(toggle()).not.toBeChecked();
     expect(status()).toHaveTextContent(
-      /^Off — the lite engine runs, with Stockfish's small network\. Switching this on downloads the large one once \(99 MB\)/,
+      /^Off — the lite engine runs, with Stockfish’s small network\. Switching this on downloads the large one once \(99 MB\)/,
     );
     expect(screen.queryByTestId('engine-full-download')).not.toBeInTheDocument();
   });

@@ -136,7 +136,7 @@ export default function ReferencePage() {
 
       <section id="faq" className="reference__section">
         <h2>Frequently asked questions</h2>
-        <div className="stack">
+        <div className="stack reference__faqs">
           {FAQ.map((item) => (
             <details key={item.question} className="card reference__faq">
               <summary>{item.question}</summary>

@@ -40,8 +40,9 @@ function figures(
 ): WeekFigures {
   const attempts = progress.attempts.filter((a) => a.at >= from && a.at < to);
   const solved = attempts.filter((a) => a.outcome === 'solved').length;
+  // Lessons marked done without being worked through are not training.
   const lessonsCompleted = Object.values(progress.lessons).filter(
-    (l) => l.completedAt !== null && l.completedAt >= from && l.completedAt < to,
+    (l) => l.completedAt !== null && !l.marked && l.completedAt >= from && l.completedAt < to,
   ).length;
   const gamesPlayed = progress.games.filter((g) => g.at >= from && g.at < to).length;
   const drills = Object.values(progress.drills).filter(

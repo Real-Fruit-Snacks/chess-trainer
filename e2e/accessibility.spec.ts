@@ -11,9 +11,15 @@ test.describe('accessibility', () => {
     await expect(dialog.getByText('Previous / next move')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
-    // The footer link opens it too.
-    await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
-    await expect(dialog).toBeVisible();
+    // The footer link opens it too — where there is a keyboard: touch screens hide the link.
+    const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    const link = page.getByRole('button', { name: 'Keyboard shortcuts' });
+    if (touch) {
+      await expect(link).toBeHidden();
+    } else {
+      await link.click();
+      await expect(dialog).toBeVisible();
+    }
   });
 
   test('skip link and focus management', async ({ page }) => {

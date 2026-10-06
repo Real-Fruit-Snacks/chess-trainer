@@ -187,6 +187,23 @@ button.movelist__move:hover {
   border-radius: 3px;
 }
 
+/* Touch screens: the line's first move, which plays it, is a finger-sized target. */
+@media (pointer: coarse) {
+  .line {
+    min-height: 40px;
+    align-items: center;
+  }
+
+  .line__pv {
+    line-height: 28px;
+  }
+
+  .line__pv button:first-of-type:not(:disabled) {
+    min-height: 28px;
+    padding: 0 6px;
+  }
+}
+
 .line__pv button:hover {
   background: var(--surface-3);
   color: var(--text);
@@ -344,6 +361,11 @@ button.movelist__move:hover {
   overflow-y: auto;
   padding: 3px var(--space-1) 3px 3px;
   scroll-padding: 3px;
+}
+
+/* The empty list's sentence is prose, not notation. */
+.treemoves__empty {
+  font-family: var(--font-sans);
 }
 
 .treemoves__move {

@@ -31,7 +31,7 @@ export function CoursesSection() {
           <Link
             key={status.course.id}
             to={`/learn/course/${status.course.id}`}
-            className="card card--link learn__course"
+            className="card card--interactive learn__course"
             data-testid={`course-${status.course.id}`}
           >
             <div className="row row--between">
@@ -42,17 +42,17 @@ export function CoursesSection() {
             </div>
             <span className="card__title">{status.course.title}</span>
             <p className="small muted">{status.course.blurb}</p>
-            <div className="row" style={{ gap: 8 }}>
+            <div className="learn__course-progress">
               <ProgressBar
                 value={status.doneItems}
                 max={status.totalItems}
                 label={`${status.course.title} progress`}
               />
-              <span className="small mono">
+              <span className="small muted learn__course-count">
                 {status.doneItems}/{status.totalItems}
               </span>
             </div>
-            <span className="small">
+            <span className="learn__course-next">
               {status.next
                 ? `${status.doneItems ? 'Continue' : 'Start'}: ${status.next.title}`
                 : 'Course complete'}

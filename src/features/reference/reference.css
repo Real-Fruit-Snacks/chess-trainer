@@ -27,9 +27,18 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* Wide screens: two columns the cards flow down, each card as tall as its text (side by side
+   in a grid row, a short card was stretched to its taller neighbour's height). */
 @media (min-width: 900px) {
   .reference__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: block;
+    columns: 2;
+    column-gap: var(--space-4);
+  }
+
+  .reference__grid > .card {
+    break-inside: avoid;
+    margin-bottom: var(--space-4);
   }
 }
 
@@ -78,7 +87,13 @@
   font-size: 0.95rem;
 }
 
+.reference__faqs {
+  max-width: 52rem;
+}
+
+/* The question is the tap target: a finger-sized row, not just the text. */
 .reference__faq summary {
   cursor: pointer;
   font-weight: 600;
+  padding: var(--space-1) 0;
 }

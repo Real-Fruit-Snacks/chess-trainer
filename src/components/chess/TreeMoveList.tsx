@@ -165,7 +165,9 @@ export function TreeMoveList({
     <div className="treemoves" ref={listRef} role="group" aria-label="Moves" data-version={version}>
       {tree.root.comment ? <span className="treemoves__comment">{tree.root.comment}</span> : null}
       {empty ? (
-        <span className="muted small">No moves yet — play on the board or import a game.</span>
+        <span className="muted small treemoves__empty">
+          No moves yet — play on the board or import a game.
+        </span>
       ) : (
         <Fragment>{renderLine(tree.root, 0, true)}</Fragment>
       )}

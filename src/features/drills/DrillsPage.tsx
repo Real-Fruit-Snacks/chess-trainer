@@ -130,18 +130,19 @@ export default function DrillsPage() {
                 : bestLabel(drills[card.id], 'score');
             return (
               <Link key={card.id} to={card.to} className="card card--interactive drill-card">
-                <div className="row row--between">
-                  <span className="card__title">{card.title}</span>
+                <span className="card__title">{card.title}</span>
+                <p className="small muted" style={{ margin: 0 }}>
+                  {card.description}
+                </p>
+                {/* The badge sits at the foot, so the title has the card's whole width. */}
+                <div className="card__foot">
+                  <span className="drill-card__meta">{card.meta}</span>
                   {best ? (
                     <Badge tone="success">{best}</Badge>
                   ) : (
                     <Difficulty level={card.difficulty} />
                   )}
                 </div>
-                <p className="small muted" style={{ margin: 0 }}>
-                  {card.description}
-                </p>
-                <span className="drill-card__meta">{card.meta}</span>
               </Link>
             );
           })}
@@ -214,23 +215,23 @@ export default function DrillsPage() {
                     to={`/drills/endgame/${drill.id}`}
                     className={`card card--interactive drill-card${done ? ' drill-card--done' : ''}`}
                   >
-                    <div className="row row--between">
-                      <span className="card__title">{drill.title}</span>
+                    <span className="card__title">{drill.title}</span>
+                    <p className="small muted" style={{ margin: 0 }}>
+                      {drill.description}
+                    </p>
+                    <div className="card__foot">
+                      <span className="drill-card__meta">
+                        Rung {rung} · You play {drill.color}
+                        {result?.attempts
+                          ? ` · ${result.attempts} attempt${result.attempts === 1 ? '' : 's'}`
+                          : ''}
+                      </span>
                       {best && result?.best ? (
                         <Badge tone="success">{best}</Badge>
                       ) : (
                         <Difficulty level={drill.difficulty} max={4} />
                       )}
                     </div>
-                    <p className="small muted" style={{ margin: 0 }}>
-                      {drill.description}
-                    </p>
-                    <span className="drill-card__meta">
-                      Rung {rung} · You play {drill.color}
-                      {result?.attempts
-                        ? ` · ${result.attempts} attempt${result.attempts === 1 ? '' : 's'}`
-                        : ''}
-                    </span>
                   </Link>
                 );
               })}

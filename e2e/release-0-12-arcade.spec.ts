@@ -246,7 +246,7 @@ test.describe('daily opening', () => {
       await input.fill('italian game');
       await page
         .getByTestId('daily-opening-matches')
-        .getByRole('button', { name: /^Italian Game ·/ })
+        .getByRole('button', { name: /^Italian Game C\d\d/ })
         .click();
       const tiles = page.getByTestId('daily-opening-guesses').locator('li.arcade__tile');
       await expect(tiles).toHaveCount(5);

@@ -15,3 +15,20 @@
   gap: var(--space-2) var(--space-4);
   margin-bottom: var(--space-4);
 }
+
+/* Phones: the five eras in two even rows, three then two, instead of a lone option on a row. */
+@media (max-width: 599px) {
+  .classics__filters > .segmented:first-child {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .classics__filters > .segmented:first-child > .segmented__option {
+    grid-column: span 2;
+  }
+
+  .classics__filters > .segmented:first-child > .segmented__option:nth-child(n + 4) {
+    grid-column: span 3;
+  }
+}

@@ -455,10 +455,13 @@ export default function LabPage() {
             <Stat value="96%" label="Accuracy" />
           </div>
           <ProgressBar value={7} max={10} label="7 of 10" />
-          <p>
-            Keyboard: <Kbd>?</Kbd> <Kbd>Esc</Kbd> <Kbd>←</Kbd> <Kbd>→</Kbd> ·{' '}
+          <div className="row" style={{ gap: 'var(--space-5)', margin: 'var(--space-3) 0' }}>
+            {/* Touch screens hide key hints, and with them this line. */}
+            <span className="keyboard-only">
+              Keyboard: <Kbd>?</Kbd> <Kbd>Esc</Kbd> <Kbd>←</Kbd> <Kbd>→</Kbd>
+            </span>
             <Spinner label="Spinner" />
-          </p>
+          </div>
           <EmptyState icon={<Icon name="puzzles" size={28} />} title="Empty state">
             Shown when a list has nothing in it yet.
           </EmptyState>
@@ -664,7 +667,7 @@ export default function LabPage() {
           <h2>Errors</h2>
           <p className="small muted">
             Crashing the page shows the real error screen with its report link and copy button.
-            Reload or "Go home" brings the app back; nothing is lost.
+            Reload or “Go home” brings the app back; nothing is lost.
           </p>
           <Button variant="danger" onClick={() => setArmed(true)} data-testid="crash">
             Crash this page

@@ -96,6 +96,12 @@ export interface LessonProgress {
   stepsDone: (number | string)[];
   completedAt: number | null;
   lastVisitedAt: number;
+  /**
+   * Marked done by the learner without working through it (they know it
+   * already): it counts as completed, but not as training. Cleared once every
+   * step is done for real.
+   */
+  marked?: boolean;
 }
 
 /** Numbers first in order, then ids in order: a stable order for `stepsDone`. */
@@ -437,6 +443,19 @@ export interface ProgressState {
   visitLesson: (lessonId: string) => void;
   /** Starts the lesson over: the steps are cleared, the completion is kept. */
   resetLesson: (lessonId: string) => void;
+  /**
+   * Marks a lesson done without working through it. It then counts as
+   * completed (courses, the Learn page, the next lesson) but not as training:
+   * no training day, no recall positions, not in the week's figures.
+   */
+  markLessonDone: (lessonId: string) => void;
+  /**
+   * Marks a lesson not done: its steps and its completion are cleared, so it
+   * starts again from the first step. Recall positions already scheduled stay.
+   */
+  markLessonNotDone: (lessonId: string) => void;
+  /** Puts a lesson's progress back as it was (`undefined`: never opened) — the undo of the two above. */
+  restoreLesson: (lessonId: string, previous: LessonProgress | undefined) => void;
   recordGame: (
     game: Omit<GameRecord, 'at' | 'id' | 'source'> & { source?: GameRecordSource },
   ) => void;
@@ -1245,13 +1264,16 @@ export const useProgress = create<ProgressState>()(
           const keys =
             typeof steps === 'number' ? Array.from({ length: steps }, (_, i) => i) : steps;
           const done = new Set(stepsDone);
-          const justCompleted = current.completedAt === null && keys.every((key) => done.has(key));
-          const completedAt = current.completedAt ?? (justCompleted ? Date.now() : null);
+          // A lesson marked done without being worked through completes for real
+          // (and schedules its recall) once every step is done.
+          const justCompleted =
+            (current.completedAt === null || current.marked === true) &&
+            keys.every((key) => done.has(key));
+          const completedAt = justCompleted ? Date.now() : current.completedAt;
+          const entry: LessonProgress = { stepsDone, completedAt, lastVisitedAt: Date.now() };
+          if (current.marked && !justCompleted) entry.marked = true;
           set({
-            lessons: {
-              ...get().lessons,
-              [lessonId]: { stepsDone, completedAt, lastVisitedAt: Date.now() },
-            },
+            lessons: { ...get().lessons, [lessonId]: entry },
             ...training(get().trainingDays),
           });
           if (justCompleted && taskSteps.length > 0) {
@@ -1282,9 +1304,48 @@ export const useProgress = create<ProgressState>()(
                 stepsDone: [],
                 completedAt: current.completedAt,
                 lastVisitedAt: Date.now(),
+                ...(current.marked ? { marked: true } : {}),
               },
             },
           });
+        },
+
+        markLessonDone: (lessonId) => {
+          const current = get().lessons[lessonId];
+          if (current?.completedAt != null) return;
+          set({
+            lessons: {
+              ...get().lessons,
+              [lessonId]: {
+                stepsDone: current?.stepsDone ?? [],
+                completedAt: Date.now(),
+                lastVisitedAt: current?.lastVisitedAt ?? 0,
+                marked: true,
+              },
+            },
+          });
+        },
+
+        markLessonNotDone: (lessonId) => {
+          const current = get().lessons[lessonId];
+          if (!current) return;
+          set({
+            lessons: {
+              ...get().lessons,
+              [lessonId]: {
+                stepsDone: [],
+                completedAt: null,
+                lastVisitedAt: current.lastVisitedAt,
+              },
+            },
+          });
+        },
+
+        restoreLesson: (lessonId, previous) => {
+          const lessons = { ...get().lessons };
+          if (previous) lessons[lessonId] = previous;
+          else delete lessons[lessonId];
+          set({ lessons });
         },
 
         recordGame: ({ source = 'play', ...game }) => {

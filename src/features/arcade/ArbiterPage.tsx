@@ -279,7 +279,11 @@ export default function ArbiterPage() {
               {running ? <Badge>Round {round}</Badge> : null}
             </div>
             {running && current ? <p className="small muted">{current.caption}</p> : null}
-            <p className="arcade__status" role="status" data-testid="arbiter-status">
+            <p
+              className={`arcade__status${running ? '' : ' arcade__status--idle'}`}
+              role="status"
+              data-testid="arbiter-status"
+            >
               {phase === 'watching' && paused ? (
                 'Paused'
               ) : move && running ? (

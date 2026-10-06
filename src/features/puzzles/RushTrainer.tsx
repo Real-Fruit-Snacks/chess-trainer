@@ -144,9 +144,9 @@ export function RushTrainer() {
             <span className="stat__label">Strikes</span>
           </div>
         </div>
-        <p className={`puzzle-status puzzle-status--${trainer.phase}`} role="status">
+        <p className={`puzzle-status puzzle-status--${trainer.phase} rush__status`} role="status">
           {rush.phase !== 'running'
-            ? ' '
+            ? ''
             : trainer.phase === 'solving'
               ? trainer.position.check
                 ? 'Your move — you are in check!'

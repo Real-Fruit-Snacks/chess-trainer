@@ -63,7 +63,8 @@ test.describe('shell', () => {
   test('dialogs have a labelled close button', async ({ page }) => {
     await seed(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
+    await expect(page.locator('main h1, main h2').first()).toBeAttached();
+    await page.keyboard.press('?');
     const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
     await expect(dialog).toBeVisible();
     // The page behind it does not scroll.

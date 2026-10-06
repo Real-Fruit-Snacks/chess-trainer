@@ -310,6 +310,66 @@ describe('own puzzles, bookmarks, recall and studies', () => {
     expect(useProgress.getState().lessonRecall['forks:1']).toBeUndefined();
   });
 
+  it('marks a lesson done without its steps: completed, but not training', () => {
+    useProgress.getState().resetAll();
+    vi.useFakeTimers({ now: 1_000_000 });
+    useProgress.getState().markLessonStep('forks', 0, 3, [2]);
+    const daysBefore = useProgress.getState().trainingDays.length;
+    vi.setSystemTime(2_000_000);
+    useProgress.getState().markLessonDone('forks');
+    expect(useProgress.getState().lessons.forks).toEqual({
+      stepsDone: [0],
+      completedAt: 2_000_000,
+      lastVisitedAt: 1_000_000,
+      marked: true,
+    });
+    expect(useProgress.getState().trainingDays).toHaveLength(daysBefore);
+    expect(useProgress.getState().lessonRecall).toEqual({});
+    expect(summarizeProgress(useProgress.getState()).lessonsCompleted).toBe(1);
+    // A lesson that is already done stays as it is.
+    useProgress.getState().markLessonDone('forks');
+    expect(useProgress.getState().lessons.forks?.completedAt).toBe(2_000_000);
+    // Restarting it keeps the mark.
+    useProgress.getState().resetLesson('forks');
+    expect(useProgress.getState().lessons.forks).toMatchObject({ stepsDone: [], marked: true });
+    vi.useRealTimers();
+  });
+
+  it('completes a marked lesson for real once every step is done', () => {
+    useProgress.getState().resetAll();
+    useProgress.getState().markLessonDone('forks');
+    useProgress.getState().markLessonStep('forks', 0, 2, [1]);
+    expect(useProgress.getState().lessons.forks?.marked).toBe(true);
+    const markedAt = useProgress.getState().lessons.forks?.completedAt ?? 0;
+    useProgress.getState().markLessonStep('forks', 1, 2, [1]);
+    const done = useProgress.getState().lessons.forks;
+    expect(done?.marked).toBeUndefined();
+    expect(done?.completedAt).toBeGreaterThanOrEqual(markedAt);
+    expect(Object.keys(useProgress.getState().lessonRecall)).toEqual(['forks:1']);
+  });
+
+  it('marks a lesson not done, and puts a lesson back as it was', () => {
+    useProgress.getState().resetAll();
+    useProgress.getState().markLessonStep('forks', 0, 1);
+    const before = useProgress.getState().lessons.forks;
+    expect(before?.completedAt).not.toBeNull();
+    useProgress.getState().markLessonNotDone('forks');
+    expect(useProgress.getState().lessons.forks).toEqual({
+      stepsDone: [],
+      completedAt: null,
+      lastVisitedAt: before?.lastVisitedAt,
+    });
+    useProgress.getState().restoreLesson('forks', before);
+    expect(useProgress.getState().lessons.forks).toEqual(before);
+    // Never opened: undoing a mark removes the lesson's entry again.
+    useProgress.getState().markLessonDone('pins');
+    useProgress.getState().restoreLesson('pins', undefined);
+    expect(useProgress.getState().lessons.pins).toBeUndefined();
+    // Not done already, or never opened: nothing to clear.
+    useProgress.getState().markLessonNotDone('skewers');
+    expect(useProgress.getState().lessons.skewers).toBeUndefined();
+  });
+
   it('records study results', () => {
     useProgress.getState().resetAll();
     useProgress.getState().recordStudy('reti', 'failed', false);

@@ -3,6 +3,8 @@ import { Link } from 'react-router';
 import { Alert, Badge, Spinner } from '@/components/ui';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
 import { repertoireOpeningTags } from '@/features/openings/openingTags';
+import { formatCount } from '@/lib/format';
+import { siteConfig } from '@/site.config';
 import { useRepertoire } from '@/store/repertoire';
 import { loadPuzzleIndex, openingTagName, type PuzzleIndex, puzzlesForTags } from './puzzleService';
 
@@ -73,7 +75,7 @@ export function OpeningCatalog() {
             >
               <div className="row row--between">
                 <span className="card__title">{rep.name}</span>
-                <Badge>{rep.count}</Badge>
+                <Badge>{formatCount(rep.count, siteConfig.locale)}</Badge>
               </div>
               <p className="small muted" style={{ margin: 0 }}>
                 {rep.tags.map(openingTagName).join(', ')}
@@ -93,7 +95,7 @@ export function OpeningCatalog() {
             >
               <div className="row row--between">
                 <span className="card__title">{openingTagName(tag)}</span>
-                <Badge>{count}</Badge>
+                <Badge>{formatCount(count, siteConfig.locale)}</Badge>
               </div>
             </Link>
           ))}

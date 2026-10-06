@@ -282,6 +282,11 @@ function MoreMenu({
         <span>More</span>
         {variant === 'dropdown' ? <Icon name="chevron-down" size={14} /> : null}
       </button>
+      {open && variant === 'sheet' ? (
+        // Dims the page behind the sheet; a tap on it closes the sheet without
+        // landing on whatever is underneath.
+        <div className="more__scrim" aria-hidden="true" onClick={() => setOpen(false)} />
+      ) : null}
       {open ? (
         <div
           className="more__menu"
@@ -445,15 +450,17 @@ export function Shell() {
         <div className="container shell__footer-inner">
           {/* The licence texts are copied into the build by scripts/postbuild.mjs. */}
           <span>
-            {siteConfig.name} v{__APP_VERSION__} · Free and open source (GPL-3.0-or-later) ·{' '}
+            {/* A no-break space keeps each dot at the end of a line, never at the start. */}
+            {siteConfig.name} v{__APP_VERSION__} · Free and open source (GPL-3.0-or-later)
+            {'\u00a0· '}
             <a href={siteConfig.repositoryUrl} target="_blank" rel="noreferrer">
               GitHub
-            </a>{' '}
-            ·{' '}
+            </a>
+            {'\u00a0· '}
             <a href={`${import.meta.env.BASE_URL}licence.txt`} target="_blank" rel="noreferrer">
               Licence
-            </a>{' '}
-            ·{' '}
+            </a>
+            {'\u00a0· '}
             <a href={`${import.meta.env.BASE_URL}notices.txt`} target="_blank" rel="noreferrer">
               Third-party notices
             </a>
@@ -475,10 +482,14 @@ export function Shell() {
             >
               CC BY-SA 3.0
             </a>{' '}
-            · Puzzles and openings: Lichess (CC0) · Runs entirely in your browser ·{' '}
-            <button type="button" className="linklike" onClick={() => shortcuts.setOpen(true)}>
-              Keyboard shortcuts
-            </button>
+            · Puzzles and openings: Lichess (CC0) · Runs entirely in your browser
+            {/* Touch screens have no keyboard to take shortcuts from. */}
+            <span className="keyboard-only">
+              {'\u00a0· '}
+              <button type="button" className="linklike" onClick={() => shortcuts.setOpen(true)}>
+                Keyboard shortcuts
+              </button>
+            </span>
           </span>
         </div>
       </footer>

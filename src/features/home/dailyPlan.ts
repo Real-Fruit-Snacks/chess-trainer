@@ -37,6 +37,14 @@ export const WEAK_THEME_MARGIN = 15;
 /** …and only once it has this many attempts. */
 export const WEAK_THEME_MIN_ATTEMPTS = 20;
 
+/** A lesson worked through (not just marked done) at `since` or later. */
+function workedThroughSince(
+  lesson: ProgressState['lessons'][string] | undefined,
+  since: number,
+): boolean {
+  return lesson?.completedAt != null && !lesson.marked && lesson.completedAt >= since;
+}
+
 /** A minutes estimate capped at `max`, flagged when the cap cut it short. */
 function capped(minutes: number, max: number): Pick<PlanItem, 'minutes' | 'moreThan'> {
   return minutes > max ? { minutes: max, moreThan: true } : { minutes };
@@ -285,7 +293,7 @@ export function buildDailyPlan(
         (a) => a.at >= dayStart && a.themes.split(' ').includes(work.theme ?? ''),
       );
     const lessonToday =
-      lesson !== undefined && (progress.lessons[lesson.id]?.completedAt ?? 0) >= dayStart;
+      lesson !== undefined && workedThroughSince(progress.lessons[lesson.id], dayStart);
     items.push({
       id: 'workOn',
       title: `Work on: ${work.title}`,
@@ -308,15 +316,16 @@ export function buildDailyPlan(
   }
 
   // 5. Next lesson
-  const lessonDoneToday = Object.values(progress.lessons).some(
-    (l) => l.completedAt !== null && l.completedAt >= dayStart,
+  const lessonDoneToday = Object.values(progress.lessons).some((l) =>
+    workedThroughSince(l, dayStart),
   );
   const next = LESSON_META.find((l) => !progress.lessons[l.id]?.completedAt);
   if (next) {
     items.push({
       id: 'lesson',
       title: lessonDoneToday ? 'Lesson done for today' : `Lesson: ${next.title}`,
-      detail: lessonDoneToday ? `Up next: ${next.title}` : `${next.minutes} min · ${next.category}`,
+      // The minutes have a column of their own: the detail is the lesson's size and topic.
+      detail: lessonDoneToday ? `Up next: ${next.title}` : `${next.steps} steps · ${next.category}`,
       to: `/learn/${next.id}`,
       done: lessonDoneToday,
       minutes: next.minutes,

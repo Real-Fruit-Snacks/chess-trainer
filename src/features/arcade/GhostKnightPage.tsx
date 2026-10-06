@@ -241,7 +241,11 @@ export default function GhostKnightPage() {
                 </Badge>
               ) : null}
             </div>
-            <p className="arcade__status" role="status" data-testid="ghost-status">
+            <p
+              className={`arcade__status${running ? '' : ' arcade__status--idle'}`}
+              role="status"
+              data-testid="ghost-status"
+            >
               {hunt && running ? huntMessage(hunt) : ''}
             </p>
             {whereabouts}

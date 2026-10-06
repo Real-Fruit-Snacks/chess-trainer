@@ -282,7 +282,13 @@ export default function EngineSaysPage() {
               </strong>
               {line ? <Badge>Round {round}</Badge> : null}
             </div>
-            <p className="arcade__status" role="status" data-testid="engine-says-status">
+            <p
+              className={`arcade__status${
+                phase === 'showing' || phase === 'replay' ? '' : ' arcade__status--idle'
+              }`}
+              role="status"
+              data-testid="engine-says-status"
+            >
               {phase === 'showing' ? (
                 <>
                   Move {Math.min(shown, sequence.length)} of {sequence.length}

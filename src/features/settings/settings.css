@@ -99,6 +99,12 @@
 .diagnostics__row dd {
   margin: 0;
   text-align: right;
+  /* Several badges (the features a build supports) wrap instead of running off the card. */
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
 /* Profiles */
@@ -137,9 +143,9 @@
   gap: 2px;
 }
 
+/* As wide as the rows around it, so its value lines up with theirs at the right edge. */
 .settings__slider {
   flex: 1;
-  max-width: 420px;
 }
 
 /* Drag-only controls: a native fieldset so they really are inert in Tap mode. */

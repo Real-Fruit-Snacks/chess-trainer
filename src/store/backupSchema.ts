@@ -345,7 +345,10 @@ export const progressFields = {
   streak: struct({ current: number, best: number, lastDate: nullable(string) }),
   daily: nullable(struct({ date: string, id: string, outcome: nullable(outcome) })),
   lessons: record(
-    struct({ stepsDone: array(stepKey), completedAt: nullable(number), lastVisitedAt: number }),
+    struct(
+      { stepsDone: array(stepKey), completedAt: nullable(number), lastVisitedAt: number },
+      { marked: boolean },
+    ),
   ),
   games: array(gameRecord),
   themeStats: record(struct({ solved: number, failed: number })),

@@ -58,6 +58,26 @@ describe('the backup validator', () => {
     }
   });
 
+  it('keeps a lesson marked done without its steps', () => {
+    const file = clone(backupV6);
+    (file.progress.lessons as Record<string, unknown>).forks = {
+      stepsDone: [],
+      completedAt: 5,
+      lastVisitedAt: 0,
+      marked: true,
+    };
+    const result = validateBackupFile(file);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.shape.progress.lessons?.forks).toEqual({
+        stepsDone: [],
+        completedAt: 5,
+        lastVisitedAt: 0,
+        marked: true,
+      });
+    }
+  });
+
   it('refuses a damaged repertoire, library or games part too', () => {
     const repertoire = clone(backupV7);
     (repertoire as Record<string, unknown>).repertoire = { cards: [] };

@@ -37,7 +37,7 @@ export function WeeklyCard() {
       {!any ? (
         <p className="small muted">Train a little and the last seven days will show up here.</p>
       ) : (
-        <table className="history" data-testid="weekly-summary">
+        <table className="history weekly__table" data-testid="weekly-summary">
           <thead>
             <tr>
               <th scope="col" />

@@ -408,18 +408,18 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
           ) : null}
           {!explore && (phase === 'idle' || phase === 'sessionDone') ? (
             <div className="trainer__overlay">
+              {/* What to do next is said once, in the status beside the board. */}
               <Card className="summary">
-                {phase === 'sessionDone' ? (
+                {phase === 'sessionDone' && trainer.session.total > 0 ? (
                   <>
                     <p className="card__eyebrow">Session complete</p>
-                    <h2 style={{ margin: '4px 0' }}>
+                    <h2 style={{ margin: '4px 0 12px' }}>
                       {trainer.session.correct}/{trainer.session.total} recalled
                     </h2>
                   </>
                 ) : (
-                  <h2 style={{ marginTop: 0 }}>{repertoire.name}</h2>
+                  <h2 style={{ margin: '0 0 12px' }}>{repertoire.name}</h2>
                 )}
-                <p className="muted">{status}</p>
                 <div className="row">
                   <Button variant="primary" size="lg" onClick={trainer.start}>
                     {stats.learned === 0

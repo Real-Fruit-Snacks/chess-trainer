@@ -146,10 +146,48 @@ describe('LessonPage', () => {
     );
   });
 
+  it('marks the lesson done from its header, and not done again', () => {
+    renderLesson('/learn/how-pieces-move');
+    fireEvent.click(screen.getByTestId('lesson-done-toggle'));
+    const marked = useProgress.getState().lessons['how-pieces-move'];
+    expect(marked?.completedAt).not.toBeNull();
+    expect(marked?.marked).toBe(true);
+    // Not training: nothing scheduled for recall.
+    expect(useProgress.getState().lessonRecall).toEqual({});
+    expect(screen.getByTestId('lesson-done-toggle')).toHaveTextContent('Mark as not done');
+    fireEvent.click(screen.getByTestId('lesson-done-toggle'));
+    expect(useProgress.getState().lessons['how-pieces-move']).toMatchObject({
+      stepsDone: [],
+      completedAt: null,
+    });
+    expect(screen.getByTestId('lesson-done-toggle')).toHaveTextContent('Mark as done');
+  });
+
+  it('says at the end that a marked lesson was only marked, and offers its steps', () => {
+    useProgress.getState().markLessonDone('how-pieces-move');
+    renderLesson(`/learn/how-pieces-move?step=${lesson.steps.length}`);
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    expect(screen.getByTestId('lesson-end-title')).toHaveTextContent('Marked as done');
+    expect(screen.getByRole('button', { name: 'Go to step 1' })).toBeInTheDocument();
+  });
+
+  it('completes a marked lesson for real once every step is done', () => {
+    useProgress.getState().markLessonDone('how-pieces-move');
+    renderLesson('/learn/how-pieces-move');
+    lesson.steps.forEach(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Show answer' }));
+      fireEvent.click(screen.getByRole('button', { name: /Continue|Finish/ }));
+    });
+    expect(screen.getByTestId('lesson-end-title')).toHaveTextContent('Lesson complete');
+    expect(useProgress.getState().lessons['how-pieces-move']?.marked).toBeUndefined();
+    expect(Object.keys(useProgress.getState().lessonRecall)).toHaveLength(7);
+  });
+
   it('ignores a course the lesson is not part of', () => {
     renderLesson('/learn/how-pieces-move?course=club-player');
     expect(screen.queryByTestId('back-to-course')).toBeNull();
-    expect(screen.getByRole('link', { name: '← All lessons' })).toBeInTheDocument();
+    // The way back is to all lessons.
+    expect(screen.getByRole('link', { name: 'Learn' })).toHaveAttribute('href', '/learn');
   });
 
   it('shows the shared not-found page with an h1 for an unknown lesson', () => {

@@ -5,7 +5,8 @@
   justify-content: center;
   gap: var(--space-2);
   min-height: 40px;
-  padding: 0 var(--space-4);
+  /* The vertical padding only shows when a long label wraps onto a second line. */
+  padding: 6px var(--space-4);
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   font-weight: 600;
@@ -99,14 +100,14 @@ a.btn:focus {
 
 .btn--sm {
   min-height: 32px;
-  padding: 0 var(--space-3);
+  padding: 4px var(--space-3);
   font-size: 0.85rem;
   border-radius: var(--radius-sm);
 }
 
 .btn--lg {
   min-height: 48px;
-  padding: 0 var(--space-5);
+  padding: 8px var(--space-5);
   font-size: 1.05rem;
 }
 
@@ -137,6 +138,7 @@ a.btn:focus {
     min-height: 38px;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
   }
 
   /* Breadcrumb links ("Arcade / Fortress", "Drills / Coordinates") are the way back. */
@@ -154,6 +156,30 @@ a.btn:focus {
   border-radius: var(--radius-lg);
   padding: var(--space-4);
   box-shadow: var(--shadow-sm);
+}
+
+/* The card's padding is its bottom edge: a closing paragraph's margin does not add to it. */
+.card > :last-child {
+  margin-bottom: 0;
+}
+
+/* The last line of a card in a grid: pinned to the bottom (cards in a row share their height),
+   details on the left, a badge or a button on the right. */
+.card__foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.card__foot > :first-child:not(:only-child) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.card__foot > :not(:first-child) {
+  flex: none;
 }
 
 /* A card that in-page links point at (#profiles, the lab sections) lands below the sticky header. */
@@ -206,6 +232,10 @@ a.btn:focus {
   background: var(--surface-2);
   color: var(--text-muted);
   border: 1px solid var(--border);
+  /* A pill never breaks over two lines ("Ye/s" in a narrow table cell). */
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .badge--accent {
@@ -325,32 +355,52 @@ a.btn:focus {
   max-height: calc(100dvh - 2 * var(--space-5));
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* The pinned title and buttons keep to the dialog's rounded corners. */
+  border-radius: inherit;
 }
 
+/*
+ * A long dialog (a new game's settings on a phone) scrolls between its title and
+ * its buttons: both stay in place, on the dialog's own background, and the content
+ * passes under them — never under the close button.
+ */
 .dialog__title {
-  margin-bottom: var(--space-2);
+  position: sticky;
+  /* A sticky box keeps clear of its scroller's padding: this lets the title reach the
+     top edge (it covers the padding itself). */
+  top: calc(-1 * var(--space-5));
+  z-index: 1;
+  margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-5)) var(--space-2);
+  padding: var(--space-5) var(--space-5) var(--space-2);
+  background: var(--bg-elevated);
 }
 
 /* Room for the close control beside the title. */
 .dialog__body--closable .dialog__title {
-  padding-right: 40px;
+  padding-right: calc(var(--space-5) + 40px);
 }
 
 /* Last in the DOM (so the content keeps the initial focus) and outside the
    scrolling body, pinned to the title row of the dialog. */
 .dialog__close {
   position: absolute;
+  z-index: 2;
   top: calc(var(--space-5) - 6px);
   right: calc(var(--space-5) - 8px);
   color: var(--text-muted);
 }
 
 .dialog__actions {
+  position: sticky;
+  bottom: calc(-1 * var(--space-5));
+  z-index: 1;
   display: flex;
   gap: var(--space-2);
   justify-content: flex-end;
   flex-wrap: wrap;
-  margin-top: var(--space-4);
+  margin: var(--space-1) calc(-1 * var(--space-5)) calc(-1 * var(--space-5));
+  padding: var(--space-3) var(--space-5) var(--space-5);
+  background: var(--bg-elevated);
 }
 
 /* ---------- Form controls ---------- */
@@ -776,7 +826,7 @@ a.btn:focus {
   border-radius: var(--radius-pill);
   background: var(--warning);
   color: #fff;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   line-height: 1.5;
   text-align: center;
   vertical-align: 1px;
@@ -811,9 +861,19 @@ a.btn:focus {
 }
 
 /* A scroll container with no focusable content gets a tab stop (ScrollRegion), so
-   the keyboard can scroll it; the ring sits inside, where overflow does not clip it. */
+   the keyboard can scroll it; the ring sits inside, where overflow does not clip it.
+   A shadow at an edge says there is more to scroll to that way (the covers scroll with
+   the content and hide the shadows at the ends). */
 .history__scroll {
   overflow-x: auto;
+  --scroll-shade: color-mix(in srgb, var(--text) 22%, transparent);
+  background:
+    linear-gradient(to right, var(--surface) 40%, transparent) left / 32px 100% no-repeat local,
+    linear-gradient(to left, var(--surface) 40%, transparent) right / 32px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--scroll-shade), transparent) left / 12px 100%
+      no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--scroll-shade), transparent) right / 12px 100%
+      no-repeat scroll;
 }
 
 .history__scroll:focus-visible {

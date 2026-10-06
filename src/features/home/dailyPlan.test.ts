@@ -33,6 +33,36 @@ describe('buildDailyPlan', () => {
     expect(plan.items[4]?.to).toBe('/drills/endgame/mate-kq');
   });
 
+  it('offers the first lesson not done, and counts a lesson as today’s only when worked through', () => {
+    const marked = buildDailyPlan(
+      progress({
+        lessons: {
+          'the-board': { stepsDone: [], completedAt: now - 1000, lastVisitedAt: 0, marked: true },
+        },
+      }),
+      { cards: {}, custom: [] },
+      now,
+    );
+    const item = marked.items.find((i) => i.id === 'lesson');
+    // Marked done: skipped, but no "lesson done for today".
+    expect(item?.title).toBe('Lesson: How the pieces move');
+    expect(item?.done).toBe(false);
+    // The minutes have their own column: the detail is the lesson's size and topic.
+    expect(item?.detail).toBe('7 steps · Rules');
+    const worked = buildDailyPlan(
+      progress({
+        lessons: {
+          'the-board': { stepsDone: [0, 1, 2, 3], completedAt: now - 1000, lastVisitedAt: 0 },
+        },
+      }),
+      { cards: {}, custom: [] },
+      now,
+    );
+    const done = worked.items.find((i) => i.id === 'lesson');
+    expect(done?.title).toBe('Lesson done for today');
+    expect(done?.done).toBe(true);
+  });
+
   it('marks the daily opening done once today’s has been solved or missed', () => {
     const solved = buildDailyPlan(
       progress({

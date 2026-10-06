@@ -12,7 +12,7 @@ import { cardsFor, useRepertoire } from '@/store/repertoire';
 import { ENGINE_LEVELS } from '@/engine/levels';
 import { themeName } from '@/features/puzzles/themes';
 import { formatDate, formatDuration, trainingStreak } from '@/lib/dates';
-import { NONE } from '@/lib/format';
+import { formatCount, NONE } from '@/lib/format';
 import { isProvisional, PROVISIONAL_RD } from '@/lib/glicko';
 import { formatRating, ratingBand } from '@/lib/rating';
 import { approximateGameRatings, formatRange } from '@/lib/ratingScales';
@@ -244,7 +244,10 @@ export default function ProgressPage() {
             <Card>
               <h2 style={{ fontSize: '1.15rem' }}>Games against the computer</h2>
               <p className="small muted" style={{ margin: '0 0 8px' }} data-testid="ladder-height">
-                {engineLadder.height > 0
+                {/* The height goes first unless the reason already says it. */}
+                {engineLadder.height > 0 &&
+                !engineLadder.complete &&
+                !engineLadder.reason.startsWith(`Level ${engineLadder.height} is beaten`)
                   ? `Engine ladder: Level ${engineLadder.height} beaten · ${engineLadder.reason}`
                   : `Engine ladder: ${engineLadder.reason}`}{' '}
                 <Link to="/play">Play</Link>
@@ -429,8 +432,10 @@ function RatingScalesCard({ rating, rd }: { rating: number; rd: number }) {
           {rows.map((row) => (
             <tr key={row.site}>
               <td>{row.site}</td>
-              <td className="mono">
-                {row.range ? formatRange(row.range, siteConfig.locale) : 'below 1000'}
+              <td className="num">
+                {row.range
+                  ? formatRange(row.range, siteConfig.locale)
+                  : `below ${formatCount(1000, siteConfig.locale)}`}
               </td>
             </tr>
           ))}

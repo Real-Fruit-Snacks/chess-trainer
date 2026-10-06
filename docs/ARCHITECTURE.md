@@ -435,7 +435,7 @@ profile list:
 - `progress` (version 8) — onboarding flag, puzzle rating and history, attempts (capped) plus
   `lifetime` counters that never forget (attempts, solved, failed, solves per theme, solve time), seen
   puzzle IDs (capped at 20,000), streaks (`puzzleStreak()` gives the live value, `bestStreak` the
-  longest training run ever), daily puzzle state, lesson progress (steps keyed by the step's `id`, or its position without one) and lesson-recall cards, game records
+  longest training run ever), daily puzzle state, lesson progress (steps keyed by the step's `id`, or its position without one; a lesson marked done without being worked through carries `marked`, counts as completed everywhere but is not training — no training day, no recall cards, not in the week's figures or the daily plan's "lesson done today" — and completes for real, scheduling its recall, once every step is done) and lesson-recall cards, game records
   (each with a unique `id` and a `source`: play, ladder, book, arcade, simul, drill or humanlike —
   the last with the `opponentRating` it played at), per-theme
   statistics, Puzzle Rush runs, drill results, study results, guess-the-move scores, the puzzle review
@@ -727,15 +727,18 @@ study:read study:write`. Disconnect and Reset everything revoke the token (`DELE
   changed) and `<ScrollRestoration>` starts each new page at the top while back/forward restore the
   old offset; `html { scroll-padding }` keeps focused controls clear of the sticky header and bottom
   bar. Dialogs use the native `<dialog>` element (focus trap, Escape, inert background), carry a close
-  button whenever they are dismissible, scroll internally when tall and lock the page behind them;
+  button whenever they are dismissible, scroll internally when tall — between a pinned title and
+  pinned buttons — and lock the page behind them;
   `ConfirmDialog` is the one shape for "are you sure?", cancel first and the action last. Toasts live
   in a permanent `aria-live` region (danger ones are alerts), show their tone as an edge colour and an
   icon, and move into an open dialog so they stay reachable. The "More" navigation is a disclosure
   over plain lists of links, not an ARIA menu. Focus is an opaque 2px outline with a halo in the page
   colour; `@media (forced-colors: active)` redraws switches, segments, progress and focus with system
   colours.
-- `useReducedMotion()` turns Chessground animation off under `prefers-reduced-motion`; the CSS does the
-  same for transitions. The high-contrast board palette uses Okabe–Ito highlight colours, and the text
+- `useReducedMotion()` turns Chessground animation off under `prefers-reduced-motion`; the CSS turns
+  transitions off altogether (`transition: none`, not a very short duration: with the default
+  `transition-property: all` a short one still animated every change, and the board, measuring
+  itself in the middle of one, placed its pieces for the size it had a frame earlier). The high-contrast board palette uses Okabe–Ito highlight colours, and the text
   tokens are chosen to meet WCAG AA contrast on every surface.
 
 ## Compatibility

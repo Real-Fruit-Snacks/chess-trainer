@@ -46,15 +46,17 @@
   min-height: 1.4em;
 }
 
+/* minmax(0, …): a column is never wider than the screen because of a wide table or a long
+   row of figures inside it (they scroll or wrap within their card instead). */
 .progress__grid {
   display: grid;
   gap: var(--space-4);
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @media (min-width: 900px) {
   .progress__grid {
-    grid-template-columns: 1.4fr 1fr;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   }
 }
 
@@ -188,4 +190,14 @@
   color: var(--accent);
   display: inline-flex;
   margin-top: 2px;
+}
+
+/* The week's figures fit a phone: labels and column titles wrap rather than push the
+   table past the card. */
+.weekly__table th {
+  white-space: normal;
+}
+
+.weekly__table thead th {
+  vertical-align: bottom;
 }

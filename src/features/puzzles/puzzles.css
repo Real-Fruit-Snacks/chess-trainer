@@ -6,6 +6,10 @@
   color: var(--danger);
 }
 
+.puzzles__empty {
+  max-width: 620px;
+}
+
 .theme-card {
   display: flex;
   flex-direction: column;
@@ -45,6 +49,23 @@
 
 .puzzle-modes .segmented {
   flex-wrap: wrap;
+}
+
+/* Phones: the nine modes in three even rows of three (wrapping left one alone on a row). */
+@media (max-width: 599px) {
+  .puzzle-modes {
+    width: 100%;
+  }
+
+  .puzzle-modes .segmented {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .puzzle-modes .segmented__option {
+    padding-inline: 4px;
+  }
 }
 
 /* Phones held sideways have no height to spare for a second row: tighter options keep one. */
@@ -104,6 +125,12 @@
   grid-template-columns: repeat(3, 1fr);
   gap: var(--space-3);
   align-items: start;
+}
+
+/* Before and after a run the status line is empty: it takes no room then. */
+.rush__status:empty {
+  min-height: 0;
+  margin: 0;
 }
 
 .rush__strikes {

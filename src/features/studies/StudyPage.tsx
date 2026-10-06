@@ -64,11 +64,11 @@ function StudyView({ study }: { study: Study }) {
 
   return (
     <div>
-      <p className="small">
-        <Link to="/studies">Endgame studies</Link> / {study.composer}
-        {study.year ? ` ${study.year}` : ''}
-      </p>
       <div className="page-header">
+        <p className="card__eyebrow">
+          <Link to="/studies">Endgame studies</Link> / {study.composer}
+          {study.year ? ` ${study.year}` : ''}
+        </p>
         <h1>{study.title}</h1>
         <p>{study.intro}</p>
       </div>

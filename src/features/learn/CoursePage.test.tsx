@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useProgress } from '@/store/progress';
@@ -51,5 +51,38 @@ describe('CoursePage', () => {
         name: `Lesson: ${meta?.title} (done), ${meta?.minutes} min · ${meta?.category}`,
       }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('CoursePage: marking lessons done', () => {
+  beforeEach(() => useProgress.getState().resetAll());
+
+  it('has a done check for every lesson, and only for lessons', () => {
+    renderCourse('/learn/course/first-steps');
+    const checks = screen.getAllByRole('checkbox', { name: /^Mark as done: / });
+    const lessons = screen.getAllByRole('link', { name: /^Lesson: / });
+    expect(checks).toHaveLength(lessons.length);
+    expect(screen.queryByRole('checkbox', { name: /Coordinates/ })).toBeNull();
+  });
+
+  it('marks a lesson done from its row, which then counts in the course', () => {
+    renderCourse('/learn/course/first-steps');
+    const check = screen.getByRole('checkbox', {
+      name: 'Mark as done: The board and the notation',
+    });
+    expect(check).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(check);
+    expect(check).toHaveAttribute('aria-checked', 'true');
+    expect(useProgress.getState().lessons['the-board']).toMatchObject({ marked: true });
+    expect(screen.getByText(/^1 of \d+ steps done$/)).toBeInTheDocument();
+    fireEvent.click(check);
+    expect(check).toHaveAttribute('aria-checked', 'false');
+    expect(useProgress.getState().lessons['the-board']?.completedAt).toBeNull();
+  });
+
+  it('keeps the "up next" note of a later unit under its text', () => {
+    renderCourse('/learn/course/first-steps');
+    const note = screen.getAllByText(/^Up next after unit \d$/)[0];
+    expect(note?.closest('.course__unit-text')).not.toBeNull();
   });
 });

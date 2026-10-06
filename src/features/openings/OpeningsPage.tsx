@@ -180,37 +180,49 @@ export default function OpeningsPage() {
                 const isCustom = rep.id.startsWith('custom-');
                 return (
                   <div key={rep.id} className="card repertoire-card">
-                    <div className="row row--between">
-                      <Link to={`/openings/${rep.id}`} className="card__title">
-                        {rep.name}
-                      </Link>
-                      {s.due > 0 ? (
-                        <Badge tone="warning">{s.due} due</Badge>
-                      ) : s.learned === s.total && s.total > 0 ? (
-                        <Badge tone="success">All learned</Badge>
-                      ) : (
-                        <Badge>{LEVEL_LABEL[rep.level] ?? rep.level}</Badge>
-                      )}
-                    </div>
-                    <code className="small muted">{rep.line}</code>
+                    <p className="card__eyebrow repertoire-card__level">
+                      {isCustom ? 'Your own' : (LEVEL_LABEL[rep.level] ?? rep.level)}
+                    </p>
+                    <Link to={`/openings/${rep.id}`} className="card__title">
+                      {rep.name}
+                    </Link>
+                    {isCustom ? null : <code className="small muted">{rep.line}</code>}
                     <p className="small muted" style={{ margin: 0 }}>
                       {rep.description}
                     </p>
-                    <div
-                      className="repertoire-card__progress"
-                      role="progressbar"
-                      aria-label="Moves learned"
-                      aria-valuemin={0}
-                      aria-valuemax={s.total}
-                      aria-valuenow={s.learned}
-                    >
-                      <span style={{ width: `${s.total ? (s.learned / s.total) * 100 : 0}%` }} />
-                    </div>
-                    <div className="row row--between">
-                      <span className="small muted">
-                        {s.learned}/{s.total} moves learned
-                      </span>
-                      <span className="row">
+                    {/* Progress and buttons at the foot: they line up across a row of cards. */}
+                    <div className="repertoire-card__foot">
+                      <div className="row row--between">
+                        <span className="small muted">
+                          {s.learned}/{s.total} moves learned
+                        </span>
+                        {s.due > 0 ? (
+                          <Badge tone="warning">{s.due} due</Badge>
+                        ) : s.learned === s.total && s.total > 0 ? (
+                          <Badge tone="success">All learned</Badge>
+                        ) : null}
+                      </div>
+                      <div
+                        className="repertoire-card__progress"
+                        role="progressbar"
+                        aria-label="Moves learned"
+                        aria-valuemin={0}
+                        aria-valuemax={s.total}
+                        aria-valuenow={s.learned}
+                      >
+                        <span style={{ width: `${s.total ? (s.learned / s.total) * 100 : 0}%` }} />
+                      </div>
+                      <div className="row">
+                        <LinkButton variant="primary" size="sm" to={`/openings/${rep.id}`}>
+                          {s.learned === 0 ? 'Learn' : s.due > 0 ? 'Review' : 'Practise'}
+                        </LinkButton>
+                        <LinkButton
+                          size="sm"
+                          to={`/play?book=${encodeURIComponent(rep.id)}`}
+                          title="Play a game in which the opponent follows this repertoire"
+                        >
+                          Play
+                        </LinkButton>
                         {isCustom ? (
                           <Button
                             size="sm"
@@ -220,17 +232,7 @@ export default function OpeningsPage() {
                             Delete
                           </Button>
                         ) : null}
-                        <LinkButton
-                          size="sm"
-                          to={`/play?book=${encodeURIComponent(rep.id)}`}
-                          title="Play a game in which the opponent follows this repertoire"
-                        >
-                          Play
-                        </LinkButton>
-                        <LinkButton variant="primary" size="sm" to={`/openings/${rep.id}`}>
-                          {s.learned === 0 ? 'Learn' : s.due > 0 ? 'Review' : 'Practise'}
-                        </LinkButton>
-                      </span>
+                      </div>
                     </div>
                   </div>
                 );

@@ -169,8 +169,9 @@ kbd {
   align-items: flex-start;
 }
 
-/* A header with a button instead may wrap: the button then takes a line of its own. */
-.card > .row--between:first-child:has(> .btn) {
+/* A header with a button or a switch of options instead may wrap: the control then takes a
+   line of its own rather than squeezing the title. */
+.card > .row--between:first-child:has(> .btn, > .segmented, > .row) {
   flex-wrap: wrap;
 }
 
@@ -273,15 +274,21 @@ kbd {
     scroll-padding-bottom: 8px;
   }
 
+  /*
+   * The board column is as wide as the board (never more than 57 % of the row,
+   * which leaves the panel room for a row of four buttons), so no dead band
+   * opens between the board and the panel and the panel gets the rest.
+   */
   .trainer {
-    grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.85fr);
+    /* Keep the whole board on screen below the page header on typical laptop heights. */
+    --trainer-board: max(420px, calc(100dvh - var(--header-height) - 190px));
+    grid-template-columns: minmax(0, min(var(--trainer-board), 57%)) minmax(300px, 1fr);
     gap: var(--space-5);
   }
 
   .trainer__board {
     margin: 0;
-    /* Keep the whole board on screen below the page header on typical laptop heights. */
-    max-width: max(420px, calc(100dvh - var(--header-height) - 190px));
+    max-width: var(--trainer-board);
   }
 
   .trainer__panel {
@@ -371,25 +378,56 @@ kbd {
     scroll-behavior: auto;
   }
 
+  /*
+   * No transitions at all — not a very short one: a 0.01ms duration still turns
+   * every change of every property into a transition (transition-property
+   * defaults to all), and the board, measuring itself in the middle of one,
+   * placed its pieces for the size it had a frame earlier.
+   */
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     /* Once, not forever: an infinite 0.01ms spin flickers instead of standing still. */
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition: none !important;
   }
 }
 
 /* ---------- Shared trainer widgets (puzzles, drills, play) ---------- */
+/*
+ * A start or results card over the board. The board and the card share one
+ * grid cell: the card is never wider than the board, and a card taller than
+ * the board (a game's settings on a phone) makes the board area taller instead
+ * of running over the file letters and the cards that follow.
+ */
+.trainer__board:has(> .trainer__overlay) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.trainer__board:has(> .trainer__overlay) > * {
+  grid-area: 1 / 1;
+}
+
+.trainer__board:has(> .trainer__overlay) > :not(.trainer__overlay) {
+  align-self: start;
+}
+
 .trainer__overlay {
-  position: absolute;
-  inset: 0;
+  position: relative;
   display: grid;
   place-items: center;
+  min-width: 0;
   background: color-mix(in srgb, var(--bg) 60%, transparent);
   border-radius: var(--radius-md);
   z-index: 5;
+}
+
+/* As wide as the board up to the card's own limit: on a phone a settings card taller than
+   the board covers it edge to edge instead of letting slivers of it show round the sides. */
+.trainer__overlay > .card {
+  width: 100%;
 }
 
 .puzzle-status {
@@ -413,10 +451,18 @@ kbd {
   margin-top: var(--space-3);
 }
 
+/* No buttons for this phase: no gap for them either. */
+.puzzle-actions:empty {
+  display: none;
+}
+
 .puzzle-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  /* Three figures side by side on a phone, rather than two and a lonely third. */
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: var(--space-3);
+  /* In a full-width card the figures stay together instead of spreading across the page. */
+  max-width: 42rem;
 }
 
 /* A button that reads as a link (for actions inside running text). */
@@ -434,6 +480,11 @@ kbd {
 @media (pointer: coarse) {
   .keyboard-only {
     display: none;
+  }
+
+  /* A disclosure ("Reset progress…", "Engine diagnostics") is a finger-sized row. */
+  summary {
+    padding-block: 10px;
   }
 }
 

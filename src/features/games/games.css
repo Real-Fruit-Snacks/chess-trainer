@@ -11,11 +11,16 @@
   }
 }
 
+/* The two selects side by side when they fit at full length, the switch on a line of its own. */
 .games__filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: var(--space-3);
   align-items: end;
+}
+
+.games__filters > .switch {
+  grid-column: 1 / -1;
 }
 
 .games__deviations {
@@ -43,9 +48,77 @@
   font-weight: 600;
 }
 
+/* The imported games: one row each — players and result, date and accuracy, then actions. */
+.games__list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+
+.games__item {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.games__item:first-child {
+  border-top: 1px solid var(--border);
+}
+
+.games__item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.games__players {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.games__item-meta {
+  margin: 2px 0 var(--space-1);
+}
+
 .games__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   align-items: center;
-  white-space: nowrap;
+  margin-left: calc(-1 * var(--space-3));
+}
+
+/* Removing a game is set apart from the actions that open it. */
+.games__actions .games__remove {
+  margin-left: auto;
+}
+
+/* Your openings: name and score, the score as a bar, then the results. */
+.games__openings {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+
+.games__opening {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.games__opening:first-child {
+  border-top: 1px solid var(--border);
+}
+
+.games__opening .small {
+  font-variant-numeric: tabular-nums;
+}
+
+.games__eco {
+  margin-right: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--text-faint);
 }

@@ -21,7 +21,7 @@ import {
 import { toast } from '@/components/ui/toastStore';
 import { useEngine } from '@/engine/useEngine';
 import { formatDate, formatDuration, localDateKey } from '@/lib/dates';
-import { NONE } from '@/lib/format';
+import { formatCount, NONE } from '@/lib/format';
 import { safeSourceUrl } from '@/lib/gameImport';
 import { formatRatingWithRd, isProvisional } from '@/lib/glicko';
 import { CALIBRATION_PUZZLES, formatRating, STARTING_RATINGS } from '@/lib/rating';
@@ -235,7 +235,8 @@ export default function PuzzlesPage() {
 /* ------------------------------------------------------------------ */
 function MineEmpty() {
   return (
-    <Card className="narrow">
+    // Under the mode bar like every mode's content: no extra gap above, not centred.
+    <Card className="puzzles__empty">
       <p className="card__eyebrow">My puzzles</p>
       <h2>No puzzles from your games yet</h2>
       <p className="muted">
@@ -262,7 +263,7 @@ function ReviewEmpty() {
   const upcoming = nextReview(queue);
   const total = Object.keys(queue).length;
   return (
-    <Card className="narrow">
+    <Card className="puzzles__empty">
       <p className="card__eyebrow">Redo missed puzzles</p>
       <h2>Nothing due right now</h2>
       <p className="muted">
@@ -400,7 +401,7 @@ function ThemeCatalog() {
               >
                 <div className="row row--between">
                   <span className="card__title">{info.name}</span>
-                  <Badge>{count}</Badge>
+                  <Badge>{formatCount(count, siteConfig.locale)}</Badge>
                 </div>
                 <p className="small muted" style={{ margin: 0 }}>
                   {info.description}

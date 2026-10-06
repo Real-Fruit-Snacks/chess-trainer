@@ -25,7 +25,7 @@ import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
 import { handOffToAnalysis } from '@/lib/handoff';
 import { type OwnPuzzle, ownPuzzlesFromReview } from '@/features/puzzles/ownPuzzles';
 import { missedThreatsNote, type OwnThreat, ownThreatsFromReview } from '@/features/drills/threats';
-import { formatDate } from '@/lib/dates';
+import { formatDate, formatPgnDate } from '@/lib/dates';
 import {
   fetchChessComGamesPage,
   fetchLichessGamesPage,
@@ -404,44 +404,25 @@ function OpeningsCard({ list, player }: { list: StoredGame[]; player: string }) 
       ) : rows.length === 0 ? (
         <p className="small muted">No games as {color} yet.</p>
       ) : (
-        <div className="history__scroll" style={{ marginTop: 8 }}>
-          <table className="history" data-testid={`openings-${color}`}>
-            <thead>
-              <tr>
-                <th scope="col">Opening</th>
-                <th scope="col" className="num">
-                  Games
-                </th>
-                <th scope="col" className="num">
-                  W / D / L
-                </th>
-                <th scope="col">Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.key}>
-                  <td>
-                    <span className="mono faint" style={{ marginRight: 6 }}>
-                      {r.eco}
-                    </span>
-                    {r.name}
-                  </td>
-                  <td className="num">{r.games}</td>
-                  <td className="num">
-                    {r.wins} / {r.draws} / {r.losses}
-                  </td>
-                  <td style={{ minWidth: 120 }}>
-                    <div className="row" style={{ gap: 8 }}>
-                      <ProgressBar value={r.score} label={`${r.name} score`} />
-                      <span className="small mono">{Math.round(r.score * 100)}%</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        // A row per opening, as on the games list: a table's score column ran off a phone.
+        <ul role="list" className="games__openings" data-testid={`openings-${color}`}>
+          {rows.map((r) => (
+            <li key={r.key} className="games__opening">
+              <div className="games__item-head">
+                <span>
+                  <span className="games__eco">{r.eco}</span>
+                  {r.name}
+                </span>
+                <span className="small">{Math.round(r.score * 100)}%</span>
+              </div>
+              <ProgressBar value={r.score} label={`${r.name} score`} />
+              <span className="small muted">
+                {r.games} game{r.games === 1 ? '' : 's'} · {r.wins} won, {r.draws} drawn, {r.losses}{' '}
+                lost
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </Card>
   );
@@ -786,108 +767,94 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
       ) : null}
       {list.length === 0 ? (
         <p className="small muted">
-          Nothing imported yet. Fetch games by username or paste a PGN on the left.
+          Nothing imported yet: fetch your games by username, or paste a PGN.
         </p>
       ) : (
-        <div className="history__scroll" style={{ marginTop: 8 }}>
-          <table className="history" data-testid="games-table">
-            <thead>
-              <tr>
-                <th scope="col">Date</th>
-                <th scope="col">Players</th>
-                <th scope="col">Result</th>
-                <th scope="col">Accuracy</th>
-                <th scope="col" />
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((game) => {
-                const color = learnerColor(game, player);
-                const outcome = color ? outcomeFor(game.result, color) : null;
-                return (
-                  <tr key={game.id}>
-                    <td>
-                      {game.timestamp
-                        ? formatDate(game.timestamp, siteConfig.locale)
-                        : game.date || '—'}
-                    </td>
-                    <td>
-                      <span className={color === 'white' ? 'games__me' : undefined}>
-                        {game.white}
-                      </span>
-                      {' – '}
-                      <span className={color === 'black' ? 'games__me' : undefined}>
-                        {game.black}
-                      </span>
-                      {game.speed ? <span className="small faint"> · {game.speed}</span> : null}
-                    </td>
-                    <td>
-                      {outcome ? (
-                        <Badge
-                          tone={
-                            outcome === 'win'
-                              ? 'success'
-                              : outcome === 'loss'
-                                ? 'danger'
-                                : 'neutral'
-                          }
-                        >
-                          {OUTCOME_LABEL[outcome]}
-                        </Badge>
-                      ) : (
-                        game.result
-                      )}
-                    </td>
-                    <td className="num">
-                      {game.review
-                        ? color
-                          ? `${game.review.accuracy[color]}%`
-                          : `${game.review.accuracy.white}% / ${game.review.accuracy.black}%`
-                        : '—'}
-                    </td>
-                    <td>
-                      <div className="games__actions">
-                        <Button size="sm" variant="ghost" onClick={() => openInAnalysis(game)}>
-                          Analyze game
-                        </Button>
-                        {!game.review ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openInAnalysis(game, true)}
-                            title="Find the turning points yourself, then compare with the engine"
-                          >
-                            Analyze it yourself
-                          </Button>
-                        ) : null}
-                        {!game.review ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={running}
-                            onClick={() => setQueue((q) => [...q, game.id])}
-                          >
-                            Review
-                          </Button>
-                        ) : null}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          icon
-                          aria-label={`Remove ${game.white} – ${game.black}`}
-                          title="Remove this game"
-                          onClick={() => setConfirm({ kind: 'remove', game })}
-                        >
-                          <Icon name="close" size={14} />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        // One row per game, wrapping inside the card: a table's last columns (the actions)
+        // were cut off at the card's edge on every screen.
+        <ul role="list" className="games__list" data-testid="games-table">
+          {list.map((game) => {
+            const color = learnerColor(game, player);
+            const outcome = color ? outcomeFor(game.result, color) : null;
+            const accuracy = game.review
+              ? color
+                ? `${game.review.accuracy[color]}%`
+                : `${game.review.accuracy.white}% / ${game.review.accuracy.black}%`
+              : null;
+            return (
+              <li key={game.id} className="games__item">
+                <div className="games__item-head">
+                  <span className="games__players">
+                    <span className={color === 'white' ? 'games__me' : undefined}>
+                      {game.white}
+                    </span>
+                    {' – '}
+                    <span className={color === 'black' ? 'games__me' : undefined}>
+                      {game.black}
+                    </span>
+                  </span>
+                  {outcome ? (
+                    <Badge
+                      tone={
+                        outcome === 'win' ? 'success' : outcome === 'loss' ? 'danger' : 'neutral'
+                      }
+                    >
+                      {OUTCOME_LABEL[outcome]}
+                    </Badge>
+                  ) : (
+                    <span className="small muted">{game.result}</span>
+                  )}
+                </div>
+                <p className="small muted games__item-meta">
+                  {game.timestamp
+                    ? formatDate(game.timestamp, siteConfig.locale)
+                    : (formatPgnDate(game.date, siteConfig.locale) ?? 'Date unknown')}
+                  {game.speed ? ` · ${game.speed}` : ''}
+                  {' · '}
+                  <span data-testid="game-accuracy">
+                    {accuracy ? `accuracy ${accuracy}` : 'not reviewed'}
+                  </span>
+                </p>
+                <div className="games__actions">
+                  <Button size="sm" variant="ghost" onClick={() => openInAnalysis(game)}>
+                    Analyze game
+                  </Button>
+                  {!game.review ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openInAnalysis(game, true)}
+                      title="Find the turning points yourself, then compare with the engine"
+                    >
+                      Analyze it yourself
+                    </Button>
+                  ) : null}
+                  {!game.review ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={running}
+                      onClick={() => setQueue((q) => [...q, game.id])}
+                    >
+                      Review
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon
+                    className="games__remove"
+                    aria-label={`Remove ${game.white} – ${game.black}`}
+                    title="Remove this game"
+                    onClick={() => setConfirm({ kind: 'remove', game })}
+                  >
+                    <Icon name="close" size={14} />
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
       <p className="small faint" style={{ margin: '8px 0 0' }}>
         Reviews run at the “{reviewDepth}” depth from Settings. Mistakes become puzzles under{' '}

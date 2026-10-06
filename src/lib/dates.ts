@@ -19,6 +19,22 @@ export function formatDate(iso: string | number, locale = 'en-GB'): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(iso));
 }
 
+/**
+ * A PGN date ("2026.09.29", "2026.??.??") for display: the whole date in the
+ * locale's medium style, like the dates of games with a timestamp, or the year
+ * alone when only the year is known; null when the date says nothing.
+ */
+export function formatPgnDate(date: string | undefined, locale = 'en-GB'): string | null {
+  const match = /^(\d{4})\.(\d{2}|\?\?)\.(\d{2}|\?\?)$/.exec(date?.trim() ?? '');
+  if (!match) return null;
+  const [, year, month, day] = match as unknown as [string, string, string, string];
+  if (month === '??' || day === '??') return year;
+  const at = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  // 2026.02.31 is no date (Date.UTC would roll it over into March).
+  if (at.getUTCMonth() !== Number(month) - 1 || at.getUTCDate() !== Number(day)) return year;
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(at);
+}
+
 export function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);

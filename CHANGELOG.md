@@ -6,6 +6,100 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-06
+
+Every screen checked on phones and desktops, in each colour scheme, and put right where the layout
+let it down — and lessons you already know can be marked as done without working through them.
+
+### Added
+
+- **Mark a lesson as done** from its card on Learn, its row in a course or its own page (_Mark as
+  done_ beside the title). It then counts as completed — in courses, on Learn and for the next lesson
+  — but not as training: no streak day, no recall positions, nothing in the week's figures. _Mark as
+  not done_ starts the lesson again from its first step; both come with an Undo. Working through every
+  step later completes it for real, recall included. Backups keep the mark.
+
+### Fixed
+
+- **Reduced motion:** with the system's “reduce motion” setting on, the board could place its pieces
+  and highlights for the size it had a moment earlier — the h-file sticking out past the edge, the
+  last-move squares beside their squares. Transitions are now off altogether under that setting, not
+  merely very short.
+- **Course page:** a later unit's “Up next after unit N” no longer squeezes into a three-line pill
+  beside the title; it sits under the unit's description.
+- **Progress page** on phones: wide tables no longer make the whole page wider than the screen
+  (which also pushed the bottom bar out of reach); a table that needs more room scrolls inside its
+  card, with a shadow at the edge that has more, and the week's figures fit as they are. The rating
+  chart keeps legible labels at any width.
+- **Start and result cards over the board** (a repertoire, the arcade games' settings, Puzzle Rush,
+  the drills) stay within the board, and one taller than the board makes the board area taller
+  instead of running over the file letters and the card below.
+- **Board pages on wide screens:** the board's column is as wide as the board, so no empty band opens
+  between the board and the side panel, and the panel gets the room (its buttons no longer wrap one
+  to a line).
+- **Learn:** course cards are no longer underlined and coloured like a link from top to bottom, and
+  the three courses share a row; the lesson page's keyboard hint is gone on touch screens (it left
+  “to move between steps” on its own), and its links never start a line with a dot.
+- **Home:** “~31 min left” stays on one line; the plan's lesson says what the lesson is instead of
+  repeating its minutes; the nine features sit three by three and the three levels side by side on
+  wide screens; a card's last paragraph no longer adds space at its bottom.
+- **More** on phones: one clear column (titles such as “Endgame studies” no longer break in two), and
+  the page behind is dimmed — a tap on it closes the sheet.
+- **Puzzles:** the nine modes in three even rows on phones; counts written with thousands separators
+  (“24,128”); the Rush card has no empty half before a run; empty states line up under the modes.
+- **Cards in grids:** the difficulty, result and level badges moved to the foot of drill, classic
+  game and endgame study cards, so titles get the card's width; repertoire cards line their progress
+  and buttons up along a row, show their level above the name, and a custom repertoire no longer
+  shows “Custom repertoire” where the moves go.
+- **Repertoire page:** the start card no longer repeats the status shown beside the board.
+- **My games:** the games and your openings are lists that wrap within their cards (the table cut off
+  its last column, the actions); dates are written one way; the time-control choice shows in full;
+  the empty list no longer points “to the left”, which is above on a phone.
+- **Endgame studies:** the goal and the result sit at the foot of each card instead of stacking
+  unevenly beside the title.
+- **Breadcrumbs** read the same on every page (the course, study, lesson and recall pages had their
+  own).
+- **Arcade:** Play buttons stay bottom right on every card; the game panels lose the empty line they
+  kept before a game; the Fortress figures line up with the other panels; the Daily Opening's matches
+  push the page down on phones instead of covering the end of it; the simul's board tiles have room
+  for “Your move”.
+- **Dialogs** taller than the screen (a new game's settings on a phone) keep their title and buttons
+  in place while the rest scrolls between them; the close button no longer sits over the content.
+- **Analyze:** the Game review heading no longer wraps under its controls; the empty move list reads
+  in the normal font; the engine's status no longer starts with a dot.
+- **Reference:** the rules and notation cards flow in two columns without blank space, and the FAQ
+  keeps to a reading width.
+- **Settings and test lab:** the volume slider spans its row; the engine diagnostics' badges wrap
+  within the card; Yes/No pills never break in two; the lab's keyboard line is gone on touch screens.
+- **Touch targets:** the lesson step numbers, disclosure rows (“Reset progress…”, “Engine
+  diagnostics”), the lab's section links, Home's Details and the first move of an engine line are
+  finger-sized; the footer's “Keyboard shortcuts” is hidden where there is no keyboard.
+- Badges never wrap; a button whose label wraps gets room above and below it; stat rows fit three
+  across on phones and stay together in wide cards; the Progress ladder line no longer says the
+  level twice; the ratings table uses the page's font.
+
+### Changed
+
+- The README's screenshots and the install dialog's (the web app manifest's) were taken again from
+  this version; the README's showed the app as it looked before blind puzzles came in.
+
+### Security
+
+- `source-map-js`, which the build and test tools use, is on 1.2.2 for a newly published advisory
+  (GHSA-68fv-2mgg-jv7q); `npm audit` is clean again. Nothing of it reaches the app.
+
+### Testing
+
+- A screen-by-screen visual check: every page and the states reached by playing (a game on, a puzzle
+  over, a run going, dialogs and toasts) captured at phone, small phone, tablet, laptop and wide
+  sizes in the light, dark and black schemes, with automatic checks for sideways scrolling,
+  overlapping controls, wrapped pills and buttons, clipped text and small touch targets.
+- End to end in every browser: marking lessons done from Learn, a course and the lesson page, with
+  Undo, a reload and no training day; with reduced motion the board puts every piece on its square.
+- Unit tests: marking done and not done, the undo, a marked lesson completed for real by its steps,
+  restarting it; the week's figures and the daily plan leave marked lessons out; backups keep the
+  mark; the Learn, course and lesson pages' controls; PGN dates written like the others.
+
 ## [0.17.1] - 2026-10-05
 
 The Lichess account sync stays connected: 0.17.0 could ask to connect again seconds after every

@@ -158,9 +158,7 @@ test.describe('my games', () => {
     await expect(page.getByRole('button', { name: 'Add as puzzles' })).toBeVisible({
       timeout: 120_000,
     });
-    await expect(
-      page.locator('[data-testid="games-table"] tbody td:nth-child(4)').first(),
-    ).not.toHaveText('—');
+    await expect(page.getByTestId('game-accuracy').first()).toHaveText(/^accuracy \d/);
     await page.getByRole('button', { name: 'Add as puzzles' }).click();
     await page.goto('/puzzles/mine');
     await completeOnboarding(page);

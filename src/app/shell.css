@@ -321,7 +321,7 @@
   white-space: nowrap;
 }
 
-/* Phones: a bottom sheet; each group is a two-column grid under its title. */
+/* Phones: a bottom sheet over a dimmed page; each group is a list under its title. */
 .more--sheet .more__menu {
   position: fixed;
   left: var(--space-3);
@@ -329,6 +329,15 @@
   bottom: calc(var(--bottom-nav-height) + var(--space-2));
   max-height: calc(100dvh - var(--header-height) - var(--bottom-nav-height) - var(--space-5));
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Everything but the bottom bar, whose More button closes the sheet again. */
+.more__scrim {
+  position: fixed;
+  inset: 0 0 var(--bottom-nav-height);
+  z-index: 55;
+  background: rgba(10, 14, 12, 0.45);
 }
 
 .more__group {
@@ -343,12 +352,6 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.more--sheet .more__list {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-1);
 }
 
 .more__heading {
