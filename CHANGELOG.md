@@ -6,6 +6,41 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-06
+
+New piece sets, all drawn for this project and judged by how quickly the pieces tell apart: two new
+ones, and the three original sets of 0.18 drawn again after a review showed where they fell short.
+
+### Added
+
+- **Staunton** piece set: tournament shapes — a turned foot and ring, a stem, a collar and each
+  piece's own head — with a heavier line than the classic set's, so the pieces stay crisp on a
+  phone. Black pieces carry light bands that hold on dark squares.
+- **Bold** piece set: big, simple shapes with a heavy outline and one oversized feature each: the
+  cross, a fanned crown of pearls, a slim mitre with its slit, the horse's head, deep battlements and
+  a round, bell-shaped pawn. Black pieces carry a light rim that lifts them off dark squares.
+
+### Changed
+
+- **Modern, Pixel and Letters are drawn again.** Modern is plain geometry without the shared plate
+  that made every piece the same width; its king no longer reads as a tombstone and its knight is a
+  horse's head. Pixel steps down clearly from king to pawn, with a round pawn head, a fanned queen's
+  crown, a slim bishop with a slit and the same one-pixel outline on every piece. Letters draws its six
+  letters as paths instead of setting them in the device's Arial, so they look the same everywhere,
+  and drops the tiles that turned the board into a grid of boxes; pawns are a size smaller.
+- Every original set now steps down in height from king to pawn, keeps one line weight throughout and
+  draws its symmetric pieces as one mirrored half. The classic cburnett set stays as it was.
+- The piece picker in Settings shows two sets to a row on phones.
+- FEATURES, ARCHITECTURE, CONTRIBUTING and the third-party notices describe the six sets and where
+  they are drawn (`scripts/pieces/`, one module per set).
+
+### Testing
+
+- Unit tests: every drawing is a well-formed SVG and the twelve pieces of a set all differ; the
+  stylesheets in `src/components/board/` match the drawings; the pixel masks stay on their 16×16 grid
+  with symmetric outlines; the list of sets matches the settings and the stylesheets the app loads.
+- End to end: the picker shows all six sets, each in its own style, and the board uses the chosen one.
+
 ## [0.18.0] - 2026-10-06
 
 Every screen checked on phones and desktops, in each colour scheme, and put right where the layout

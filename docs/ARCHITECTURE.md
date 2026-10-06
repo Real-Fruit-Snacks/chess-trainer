@@ -302,7 +302,10 @@ drills and the board editor) is one `role="group"` tab stop with a roving tabind
 keys, and marks the selected square with `aria-pressed`. Piece sets are chosen with a `data-pieces` attribute on
 `<html>`; every set is a stylesheet of inline SVG with the same selectors (`pieces-*.css`, written by
 `scripts/generate-pieces.mjs`: the cburnett figurines re-emitted from the Chessground package, and the
-original Modern and Pixel sets, drawn in the script; the Letters set is hand-written). A more specific
+original Staunton, Bold, Modern, Pixel and Letters sets drawn in `scripts/pieces/` — one module per set
+on a shared 100×100 grid, symmetric pieces drawn as half a profile and mirrored, the pixel set as
+16×16 masks with an automatic outline; `scripts/pieces/pieces.test.ts` checks the stylesheets match
+the drawings). A more specific
 `.piece-preview.pieces-<set>` selector lets a picker show every set at once. The drag feel comes
 from settings too: `draggable`/`selectable` follow the move method, the magnifier is a `scale` on
 `piece.dragging`, and the drag target is an overlay the board positions straight from pointer

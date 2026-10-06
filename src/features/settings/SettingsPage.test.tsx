@@ -176,7 +176,7 @@ describe('SettingsPage', () => {
 
     // The piece-set picker shows every set and selects one.
     const pieces = screen.getByRole('group', { name: 'Piece set' });
-    expect(within(pieces).getAllByRole('button')).toHaveLength(4);
+    expect(within(pieces).getAllByRole('button')).toHaveLength(6);
     expect(within(pieces).getByRole('button', { name: 'Classic' })).toHaveAttribute(
       'aria-pressed',
       'true',

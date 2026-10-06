@@ -82,7 +82,7 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
 | `npm run arcade:positions`   | Re-evaluate the classic-game positions used by Who Stands Better? and Fortress (slow).                                                                                                                                                                                   |
 | `npm run icons:generate`     | Re-render the PWA icons (standard, maskable, monochrome, shortcuts) from `scripts/icons/logo.svg`.                                                                                                                                                                       |
 | `npm run screenshots`        | Re-render the install-dialog screenshots in `public/screenshots/` from a running preview (`npm run build && npm run preview` first).                                                                                                                                     |
-| `npm run pieces:generate`    | Rebuild the piece-set stylesheets (`src/components/board/pieces-*.css`) from the drawings in the script.                                                                                                                                                                 |
+| `npm run pieces:generate`    | Rebuild the piece-set stylesheets (`src/components/board/pieces-*.css`) from the drawings in `scripts/pieces/`; add `-- --svg <dir>` to also write every piece as an SVG to look at.                                                                                     |
 
 ## Project layout
 
@@ -99,7 +99,8 @@ src/
                 lichess/: the Lichess account sync
   test/         test set-up and the stand-in lichess.org the sync's tests talk to
   sw/, sw.ts    the service worker and the helpers it shares with the page
-scripts/        engine and model downloads, content checks, puzzle and opening imports, build steps, CI helpers
+scripts/        engine and model downloads, content checks, puzzle and opening imports, build steps, CI helpers;
+                pieces/: the original piece sets, one module per set
 public/         static assets: engine and maia (downloaded), puzzles and openings (committed), icons
 e2e/            Playwright end-to-end tests and the accessibility sweep
 docs/           feature reference, architecture, content and deployment guides

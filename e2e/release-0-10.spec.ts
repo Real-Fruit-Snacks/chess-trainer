@@ -76,14 +76,13 @@ test.describe('colour scheme and board', () => {
 
     // The picker shows every set at once, each drawn in its own style.
     const picker = page.getByRole('group', { name: 'Piece set' });
-    await expect(picker.getByRole('button')).toHaveCount(4);
+    const sets = ['classic', 'staunton', 'bold', 'modern', 'pixel', 'letters'];
+    await expect(picker.getByRole('button')).toHaveCount(sets.length);
     const strip = (set: string) => picker.locator(`.pieces-${set} piece.white.knight`);
     const images = await Promise.all(
-      ['classic', 'modern', 'pixel', 'letters'].map((set) =>
-        strip(set).evaluate((el) => getComputedStyle(el).backgroundImage),
-      ),
+      sets.map((set) => strip(set).evaluate((el) => getComputedStyle(el).backgroundImage)),
     );
-    expect(new Set(images).size).toBe(4);
+    expect(new Set(images).size).toBe(sets.length);
     for (const image of images) expect(image).toContain('data:image/svg+xml');
 
     await page.getByTestId('pieces-pixel').click();
@@ -104,7 +103,7 @@ test.describe('colour scheme and board', () => {
     const boardKnight = page.locator('cg-board piece.white.knight').first();
     await expect
       .poll(() => boardKnight.evaluate((el) => getComputedStyle(el).backgroundImage))
-      .toBe(images[2]);
+      .toBe(images[sets.indexOf('pixel')]);
     await expect
       .poll(async () =>
         decodeURIComponent(

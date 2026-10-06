@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
-import { applyPieceSet } from '@/components/board/pieceSets';
-import { type ColorScheme, useSettings } from '@/store/settings';
+import { type ColorScheme, PIECE_SET_IDS, type PieceSet, useSettings } from '@/store/settings';
 import { siteConfig } from '@/site.config';
 
 /** The browser-UI colour for a scheme: the page background, so the chrome and the page are one. */
@@ -41,6 +40,18 @@ export function useColorScheme(): void {
     media.addEventListener('change', onChange);
     return () => media.removeEventListener('change', onChange);
   }, [scheme]);
+}
+
+/**
+ * Applies the piece set to <html>, where the piece CSS looks for it. A value that is not a known
+ * set (an old or edited settings blob) falls back to the classic set, which the piece CSS also
+ * shows while the attribute is missing.
+ */
+export function applyPieceSet(set: PieceSet, root: HTMLElement = document.documentElement): void {
+  root.setAttribute(
+    'data-pieces',
+    (PIECE_SET_IDS as readonly string[]).includes(set) ? set : 'classic',
+  );
 }
 
 /** Keeps the piece set on <html> in step with the settings. */

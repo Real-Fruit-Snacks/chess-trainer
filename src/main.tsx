@@ -4,6 +4,8 @@ import { RouterProvider } from 'react-router/dom';
 import '@lichess-org/chessground/assets/chessground.base.css';
 import '@lichess-org/chessground/assets/chessground.brown.css';
 import '@/components/board/pieces-classic.css';
+import '@/components/board/pieces-staunton.css';
+import '@/components/board/pieces-bold.css';
 import '@/components/board/pieces-modern.css';
 import '@/components/board/pieces-pixel.css';
 import '@/components/board/pieces-letters.css';

@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyPieceSet } from '@/components/board/pieceSets';
 import { siteConfig } from '@/site.config';
-import { applyColorScheme } from './theme';
+import { applyColorScheme, applyPieceSet } from './theme';
 
 describe('colour scheme', () => {
   const meta = document.createElement('meta');
@@ -46,6 +45,11 @@ describe('colour scheme', () => {
     applyPieceSet('pixel', root);
     expect(root.dataset.pieces).toBe('pixel');
     applyPieceSet('classic', root);
+    expect(root.dataset.pieces).toBe('classic');
+    applyPieceSet('staunton', root);
+    expect(root.dataset.pieces).toBe('staunton');
+    // A set this version does not know (an edited settings blob) shows the classic pieces.
+    applyPieceSet('tiles' as never, root);
     expect(root.dataset.pieces).toBe('classic');
   });
 });

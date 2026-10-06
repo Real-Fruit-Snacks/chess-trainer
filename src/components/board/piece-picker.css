@@ -1,7 +1,8 @@
 /* The piece-set picker: one strip of six pieces per set (see PieceSetPicker.tsx). */
 .piecepick {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  /* Three to a row on a wide card, two on a phone. */
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, calc(50% - var(--space-2))), 1fr));
   gap: var(--space-2);
   width: 100%;
 }

@@ -253,9 +253,10 @@ of lessons and themes. Rows resting on fewer than 3 games or 20 reviewed moves a
 
 **Appearance:** the colour scheme (system, light, dark, or black for OLED screens), **move
 notation** — figurines drawn from the piece set (♘f3) or letters (Nf3), everywhere a move is
-written — and the sounds. **Board:** nine board colours, four piece sets (the classic cburnett
-figurines, a flat Modern set, an 8-bit Pixel set and the high-legibility Letters tiles) shown as
-strips to pick from, coordinates, legal-move dots, last-move and check highlights, animation, a
+written — and the sounds. **Board:** nine board colours, six piece sets (the classic cburnett
+figurines; Staunton, tournament shapes with a heavier line; Bold, big simple shapes with a heavy
+outline; Modern, plain geometry; Pixel, 8-bit figurines; and Letters, each piece drawn as its letter)
+shown as strips to pick from, coordinates, legal-move dots, last-move and check highlights, animation, a
 **magnified dragged piece** with a circle or square **drag target**, moving by tap, drag or either,
 and captured material beside the player bars as the difference, every capture, or nothing.
 **Play:** defaults plus **focus mode**, which hides the header and navigation while you play the
@@ -386,7 +387,7 @@ square — the letters never trigger page shortcuts) with a "describe position" 
 descriptions of view-only diagrams, keyboard shortcuts (press `?`; the single-letter ones can be
 switched off in Settings for speech input and switch devices, while Enter, Space and the arrows keep
 working), focus management, a
-colour-blind-safe high-contrast board theme, a high-legibility **Letters** piece set, a soft sound
+colour-blind-safe high-contrast board theme, the high-legibility **Bold** and **Letters** piece sets, a soft sound
 theme, reduced-motion support, a visible focus ring on every surface (and Windows High Contrast
 styles) and WCAG-AA text contrast — checked by an automated axe-core sweep of every page, one of each
 parameterised route included, in all three colour schemes.
