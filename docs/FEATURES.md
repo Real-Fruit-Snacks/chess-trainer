@@ -273,16 +273,21 @@ install, a **storage meter**, and backups — export or import as JSON, **share 
 another device, or open a backup file with the installed app. An import is checked field by field,
 then asks first: it shows the backup's date and what it holds (puzzle attempts, imported games, saved
 analyses, custom repertoires), offers to export the current progress, replaces everything in the
-profile at once, and can be undone from the toast that follows. Backups since 0.17 (format 10)
-keep the Lichess puzzles waiting in the review queue and which games went to Lichess; since 0.16
+profile at once, and can be undone from the toast that follows. Backups since 0.21 (format 11)
+keep the rounds from the Lichess puzzle history counted lately (so sync between devices counts a
+round two devices both brought in once) and a random id of the profile's history (so a backup of
+the profile is known as such, however long ago it was made); since 0.17 (format 10) they keep the Lichess puzzles
+waiting in the review queue and which games went to Lichess; since 0.16
 (format 9) they keep games against the human-like opponent with its rating; since 0.15 (format 8) they carry the
 thinking-skill records too; since 0.12 (format 7) they include the imported games and, on a device with several profiles, carry the profile's name in the
 file name. _Reset everything_ clears this profile's progress, repertoires, library and imported games
 and the device settings, a downloaded full engine included, turns sync between devices off on this
 device first (so the synced copy and the other devices keep their data), and disconnects the
 profile's Lichess account (withdrawing the permission); the other profiles are kept, and the dialog
-says so. With sync between devices on, an import joins the backup with the synced data instead of
-replacing anything, and the dialog says that instead. **Sync between devices** and the **Lichess
+says so. With sync between devices on, an import joins the backup with this device's data and the
+synced data instead of replacing anything (an item that differs is kept twice, the backup's version
+as "… (backup)"), and the dialog says that instead; the device syncs first, so this needs a
+connection, and only what goes beyond the synced data is added. **Sync between devices** and the **Lichess
 account:** see below.
 
 ### The test lab
@@ -319,6 +324,9 @@ computer, with no account:
   and type or paste the words (numbering, line breaks and capitals are fine; a mistyped word is
   named, and a checksum catches the rest). A device with progress of its own chooses whether it
   joins the synced data (_Keep both_, the default) or makes way for it, with an export offered first.
+  _Keep both_ adds up what two devices did apart, and keeps the puzzle rating, with its chart, of
+  the one that rated a puzzle last. A device restored from the other's backup is recognised by the
+  history they share, so what they have in common is not counted twice.
 - **What syncs:** progress, ratings, lessons, flashcards, review schedules, repertoires and their
   cards, saved analyses and imported games — everything a backup holds. Device settings, the
   Lichess sign-in and the backup reminder stay on each device.
@@ -334,13 +342,18 @@ computer, with no account:
 - **Private by design.** The data is encrypted on the device (AES-256-GCM, with keys from the phrase
   by HKDF-SHA-256) before it leaves; the relay stores scrambled bytes under a random name — no
   account, email or device name — and never sees the phrase. A relay that altered a vault, swapped
-  one for another or rolled one back to an older copy would be caught.
+  one for another or rolled one back to an older copy would be caught. The phrase is the only key,
+  so the join dialog asks for one from the learner's own devices: whoever made a phrase can read
+  everything synced with it.
 - **Ending it:** _Turn off_ stops syncing on one device (its data stays); _Delete synced copy_
   deletes the encrypted copy, and every device keeps what it has — the others say so at their next
   sync. A synced copy no device has used for a year is deleted. _Reset everything_ turns sync off
   on the device before clearing it.
 - **Limits:** up to 1.4 MB of compressed data — far more than the app's own storage caps produce.
-  Data from a newer version of the app pauses the sync until the device is updated.
+  Data from a newer version of the app pauses the sync until the device is updated. When this
+  device's storage is full, syncing waits and says so: nothing it could not save is agreed with the
+  other devices, and it carries on once there is room. Offline it waits for the connection; when
+  the sync service cannot be reached, it says so and tries again a few minutes later.
 
 While sync between devices is on, the Lichess account sync leaves repertoires and analyses to it.
 The relay is a small Cloudflare Worker (or a Node server) in `relay/`; see `relay/README.md`.

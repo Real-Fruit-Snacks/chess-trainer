@@ -116,6 +116,22 @@ describe('progress store', () => {
     expect(useProgress.getState().importState({ nonsense: true }).ok).toBe(false);
   });
 
+  it('names the profile’s history in its first backup, and keeps that name', () => {
+    expect(useProgress.getState().lineage).toEqual([]);
+    const first = JSON.parse(useProgress.getState().exportState()) as {
+      progress: { lineage: string[] };
+    };
+    expect(first.progress.lineage).toHaveLength(1);
+    expect(first.progress.lineage[0]).toMatch(/^[A-Za-z0-9_-]{12}$/);
+    const second = JSON.parse(useProgress.getState().exportState()) as typeof first;
+    expect(second.progress.lineage).toEqual(first.progress.lineage);
+    // Restoring a backup restores its name with it.
+    useProgress.getState().resetAll();
+    expect(useProgress.getState().lineage).toEqual([]);
+    expect(useProgress.getState().importState(first).ok).toBe(true);
+    expect(useProgress.getState().lineage).toEqual(first.progress.lineage);
+  });
+
   it('queues missed puzzles for review and reschedules solves', () => {
     attempt('miss', 'failed');
     const card = useProgress.getState().puzzleReviews.miss;

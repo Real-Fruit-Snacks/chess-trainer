@@ -16,8 +16,11 @@ import { canonical } from './canonical';
 import type { SyncSnapshot } from './merge';
 import {
   applySnapshot,
+  emptySyncSnapshot,
   hasProgress,
+  noteRemoved,
   readSnapshotJson,
+  shareHistory,
   snapshotJson,
   takeSnapshot,
 } from './snapshot';
@@ -41,7 +44,7 @@ afterEach(() => {
 
 describe('snapshotJson and readSnapshotJson', () => {
   it('write a backup file the vault keeps, with its generation', () => {
-    const json = snapshotJson(fixtureSnapshot(), 7, new Date('2026-10-07T10:00:00Z'));
+    const json = snapshotJson(fixtureSnapshot(), 7, {}, new Date('2026-10-07T10:00:00Z'));
     const file = JSON.parse(json) as Record<string, unknown>;
     expect(file).toMatchObject({
       app: 'chess-trainer',
@@ -117,9 +120,112 @@ describe('takeSnapshot and applySnapshot', () => {
       links: { [`rep:${REP}`]: link('My London'), [`ana:${ANALYSIS}`]: link('Fixture analysis') },
       deleted: [],
     });
-    applySnapshot(deleteAnalysis(deleteRepertoire(fixture, REP), ANALYSIS), takeSnapshot());
+    const current = takeSnapshot();
+    const next = deleteAnalysis(deleteRepertoire(fixture, REP), ANALYSIS);
+    applySnapshot(next, current);
+    expect(useLichess.getState().deleted).toEqual([]);
+    noteRemoved(next, current);
     expect(useLichess.getState().deleted.sort()).toEqual([`ana:${ANALYSIS}`, `rep:${REP}`]);
     expect(useRepertoire.getState().custom).toEqual([]);
+  });
+});
+
+describe('shareHistory', () => {
+  it('tells devices restored from one backup from devices used apart', () => {
+    const shared = fixtureSnapshot();
+    expect(shareHistory(solvePuzzle(shared, 'a', 1_791_000_000_000), shared)).toBe(true);
+    const apart = solvePuzzle(emptySnapshot(), 'b', 1_791_000_000_000);
+    expect(shareHistory(apart, shared)).toBe(false);
+    expect(shareHistory(emptySnapshot(), shared)).toBe(false);
+    // The same Lichess game imported on both devices is not shared history.
+    const imported = emptySnapshot();
+    imported.games = shared.games;
+    expect(shareHistory(imported, shared)).toBe(false);
+  });
+
+  it('takes only copies for shared history, not what reaches both devices otherwise', () => {
+    const T = 1_791_000_000_000;
+    const laptop = fixtureSnapshot();
+    const phone = solvePuzzle(emptySnapshot(), 'b', T);
+    // Repertoires and analyses the Lichess studies brought: new ids, made there and then.
+    phone.repertoire.custom = laptop.repertoire.custom.map((r) => ({
+      ...r,
+      id: `${r.id}-pulled`,
+      createdAt: T,
+    }));
+    phone.analyses.items = Object.fromEntries(
+      Object.values(laptop.analyses.items).map((a) => [
+        `${a.id}-pulled`,
+        { ...a, id: `${a.id}-pulled`, createdAt: T },
+      ]),
+    );
+    expect(shareHistory(phone, laptop)).toBe(false);
+    // A game the laptop played and sent to Lichess, read back on the phone (without the id).
+    const sent = laptop.progress.games.find((g) => g.lichessId);
+    if (!sent) throw new Error('The fixture has no game sent to Lichess.');
+    const { lichessId, ...readBack } = sent;
+    expect(lichessId).toBeTruthy();
+    laptop.progress.games = [sent];
+    phone.progress.games = [readBack];
+    expect(shareHistory(phone, laptop)).toBe(false);
+    // A puzzle both made from the same game: the id comes from the position, the moment not.
+    const own = {
+      id: 'own-abc123',
+      fen: '8/8/8/8/8/8/8/K6k w - - 0 1',
+      moves: 'a1a2 h1h2',
+      rating: 1500,
+      rd: 100,
+      popularity: 0,
+      plays: 0,
+      themes: 'fork',
+      url: '',
+      source: { title: 'A game', ply: 20, played: 'Kb1', judgement: 'blunder' as const, loss: 0.4 },
+      createdAt: T - 1000,
+    };
+    laptop.progress.ownPuzzles = { [own.id]: own };
+    phone.progress.ownPuzzles = { [own.id]: { ...own, createdAt: T } };
+    expect(shareHistory(phone, laptop)).toBe(false);
+    // Copies, as a restored backup has them, are shared history, however old the logs are.
+    const copies: ((s: SyncSnapshot) => void)[] = [
+      (s) => {
+        s.repertoire.custom = laptop.repertoire.custom;
+      },
+      (s) => {
+        s.analyses.items = laptop.analyses.items;
+      },
+      (s) => {
+        s.progress.ownPuzzles = laptop.progress.ownPuzzles;
+      },
+    ];
+    for (const copy of copies) {
+      const restored = structuredClone(phone);
+      copy(restored);
+      expect(shareHistory(restored, laptop)).toBe(true);
+    }
+    // And so is a game without a trip through Lichess: only a backup gives it to both.
+    laptop.progress.games = [readBack];
+    expect(shareHistory(phone, laptop)).toBe(true);
+  });
+
+  it('takes a history id the two have in common for shared history, whatever the logs', () => {
+    let at = 1_791_000_000_000;
+    // Profiles with nothing else in common: each its own puzzle, at its own moment.
+    const named = (lineage: string[]) => {
+      at += 60_000;
+      const s = solvePuzzle(emptySnapshot(), `p-${at}`, at);
+      s.progress.lineage = lineage;
+      return s;
+    };
+    expect(shareHistory(named(['profile-a1']), named(['profile-a1']))).toBe(true);
+    expect(shareHistory(named(['profile-a1', 'profile-b2']), named(['profile-b2']))).toBe(true);
+    expect(shareHistory(named(['profile-a1']), named(['profile-b2']))).toBe(false);
+    expect(shareHistory(named([]), named([]))).toBe(false);
+  });
+
+  it('starts from an empty profile', () => {
+    const empty = emptySyncSnapshot();
+    expect(hasProgress(empty)).toBe(false);
+    expect(canonical(empty)).toBe(canonical(emptySnapshot()));
   });
 });
 

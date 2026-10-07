@@ -7,18 +7,22 @@ import {
   type GameRecord,
   keepReviewedPuzzles,
   type LessonProgress,
-  type OddsLadderState,
+  type LichessRoundCount,
   MAX_ATTEMPTS,
   MAX_GAMES,
   MAX_HISTORY,
+  MAX_LICHESS_ROUNDS,
+  MAX_LINEAGE,
   MAX_OWN_PUZZLES,
   MAX_RECENT_THREATS,
   MAX_RUSH_RUNS,
   MAX_SELF_REVIEWS,
   MAX_TRAINING_DAYS,
+  type OddsLadderState,
   type PersistedProgress,
   pruneSeen,
   repairProgress,
+  type ThemeStat,
 } from '@/store/progress';
 import type { PersistedRepertoire } from '@/store/repertoire';
 import type { PuzzleReviewCard } from '@/lib/puzzleReview';
@@ -34,17 +38,25 @@ import { canonical, same } from './canonical';
  *
  * - logs (puzzle attempts, rating points, games, training days) join;
  * - counters (puzzles solved, plays, theme statistics) add up both sides'
- *   increments — remote plus what this device added since the base;
+ *   increments — remote plus what this device added since the base — even
+ *   inside a record both sides changed alike, since two devices that each
+ *   solved one fork puzzle solved two; a round from the Lichess history that
+ *   both devices brought in counts once (`lichessRounds`);
  * - bests take the higher, firsts the earlier, lasts the later;
  * - schedules keep the card reviewed last (or, for the puzzle queue, the one
  *   with more misses, so nothing is let off a review);
  * - a repertoire or analysis edited on both sides is kept twice, the other
  *   version as "(other device)", so no work is lost.
  *
- * Without a base (a device joining with progress of its own) nothing can be
- * known to have been deleted: everything joins, and counters take the larger.
- * Every rule gives the same answer whichever side is local, so two devices
- * that merge the same versions end up with the same data.
+ * A device joining with progress of its own merges without a shared version.
+ * If the two have no history in common (used apart until now), an empty
+ * profile serves as the base, so their counts add up (`independent`). If they
+ * share some (one was restored from the other's backup, say), nothing can be
+ * known to have been deleted or counted already: everything joins, and
+ * counters take the larger (no base). Either way the puzzle rating, which
+ * cannot be added, is the one rated last, with its history. Every rule gives
+ * the same answer whichever side is local, so two devices that merge the same
+ * versions end up with the same data.
  */
 
 export interface SyncSnapshot {
@@ -52,6 +64,21 @@ export interface SyncSnapshot {
   repertoire: PersistedRepertoire;
   analyses: { items: Record<string, SavedAnalysis> };
   games: { games: Record<string, StoredGame>; player: string };
+}
+
+export interface MergeOptions {
+  /**
+   * The base is not a version both sides had but an empty profile: two
+   * devices used apart, joining. Their counts add up; the rating is the one
+   * rated last.
+   */
+  independent?: boolean;
+  /**
+   * The other side is not a device but data brought in here, named so (an
+   * imported backup): this device's version of an item changed on both sides
+   * keeps its id, and the other is kept as "… (<incoming>)".
+   */
+  incoming?: string;
 }
 
 /**
@@ -109,6 +136,25 @@ function pick<T>(
     if (same(remote, base)) return local;
   }
   return resolve(local, remote);
+}
+
+/**
+ * Like `pick`, but two sides that changed alike both count: `resolve` adds up
+ * what each added (for a value that holds counters).
+ */
+function combine<T>(
+  hasBase: boolean,
+  base: T | undefined,
+  local: T,
+  remote: T,
+  resolve: (local: T, remote: T) => T,
+): T {
+  if (hasBase) {
+    if (same(local, base)) return remote;
+    if (same(remote, base)) return local;
+    return resolve(local, remote);
+  }
+  return same(local, remote) ? local : resolve(local, remote);
 }
 
 /** A count both sides add to: the remote count plus this device's increments since the base. */
@@ -193,23 +239,26 @@ function fingerprint(value: unknown): string {
 
 /**
  * Items both sides edited: the winner keeps its id, the other version is kept
- * beside it as a copy, under an id and name every device derives the same.
+ * beside it as a copy, under an id and name every device derives the same —
+ * "(other device)", or with data brought in (`incoming`), this device's
+ * version wins and the copy is named after where the other came from.
  */
 function keepBoth<T extends { id: string; name: string }>(
   base: Record<string, T> | undefined,
   local: Record<string, T>,
   remote: Record<string, T>,
   winner: (a: T, b: T) => T,
+  incoming: string | undefined,
 ): Record<string, T> {
   const copies: T[] = [];
   const merged = mergeRecord(base, local, remote, (was, here, there) =>
     pick(base !== undefined, was, here, there, (a, b) => {
-      const kept = winner(a, b);
+      const kept = incoming === undefined ? winner(a, b) : a;
       const other = kept === a ? b : a;
       copies.push({
         ...other,
         id: `${other.id}~${fingerprint(other)}`,
-        name: `${other.name} (other device)`,
+        name: `${other.name} (${incoming ?? 'other device'})`,
       });
       return kept;
     }),
@@ -221,6 +270,50 @@ function keepBoth<T extends { id: string; name: string }>(
 /* ------------------------------------------------------------------ */
 /* Progress                                                           */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Rounds from the Lichess history counted on both sides since the base: both
+ * devices read the same history before either's sync brought the other's
+ * count, or one counted from Lichess a puzzle the other played itself (and
+ * sent there). One round each, which the theme statistics then hold twice.
+ */
+function countedTwice(
+  base: PersistedProgress,
+  l: PersistedProgress,
+  r: PersistedProgress,
+): LichessRoundCount[] {
+  const before = new Set(base.lichessRounds.map((round) => round.id));
+  const fresh = (p: PersistedProgress) =>
+    new Map(p.lichessRounds.filter((round) => !before.has(round.id)).map((x) => [x.id, x]));
+  const freshL = fresh(l);
+  const freshR = fresh(r);
+  const counted = (p: PersistedProgress, mine: Map<string, LichessRoundCount>, id: string) =>
+    mine.has(id) || (id in p.seen && !(id in base.seen));
+  const twice: LichessRoundCount[] = [];
+  for (const [id, round] of new Map([...freshL, ...freshR])) {
+    if (counted(l, freshL, id) && counted(r, freshR, id)) twice.push(round);
+  }
+  return twice;
+}
+
+/** Theme statistics with the given rounds taken out once each. */
+function withoutRounds(
+  stats: Record<string, ThemeStat>,
+  rounds: readonly LichessRoundCount[],
+): Record<string, ThemeStat> {
+  if (rounds.length === 0) return stats;
+  const out = { ...stats };
+  for (const round of rounds) {
+    for (const theme of round.themes.split(' ').filter(Boolean)) {
+      const stat = out[theme];
+      if (!stat) continue;
+      out[theme] = round.win
+        ? { ...stat, solved: Math.max(0, stat.solved - 1) }
+        : { ...stat, failed: Math.max(0, stat.failed - 1) };
+    }
+  }
+  return out;
+}
 
 /** The puzzle queue: more misses win (nothing is let off a review), then further along, then sooner. */
 function reviewCard(a: PuzzleReviewCard, b: PuzzleReviewCard): PuzzleReviewCard {
@@ -272,15 +365,21 @@ function mergeProgressFields(
   b: PersistedProgress | null,
   l: PersistedProgress,
   r: PersistedProgress,
+  independent: boolean,
 ): PersistedProgress {
   const has = b !== null;
   const base = b ?? undefined;
+  /** A counter inside a record: what both sides added since the base (a key new there counts from 0). */
+  const counter = (was: number | undefined, x: number, y: number) =>
+    count(has ? (was ?? 0) : undefined, x, y);
   const lastRated = later(l, r, (p) => p.lastRatedAt);
+  // Both sides' ratings grew from the base's: their changes can be added up.
+  const sharedRating = b !== null && !independent;
 
   // Both sides' rating changes count. Two devices on the same rating agree, though: with
   // "Puzzle rating from Lichess" on, each takes the same rating from Lichess, and adding
   // those two changes would push the rating past it, and back, sync after sync.
-  const puzzleRating = b
+  const puzzleRating = sharedRating
     ? pick(true, b.puzzleRating, l.puzzleRating, r.puzzleRating, (x, y) =>
         Math.round(x + y - b.puzzleRating),
       )
@@ -315,10 +414,10 @@ function mergeProgressFields(
     ...l,
     onboarded: pick(has, base?.onboarded, l.onboarded, r.onboarded, (x, y) => x || y),
     puzzleRating,
-    puzzleRd: has
+    puzzleRd: sharedRating
       ? pick(true, base?.puzzleRd, l.puzzleRd, r.puzzleRd, Math.min)
       : lastRated.puzzleRd,
-    puzzleVolatility: has
+    puzzleVolatility: sharedRating
       ? pick(
           true,
           base?.puzzleVolatility,
@@ -347,9 +446,12 @@ function mergeProgressFields(
       return progress(x) !== progress(y) ? (progress(x) > progress(y) ? x : y) : either(x, y);
     }),
     ratedAttempts: count(base?.ratedAttempts, l.ratedAttempts, r.ratedAttempts),
-    ratingHistory: join(l.ratingHistory, r.ratingHistory, (p) => `${p.at}:${p.rating}`)
-      .sort((x, y) => x.at - y.at || x.rating - y.rating)
-      .slice(-MAX_HISTORY),
+    // Two ratings that grew apart would zigzag on one chart: the one kept keeps its own.
+    ratingHistory: sharedRating
+      ? join(l.ratingHistory, r.ratingHistory, (p) => `${p.at}:${p.rating}`)
+          .sort((x, y) => x.at - y.at || x.rating - y.rating)
+          .slice(-MAX_HISTORY)
+      : lastRated.ratingHistory.slice(-MAX_HISTORY),
     attempts: join(l.attempts, r.attempts, (a) => `${a.id}:${a.at}`)
       .sort((x, y) => y.at - x.at || (x.id < y.id ? -1 : 1))
       .slice(0, MAX_ATTEMPTS),
@@ -379,30 +481,38 @@ function mergeProgressFields(
     games: join(l.games, r.games, (g) => g.id, mergeGameRecord)
       .sort((x, y) => y.at - x.at || (x.id < y.id ? -1 : 1))
       .slice(0, MAX_GAMES),
-    themeStats: mergeRecord(
-      has ? (base?.themeStats ?? {}) : undefined,
-      l.themeStats,
-      r.themeStats,
-      (was, x, y) =>
-        pick(has, was, x, y, () => ({
-          solved: count(has ? (was?.solved ?? 0) : undefined, x.solved, y.solved),
-          failed: count(has ? (was?.failed ?? 0) : undefined, x.failed, y.failed),
-        })),
+    themeStats: withoutRounds(
+      mergeRecord(
+        has ? (base?.themeStats ?? {}) : undefined,
+        l.themeStats,
+        r.themeStats,
+        (was, x, y) => ({
+          solved: counter(was?.solved, x.solved, y.solved),
+          failed: counter(was?.failed, x.failed, y.failed),
+        }),
+      ),
+      b ? countedTwice(b, l, r) : [],
     ),
+    // Every history merged into the profile is part of it from then on.
+    lineage: [...new Set([...l.lineage, ...r.lineage])].sort().slice(0, MAX_LINEAGE),
+    lichessRounds: join(l.lichessRounds, r.lichessRounds, (round) => round.id)
+      .sort((x, y) => x.at - y.at || (x.id < y.id ? -1 : 1))
+      .slice(-MAX_LICHESS_ROUNDS),
     rushRuns: join(l.rushRuns, r.rushRuns, (run) => `${run.at}:${run.mode}:${run.score}`)
       .sort((x, y) => y.at - x.at || y.score - x.score)
       .slice(0, MAX_RUSH_RUNS),
-    drills: mergeRecord(base?.drills, l.drills, r.drills, (was, x, y) =>
-      pick(has, was, x, y, () => {
+    drills: mergeRecord(base?.drills, l.drills, r.drills, (was, x, y) => ({
+      ...pick(has, was, x, y, () => {
         const top = x.best !== y.best ? (x.best > y.best ? x : y) : later(x, y, (d) => d.lastAt);
         const drill = {
           best: Math.max(x.best, y.best),
-          attempts: count(has ? (was?.attempts ?? 0) : undefined, x.attempts, y.attempts),
+          attempts: 0,
           lastAt: Math.max(x.lastAt, y.lastAt),
         };
         return top.detail === undefined ? drill : { ...drill, detail: top.detail };
       }),
-    ),
+      attempts: counter(was?.attempts, x.attempts, y.attempts),
+    })),
     guessGames: mergeRecord(base?.guessGames, l.guessGames, r.guessGames, (was, x, y) =>
       pick(has, was, x, y, () =>
         x.score !== y.score ? (x.score > y.score ? x : y) : either(x, y),
@@ -414,24 +524,26 @@ function mergeProgressFields(
       .slice(-MAX_TRAINING_DAYS),
     ownPuzzles: Object.fromEntries(ownKept.map((p) => [p.id, p])),
     lessonRecall: mergeReviews(base?.lessonRecall, l.lessonRecall, r.lessonRecall),
-    studies: mergeRecord(base?.studies, l.studies, r.studies, (was, x, y) =>
-      pick(has, was, x, y, () => ({
+    studies: mergeRecord(base?.studies, l.studies, r.studies, (was, x, y) => ({
+      ...pick(has, was, x, y, () => ({
         solvedAt: minOf(x.solvedAt, y.solvedAt),
-        attempts: count(has ? (was?.attempts ?? 0) : undefined, x.attempts, y.attempts),
+        attempts: 0,
         clean: x.clean || y.clean,
       })),
-    ),
-    arcade: mergeRecord(base?.arcade, l.arcade, r.arcade, (was, x, y) =>
-      pick(has, was, x, y, () => {
+      attempts: counter(was?.attempts, x.attempts, y.attempts),
+    })),
+    arcade: mergeRecord(base?.arcade, l.arcade, r.arcade, (was, x, y) => ({
+      ...pick(has, was, x, y, () => {
         const top = x.best !== y.best ? (x.best > y.best ? x : y) : later(x, y, (a) => a.lastAt);
         const game = {
           best: Math.max(x.best, y.best),
-          plays: count(has ? (was?.plays ?? 0) : undefined, x.plays, y.plays),
+          plays: 0,
           lastAt: Math.max(x.lastAt, y.lastAt),
         };
         return top.detail === undefined ? game : { ...game, detail: top.detail };
       }),
-    ),
+      plays: counter(was?.plays, x.plays, y.plays),
+    })),
     dailyOpening: pick(has, base?.dailyOpening, l.dailyOpening, r.dailyOpening, (x, y) => {
       if (x === null || y === null) return x ?? y;
       const rank = (d: typeof x) => (d.result === 'solved' ? 2 : d.result === 'failed' ? 1 : 0);
@@ -449,22 +561,9 @@ function mergeProgressFields(
       }
       return { ...day, bestStreak: Math.max(x.bestStreak, y.bestStreak), history };
     }),
-    oddsLadder: pick<OddsLadderState>(has, base?.oddsLadder, l.oddsLadder, r.oddsLadder, (x, y) => {
-      const was = base?.oddsLadder.results;
-      const results: OddsLadderState['results'] = {};
-      for (const key of new Set([...Object.keys(x.results), ...Object.keys(y.results)])) {
-        const rung = Number(key);
-        const before = was?.[rung];
-        const mine = x.results[rung];
-        const theirs = y.results[rung];
-        const at = (side: typeof mine, field: 'wins' | 'losses' | 'draws') =>
-          side?.[field] ?? before?.[field] ?? 0;
-        const tally = (field: 'wins' | 'losses' | 'draws') =>
-          count(has ? (before?.[field] ?? 0) : undefined, at(mine, field), at(theirs, field));
-        results[rung] = { wins: tally('wins'), losses: tally('losses'), draws: tally('draws') };
-      }
-      return { rung: Math.max(x.rung, y.rung), best: Math.max(x.best, y.best), results };
-    }),
+    oddsLadder: combine(has, base?.oddsLadder, l.oddsLadder, r.oddsLadder, (x, y) =>
+      mergeOddsLadder(base?.oddsLadder, x, y, has),
+    ),
     ladderHeight: pick(has, base?.ladderHeight, l.ladderHeight, r.ladderHeight, Math.max),
     bestStreak: pick(has, base?.bestStreak, l.bestStreak, r.bestStreak, Math.max),
     lifetime: {
@@ -493,19 +592,13 @@ function mergeProgressFields(
       r.tourDismissed,
       (x, y) => x || y,
     ),
-    lichessUsername: pick(
-      has,
-      base?.lichessUsername,
-      l.lichessUsername,
-      r.lichessUsername,
-      (x) => x,
-    ),
+    lichessUsername: pick(has, base?.lichessUsername, l.lichessUsername, r.lichessUsername, either),
     chesscomUsername: pick(
       has,
       base?.chesscomUsername,
       l.chesscomUsername,
       r.chesscomUsername,
-      (x) => x,
+      either,
     ),
     blind: {
       levels: pick(
@@ -558,21 +651,26 @@ function mergeProgressFields(
         l.threatStats.recent,
         r.threatStats.recent,
         (x, y) => {
-          const seen = new Set(x);
-          return [...x, ...y.filter((id) => !seen.has(id))].slice(-MAX_RECENT_THREATS);
+          // Both lists, in an order every device derives alike.
+          const [first, second] = either(x, y) === x ? [x, y] : [y, x];
+          const seen = new Set(first);
+          return [...first, ...second.filter((id) => !seen.has(id))].slice(-MAX_RECENT_THREATS);
         },
       ),
     },
     ownThreats: capOwnThreats(
-      mergeRecord(base?.ownThreats, l.ownThreats, r.ownThreats, (was, x, y) =>
-        pick(has, was, x, y, (p, q) =>
+      mergeRecord(base?.ownThreats, l.ownThreats, r.ownThreats, (was, x, y) => ({
+        // The streak and the rest from the side that drilled it more; the tallies add up.
+        ...pick(has, was, x, y, (p, q) =>
           p.found + p.missed !== q.found + q.missed
             ? p.found + p.missed > q.found + q.missed
               ? p
               : q
             : either(p, q),
         ),
-      ),
+        found: counter(was?.found, x.found, y.found),
+        missed: counter(was?.missed, x.missed, y.missed),
+      })),
     ),
     selfReview: {
       games: count(base?.selfReview.games, l.selfReview.games, r.selfReview.games),
@@ -609,6 +707,32 @@ function mergeProgressFields(
   };
 }
 
+/** The odds ladder: the rung moved on either side (the higher if both), each rung's games added up. */
+function mergeOddsLadder(
+  base: OddsLadderState | undefined,
+  x: OddsLadderState,
+  y: OddsLadderState,
+  has: boolean,
+): OddsLadderState {
+  const results: OddsLadderState['results'] = {};
+  for (const key of new Set([...Object.keys(x.results), ...Object.keys(y.results)])) {
+    const rung = Number(key);
+    const before = base?.results[rung];
+    const mine = x.results[rung];
+    const theirs = y.results[rung];
+    const at = (side: typeof mine, field: 'wins' | 'losses' | 'draws') =>
+      side?.[field] ?? before?.[field] ?? 0;
+    const tally = (field: 'wins' | 'losses' | 'draws') =>
+      count(has ? (before?.[field] ?? 0) : undefined, at(mine, field), at(theirs, field));
+    results[rung] = { wins: tally('wins'), losses: tally('losses'), draws: tally('draws') };
+  }
+  return {
+    rung: pick(has, base?.rung, x.rung, y.rung, Math.max),
+    best: pick(has, base?.best, x.best, y.best, Math.max),
+    results,
+  };
+}
+
 /** One game recorded on two devices: the same record, with its Lichess id once either sent it. */
 function mergeGameRecord(a: GameRecord, b: GameRecord): GameRecord {
   const kept = either(a, b);
@@ -625,12 +749,13 @@ export function mergeProgress(
   base: PersistedProgress | null,
   local: PersistedProgress,
   remote: PersistedProgress,
+  { independent = false }: MergeOptions = {},
 ): PersistedProgress {
   // The store's own repair puts the result in order: the lifetime counts never
   // fall below the attempt list, the best streak covers the days, and so on.
   return {
     ...local,
-    ...repairProgress(mergeProgressFields(base, local, remote)),
+    ...repairProgress(mergeProgressFields(base, local, remote, independent)),
   };
 }
 
@@ -650,6 +775,7 @@ export function mergeRepertoire(
   base: PersistedRepertoire | null,
   local: PersistedRepertoire,
   remote: PersistedRepertoire,
+  incoming?: string,
 ): PersistedRepertoire {
   const has = base !== null;
   const byId = (list: PersistedRepertoire['custom']) =>
@@ -659,6 +785,7 @@ export function mergeRepertoire(
     byId(local.custom),
     byId(remote.custom),
     either,
+    incoming,
   );
   return {
     cards: mergeRecord(base?.cards, local.cards, remote.cards, (was, x, y) =>
@@ -677,10 +804,17 @@ export function mergeAnalyses(
   base: SyncSnapshot['analyses'] | null,
   local: SyncSnapshot['analyses'],
   remote: SyncSnapshot['analyses'],
+  incoming?: string,
 ): SyncSnapshot['analyses'] {
   return {
     items: capAnalyses(
-      keepBoth(base?.items, local.items, remote.items, (a, b) => later(a, b, (x) => x.updatedAt)),
+      keepBoth(
+        base?.items,
+        local.items,
+        remote.items,
+        (a, b) => later(a, b, (x) => x.updatedAt),
+        incoming,
+      ),
     ),
   };
 }
@@ -705,7 +839,7 @@ export function mergeGames(
   );
   return {
     games: capGames(games).games,
-    player: pick(has, base?.player, local.player, remote.player, (x) => x),
+    player: pick(has, base?.player, local.player, remote.player, either),
   };
 }
 
@@ -714,11 +848,18 @@ export function mergeSnapshots(
   base: SyncSnapshot | null,
   local: SyncSnapshot,
   remote: SyncSnapshot,
+  options: MergeOptions = {},
 ): SyncSnapshot {
+  const { incoming } = options;
   return {
-    progress: mergeProgress(base?.progress ?? null, local.progress, remote.progress),
-    repertoire: mergeRepertoire(base?.repertoire ?? null, local.repertoire, remote.repertoire),
-    analyses: mergeAnalyses(base?.analyses ?? null, local.analyses, remote.analyses),
+    progress: mergeProgress(base?.progress ?? null, local.progress, remote.progress, options),
+    repertoire: mergeRepertoire(
+      base?.repertoire ?? null,
+      local.repertoire,
+      remote.repertoire,
+      incoming,
+    ),
+    analyses: mergeAnalyses(base?.analyses ?? null, local.analyses, remote.analyses, incoming),
     games: mergeGames(base?.games ?? null, local.games, remote.games),
   };
 }

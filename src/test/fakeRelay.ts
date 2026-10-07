@@ -15,6 +15,11 @@ export interface FakeRelay {
   requests: { method: string; status: number }[];
   /** Runs before a request reaches the relay: to slip another device's write in first, say. */
   beforeRequest: ((method: string) => Promise<void> | void) | null;
+  /**
+   * Whether the answer to a request the relay handled is lost on its way back
+   * (a dropped connection, the app closed): the device then sees a network error.
+   */
+  loseAnswer: ((method: string) => boolean) | null;
   /** Starts the relay over with other options (the vaults stay). */
   reconfigure(options: Omit<RelayOptions, 'store'>): void;
   /** How many writes reached the relay. */
@@ -31,6 +36,7 @@ export function installFakeRelay(options: Omit<RelayOptions, 'store'> = {}): Fak
     offline: false,
     requests: [],
     beforeRequest: null,
+    loseAnswer: null,
     reconfigure: (next) => {
       handle = make(next);
     },
@@ -51,6 +57,7 @@ export function installFakeRelay(options: Omit<RelayOptions, 'store'> = {}): Fak
         new Request(url, { method, headers: init.headers, body: init.body ?? null }),
       );
       relay.requests.push({ method, status: response.status });
+      if (relay.loseAnswer?.(method)) throw new TypeError('Failed to fetch');
       return response;
     }),
   );

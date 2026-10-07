@@ -41,7 +41,10 @@ The data is a backup file, sealed:
 A relay that alters a vault, or swaps one vault for another, is caught when
 the app opens it. Each write also seals a generation number, one more than the
 last. A device refuses a copy older than one it has already seen, so a relay
-cannot roll the data back either. See `src/lib/sync/vaultCrypto.ts` and
+cannot roll the data back either. Sealed with them is each device's latest
+write, under a random id the device makes for itself: a device whose write's
+answer was lost learns from the next read whether it went through. The relay
+sees none of it. See `src/lib/sync/vaultCrypto.ts` and
 `src/lib/sync/deviceSync.ts`.
 
 ## API
@@ -93,16 +96,38 @@ Settings in `wrangler.jsonc` (`vars`):
 
 A cron runs once a day and deletes vaults unused for a year.
 
-The free plan allows 100,000 requests a day, and D1 100,000 written rows. A device makes a request
-when the app opens, a few seconds after each change, and every 5 minutes while the app is on screen,
-so a device in use all day makes a few hundred. If the relay outgrows the free plan, devices see a
-"could not be reached" or server error and try again later; Workers Paid lifts the limits.
+The Worker turns on the `nodejs_compat` flag for Node's `Buffer`. D1 keeps a
+vault as base64 text, and native base64 turns a full vault around in about
+2 ms, well inside the free plan's 10 ms of CPU per request.
+
+The free plan allows 100,000 requests a day, and D1 100,000 written rows. A
+device makes a request when the app opens, a few seconds after each change, and
+every 5 minutes while the app is on screen, so a device in use all day makes a
+few hundred. If the relay outgrows the free plan, devices see a "could not be
+reached" or server error and try again later; Workers Paid lifts the limits.
 
 To check it works:
 
 ```sh
 curl https://chess-trainer-sync.<your-subdomain>.workers.dev/v1/health
 ```
+
+### Optional: fewer new vaults per address
+
+Anyone can make vaults, since there are no accounts, and a script could fill the
+database with them. To limit how many vaults each address can create, add a
+rate-limiting binding called `NEW_VAULTS` to `wrangler.jsonc`, then deploy again:
+
+```jsonc
+"ratelimits": [
+  { "name": "NEW_VAULTS", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
+]
+```
+
+Each address may then create 10 vaults a minute (Wrangler 4.36 or later reads
+the binding). Reading and writing existing vaults is not limited, and Cloudflare
+counts at each of its locations separately. Cloudflare does not say which plans
+include the binding, so it is not in the default config.
 
 ## Host it yourself
 
@@ -120,6 +145,9 @@ node relay/src/server.mjs --port 8787 --db relay.db --origin https://you.github.
 | `--db`        | `relay.db`  | the SQLite file (`:memory:` keeps nothing)           |
 | `--origin`    | any         | the app's origin; repeat it, or separate with commas |
 | `--max-bytes` | 1,400,000   | the largest vault accepted                           |
+
+A request body is kept only up to the vault limit, and the rest is dropped as it
+arrives, so an endless upload cannot fill the memory.
 
 Put it behind HTTPS (a reverse proxy such as Caddy or nginx). An app served over
 HTTPS can only reach an HTTPS relay; `localhost` is the one exception. Then

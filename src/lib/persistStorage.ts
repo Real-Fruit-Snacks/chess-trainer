@@ -97,11 +97,39 @@ export const STORAGE_FULL_MESSAGE =
 /** The id of the sticky "storage is full" toast while it is on screen. */
 let warningToast: number | null = null;
 
+/** Writes refused for lack of space since the app started. */
+let refusals = 0;
+
+/** How many writes storage has refused for lack of space so far (a change means another did). */
+export const storageRefusals = (): number => refusals;
+
+/** While true, writes leave the storage's health and its messages alone (see `quietly`). */
+let quiet = false;
+
+/**
+ * Runs `task` without the usual bookkeeping of writes: a refused one is only
+ * counted (`storageRefusals`), not recorded as a failure or announced, and one
+ * that fits does not count as room made. Device sync applies a merge this way
+ * and, when it does not fit, takes it back and says so itself: storage then
+ * holds just what it held, and nothing of the learner's is waiting to be saved.
+ */
+export function quietly<T>(task: () => T): T {
+  const before = quiet;
+  quiet = true;
+  try {
+    return task();
+  } finally {
+    quiet = before;
+  }
+}
+
 function warningShowing(): boolean {
   return warningToast !== null && useToasts.getState().toasts.some((t) => t.id === warningToast);
 }
 
 function reportFull(key: string): void {
+  refusals++;
+  if (quiet) return;
   useStorageHealth.getState().markFull(key);
   // One sticky warning at a time: a second failing key does not add a second toast.
   if (warningShowing()) return;
@@ -149,6 +177,7 @@ export function repersistAll(): void {
  * nothing is pending the sticky warning goes and a short confirmation shows.
  */
 function recovered(key: string, now = Date.now()): void {
+  if (quiet) return;
   const health = useStorageHealth.getState();
   if (!health.full) return;
   health.markOk(key);

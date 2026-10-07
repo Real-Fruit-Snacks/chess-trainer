@@ -70,8 +70,15 @@ function DeviceSync() {
   // phrase leaves the address straight away, so it stays out of the history.
   useEffect(() => {
     if (!hash.startsWith(JOIN_PREFIX)) return;
-    const words = splitWords(decodeURIComponent(hash.slice(JOIN_PREFIX.length))).join(' ');
     void navigate({ hash: '' }, { replace: true });
+    const raw = hash.slice(JOIN_PREFIX.length);
+    let text = raw;
+    try {
+      text = decodeURIComponent(raw);
+    } catch {
+      // A mangled link: its words as they are (the dialog names any it cannot read).
+    }
+    const words = splitWords(text).join(' ');
     void (async () => {
       const current = await currentPhrase();
       if (current?.join(' ') === words) {
@@ -126,7 +133,7 @@ function DeviceSync() {
             )}
             <Button
               size="sm"
-              onClick={() => void syncNow()}
+              onClick={() => void syncNow({ asked: true })}
               disabled={status.phase === 'syncing' || !online}
               data-testid="sync-now"
             >

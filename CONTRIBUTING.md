@@ -145,6 +145,11 @@ precache outgrows its budget.
 - The Lichess sync is tested against a stand-in lichess.org (`src/test/fakeLichess.ts`) that answers
   as the Lichess server does; when the sync starts using another endpoint, add it there, following
   the server's code, and the unit and end-to-end tests can use it at once.
+- Sync between devices is tested against the real relay behind a `fetch` stub
+  (`src/test/fakeRelay.ts`, which can also drop answers), with stand-ins for the Cache API and Web
+  Locks (`fakeCaches.ts`, `fakeLocks.ts`) and for another device (`syncDevices.ts`). A change to
+  how the sync keeps or agrees its base needs a case in `src/lib/sync/integrity.test.ts` or
+  `restart.test.ts`: nothing may be counted twice, or taken for deleted, at any step.
 - Accessibility matters: every interactive element is keyboard reachable, status changes are announced
   through `role="status"`, and the layout works from 320 px wide upwards.
 - Follow the existing style — Prettier and ESLint enforce most of it (`npm run lint:fix`, `npm run format`).

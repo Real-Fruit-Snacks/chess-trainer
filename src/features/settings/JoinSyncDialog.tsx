@@ -72,9 +72,11 @@ export function JoinSyncDialog({
       open={open}
       onClose={onClose}
       title="Join with a recovery phrase"
+      // A join under way finishes either way: closing the dialog would not stop it.
+      dismissible={!busy}
       actions={(close) => (
         <>
-          <Button variant="secondary" onClick={close}>
+          <Button variant="secondary" onClick={close} disabled={busy}>
             Cancel
           </Button>
           <Button
@@ -116,6 +118,10 @@ export function JoinSyncDialog({
             />
           )}
         </Field>
+        <p className="small muted" style={{ margin: 0 }}>
+          Join only with a phrase from one of your own devices: whoever made it can read everything
+          this device syncs.
+        </p>
         {ownData ? (
           <>
             <div

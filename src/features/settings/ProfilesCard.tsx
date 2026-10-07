@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, Card, Icon, Input } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
-import { clearBase } from '@/lib/sync/base';
+import { dropCopies } from '@/lib/sync/base';
 import { activeProfile, nameTaken, useProfiles } from '@/store/profiles';
 
 /**
@@ -103,8 +103,8 @@ export function ProfilesCard() {
                         variant="danger"
                         onClick={() => {
                           remove(profile.id);
-                          // Its device-sync base goes too (its synced copy stays for other devices).
-                          void clearBase(profile.id);
+                          // Its device-sync copies go too (its synced copy stays for other devices).
+                          void dropCopies(profile.id);
                           setConfirmRemove(null);
                           toast(`Deleted the profile “${profile.name}” and its data.`);
                         }}

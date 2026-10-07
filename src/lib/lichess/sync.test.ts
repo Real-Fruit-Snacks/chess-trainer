@@ -131,6 +131,11 @@ describe('the account sync', () => {
     expect(Object.keys(useProgress.getState().seen)).toHaveLength(62);
     expect(useProgress.getState().puzzleReviews['6Mhmf']).toBeDefined();
     expect(useProgress.getState().lichessPuzzles['6Mhmf']?.fen).toBeDefined();
+    // The two rounds counted from the history are remembered, for device sync to count once.
+    expect(useProgress.getState().lichessRounds).toMatchObject([
+      { id: 'XuTO3', win: true, themes: 'promotion' },
+      { id: '6Mhmf', win: false, themes: 'mateIn2' },
+    ]);
     const games = useProgress.getState().games;
     expect(games.map((g) => g.id)).toContain('g-elsewhere');
     expect(games.find((g) => g.id !== 'g-elsewhere')?.lichessId).toMatch(/^gm/);

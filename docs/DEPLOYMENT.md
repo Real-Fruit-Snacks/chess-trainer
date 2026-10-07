@@ -100,8 +100,10 @@ sync sets `syncRelay` to `''`; one that hosts the relay itself runs `relay/src/s
 HTTPS (see `relay/README.md`).
 
 The relay stores only sealed vaults under random names, keeps no logs, and deletes vaults unused for
-a year. Moving the site to another address only needs the new origin in `ALLOWED_ORIGINS`: synced
-data is tied to the recovery phrase, not to the site.
+a year; `relay/README.md` shows how to cap the vaults each address can create. Moving the site to
+another address only needs the new origin in `ALLOWED_ORIGINS`: synced data is tied to the recovery
+phrase, not to the site. A new relay starts empty, though: after `syncRelay` changes, each device
+says its synced copy is gone and keeps its data, and turning sync on again starts a new phrase.
 
 ### Crash reports
 

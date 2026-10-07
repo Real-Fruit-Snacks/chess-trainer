@@ -7,8 +7,10 @@ import {
   capReviews,
   type GameRecord,
   keepReviewedPuzzles,
+  type LichessRoundCount,
   MAX_GAMES,
   MAX_HISTORY,
+  MAX_LICHESS_ROUNDS,
   MAX_TRAINING_DAYS,
   pruneSeen,
   type PuzzleOutcome,
@@ -52,10 +54,11 @@ export function adoptLichessRating(rating: number, rd: number, now = Date.now())
 
 /**
  * Brings in rounds from the Lichess puzzle history: puzzles not seen here
- * count as seen and join the theme statistics, their days count as training
- * days, and misses whose puzzle is at hand (in `puzzles`, or kept from
- * before) join the review queue. Returns how many puzzles were new here and
- * how many cards were added.
+ * count as seen and join the theme statistics (and the rounds counted, so
+ * device sync can tell a round two devices both brought in), their days count
+ * as training days, and misses whose puzzle is at hand (in `puzzles`, or kept
+ * from before) join the review queue. Returns how many puzzles were new here
+ * and how many cards were added.
  */
 export function mergeLichessRounds(
   rounds: readonly LichessRound[],
@@ -68,7 +71,7 @@ export function mergeLichessRounds(
   const ordered = [...rounds].sort((a, b) => a.date - b.date);
   const seen: Record<string, PuzzleOutcome> = { ...state.seen };
   let themeStats = state.themeStats;
-  let added = 0;
+  const counted: LichessRoundCount[] = [];
   const latest = new Map<string, LichessRound>();
   for (const round of ordered) {
     latest.set(round.id, round);
@@ -76,8 +79,9 @@ export function mergeLichessRounds(
     const outcome: PuzzleOutcome = round.win ? 'solved' : 'failed';
     seen[round.id] = outcome;
     themeStats = addThemeStats(themeStats, round.themes, outcome);
-    added++;
+    counted.push({ id: round.id, at: round.date, win: round.win, themes: round.themes });
   }
+  const added = counted.length;
   const lichessPuzzles = { ...state.lichessPuzzles };
   for (const puzzle of puzzles) lichessPuzzles[puzzle.id] = puzzle;
   const reviews = { ...state.puzzleReviews };
@@ -101,6 +105,12 @@ export function mergeLichessRounds(
   useProgress.setState({
     seen: pruneSeen(seen),
     themeStats,
+    lichessRounds:
+      counted.length === 0
+        ? state.lichessRounds
+        : [...state.lichessRounds, ...counted]
+            .sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1))
+            .slice(-MAX_LICHESS_ROUNDS),
     puzzleReviews,
     lichessPuzzles: keepReviewedPuzzles(lichessPuzzles, puzzleReviews),
     trainingDays,

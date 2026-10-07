@@ -27,8 +27,9 @@ function count(n: number, noun: string, plural = `${noun}s`): string {
  * Asks before a backup replaces the current data: what the file holds, a way
  * to export the current progress first, and the replacement itself, which can
  * be undone from the toast that follows. With device sync on, the backup joins
- * the synced data instead (nothing is deleted from the other devices), which
- * no undo could take back from them.
+ * this device's data and the synced data instead (nothing is replaced or
+ * deleted, here or on the other devices), which no undo could take back from
+ * them.
  */
 export function ImportBackupDialog({
   pending,
@@ -41,28 +42,50 @@ export function ImportBackupDialog({
   const summary = pending?.preview.summary;
   const synced = pending !== null && deviceSyncOn();
 
-  const confirm = () => {
+  const skipped = (n: number) =>
+    n ? ` ${count(n, 'damaged entry', 'damaged entries')} skipped.` : '';
+
+  const confirm = async () => {
     if (!pending) return;
+    // Asked again now: sync may have been turned on (in another tab) while this was open.
+    if (deviceSyncOn()) {
+      const joined = await import('@/lib/sync/deviceSync').then(
+        (sync) => sync.importIntoSync(pending.preview.shape),
+        () => ({ ok: false as const, reason: 'The import could not start. Try again.' }),
+      );
+      if (!joined.ok) {
+        toast(joined.reason, { tone: 'danger' });
+        return;
+      }
+      const dropped = skipped(pending.preview.summary.dropped);
+      toast(`Backup imported — it joins your synced data.${dropped}`, { tone: 'success' });
+      if (pending.preview.warning) {
+        toast(pending.preview.warning, { tone: 'warning', duration: 12000 });
+      }
+      return;
+    }
     const result = importWithUndo(pending.raw);
     if (!result.ok) {
       toast(result.reason, { tone: 'danger' });
       return;
     }
-    const dropped = result.summary.dropped
-      ? ` ${count(result.summary.dropped, 'damaged entry', 'damaged entries')} skipped.`
-      : '';
-    if (synced) {
-      toast(`Backup imported — it joins your synced data.${dropped}`, { tone: 'success' });
-      if (result.warning) toast(result.warning, { tone: 'warning', duration: 12000 });
-      return;
-    }
+    const dropped = skipped(result.summary.dropped);
     toast(`Backup imported — your data was replaced.${dropped}`, {
       tone: 'success',
       duration: 15000,
       actionLabel: 'Undo import',
       onAction: () => {
-        if (undoImport()) toast('Import undone: your previous data is back.', { tone: 'success' });
-        else toast('The previous data could not be restored.', { tone: 'danger' });
+        // Undoing replaces the data again, which sync between devices, if turned on since,
+        // would not take as a change to keep: the other devices would bring it back.
+        if (deviceSyncOn()) {
+          toast('Sync between devices is on now, so the import cannot be undone here.', {
+            tone: 'warning',
+          });
+        } else if (undoImport()) {
+          toast('Import undone: your previous data is back.', { tone: 'success' });
+        } else {
+          toast('The previous data could not be restored.', { tone: 'danger' });
+        }
       },
     });
     if (result.warning) toast(result.warning, { tone: 'warning', duration: 12000 });
@@ -83,7 +106,7 @@ export function ImportBackupDialog({
           <Button
             variant={synced ? 'primary' : 'danger'}
             onClick={() => {
-              confirm();
+              void confirm();
               close();
             }}
             data-testid="import-confirm"
@@ -104,9 +127,9 @@ export function ImportBackupDialog({
           </p>
           {synced ? (
             <p className="muted" style={{ margin: 0 }} data-testid="import-synced">
-              Sync between devices is on, so what the file holds joins the data on all your devices,
-              and nothing is deleted from them. To replace this device’s data with the file instead,
-              turn sync off here first.
+              Sync between devices is on, so what the file holds joins the data on all your devices:
+              nothing is replaced or deleted, here or on them. To replace this device’s data with
+              the file instead, turn sync off here first.
             </p>
           ) : (
             <p className="muted" style={{ margin: 0 }}>

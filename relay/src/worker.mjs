@@ -5,6 +5,9 @@
  *
  *   ALLOWED_ORIGINS  the app's origins, comma-separated ("*" for any)
  *   MAX_BYTES        the largest vault accepted, in bytes
+ *
+ * With a rate-limiting binding named NEW_VAULTS (optional, see ../README.md),
+ * each address may create only so many vaults a minute.
  */
 import { d1Store } from './d1Store.mjs';
 import { createRelay, DEFAULT_MAX_BYTES, expireVaults } from './handler.mjs';
@@ -24,8 +27,11 @@ function relayFor(env) {
   return relay;
 }
 
+/** @typedef {{ limit(options: { key: string }): Promise<{ success: boolean }> }} RateLimit */
+
 /** @param {Record<string, unknown>} env */
 function makeRelay(env) {
+  const newVaults = /** @type {RateLimit | undefined} */ (env.NEW_VAULTS);
   const origins = String(env.ALLOWED_ORIGINS ?? '*')
     .split(',')
     .map((origin) => origin.trim())
@@ -35,6 +41,12 @@ function makeRelay(env) {
     store: d1Store(env.DB),
     allowedOrigins: origins.length > 0 ? origins : ['*'],
     maxBytes: Number.isFinite(maxBytes) && maxBytes > 0 ? maxBytes : DEFAULT_MAX_BYTES,
+    allowCreate: newVaults
+      ? async (request) => {
+          const key = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+          return (await newVaults.limit({ key })).success;
+        }
+      : undefined,
   });
 }
 

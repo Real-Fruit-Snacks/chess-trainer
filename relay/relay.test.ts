@@ -77,8 +77,24 @@ const stores: [string, () => VaultStore][] = [
   ['d1', () => d1Store(fakeD1())],
 ];
 
+/** A body that arrives in pieces, with no Content-Length to go by. */
+function streamed(...pieces: number[]): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      for (const size of pieces) controller.enqueue(new Uint8Array(size).fill(7));
+      controller.close();
+    },
+  });
+}
+
 describe.each(stores)('the relay over the %s store', (_name, makeStore) => {
-  function setup(options: { maxBytes?: number; allowedOrigins?: string[] } = {}) {
+  function setup(
+    options: {
+      maxBytes?: number;
+      allowedOrigins?: string[];
+      allowCreate?: (request: Request) => boolean;
+    } = {},
+  ) {
     let clock = 1_000_000;
     const store = makeStore();
     const relay = createRelay({ store, now: () => clock, ...options });
@@ -183,6 +199,53 @@ describe.each(stores)('the relay over the %s store', (_name, makeStore) => {
     expect((await relay(request('GET', `/v1/vaults/${ID}`, { token: 'short' }))).status).toBe(401);
   });
 
+  it('stops reading a body as soon as it is too big, even without a Content-Length', async () => {
+    const { relay, store } = setup({ maxBytes: 10 });
+    let pulled = 0;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        controller.enqueue(new Uint8Array(4));
+      },
+    });
+    const put = (body: ReadableStream<Uint8Array>) =>
+      relay(
+        new Request(`${URL_BASE}/v1/vaults/${ID}`, {
+          method: 'PUT',
+          body,
+          duplex: 'half',
+          headers: { Authorization: `Bearer ${TOKEN}`, 'If-None-Match': '*' },
+        } as RequestInit),
+      );
+    expect((await put(endless)).status).toBe(413);
+    expect(pulled).toBeLessThan(10);
+    expect(await store.get(ID)).toBeNull();
+    // Pieces that add up to the limit are kept whole.
+    expect((await put(streamed(4, 4, 2))).status).toBe(201);
+    expect((await store.get(ID))?.data.byteLength).toBe(10);
+  });
+
+  it('asks before creating a vault, when told to (a limit on new vaults per address)', async () => {
+    let allow = false;
+    const { relay, tick } = setup({ allowCreate: () => allow });
+    const create = () =>
+      relay(
+        request('PUT', `/v1/vaults/${ID}`, { body: bytes(1), headers: { 'If-None-Match': '*' } }),
+      );
+    const refused = await create();
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('Retry-After')).toBe('60');
+    allow = true;
+    expect((await create()).status).toBe(201);
+    // Replacing a vault is not creating one.
+    allow = false;
+    tick(1_000);
+    const replaced = await relay(
+      request('PUT', `/v1/vaults/${ID}`, { body: bytes(2), headers: { 'If-Match': '"1"' } }),
+    );
+    expect(replaced.status).toBe(200);
+  });
+
   it('deletes a vault for its token only', async () => {
     const { relay } = setup();
     await relay(
@@ -238,9 +301,33 @@ describe('the relay entry points', () => {
     expect(await Promise.all(waits)).toEqual([0]);
   });
 
+  it('limits new vaults per address when the Worker has a NEW_VAULTS binding', async () => {
+    const keys: string[] = [];
+    const env = {
+      DB: fakeD1(),
+      NEW_VAULTS: {
+        limit: ({ key }: { key: string }) => {
+          keys.push(key);
+          return Promise.resolve({ success: keys.length <= 1 });
+        },
+      },
+    };
+    const create = (id: string) =>
+      worker.fetch(
+        request('PUT', `/v1/vaults/${id}`, {
+          body: bytes(1),
+          headers: { 'If-None-Match': '*', 'CF-Connecting-IP': '203.0.113.9' },
+        }),
+        env,
+      );
+    expect((await create('a'.repeat(43))).status).toBe(201);
+    expect((await create('b'.repeat(43))).status).toBe(429);
+    expect(keys).toEqual(['203.0.113.9', '203.0.113.9']);
+  });
+
   it('runs as a Node server', async () => {
-    const relay = createRelay({ store: memoryStore() });
-    const server = nodeServer(relay).listen(0, '127.0.0.1');
+    const relay = createRelay({ store: memoryStore(), maxBytes: 100 });
+    const server = nodeServer(relay, { maxBodyBytes: 100 }).listen(0, '127.0.0.1');
     await new Promise((resolve) => server.once('listening', resolve));
     const { port } = server.address() as AddressInfo;
     try {
@@ -256,6 +343,13 @@ describe('the relay entry points', () => {
       });
       expect(read.headers.get('etag')).toBe('"1"');
       expect(new Uint8Array(await read.arrayBuffer())).toEqual(bytes(7, 8, 9));
+      // A body too big is refused, and the server keeps no more of it than the limit.
+      const tooBig = await fetch(`${base}/v1/vaults/${'c'.repeat(43)}`, {
+        method: 'PUT',
+        body: new Uint8Array(200_000),
+        headers: { Authorization: `Bearer ${TOKEN}`, 'If-None-Match': '*' },
+      });
+      expect(tooBig.status).toBe(413);
     } finally {
       await new Promise((resolve) => server.close(resolve));
     }

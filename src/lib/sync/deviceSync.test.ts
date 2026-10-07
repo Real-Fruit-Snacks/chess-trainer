@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { siteConfig } from '@/site.config';
 import { EXPORT_VERSION } from '@/store/backupSchema';
+import { useAnalyses } from '@/store/analyses';
 import { useDeviceSyncStore } from '@/store/deviceSync';
 import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
 import { installFakeRelay, type FakeRelay } from '@/test/fakeRelay';
+import { otherDevice } from '@/test/syncDevices';
 import {
   deleteRepertoire,
   emptySnapshot,
@@ -25,47 +27,21 @@ import {
   useDeviceSync,
 } from './deviceSync';
 import { sameData, type SyncSnapshot } from './merge';
-import { phraseToSecret } from './phrase';
-import { deleteVault, readVault, writeVault } from './relayClient';
-import { applySnapshot, readSnapshotJson, snapshotJson, takeSnapshot } from './snapshot';
-import { deriveVaultKeys, openSnapshot, sealSnapshot } from './vaultCrypto';
+import { applySnapshot, snapshotJson, takeSnapshot } from './snapshot';
 
 const T = 1_791_000_000_000;
 const REP = 'custom-muofwy80-fruf';
 
+/** `snapshot` named as the synced profile is: turning sync on gives a profile its lineage. */
+function named(snapshot: SyncSnapshot): SyncSnapshot {
+  const lineage = useProgress.getState().lineage;
+  expect(lineage).toHaveLength(1);
+  return { ...snapshot, progress: { ...snapshot.progress, lineage } };
+}
+
 /** Puts a profile into the stores, as using the app would. */
 function load(snapshot: SyncSnapshot) {
   applySnapshot(snapshot, takeSnapshot());
-}
-
-/** Another device with the same phrase, talking to the relay directly. */
-async function otherDevice(words: readonly string[]) {
-  const check = await phraseToSecret(words.join(' '));
-  if (!check.ok) throw new Error(check.reason);
-  const keys = await deriveVaultKeys(check.secret);
-  const relay = siteConfig.syncRelay;
-  const read = async () => {
-    const vault = await readVault(relay, keys);
-    if (vault.status !== 'found') throw new Error(`The vault is ${vault.status}.`);
-    const parsed = readSnapshotJson(await openSnapshot(keys, vault.data));
-    if (!parsed.ok) throw new Error(parsed.reason);
-    return { ...parsed, etag: vault.etag, data: vault.data };
-  };
-  const writeJson = async (json: string, etag: string) => {
-    const result = await writeVault(relay, keys, await sealSnapshot(keys, json), etag);
-    if (!result.ok) throw new Error('Conflict');
-  };
-  return {
-    keys,
-    read,
-    /** Changes the synced data as a sync from that device would. */
-    async change(edit: (snapshot: SyncSnapshot) => SyncSnapshot) {
-      const current = await read();
-      await writeJson(snapshotJson(edit(current.snapshot), current.generation + 1), current.etag);
-    },
-    writeJson,
-    remove: () => deleteVault(relay, keys),
-  };
 }
 
 let relay: FakeRelay;
@@ -118,6 +94,22 @@ describe('syncing', () => {
     relay.requests = [];
     await syncNow();
     expect(relay.requests).toEqual([{ method: 'GET', status: 204 }]);
+  });
+
+  it('does not keep sending what the vault would not keep (a damaged entry)', async () => {
+    await turnOn();
+    // Entries the backup schema refuses, as a damaged save might hold.
+    const attempts = useProgress.getState().attempts;
+    useProgress.setState({
+      attempts: [{ id: 'broken' } as unknown as (typeof attempts)[number], ...attempts],
+    });
+    const items = useAnalyses.getState().items;
+    useAnalyses.setState({
+      items: { ...items, broken: { id: 'broken' } as unknown as (typeof items)[string] },
+    });
+    await syncNow();
+    await syncNow();
+    expect(relay.puts()).toBe(1);
   });
 
   it("sends this device's changes", async () => {
@@ -181,10 +173,29 @@ describe('syncing', () => {
     await turnOn();
     load(solvePuzzle(takeSnapshot(), 'n1', T));
     relay.offline = true;
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
     await syncNow();
     expect(useDeviceSync.getState().phase).toBe('offline');
     relay.offline = false;
+    onLine.mockReturnValue(true);
     window.dispatchEvent(new Event('online'));
+    await vi.waitFor(() => expect(useDeviceSync.getState().phase).toBe('done'));
+    expect(relay.puts()).toBe(2);
+    onLine.mockRestore();
+  });
+
+  it('says the sync service could not be reached when the device is online', async () => {
+    await turnOn();
+    load(solvePuzzle(takeSnapshot(), 'n1', T));
+    relay.offline = true; // the relay is down, or something on the way blocks it
+    await syncNow();
+    expect(useDeviceSync.getState()).toMatchObject({
+      phase: 'failed',
+      error: 'The sync service could not be reached.',
+    });
+    // It tries again by itself.
+    relay.offline = false;
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
     await vi.waitFor(() => expect(useDeviceSync.getState().phase).toBe('done'));
     expect(relay.puts()).toBe(2);
   });
@@ -267,6 +278,8 @@ describe('joining from another device', () => {
     const here = takeSnapshot();
     expect(here.repertoire.custom.map((r) => r.id)).toEqual([REP]);
     expect(here.progress.attempts.map((a) => a.id)).toContain('mine');
+    // Used apart until now: both devices' counts add up.
+    expect(here.progress.lifetime.attempts).toBe(fixtureSnapshot().progress.lifetime.attempts + 1);
     // What this device added goes up straight away.
     await vi.waitFor(() => expect(relay.puts()).toBe(1));
     const vault = await (await otherDevice(words)).read();
@@ -281,7 +294,7 @@ describe('joining from another device', () => {
     expect(await joinSync(words.join(' '), 'replace')).toEqual({ ok: true });
     const here = takeSnapshot();
     expect(here.progress.attempts.map((a) => a.id)).not.toContain('mine');
-    expect(sameData(here, fixtureSnapshot())).toBe(true);
+    expect(sameData(here, named(fixtureSnapshot()))).toBe(true);
     expect(here.progress.lastBackupAt).toBe(123);
   });
 
@@ -315,7 +328,7 @@ describe('ending sync', () => {
       stoppedBecause: 'deleted',
     });
     expect(useDeviceSync.getState().phase).toBe('off');
-    expect(sameData(takeSnapshot(), fixtureSnapshot())).toBe(true);
+    expect(sameData(takeSnapshot(), named(fixtureSnapshot()))).toBe(true);
   });
 
   it('deletes the synced copy', async () => {
@@ -340,7 +353,7 @@ describe('forgetSyncBase', () => {
     await turnOn();
     // An import replaced this device's data with a backup that lacks the repertoire.
     load(deleteRepertoire(takeSnapshot(), REP));
-    await forgetSyncBase();
+    forgetSyncBase();
     await vi.waitFor(() => expect(useDeviceSync.getState().phase).toBe('done'));
     await syncNow();
     expect(useRepertoire.getState().custom.map((r) => r.id)).toEqual([REP]);

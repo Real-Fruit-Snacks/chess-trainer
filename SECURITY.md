@@ -74,14 +74,19 @@ study:write`; it is kept in the profile's local storage on this device, sent onl
     to write a vault.
   - **Sealing.** Every write is gzipped and then encrypted with a fresh random nonce. The vault's
     name is bound in as additional data, and a generation number (one more per write) is sealed
-    inside. A changed, swapped or older vault fails to open or is refused, and the device keeps its
-    data.
+    inside, with each device's latest write under a random id the device makes for itself (so a
+    device can tell whether a write whose answer was lost went through). A changed, swapped or older
+    vault fails to open or is refused, and the device keeps its data.
   - **What the relay sees.** A random-looking name, the ciphertext's size and the times of requests.
     It sees no account, email or device name. It keeps no logs, and it deletes vaults unused for a
     year. Like any server, it sees requesters' IP addresses.
+  - **Abuse.** The relay reads a request body as it arrives and refuses it past 1.4 MB, whatever
+    its `Content-Length` says, and takes at most one write a second per vault. An optional
+    rate-limit binding caps the vaults each address can create.
   - **Limits.** A relay can refuse service or delete a vault: devices then stop syncing and keep their
     data. Anyone holding the phrase holds the data, so the app tells learners to keep it to
-    themselves.
+    themselves, and to join only with a phrase from their own devices: a device that joins with
+    someone else's phrase sends its data to whoever made it.
 
 ## Supply chain
 

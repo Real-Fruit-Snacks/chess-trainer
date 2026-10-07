@@ -85,6 +85,8 @@ export const useLichessSync = create<SyncStatus>()(() => ({
   report: null,
 }));
 
+/** How long the puzzle history waits for device sync to bring the other devices' puzzles. */
+const DEVICE_SYNC_WAIT_MS = 10_000;
 /** The game history is read again at most this often (it is the slowest read). */
 export const GAMES_PULL_INTERVAL_MS = 12 * 60 * 60 * 1000;
 /** After a dropped connection or a server error, the next attempt. */
@@ -156,6 +158,17 @@ async function sendGames(token: string, report: SyncReport): Promise<void> {
 }
 
 async function bringPuzzles(token: string, report: SyncReport): Promise<void> {
+  // With device sync on, what the other devices already counted from this history comes in
+  // first (a puzzle seen here is not counted again), and what this read counts goes out at
+  // once: two devices reading the same rounds before they sync would count them twice.
+  const devices = deviceSyncOn() ? await import('@/lib/sync/deviceSync') : null;
+  if (devices) {
+    // A slow sync service holds the history up for a few seconds at most.
+    await Promise.race([
+      devices.syncNow(),
+      new Promise((resolve) => setTimeout(resolve, DEVICE_SYNC_WAIT_MS)),
+    ]);
+  }
   const since = useLichess.getState().cursors.activity;
   onStep('Reading your puzzle history');
   const rounds: LichessRound[] = [];
@@ -171,6 +184,11 @@ async function bringPuzzles(token: string, report: SyncReport): Promise<void> {
   // Rounds sent from here come back in the history: this device already has them.
   const sent = useLichess.getState().sent;
   const fresh = rounds.filter((r) => !(r.id in sent));
+  // The rounds count at once, and go to the other devices, before the slower fetches below.
+  const counted = mergeLichessRounds(fresh, []);
+  report.roundsAdded += counted.added;
+  report.reviewsAdded += counted.reviews;
+  if (counted.added > 0) void devices?.syncNow();
   // Missed puzzles are fetched whole, newest first, so they can be reviewed here (offline too).
   const progress = useProgress.getState();
   const wanted = [
@@ -187,9 +205,8 @@ async function bringPuzzles(token: string, report: SyncReport): Promise<void> {
     const puzzle = await fetchLichessPuzzle(id);
     if (puzzle) puzzles.push(puzzle);
   }
-  const merged = mergeLichessRounds(fresh, puzzles);
-  report.roundsAdded += merged.added;
-  report.reviewsAdded += merged.reviews;
+  // The rounds are counted already: this adds the fetched puzzles and their review cards.
+  if (puzzles.length > 0) report.reviewsAdded += mergeLichessRounds(fresh, puzzles).reviews;
   // `since` counts the round at that moment in: the next read starts just after the newest.
   useLichess.getState().setCursor('activity', Math.max(...rounds.map((r) => r.date)) + 1);
 }

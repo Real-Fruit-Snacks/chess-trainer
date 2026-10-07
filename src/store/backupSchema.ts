@@ -433,6 +433,9 @@ export const progressFields = {
   blunderChecks: struct({ stopped: number, playedAnyway: number }),
   // Added in 0.17 (export version 10).
   lichessPuzzles: record(lichessPuzzle),
+  // Added in 0.21 (export version 11).
+  lichessRounds: array(struct({ id: string, at: number, win: boolean, themes: string })),
+  lineage: array(string),
 } satisfies { [K in keyof PersistedProgress]: Schema<unknown> };
 
 export const progressSlice = slice(progressFields) as Schema<Partial<PersistedProgress>>;
@@ -526,7 +529,7 @@ export const gamesSlice = slice(gamesFields);
 /* ------------------------------------------------------------------ */
 
 /** The export format written by this build (see `exportState`). */
-export const EXPORT_VERSION = 10;
+export const EXPORT_VERSION = 11;
 
 /** Why a file was refused: not ours, ours but broken, not JSON at all, or a PGN by the look of it. */
 export type BackupProblem = 'not-a-backup' | 'damaged' | 'unreadable' | 'looks-like-pgn';

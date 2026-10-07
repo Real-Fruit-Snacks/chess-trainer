@@ -33,6 +33,7 @@ import {
   type Rating,
 } from '@/lib/glicko';
 import { attemptScore, type HintLevel, ratedSolveScore, REPEAT_WEIGHT } from '@/lib/puzzleScore';
+import { randomId } from '@/lib/sync/randomId';
 import {
   CALIBRATION_PUZZLES,
   CALIBRATION_START_RATING,
@@ -171,6 +172,17 @@ export interface DailyPuzzleState {
 export interface ThemeStat {
   solved: number;
   failed: number;
+}
+
+/** A round from the Lichess puzzle history that the theme statistics count. */
+export interface LichessRoundCount {
+  /** The puzzle's id. */
+  id: string;
+  /** When Lichess recorded the round (ms). */
+  at: number;
+  win: boolean;
+  /** Space-separated theme keys. */
+  themes: string;
 }
 
 export interface RushRun {
@@ -381,6 +393,19 @@ export interface ProgressState {
    * review queue (so they can be reviewed here, offline too).
    */
   lichessPuzzles: Record<string, Puzzle>;
+  /**
+   * The rounds from the Lichess puzzle history counted here lately (the newest
+   * `MAX_LICHESS_ROUNDS`, oldest first): device sync counts a round once when
+   * two devices both brought it in before they synced.
+   */
+  lichessRounds: LichessRoundCount[];
+  /**
+   * Random ids naming the profile's history: one is made when the profile is
+   * first exported or synced, and profiles merged into it bring theirs. A
+   * backup or device sharing one with this profile holds part of its history
+   * (device sync then adds only what is new, instead of counting it again).
+   */
+  lineage: string[];
 
   /**
    * Sets the starting rating. `'self'` trusts the learner's own assessment
@@ -560,6 +585,10 @@ export const MAX_OWN_THREATS = 200;
 export const MAX_RECENT_THREATS = 300;
 /** Self-reviews kept in the history. */
 export const MAX_SELF_REVIEWS = 50;
+/** Lichess history rounds remembered as counted (the first read of the history brings 500). */
+export const MAX_LICHESS_ROUNDS = 500;
+/** Histories a profile remembers having merged (`lineage`). */
+export const MAX_LINEAGE = 32;
 
 function withToday(days: string[], today = localDateKey()): string[] {
   if (days.includes(today)) return days;
@@ -659,6 +688,8 @@ const initialState = {
   selfReview: emptySelfReview(),
   blunderChecks: { stopped: 0, playedAnyway: 0 },
   lichessPuzzles: {} as Record<string, Puzzle>,
+  lichessRounds: [] as LichessRoundCount[],
+  lineage: [] as string[],
 };
 
 export type PersistedProgress = typeof initialState;
@@ -1634,6 +1665,8 @@ export const useProgress = create<ProgressState>()(
         },
 
         exportState: () => {
+          // A backup names the history it comes from (see `lineage`).
+          if (get().lineage.length === 0) set({ lineage: [randomId()] });
           const { games, player } = useGames.getState();
           return JSON.stringify(
             {

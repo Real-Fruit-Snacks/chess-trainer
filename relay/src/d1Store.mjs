@@ -2,8 +2,12 @@
  * Vaults in a Cloudflare D1 database (SQLite). The table is made on first use,
  * so a fresh database needs no migration step. D1 hands BLOBs back as arrays
  * of numbers, so the bytes are kept as base64 text: a 1.4 MB vault stays under
- * D1's 2 MB row.
+ * D1's 2 MB row. The base64 is Node's (`node:buffer`, which the Worker gets
+ * from its `nodejs_compat` flag): native code turns a full vault around in
+ * about 2 ms, where JavaScript would spend the free plan's 10 ms of CPU many
+ * times over.
  */
+import { Buffer } from 'node:buffer';
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS vaults (
@@ -17,20 +21,14 @@ const SCHEMA = [
   'CREATE INDEX IF NOT EXISTS vaults_used ON vaults (touched_at, updated_at)',
 ];
 
-/** Bytes as base64 (in pieces: a spread of a large array overflows the stack). */
+/** Bytes as base64. */
 export function toBase64(bytes) {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(binary);
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
 }
 
+/** Base64 back to bytes (a copy of their own, not a view of Node's pool). */
 export function fromBase64(text) {
-  const binary = atob(text);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+  return new Uint8Array(Buffer.from(text, 'base64'));
 }
 
 /**

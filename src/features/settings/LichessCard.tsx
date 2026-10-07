@@ -227,7 +227,11 @@ export function LichessCard() {
                 ]
                   .filter(Boolean)
                   .join(' and ')}{' '}
-                that Lichess has not seen. Send {backlogCount === 1 ? 'it' : 'them'} too?
+                that this device has not sent to Lichess. Send {backlogCount === 1 ? 'it' : 'them'}{' '}
+                too?
+                {deviceSync && backlog.puzzles.length > 0
+                  ? ' Some of the puzzles may have gone up from your other devices already: Lichess rates a puzzle only once.'
+                  : ''}
               </p>
               <div className="row" style={{ marginTop: 8 }}>
                 <Button

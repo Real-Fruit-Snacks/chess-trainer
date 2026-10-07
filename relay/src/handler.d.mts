@@ -34,6 +34,8 @@ export interface RelayOptions {
   maxBytes?: number;
   allowedOrigins?: readonly string[];
   minWriteIntervalMs?: number;
+  /** Asked before a vault is created: false refuses it with 429 (a limit per address, say). */
+  allowCreate?: (request: Request) => boolean | Promise<boolean>;
   now?: () => number;
 }
 

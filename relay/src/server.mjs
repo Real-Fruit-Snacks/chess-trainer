@@ -19,13 +19,23 @@ import { sqliteStore } from './sqliteStore.mjs';
 const DAY = 24 * 60 * 60 * 1000;
 
 /**
- * An HTTP server answering with `handle` (a Fetch API handler).
+ * An HTTP server answering with `handle` (a Fetch API handler). A body is kept
+ * up to `maxBodyBytes` and one piece more, enough for the handler to refuse it
+ * as too big; the rest is read and dropped, so a request that never ends cannot
+ * fill the memory.
  * @param {(request: Request) => Promise<Response>} handle
+ * @param {{ maxBodyBytes?: number }} [options]
  */
-export function nodeServer(handle) {
+export function nodeServer(handle, { maxBodyBytes = DEFAULT_MAX_BYTES } = {}) {
   return createServer((req, res) => {
+    /** @type {Buffer[]} */
     const chunks = [];
-    req.on('data', (chunk) => chunks.push(chunk));
+    let kept = 0;
+    req.on('data', (/** @type {Buffer} */ chunk) => {
+      if (kept > maxBodyBytes) return;
+      chunks.push(chunk);
+      kept += chunk.length;
+    });
     req.on('end', () => {
       void (async () => {
         const body = Buffer.concat(chunks);
@@ -34,16 +44,17 @@ export function nodeServer(handle) {
           if (typeof value === 'string') headers.set(name, value);
           else if (Array.isArray(value)) headers.set(name, value.join(', '));
         }
+        const method = req.method ?? 'GET';
         const request = new Request(`http://${req.headers.host ?? 'localhost'}${req.url ?? '/'}`, {
-          method: req.method,
+          method,
           headers,
-          body: req.method === 'GET' || req.method === 'HEAD' || body.length === 0 ? null : body,
+          body: method === 'GET' || method === 'HEAD' || body.length === 0 ? null : body,
         });
         const response = await handle(request);
         res.writeHead(response.status, Object.fromEntries(response.headers));
         res.end(Buffer.from(await response.arrayBuffer()));
       })().catch(() => {
-        res.writeHead(500);
+        if (!res.headersSent) res.writeHead(500);
         res.end();
       });
     });
@@ -69,16 +80,26 @@ const invokedDirectly =
 if (invokedDirectly) {
   const args = readArgs(process.argv.slice(2));
   const one = (name, fallback) => args.get(name)?.at(-1) ?? fallback;
+  /** A whole-number option, or the server does not start (a typo must not lift a limit). */
+  const whole = (name, fallback, max = Number.MAX_SAFE_INTEGER) => {
+    const value = Number(one(name, String(fallback)));
+    if (!Number.isSafeInteger(value) || value < 1 || value > max) {
+      console.error(`--${name} takes a whole number from 1 to ${max}.`);
+      process.exit(2);
+    }
+    return value;
+  };
+  const maxBytes = whole('max-bytes', DEFAULT_MAX_BYTES);
+  const port = whole('port', 8787, 65535);
+  const host = one('host', '127.0.0.1');
   const origins = (args.get('origin') ?? ['*']).flatMap((o) => o.split(',')).map((o) => o.trim());
   const store = sqliteStore(one('db', 'relay.db'));
   const handle = createRelay({
     store,
     allowedOrigins: origins.filter(Boolean),
-    maxBytes: Number(one('max-bytes', DEFAULT_MAX_BYTES)),
+    maxBytes,
   });
-  const host = one('host', '127.0.0.1');
-  const port = Number(one('port', '8787'));
-  nodeServer(handle).listen(port, host, () => {
+  nodeServer(handle, { maxBodyBytes: maxBytes }).listen(port, host, () => {
     console.log(`Chess Trainer sync relay on http://${host}:${port}`);
   });
   const sweep = () => void expireVaults(store).catch(() => undefined);

@@ -1,15 +1,17 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { useToasts } from '@/components/ui/toastStore';
 import type { ImportedGame } from '@/lib/gameImport';
 import type * as SoundModule from '@/lib/sound';
 import { deviceSyncStorageKey } from '@/lib/sync/enabled';
 import type * as IsolationModule from '@/sw/isolation';
+import { useAnalyses } from '@/store/analyses';
 import backupV6 from '@/store/fixtures/backup-v6.json';
 import { useGames } from '@/store/games';
 import { PRE_IMPORT_BACKUP_KEY, useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
+import { installFakeRelay } from '@/test/fakeRelay';
 
 // jsdom has neither matchMedia (read when the install store is created) nor
 // the dialog and scrolling APIs the page uses.
@@ -355,11 +357,40 @@ describe('SettingsPage', () => {
     expect(useProgress.getState().drills['lab-drill']?.best).toBe(7);
   });
 
-  it('with device sync on, an import joins the synced data, with no undo to promise', async () => {
+  it('does not undo an import once sync between devices is on', async () => {
+    renderAt('/settings');
+    const file = new File([JSON.stringify(backupV6)], 'backup.json', { type: 'application/json' });
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('import-file'), { target: { files: [file] } });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('import-confirm'));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(useProgress.getState().puzzleRating).toBe(1212);
+    const undo = useToasts.getState().toasts.find((t) => t.actionLabel === 'Undo import');
+    // Sync is turned on (here or in another tab) before the learner taps Undo.
     localStorage.setItem(
       deviceSyncStorageKey(),
       JSON.stringify({ state: { secret: 'AAAAAAAAAAAAAAAAAAAAAA' }, version: 1 }),
     );
+    act(() => undo?.onAction?.());
+    expect(useProgress.getState().puzzleRating).toBe(1212);
+    expect(
+      useToasts.getState().toasts.some((t) => t.message.includes('cannot be undone here')),
+    ).toBe(true);
+  });
+
+  it('with device sync on, an import joins this device’s data, with no undo to promise', async () => {
+    useProgress.getState().recordDrill('lab-drill', 7);
+    installFakeRelay();
+    const { stopSync, turnOnSync } = await import('@/lib/sync/deviceSync');
+    expect((await turnOnSync()).ok).toBe(true);
+    onTestFinished(async () => {
+      await stopSync();
+      vi.unstubAllGlobals();
+    });
     renderAt('/settings');
     const file = new File([JSON.stringify(backupV6)], 'backup.json', { type: 'application/json' });
     await act(async () => {
@@ -369,9 +400,20 @@ describe('SettingsPage', () => {
     expect(
       screen.getByRole('heading', { name: 'Add this backup to your synced data?' }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId('import-synced')).toHaveTextContent('nothing is deleted');
-    fireEvent.click(screen.getByTestId('import-confirm'));
-    expect(useProgress.getState().puzzleRating).toBe(1212);
+    expect(screen.getByTestId('import-synced')).toHaveTextContent('nothing is replaced or deleted');
+    const analyses = Object.keys(useAnalyses.getState().items).length;
+    act(() => {
+      fireEvent.click(screen.getByTestId('import-confirm'));
+    });
+    // The device syncs first, then the backup joins: nothing here is replaced, the drill
+    // stays, and the backup's analysis joins the library.
+    await waitFor(() =>
+      expect(useToasts.getState().toasts.some((t) => t.message.includes('joins your synced'))).toBe(
+        true,
+      ),
+    );
+    expect(useProgress.getState().drills['lab-drill']?.best).toBe(7);
+    expect(Object.keys(useAnalyses.getState().items)).toHaveLength(analyses + 1);
     const toast = useToasts.getState().toasts.find((t) => t.message.includes('joins your synced'));
     expect(toast?.actionLabel).toBeUndefined();
   });

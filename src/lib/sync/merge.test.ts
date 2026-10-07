@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { trainingStreak } from '@/lib/dates';
 import {
   addRepertoire,
   deleteAnalysis,
@@ -14,11 +15,12 @@ import {
 } from '@/test/syncFixtures';
 import { canonical } from './canonical';
 import { mergeSnapshots, sameData, type SyncSnapshot, withDeviceFields } from './merge';
-import { readSnapshotJson, snapshotJson } from './snapshot';
+import { emptySyncSnapshot, readSnapshotJson, snapshotJson } from './snapshot';
 
 /** A moment after everything in the fixture. */
 const T = 1_791_000_000_000;
 const MIN = 60_000;
+const HOUR = 60 * MIN;
 
 /** What reading a vault gives back for a snapshot written to it. */
 function viaVault(snapshot: SyncSnapshot, generation = 1): SyncSnapshot {
@@ -54,6 +56,50 @@ describe('mergeSnapshots', () => {
     remote.progress.lastRatedAt = null;
     remote.progress.tourDismissed = false;
     expectSame(mergeSnapshots(base, base, remote), remote);
+  });
+
+  it('takes every field the other side changed, one by one', () => {
+    // A field the merge forgot would keep this device's value, and never take another's.
+    const empty = emptySnapshot();
+    const full = fixtureSnapshot();
+    const merged = mergeSnapshots(empty, empty, full);
+    const device = new Set<string>(['lastBackupAt', 'lastBackupAttempts', 'backupSnoozedUntil']);
+    const fields = (p: object) => p as Record<string, unknown>;
+    for (const key of Object.keys(full.progress)) {
+      const expected = device.has(key) ? fields(empty.progress)[key] : fields(full.progress)[key];
+      expect(canonical(fields(merged.progress)[key]), key).toBe(canonical(expected));
+    }
+    expectSame(merged.repertoire, full.repertoire);
+    expectSame(merged.analyses, full.analyses);
+    expectSame(merged.games, full.games);
+  });
+
+  it('takes the other side emptied, but for the logs, which only grow', () => {
+    const empty = emptySnapshot();
+    const full = fixtureSnapshot();
+    const merged = mergeSnapshots(full, full, empty);
+    const p = merged.progress;
+    const fields = (x: object) => x as Record<string, unknown>;
+    // Logs keep what either side had; the device's own fields stay; the store's repair
+    // keeps the counts up with the logs (lifetime with the attempts, the best streak
+    // with the training days).
+    const logs = ['ratingHistory', 'attempts', 'games', 'rushRuns', 'trainingDays'];
+    const device = ['lastBackupAt', 'lastBackupAttempts', 'backupSnoozedUntil'];
+    const derived = ['lifetime', 'bestStreak', 'selfReview'];
+    for (const key of Object.keys(full.progress)) {
+      if (derived.includes(key)) continue;
+      const expected = [...logs, ...device].includes(key) ? full.progress : empty.progress;
+      expect(canonical(fields(p)[key]), key).toBe(canonical(fields(expected)[key]));
+    }
+    expect(p.lifetime.attempts).toBe(full.progress.attempts.length);
+    expect(p.bestStreak).toBe(trainingStreak(full.progress.trainingDays).best);
+    expect(p.selfReview).toEqual({
+      ...empty.progress.selfReview,
+      history: full.progress.selfReview.history,
+    });
+    expectSame(merged.repertoire, { ...empty.repertoire, sessions: full.repertoire.sessions });
+    expectSame(merged.analyses, empty.analyses);
+    expectSame(merged.games, empty.games);
   });
 
   it('keeps this side as it is when the other side changed nothing', () => {
@@ -119,6 +165,29 @@ describe('mergeSnapshots', () => {
     const vault = viaVault(mergeSnapshots(base, a, b));
     expect(mergeSnapshots(a, a, vault).progress.puzzleRating).toBe(1530);
     expect(mergeSnapshots(b, fromLichess(b, T + 2 * MIN), vault).progress.puzzleRating).toBe(1530);
+  });
+
+  it('joins two devices used apart: their counts add up, and the last-rated rating stays', () => {
+    let phone = emptySnapshot();
+    for (let i = 0; i < 3; i++) phone = solvePuzzle(phone, `p${i}`, T + i * MIN);
+    phone = playArcade(phone, 'fortress', 9, T);
+    let laptop = emptySnapshot();
+    for (let i = 0; i < 2; i++) {
+      laptop = solvePuzzle(laptop, `l${i}`, T + HOUR + i * MIN, 'solved', 20);
+    }
+    laptop = playArcade(laptop, 'fortress', 4, T + HOUR);
+    const onPhone = mergeSnapshots(emptySyncSnapshot(), phone, laptop, { independent: true });
+    const onLaptop = mergeSnapshots(emptySyncSnapshot(), laptop, phone, { independent: true });
+    expectSame(onPhone, onLaptop);
+    const p = onPhone.progress;
+    expect(p.lifetime.attempts).toBe(5);
+    expect(p.ratedAttempts).toBe(5);
+    expect(p.themeStats.fork?.solved).toBe(5);
+    expect(p.attempts).toHaveLength(5);
+    expect(p.arcade.fortress).toMatchObject({ best: 9, plays: 2 });
+    // The laptop rated last: its rating, and only its rating's history.
+    expect(p.puzzleRating).toBe(laptop.progress.puzzleRating);
+    expect(p.ratingHistory).toEqual(laptop.progress.ratingHistory);
   });
 
   it('joins without a base without counting the shared part twice', () => {
@@ -205,6 +274,147 @@ describe('mergeSnapshots', () => {
     const b = playArcade(base, 'fortress', 15, T + 2 * MIN);
     const fortress = mergeSnapshots(base, a, b).progress.arcade.fortress;
     expect(fortress).toMatchObject({ best: 20, plays: 4, lastAt: T + 2 * MIN });
+  });
+
+  it('adds up what both sides added alike: one fork puzzle, one play, one drill each', () => {
+    const base = fixtureSnapshot();
+    const fork = base.progress.themeStats.fork ?? { solved: 0, failed: 0 };
+    const once = (s: SyncSnapshot, id: string, at: number) => {
+      const next = playArcade(solvePuzzle(s, id, at), 'fortress', 3, T);
+      const p = next.progress;
+      const drill = p.drills['knight-tour'];
+      p.drills = {
+        ...p.drills,
+        'knight-tour': { best: 9, attempts: (drill?.attempts ?? 0) + 1, lastAt: T },
+      };
+      const study = p.studies['study-1'];
+      p.studies = {
+        ...p.studies,
+        'study-1': { solvedAt: T, attempts: (study?.attempts ?? 0) + 1, clean: true },
+      };
+      const rung = p.oddsLadder.results[0] ?? { wins: 0, losses: 0, draws: 0 };
+      p.oddsLadder = {
+        ...p.oddsLadder,
+        results: { ...p.oddsLadder.results, 0: { ...rung, wins: rung.wins + 1 } },
+      };
+      return next;
+    };
+    // The same changes on both devices, made apart: two of each, not one.
+    const merged = mergeSnapshots(
+      base,
+      once(base, 'phone-1', T),
+      once(base, 'laptop-1', T),
+    ).progress;
+    expect(merged.themeStats.fork).toEqual({ solved: fork.solved + 2, failed: fork.failed });
+    expect(merged.arcade.fortress?.plays).toBe((base.progress.arcade.fortress?.plays ?? 0) + 2);
+    expect(merged.drills['knight-tour']?.attempts).toBe(
+      (base.progress.drills['knight-tour']?.attempts ?? 0) + 2,
+    );
+    expect(merged.studies['study-1']?.attempts).toBe(
+      (base.progress.studies['study-1']?.attempts ?? 0) + 2,
+    );
+    expect(merged.oddsLadder.results[0]?.wins).toBe(
+      (base.progress.oddsLadder.results[0]?.wins ?? 0) + 2,
+    );
+  });
+
+  it('counts a round from the Lichess history once, though both devices brought it in', () => {
+    const base = fixtureSnapshot();
+    const fork = base.progress.themeStats.fork ?? { solved: 0, failed: 0 };
+    const rounds = [
+      { id: 'LcH01', at: T, win: true, themes: 'fork short' },
+      { id: 'LcH02', at: T + 1000, win: false, themes: 'fork long' },
+    ];
+    /** What `mergeLichessRounds` does with the rounds on one device. */
+    const bring = (s: SyncSnapshot): SyncSnapshot => {
+      const next = structuredClone(s);
+      const p = next.progress;
+      for (const round of rounds) {
+        p.seen = { ...p.seen, [round.id]: round.win ? 'solved' : 'failed' };
+        const stat = p.themeStats.fork ?? { solved: 0, failed: 0 };
+        p.themeStats = {
+          ...p.themeStats,
+          fork: round.win
+            ? { ...stat, solved: stat.solved + 1 }
+            : { ...stat, failed: stat.failed + 1 },
+        };
+      }
+      p.lichessRounds = [...p.lichessRounds, ...rounds];
+      return next;
+    };
+    const laptop = bring(base);
+    const phone = bring(base);
+    const merged = mergeSnapshots(base, phone, laptop).progress;
+    expect(merged.themeStats.fork).toEqual({ solved: fork.solved + 1, failed: fork.failed + 1 });
+    expect(merged.lichessRounds.map((r) => r.id)).toEqual(['LcH01', 'LcH02']);
+    // With a puzzle solved in the app on the phone too: that one adds up.
+    const busy = mergeSnapshots(base, solvePuzzle(bring(base), 'app-1', T + 5000), laptop).progress;
+    expect(busy.themeStats.fork).toEqual({ solved: fork.solved + 2, failed: fork.failed + 1 });
+    // A round the laptop brought from Lichess that the phone played in the app (and sent
+    // there): one round.
+    const played = solvePuzzle(base, 'LcH01', T);
+    const broughtOne = structuredClone(base);
+    broughtOne.progress.seen = { ...broughtOne.progress.seen, LcH01: 'solved' };
+    broughtOne.progress.themeStats = {
+      ...broughtOne.progress.themeStats,
+      fork: { solved: fork.solved + 1, failed: fork.failed },
+    };
+    broughtOne.progress.lichessRounds = [rounds[0]!];
+    const once = mergeSnapshots(base, played, broughtOne).progress;
+    expect(once.themeStats.fork).toEqual({ solved: fork.solved + 1, failed: fork.failed });
+    // And merged in either order, the same.
+    expectSame(mergeSnapshots(base, laptop, phone), mergeSnapshots(base, phone, laptop));
+  });
+
+  it('keeps every history merged into the profile', () => {
+    const base = fixtureSnapshot();
+    const a = structuredClone(base);
+    const b = structuredClone(base);
+    a.progress.lineage = ['profile-b2', 'profile-a1'];
+    b.progress.lineage = ['profile-c3'];
+    expect(mergeSnapshots(base, a, b).progress.lineage).toEqual([
+      'profile-a1',
+      'profile-b2',
+      'profile-c3',
+    ]);
+    expect(mergeSnapshots(null, b, a).progress.lineage).toEqual([
+      'profile-a1',
+      'profile-b2',
+      'profile-c3',
+    ]);
+  });
+
+  it('gives the same answer whichever side is this device', () => {
+    const base = fixtureSnapshot();
+    const a = structuredClone(base);
+    const b = structuredClone(base);
+    a.progress.lichessUsername = 'alice_phone';
+    b.progress.lichessUsername = 'alice_laptop';
+    a.progress.chesscomUsername = 'alice1';
+    b.progress.chesscomUsername = 'alice2';
+    a.games.player = 'Alice';
+    b.games.player = 'alice';
+    a.progress.threatStats.recent = [...base.progress.threatStats.recent, 't-a'];
+    b.progress.threatStats.recent = [...base.progress.threatStats.recent, 't-b'];
+    expectSame(mergeSnapshots(base, a, b), mergeSnapshots(base, b, a));
+    expectSame(mergeSnapshots(null, a, b), mergeSnapshots(null, b, a));
+  });
+
+  it('keeps this device’s version of an item a backup brought in changed, and the backup’s as a copy', () => {
+    const base = fixtureSnapshot();
+    for (const [mine, theirs] of [
+      ['1. e4 e5 2. Nf3 *', '1. d4 d5 *'],
+      ['1. d4 d5 *', '1. e4 e5 2. Nf3 *'],
+    ] as const) {
+      const here = editRepertoire(base, REP, mine);
+      const backup = editRepertoire(base, REP, theirs);
+      const custom = mergeSnapshots(null, here, backup, { incoming: 'backup' }).repertoire.custom;
+      const kept = custom.find((r) => r.id === REP);
+      const copy = custom.find((r) => r.id.startsWith(`${REP}~`));
+      expect(kept?.pgn).toBe(mine);
+      expect(copy?.pgn).toBe(theirs);
+      expect(copy?.name).toBe(`${kept?.name} (backup)`);
+    }
   });
 
   it("keeps each device's own backup reminder out of the comparison", () => {
@@ -294,11 +504,22 @@ describe('two devices syncing through one vault', () => {
       const pickOne = <T>(list: readonly T[]): T | undefined =>
         list[Math.floor(random() * list.length)];
 
-      // A turns sync on with its profile; B joins and replaces its empty one.
+      // A turns sync on with its profile. B joins: on odd seeds it was never used and takes
+      // the synced data; on even ones it brings a few puzzles of its own, used apart till now.
       const start = fixtureSnapshot();
       const vault: Vault = { snapshot: viaVault(start), generation: 1 };
       const a: Device = { local: start, base: start, generation: 1 };
-      const b: Device = { local: vault.snapshot, base: vault.snapshot, generation: 1 };
+      let own = emptySnapshot();
+      const brought = seed % 2 === 0 ? 3 : 0;
+      for (let i = 0; i < brought; i++) own = solvePuzzle(own, `own${i}`, T - 60 * MIN + i * MIN);
+      const b: Device = {
+        local:
+          brought > 0
+            ? mergeSnapshots(emptySyncSnapshot(), own, vault.snapshot, { independent: true })
+            : vault.snapshot,
+        base: vault.snapshot,
+        generation: 1,
+      };
       const devices = [a, b];
 
       let n = 0;
@@ -366,12 +587,12 @@ describe('two devices syncing through one vault', () => {
 
       // Every puzzle and every play counted once.
       const p = vault.snapshot.progress;
-      expect(p.lifetime.attempts).toBe(start.progress.lifetime.attempts + solves);
-      expect(p.ratedAttempts).toBe(start.progress.ratedAttempts + solves);
+      expect(p.lifetime.attempts).toBe(start.progress.lifetime.attempts + solves + brought);
+      expect(p.ratedAttempts).toBe(start.progress.ratedAttempts + solves + brought);
       expect(p.arcade.fortress?.plays ?? 0).toBe(
         (start.progress.arcade.fortress?.plays ?? 0) + plays,
       );
-      expect(p.attempts).toHaveLength(start.progress.attempts.length + solves);
+      expect(p.attempts).toHaveLength(start.progress.attempts.length + solves + brought);
       // Repertoires added and never deleted anywhere are all there.
       const ids = new Set(vault.snapshot.repertoire.custom.map((r) => r.id));
       for (const id of added) if (!deleted.has(id)) expect(ids.has(id)).toBe(true);

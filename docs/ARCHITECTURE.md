@@ -742,46 +742,105 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
   `chess-trainer-sync:1:<vault id>` as additional data, so a vault moved under another id fails to
   open.
 - **Snapshot** (`snapshot.ts`). The four per-profile stores — progress, repertoire, analyses, games —
-  as a backup file (format 10, `validateBackupFile` reads it back), plus `sync.generation`, one more
-  with every write. A device refuses a vault whose generation is below the one it last agreed: the
-  relay cannot roll the data back. Data from a newer app version pauses sync (`newer`) rather than
-  being read in part and written back.
+  as a backup file (format 11, `validateBackupFile` reads it back), plus `sync.generation`, one more
+  with every write, and `sync.writes`, each device's latest write in the vault (a random device id,
+  made when sync is turned on or joined there, and the generation it wrote; the 64 latest). A device
+  refuses a vault whose generation is below the one it last agreed: the relay cannot roll the data
+  back. Data from a newer app version pauses sync (`newer`) rather than being read in part and
+  written back.
 - **Merge** (`merge.ts`). Three-way, over the base: the snapshot this device last agreed with the
-  relay (`base.ts`, gzipped in the Cache API, in memory where that is missing). A part only one side
-  changed takes that side, deletions included (`pick`, `mergeRecord`); logs join (attempts, rating
-  points, games, rush runs, training days, sessions), sorted and capped as the stores keep them;
-  counters add both sides' increments (`remote + local − base`; without a base, the larger); bests
-  take the higher, firsts the earlier; the puzzle queue keeps the card with more lapses, repertoire
-  cards the later review; a repertoire or analysis changed on both sides is kept twice, the other
-  version under `<id>~<FNV-1a of it>` and "… (other device)", so every device names the copy alike.
+  relay. A part only one side changed takes that side, deletions included (`pick`, `mergeRecord`);
+  logs join (attempts, rating points, games, rush runs, training days, sessions), sorted and capped
+  as the stores keep them; counters add both sides' increments (`remote + local − base`; without a
+  base, the larger), inside records too (theme statistics, drills, plays, studies, the odds ladder,
+  own threats), so two devices that each solved one fork puzzle count two; bests take the higher,
+  firsts the earlier; the puzzle queue keeps the card with more lapses, repertoire cards the later
+  review; a repertoire or analysis changed on both sides is kept twice, the other version under
+  `<id>~<FNV-1a of it>` and "… (other device)", so every device names the copy alike. Every rule
+  gives the same result whichever side is local. Rounds from the Lichess puzzle history are counted
+  once: the progress store remembers the last 500 it counted (`lichessRounds`), and a round two
+  devices both counted since the base (both read the history before syncing, or one played the
+  puzzle here and the other read it back from Lichess) is taken out of the theme statistics once.
+  With device sync on, the Lichess sync also syncs devices just before it reads the history (a
+  puzzle another device counted is then seen here, and skipped) and right after it counts the
+  rounds, before the slower fetches of missed puzzles, so two devices rarely count the same rounds
+  at all; more than 500 rounds read on two devices within those seconds is the one case left.
   The puzzle rating adds both sides' changes, unless both arrived at the same rating (taken from
   Lichess on each device, say). The result goes through `repairProgress`. The backup reminder's
   fields stay each device's own (`DEVICE_FIELDS`) and are left out of comparisons, or two devices
   would write their own values over each other's. Comparisons use sorted-key JSON (`canonical.ts`).
-  The tests run random two-device histories through a simulated relay: the devices always agree
-  after a round or two, and no attempt or play is lost or counted twice.
+  A device joining with data of its own has no base. If the two profiles share history
+  (`shareHistory`: an id of their `lineage` — random ids a profile gets when it is first exported
+  or synced, keeps in its backups, and collects from every profile merged into it — or an attempt,
+  rating point, finished game, rush run or self-review, or a custom repertoire, saved analysis or
+  own puzzle with the same id and creation time: a copy, as after restoring a backup; not what
+  reaches both devices otherwise, as games sent to Lichess, or an own puzzle both made from the
+  same game), they merge without one: everything joins, counters take the larger.
+  Otherwise an empty profile is the base (`independent`), so the counts of two devices used apart
+  add up. Either way the rating, its deviation and its chart come from the side that rated a puzzle
+  last, since two ratings that grew apart cannot be added. The tests run random two-device histories
+  through a simulated relay, and devices joining both ways: the devices always agree after a round
+  or two, and no attempt or play is lost or counted twice.
 - **Runs** (`deviceSync.ts`). Read the vault (`X-Known-Version` with the agreed version: an
-  unchanged one is not sent again), merge, apply to the stores (only those that changed; their own
-  change notifications are ignored meanwhile), save the remote copy as the base, and write the
-  merged data back only when the vault lacks something (`If-Match` the version read; a `412` means
-  another device wrote first: read and merge again, up to five rounds). One run at a time per tab
+  unchanged one comes back as `204` with no body), merge, apply to the stores (only those that
+  changed; their own change notifications are ignored meanwhile), agree the version read as the
+  base, and write the merged data back only when the vault lacks something (`If-Match` the version
+  read; a `412` means another device wrote first: read and merge again, up to five rounds). The
+  local side is taken as a vault read would give it back (`localSnapshot`), so an entry the backup
+  schema refuses does not look like a change to send at every run. Bodies the sync has no use for
+  are read to the end (`drain` in `relayClient.ts`), or browsers cancel the request and drop its
+  connection; each request times out after 30 s plus a second per 25 KB. One run at a time per tab
   and per profile across tabs (Web Locks); a run stops before changing anything more once sync is
-  turned off. A missing vault turns sync off on this device (_deleted_ is shown) and keeps the data.
-  Runs start 1.5 s after start-up, 8 s after a store changes, on `online`, on coming back into view
-  after a minute, and every 5 minutes in view; offline waits for `online`, a busy relay its
-  `Retry-After`, doubling while it stays busy, other failures 5 minutes. `PlatformHooks` loads the
-  module only while sync is on (or once another tab turns it on); the state — the secret, the agreed
-  ETag and generation — is per profile in `store/deviceSync.ts`, never in a backup.
-- **Interplay.** An import (or its undo) forgets the base, so the next run joins the backup with the
-  synced data instead of deleting what the backup lacks everywhere (`forgetSyncBase`; a run that
-  loaded the base before it merges again without). _Reset everything_ turns sync off first. While
-  device sync is on, the Lichess sync skips its studies part: two devices matching the same items to
-  the studies would make copies.
+  turned off. A missing vault turns sync off on this device (_deleted_ is shown) and keeps the
+  data. Runs start 1.5 s after start-up, 8 s after a store changes, on `online`, on coming back
+  into view after a minute, and every 5 minutes in view; offline waits for `online`, a relay out
+  of reach 2 minutes, a busy one its `Retry-After`, doubling while it stays busy, other failures 5
+  minutes. `PlatformHooks` loads the module only while sync is on (or once another tab turns it
+  on); the state — the secret, the device id, the agreed ETag, generation and base, a pending
+  write — is per profile in `store/deviceSync.ts`, never in a backup.
+- **An exact base.** With a wrong base, increments count twice and data looks deleted, so:
+  - copies of the synced data (`base.ts`) are gzipped in the Cache API under random ids, written
+    once and never changed, and the store names the one agreed; this tab also keeps them in memory
+    (the Cache API is missing in some private windows, and a full disk refuses it), and a merge
+    without its copy has no base, which joins both sides and loses nothing;
+  - the copy of the vault is saved before the stores change, and then the agreement and the stores
+    change in one synchronous step (the agreement first), so a page closed at any moment leaves both
+    before or both after;
+  - a write is noted as pending, with a copy of what it sends, before it goes; a run that finds its
+    device's generation in the vault's `sync.writes` knows a write whose answer never came went
+    through, and measures against what it wrote;
+  - the agreement, the merge and the note of a pending write are written `quietly`
+    (`persistStorage.ts`: a refused write is counted, not recorded or announced); if storage
+    refuses any of them, everything goes back to what storage holds, the sync says itself that
+    there is no room, and it tries again once the app uses less storage, the vault changes (a
+    `204`-or-not read with that version), or the learner asks (_Sync now_) — not after every
+    change; any other storage error there puts back what it can and forgets the base; nothing is
+    agreed or sent while a change of the learner's waits for room;
+  - forgetting the base writes a new mark under a localStorage key of its own
+    (`chess-trainer:device-sync-base`), which every tab reads from storage before using a base: a
+    base agreed under another mark is not used, even from a tab's memory.
+
+  `integrity.test.ts` and `restart.test.ts` go through each of these, closing the page at each step.
+
+- **Interplay.** An import with sync on first runs a sync to the end, holding the other tabs off
+  (offline, or when that fails, nothing is imported), so the backup is measured against what the
+  vault holds now. It then joins the backup with this device's data as joining a device does
+  (`importIntoSync`): a backup of this profile adds what it holds beyond the vault, one from
+  elsewhere adds up with this device's counts, and of an item that differs this device's version
+  stays and the backup's is kept as "… (backup)". That is a change made here like any other: the
+  next run takes it everywhere without undoing or counting twice what other devices did. Replacing
+  the data (and undoing an import) is offered only while sync is off. _Reset everything_ turns
+  sync off first. While device sync is on, the Lichess sync skips its studies part: two devices
+  matching the same items to the studies would make copies.
 - **Relay** (`relay/src/handler.mjs`, platform-free; `worker.mjs` for Cloudflare with `d1Store.mjs`,
   `server.mjs` for Node with `sqliteStore.mjs`). `GET/PUT/DELETE /v1/vaults/:id` with ETag
   concurrency (`If-None-Match: *` creates), 1.4 MB per vault (base64 in a D1 row of at most 2 MB),
   one write per second per vault, CORS for the app's origin, no logs; a daily cron deletes vaults
-  unused for a year. `relay/README.md` covers its API, deployment and what it can see.
+  unused for a year. A body is read as it arrives and refused (`413`) once past the limit, whatever
+  its `Content-Length` says. The Worker's base64 is `node:buffer`'s (the `nodejs_compat` flag):
+  JavaScript base64 of a full vault would spend the free plan's 10 ms of CPU many times over. An
+  optional rate-limit binding, `NEW_VAULTS`, caps the vaults each address can create.
+  `relay/README.md` covers its API, deployment and what it can see.
 - **Tests.** `relay/relay.test.ts` runs the handler over every store (D1 through a stand-in over
   `node:sqlite`). The app's unit tests run the real relay behind a `fetch` stub
   (`src/test/fakeRelay.ts`): conflicts, deletion, rollback, newer data, size limits, joining both

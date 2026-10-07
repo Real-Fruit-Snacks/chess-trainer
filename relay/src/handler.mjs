@@ -60,6 +60,7 @@ const TOUCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
  *   maxBytes?: number,
  *   allowedOrigins?: readonly string[],
  *   minWriteIntervalMs?: number,
+ *   allowCreate?: (request: Request) => boolean | Promise<boolean>,
  *   now?: () => number,
  * }} RelayOptions
  */
@@ -68,6 +69,38 @@ const TOUCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export async function hashToken(token) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * The request's body, read up to `maxBytes`; null when there is more (the rest
+ * is not read, so a body that never ends cannot fill the memory).
+ * @param {Request} request
+ * @param {number} maxBytes
+ * @returns {Promise<Uint8Array | null>}
+ */
+async function readBody(request, maxBytes) {
+  if (!request.body) return new Uint8Array(0);
+  const reader = request.body.getReader();
+  /** @type {Uint8Array[]} */
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const data = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    data.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return data;
 }
 
 /** Compares two strings without stopping at the first difference. */
@@ -118,6 +151,7 @@ export function createRelay(options) {
     maxBytes = DEFAULT_MAX_BYTES,
     allowedOrigins = ['*'],
     minWriteIntervalMs = DEFAULT_MIN_WRITE_INTERVAL_MS,
+    allowCreate,
     now = Date.now,
   } = options;
 
@@ -174,14 +208,19 @@ export function createRelay(options) {
       }
 
       if (request.method === 'PUT') {
+        const tooBig = () => fail(413, `A vault holds at most ${maxBytes} bytes.`);
         const declared = Number(request.headers.get('Content-Length') ?? '0');
-        if (declared > maxBytes) return fail(413, `A vault holds at most ${maxBytes} bytes.`);
-        const data = new Uint8Array(await request.arrayBuffer());
-        if (data.byteLength > maxBytes)
-          return fail(413, `A vault holds at most ${maxBytes} bytes.`);
+        if (declared > maxBytes) return tooBig();
+        const data = await readBody(request, maxBytes);
+        if (data === null) return tooBig();
         if (data.byteLength === 0) return fail(400, 'An empty vault is not kept.');
         const at = now();
         if (request.headers.get('If-None-Match')?.trim() === '*') {
+          if (allowCreate && !(await allowCreate(request))) {
+            return fail(429, 'Too many new vaults from here: try again in a minute.', {
+              'Retry-After': '60',
+            });
+          }
           const created = await store.create(id, authHash, data, at);
           if (created) return empty(201, { ETag: etag(1) });
           const existing = await store.get(id);
