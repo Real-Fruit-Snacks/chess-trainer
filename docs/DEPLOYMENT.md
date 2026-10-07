@@ -62,6 +62,12 @@ tag (`git tag v0.12.0 && git push origin v0.12.0`). The **Release** workflow ref
 not match `package.json`, and otherwise publishes a GitHub release for the tag with that section as
 the notes and a link to the live app (the `siteUrl` in `src/site.config.ts`).
 
+When a release changes how the app looks, refresh the README's pictures before tagging it: run
+`npm run build && npm run preview`, then `npm run readme:screenshots` in another terminal, and
+commit `docs/screenshots/`. The pictures are seeded and dated from a fixed day, so a run that
+changes one has found a real change in the app — except the game review, whose engine analysis
+varies a little from run to run.
+
 ### The Lichess sign-in
 
 Nothing to set up: Lichess lets apps without a server sign people in with PKCE and no registration.

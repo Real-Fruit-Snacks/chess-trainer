@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The README shows six screens instead of three, under a new hero image of the puzzle trainer and a
+  game on a phone: game review, a lesson, an opening repertoire, the progress page, the arcade, and
+  the board themes with the piece sets. The pictures are WebP.
+
+### Added
+
+- `npm run readme:screenshots` renders the README's pictures from a running preview build, so a
+  release can refresh them in one command. Its learner, dates and random choices are seeded, the
+  app's own included, so every picture but the game review (whose engine analysis varies a little
+  from run to run) comes out the same until the app changes. It shares its browser set-up,
+  seed and encoder with `npm run screenshots` (`scripts/lib/screenshots.mjs`).
+
 ## [0.20.0] - 2026-10-06
 
 The pieces and the boards now come from the open collections Lichess publishes: eight of its best

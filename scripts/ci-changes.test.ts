@@ -6,7 +6,7 @@ describe('CI path filter', () => {
   it('lets documentation-only changes skip the heavy jobs', () => {
     expect(documentationOnly(['README.md'])).toBe(true);
     expect(
-      documentationOnly(['docs/FEATURES.md', 'docs/screenshots/hero.png', 'CHANGELOG.md']),
+      documentationOnly(['docs/FEATURES.md', 'docs/screenshots/hero.webp', 'CHANGELOG.md']),
     ).toBe(true);
     expect(documentationOnly(['.github/ISSUE_TEMPLATE/bug_report.yml'])).toBe(true);
     expect(documentationOnly(['.github/PULL_REQUEST_TEMPLATE.md', 'public/engine/README.md'])).toBe(

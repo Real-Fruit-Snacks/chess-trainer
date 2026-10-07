@@ -39,6 +39,7 @@
     "drills:verify": "node scripts/verify-drills.mjs",
     "icons:generate": "node scripts/generate-icons.mjs",
     "screenshots": "node scripts/generate-screenshots.mjs",
+    "readme:screenshots": "node scripts/readme-screenshots.mjs",
     "pieces:generate": "node scripts/generate-pieces.mjs",
     "boards:thumbs": "node scripts/generate-board-thumbs.mjs",
     "studies:verify": "node scripts/verify-studies.mjs",

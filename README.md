@@ -31,7 +31,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/hero.png" width="880" alt="Chess Trainer: a rated puzzle on a laptop, and a game against the engine on a phone in the dark theme">
+  <img src="docs/screenshots/hero.webp" width="880" alt="Chess Trainer: a rated puzzle on a laptop, and a game against the engine on a phone in the dark theme">
 </p>
 
 A complete chess trainer in a single web app: lessons, 48,000 puzzles, drills, opening repertoires,
@@ -93,14 +93,24 @@ illegal move in a replayed classic) and Ghost Knight (hunt a knight you only see
 
 <table>
   <tr>
-    <td width="33%"><img src="docs/screenshots/analyze.png" alt="The analysis board with engine lines"></td>
-    <td width="33%"><img src="docs/screenshots/lesson.png" alt="An interactive lesson on forks"></td>
-    <td width="33%"><img src="docs/screenshots/arcade.png" alt="The arcade of chess games"></td>
+    <td width="33%"><img src="docs/screenshots/review.webp" alt="Game review of the Immortal Game: the evaluation graph, each side's accuracy and the key moments explained, beside the board and the engine's lines"></td>
+    <td width="33%"><img src="docs/screenshots/lesson.webp" alt="An interactive lesson on forks"></td>
+    <td width="33%"><img src="docs/screenshots/openings.webp" alt="Learning the Italian Game repertoire, the next move shown as an arrow"></td>
   </tr>
   <tr>
-    <td align="center">Analysis board with engine lines</td>
+    <td align="center">Game review</td>
     <td align="center">Interactive lessons</td>
+    <td align="center">Opening repertoires</td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/progress.webp" alt="The progress page: six weeks of puzzle rating, accuracy, streak and training totals"></td>
+    <td width="33%"><img src="docs/screenshots/arcade.webp" alt="The arcade of chess games"></td>
+    <td width="33%"><img src="docs/screenshots/boards.webp" alt="Eight boards, each in a different board theme with a different piece set"></td>
+  </tr>
+  <tr>
+    <td align="center">Progress</td>
     <td align="center">The arcade</td>
+    <td align="center">Board themes and piece sets</td>
   </tr>
 </table>
 
