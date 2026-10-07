@@ -19,6 +19,12 @@ export const siteConfig = {
   siteUrl: 'https://real-fruit-snacks.github.io/chess-trainer/',
   /** Public repository. Used for "Edit this lesson", bug reports and the footer link. */
   repositoryUrl: 'https://github.com/Real-Fruit-Snacks/chess-trainer',
+  /**
+   * The device-sync relay (relay/, deployed with `npm run relay:deploy`): where the encrypted
+   * copy of each learner's data is kept between devices. Its origin joins the page's
+   * connect-src. An empty string turns device sync off: Settings does not offer it.
+   */
+  syncRelay: 'https://chess-trainer-sync.real-fruit-snacks.workers.dev',
   /** Brand colour used for the manifest theme colour and accents. */
   themeColor: '#1f6f5b',
   /** The page background in each scheme: the browser UI colour follows the page, not the accent. */

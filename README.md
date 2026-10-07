@@ -43,9 +43,10 @@ entirely in your browser, installs as an app and keeps working on a plane.
 
 - **Everything in one place.** Learn a concept, drill it, solve puzzles on it, play it against the
   engine and review the game — every part links to the others.
-- **Yours, and only yours.** No sign-up, no server, no ads, no tracking. Progress lives on your
-  device, and a backup is a file you keep — or connect your Lichess account to keep puzzles, games,
-  repertoires and analyses in step across your devices. Optional network features are off by default.
+- **Yours, and only yours.** No sign-up, no ads, no tracking. Progress lives on your device. Sync
+  between devices is end-to-end encrypted with a recovery phrase only you hold, so the sync service
+  never sees your data; a backup is a file you keep; and you can connect your Lichess account.
+  Optional network features are off by default.
 - **Works everywhere.** Phones, tablets and desktops, light, dark or black, online and offline, with
   screen readers and the keyboard.
 - **Honest chess.** Every lesson task, endgame drill position, study move and repertoire move is
@@ -76,10 +77,13 @@ position.
 key moments explained in words — or analyse the game yourself first and let the review score what
 you found — Lichess and chess.com imports, and shareable links that carry the whole game.
 
-**Sync** — connect your Lichess account and the app keeps in step with it, both ways: puzzles you
-solve here count on Lichess (solved offline, they go up when you are back online), your Lichess
-puzzle history and its misses come here, games you play are imported to Lichess and restored on your
-other devices, and your own repertoires and saved analyses live in private Lichess studies.
+**Sync** — turn on sync between devices and your phone, tablet and computer stay in step: progress,
+lessons, review schedules, repertoires, analyses and games. There is no account, only a 12-word
+recovery phrase (or its QR code), and everything is encrypted on the device before it leaves.
+Changes made offline are merged, not overwritten. Or connect your Lichess account and the app keeps
+in step with it, both ways: puzzles you solve here count on Lichess, your Lichess puzzle history and
+its misses come here, games you play are imported to Lichess, and your own repertoires and saved
+analyses live in private Lichess studies.
 
 **Train** — coordinate, vision and endgame drills on a 41-rung ladder, "What's the threat?" (name
 the opponent's threat, then meet it — in real positions and in your own games), sixteen opening
@@ -149,6 +153,10 @@ to **GitHub Actions**, and push to `main`. Once CI has passed, the deploy workfl
 with the right base path and deploys it; a version tag publishes a GitHub release. Custom domains
 and other static hosts are covered in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
+Sync between devices goes through a tiny relay of your own: a Cloudflare Worker on the free plan, or
+a plain Node server. [relay/README.md](relay/README.md) shows how to deploy it and what it can and
+cannot see. Setting `syncRelay` to `''` in `src/site.config.ts` leaves sync out.
+
 ## Built with
 
 | Part            | Technology                                                                                                         |
@@ -158,6 +166,7 @@ and other static hosts are covered in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 | Human-like play | [Maia-3](https://huggingface.co/UofTCSSLab/Maia3-5M) run by [ONNX Runtime Web](https://onnxruntime.ai) in a worker |
 | Board and chess | [Chessground](https://github.com/lichess-org/chessground), [chess.js](https://github.com/jhlywa/chess.js)          |
 | Data            | [Lichess](https://lichess.org) puzzle database and the chess-openings dataset (both CC0)                           |
+| Sync            | Web Crypto (HKDF, AES-GCM) on the device; a relay on Cloudflare Workers and D1, or Node and SQLite                 |
 
 Any evergreen browser with WebAssembly and Web Workers works: Chrome and Edge 111+, Firefox 121+,
 Safari 16.4+ (iOS 16.4+); the test suite runs on Chromium, Firefox and WebKit. The interface is in

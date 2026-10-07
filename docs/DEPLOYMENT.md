@@ -77,6 +77,32 @@ Pages `404.html` fallback both serve. Moving the site to another address only ch
 devices already connected keep their tokens. The Content-Security-Policy already allows
 `connect-src https://lichess.org`.
 
+### The sync relay
+
+Sync between devices needs a small relay of your own; the site works without it, and Settings offers
+sync only when `syncRelay` in [`src/site.config.ts`](../src/site.config.ts) names one. The relay in
+[`relay/`](../relay/README.md) runs on Cloudflare Workers with a D1 database, which the free plan
+covers:
+
+```bash
+cd relay
+npx wrangler@latest login
+npx wrangler@latest deploy
+```
+
+The first deploy creates the D1 database (Wrangler 4.45 or later) and writes its id into
+`relay/wrangler.jsonc`: commit that change. Wrangler prints the Worker's address,
+`https://chess-trainer-sync.<your-subdomain>.workers.dev`. Put it in `syncRelay`, and the site's
+origin in `ALLOWED_ORIGINS` in `relay/wrangler.jsonc`. The page's Content-Security-Policy picks the
+relay's origin up from `syncRelay` at build time. To check it, run
+`curl https://chess-trainer-sync.<your-subdomain>.workers.dev/v1/health`. A fork that does not want
+sync sets `syncRelay` to `''`; one that hosts the relay itself runs `relay/src/server.mjs` behind
+HTTPS (see `relay/README.md`).
+
+The relay stores only sealed vaults under random names, keeps no logs, and deletes vaults unused for
+a year. Moving the site to another address only needs the new origin in `ALLOWED_ORIGINS`: synced
+data is tied to the recovery phrase, not to the site.
+
 ### Crash reports
 
 A crash report (the error page's "Copy details" or its pre-filled issue) names the version, the build
@@ -138,6 +164,9 @@ Optional headers:
 - Chrome DevTools → Application → Manifest: no warnings; "Add to home screen" available.
 - The console shows no Content-Security-Policy violations, and the footer's Licence, AGPL-3.0 and
   Third-party notices links open `licence.txt`, `licence-agpl.txt` and `notices.txt`.
+- _Settings → Sync between devices → Turn on sync_ shows a recovery phrase and "Synced just now." (a
+  failure names the relay's answer; a CORS error in the console means the site's origin is missing
+  from `ALLOWED_ORIGINS`).
 - _Play → New game → Opponent: A human-like opponent → Download_ fetches about 25 MB and the game
   starts; after that, it plays offline too.
 - _Settings → Lichess account → Connect_ goes to lichess.org, asks for the puzzle and study

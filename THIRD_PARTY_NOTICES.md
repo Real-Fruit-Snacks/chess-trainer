@@ -32,6 +32,8 @@ development-time tools only.
 | [Lichess](https://lichess.org/api) and [chess.com](https://www.chess.com/news/view/published-data-api) public game APIs (optional, network)                                                                                                         | Services — not bundled                                                | Importing the learner's own games on request                                        |
 | [Lichess API](https://lichess.org/api): OAuth, puzzle activity and results, game import and export, studies (optional, network)                                                                                                                     | Service — not bundled                                                 | The account sync, once the learner connects an account                              |
 | [scalalib](https://github.com/ornicar/scalalib) by Thibault Duplessis: the name clean-up rules of `StringOps`, ported to TypeScript (`src/lib/lichess/lichessNames.ts`)                                                                             | MIT                                                                   | Names sent to Lichess already as Lichess keeps them                                 |
+| BIP-39 English word list by Marek Palatinus, Pavol Rusnak, Aaron Voisine and Sean Bowe (from the [bitcoin/bips repository](https://github.com/bitcoin/bips/blob/master/bip-0039/english.txt), `src/lib/sync/bip39English.ts`)                       | MIT (notice below)                                                    | The words of the sync recovery phrase                                               |
+| [uqr](https://github.com/unjs/uqr) by Anthony Fu, a port of [Project Nayuki’s QR code generator](https://www.nayuki.io/page/qr-code-generator-library)                                                                                              | MIT (notice below)                                                    | The QR code that adds a device to sync                                              |
 
 The sounds, the lessons, courses, endgame drills and the study annotations are original work of this
 project and covered by its licence.
@@ -62,8 +64,10 @@ human-like opponent's worker script). Its WebAssembly build contains the open-so
 listed in ONNX Runtime's
 [third-party notices](https://github.com/microsoft/onnxruntime/blob/v1.30.0/ThirdPartyNotices.txt).
 
-The rules by which Lichess cleans study and chapter names come from scalalib (MIT), whose notice
-follows:
+The rules by which Lichess cleans study and chapter names come from scalalib (MIT); the recovery
+phrase's word list is BIP-39's (MIT, Copyright (c) 2013 Marek Palatinus, Pavol Rusnak, Aaron Voisine
+and Sean Bowe); and uqr, which draws the QR code, is MIT too (Copyright (c) Project Nayuki, Copyright
+(c) 2023 Anthony Fu). Each is under the same permission notice, here with scalalib's copyright line:
 
 > Copyright (c) Thibault Duplessis
 >

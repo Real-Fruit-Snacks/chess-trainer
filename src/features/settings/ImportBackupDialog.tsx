@@ -2,6 +2,7 @@ import { Alert, Button, Dialog } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import { importWithUndo, undoImport } from '@/lib/backup';
 import { formatDate } from '@/lib/dates';
+import { deviceSyncOn } from '@/lib/sync/enabled';
 import { siteConfig } from '@/site.config';
 import type { BackupPreview, BackupSummary } from '@/store/progress';
 import { useBackupActions } from './useBackupActions';
@@ -25,7 +26,9 @@ function count(n: number, noun: string, plural = `${noun}s`): string {
 /**
  * Asks before a backup replaces the current data: what the file holds, a way
  * to export the current progress first, and the replacement itself, which can
- * be undone from the toast that follows.
+ * be undone from the toast that follows. With device sync on, the backup joins
+ * the synced data instead (nothing is deleted from the other devices), which
+ * no undo could take back from them.
  */
 export function ImportBackupDialog({
   pending,
@@ -36,6 +39,7 @@ export function ImportBackupDialog({
 }) {
   const backup = useBackupActions();
   const summary = pending?.preview.summary;
+  const synced = pending !== null && deviceSyncOn();
 
   const confirm = () => {
     if (!pending) return;
@@ -47,6 +51,11 @@ export function ImportBackupDialog({
     const dropped = result.summary.dropped
       ? ` ${count(result.summary.dropped, 'damaged entry', 'damaged entries')} skipped.`
       : '';
+    if (synced) {
+      toast(`Backup imported — it joins your synced data.${dropped}`, { tone: 'success' });
+      if (result.warning) toast(result.warning, { tone: 'warning', duration: 12000 });
+      return;
+    }
     toast(`Backup imported — your data was replaced.${dropped}`, {
       tone: 'success',
       duration: 15000,
@@ -63,21 +72,23 @@ export function ImportBackupDialog({
     <Dialog
       open={pending !== null}
       onClose={onClose}
-      title="Replace your data with this backup?"
+      title={
+        synced ? 'Add this backup to your synced data?' : 'Replace your data with this backup?'
+      }
       actions={(close) => (
         <>
           <Button variant="secondary" onClick={close} data-testid="import-cancel">
             Cancel
           </Button>
           <Button
-            variant="danger"
+            variant={synced ? 'primary' : 'danger'}
             onClick={() => {
               confirm();
               close();
             }}
             data-testid="import-confirm"
           >
-            Replace my data
+            {synced ? 'Import' : 'Replace my data'}
           </Button>
         </>
       )}
@@ -91,11 +102,19 @@ export function ImportBackupDialog({
             <strong>{count(summary.analyses, 'saved analysis', 'saved analyses')}</strong> and{' '}
             <strong>{count(summary.repertoires, 'custom repertoire')}</strong>.
           </p>
-          <p className="muted" style={{ margin: 0 }}>
-            Everything in this profile — progress, ratings, repertoires, library and games — is
-            replaced by what the file holds. Other profiles and device settings are kept. You can
-            undo the import right after it.
-          </p>
+          {synced ? (
+            <p className="muted" style={{ margin: 0 }} data-testid="import-synced">
+              Sync between devices is on, so what the file holds joins the data on all your devices,
+              and nothing is deleted from them. To replace this device’s data with the file instead,
+              turn sync off here first.
+            </p>
+          ) : (
+            <p className="muted" style={{ margin: 0 }}>
+              Everything in this profile — progress, ratings, repertoires, library and games — is
+              replaced by what the file holds. Other profiles and device settings are kept. You can
+              undo the import right after it.
+            </p>
+          )}
           {summary.dropped > 0 ? (
             <Alert tone="warning">
               {count(summary.dropped, 'damaged entry', 'damaged entries')} in the file will be

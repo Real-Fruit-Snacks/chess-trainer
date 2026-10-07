@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useToasts } from '@/components/ui/toastStore';
 import type { ImportedGame } from '@/lib/gameImport';
 import type * as SoundModule from '@/lib/sound';
+import { deviceSyncStorageKey } from '@/lib/sync/enabled';
 import type * as IsolationModule from '@/sw/isolation';
 import backupV6 from '@/store/fixtures/backup-v6.json';
 import { useGames } from '@/store/games';
@@ -352,5 +353,26 @@ describe('SettingsPage', () => {
     undo?.onAction?.();
     expect(useProgress.getState().puzzleRating).toBe(1800);
     expect(useProgress.getState().drills['lab-drill']?.best).toBe(7);
+  });
+
+  it('with device sync on, an import joins the synced data, with no undo to promise', async () => {
+    localStorage.setItem(
+      deviceSyncStorageKey(),
+      JSON.stringify({ state: { secret: 'AAAAAAAAAAAAAAAAAAAAAA' }, version: 1 }),
+    );
+    renderAt('/settings');
+    const file = new File([JSON.stringify(backupV6)], 'backup.json', { type: 'application/json' });
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('import-file'), { target: { files: [file] } });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(
+      screen.getByRole('heading', { name: 'Add this backup to your synced data?' }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('import-synced')).toHaveTextContent('nothing is deleted');
+    fireEvent.click(screen.getByTestId('import-confirm'));
+    expect(useProgress.getState().puzzleRating).toBe(1212);
+    const toast = useToasts.getState().toasts.find((t) => t.message.includes('joins your synced'));
+    expect(toast?.actionLabel).toBeUndefined();
   });
 });

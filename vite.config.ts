@@ -7,6 +7,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 import {
   fillSitePlaceholders,
+  relayOrigins,
   sitePlaceholders,
   withContentSecurityPolicy,
 } from './scripts/lib/html.ts';
@@ -84,7 +85,10 @@ function contentSecurityPolicyHtml(): Plugin {
   return {
     name: 'chess-trainer:content-security-policy',
     apply: 'build',
-    transformIndexHtml: { order: 'post', handler: (html) => withContentSecurityPolicy(html) },
+    transformIndexHtml: {
+      order: 'post',
+      handler: (html) => withContentSecurityPolicy(html, relayOrigins(siteConfig.syncRelay)),
+    },
   };
 }
 
@@ -312,7 +316,7 @@ export default defineConfig(({ mode }) => {
       globals: false,
       setupFiles: ['./src/test/setup.ts'],
       // The build scripts' tests live next to them and run under Node (`@vitest-environment node`).
-      include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
+      include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts', 'relay/**/*.test.ts'],
       // Stylesheets are stubbed out of component tests; only their text is
       // served (`?raw`), for the stylesheet-scope test in src/styles.
       css: { include: [/\.css\?raw$/] },

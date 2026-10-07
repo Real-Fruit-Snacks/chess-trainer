@@ -23,6 +23,7 @@ export const PROFILE_SCOPED_KEYS = [
   'chess-trainer:games',
   'chess-trainer:analyses',
   'chess-trainer:lichess',
+  'chess-trainer:device-sync',
 ] as const;
 
 export interface StoredProfiles {

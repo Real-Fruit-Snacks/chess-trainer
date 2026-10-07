@@ -1,11 +1,13 @@
 # Security policy
 
-Chess Trainer is a static, client-only application: there are no accounts and no server, and
-everything you do is stored in your browser, on your device. The app talks to the network only when
-you ask it to — importing your games from Lichess or chess.com, and the opening explorer and tablebase
-lookups, which are off by default (see [Privacy and network use](docs/FEATURES.md#privacy-and-network-use)).
-The attack surface is therefore small, but not zero: the app parses user-supplied PGN/FEN, share links
-and imported JSON backups, calls those four public APIs on request, and ships a service worker.
+Chess Trainer is a static, client-only application: there are no accounts, and everything you do is
+stored in your browser, on your device. The app talks to the network only when you ask it to —
+importing your games from Lichess or chess.com, the opening explorer and tablebase lookups, which are
+off by default, the Lichess account sync, and sync between devices, whose relay
+([`relay/`](relay/README.md)) stores only data encrypted on the device (see
+[Privacy and network use](docs/FEATURES.md#privacy-and-network-use)). The attack surface is therefore
+small, but not zero: the app parses user-supplied PGN/FEN, share links and imported JSON backups,
+calls those public APIs on request, opens synced vaults, and ships a service worker.
 
 ## Reporting a vulnerability
 
@@ -25,6 +27,10 @@ In scope:
 - Supply-chain issues in the build (for example the engine download checksums or the CI workflows)
 - The Lichess sign-in: anything that could leak the token, use it beyond the sync, or connect an
   account the learner did not approve
+- Sync between devices: anything that lets the relay, or anyone without the recovery phrase, read,
+  change, roll back or delete a learner's data unnoticed (beyond deleting a whole vault, which the
+  devices report), learn the phrase, or link vaults to people; and the relay itself
+  (`relay/src/`)
 
 Out of scope:
 
@@ -35,7 +41,8 @@ Out of scope:
 
 - **Content-Security-Policy.** Every page carries a policy (a meta tag written at build time) that
   runs only the site's own scripts and its one inline theme script, by hash; allows connections only
-  to the site itself, lichess.org, explorer.lichess.ovh, tablebase.lichess.ovh and api.chess.com; and
+  to the site itself, lichess.org, explorer.lichess.ovh, tablebase.lichess.ovh, api.chess.com and
+  the sync relay named in `src/site.config.ts`; and
   forbids plugins, `<base>` changes and form posts elsewhere. The service worker adds
   `frame-ancestors 'none'` to the pages it serves, so the app cannot be framed by another site.
 - **Cross-origin isolation.** Unless threads are switched off in Settings, the service worker serves
@@ -54,6 +61,27 @@ study:write`; it is kept in the profile's local storage on this device, sent onl
   everything. A personal token pasted instead is checked with Lichess (it must allow those four
   permissions) and kept the same way. Studies the sync creates are private, with chat and cloning
   off, and only their owner may share or export them.
+
+- **Sync between devices.** The design assumes the relay may be hostile, and keeps it from learning or
+  changing anything:
+  - **One secret.** A 128-bit random secret, generated on the device, is the only key. It is shown
+    as a 12-word recovery phrase and kept in the profile's local storage, and it never leaves the
+    device: not to the relay, not into a backup or an export. Join links carry it in the URL
+    fragment, which browsers do not send to servers, and the app removes it from the address at
+    once.
+  - **Three derived values.** HKDF-SHA-256 derives, independently, the vault's name, a write token
+    and an AES-256-GCM key. The relay stores the token's SHA-256 only, so its database cannot be used
+    to write a vault.
+  - **Sealing.** Every write is gzipped and then encrypted with a fresh random nonce. The vault's
+    name is bound in as additional data, and a generation number (one more per write) is sealed
+    inside. A changed, swapped or older vault fails to open or is refused, and the device keeps its
+    data.
+  - **What the relay sees.** A random-looking name, the ciphertext's size and the times of requests.
+    It sees no account, email or device name. It keeps no logs, and it deletes vaults unused for a
+    year. Like any server, it sees requesters' IP addresses.
+  - **Limits.** A relay can refuse service or delete a vault: devices then stop syncing and keep their
+    data. Anyone holding the phrase holds the data, so the app tells learners to keep it to
+    themselves.
 
 ## Supply chain
 

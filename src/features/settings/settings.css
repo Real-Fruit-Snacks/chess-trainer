@@ -189,3 +189,57 @@
   display: grid;
   gap: var(--space-1);
 }
+
+/* ---------- Sync between devices ---------- */
+/* The recovery phrase: the numbered words beside the QR code, stacked on narrow screens. */
+.sync-phrase {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.sync-phrase__words {
+  flex: 1 1 220px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(6, auto);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1) var(--space-3);
+  font-family: var(--font-mono);
+}
+
+.sync-phrase__words li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.sync-phrase__n {
+  min-width: 1.4em;
+  text-align: right;
+  color: var(--text-faint);
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dark on white whatever the scheme, so a camera reads it off the screen. */
+.qr {
+  display: block;
+  flex: none;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+
+.qr--loading {
+  background: var(--surface-2);
+}

@@ -278,10 +278,12 @@ keep the Lichess puzzles waiting in the review queue and which games went to Lic
 (format 9) they keep games against the human-like opponent with its rating; since 0.15 (format 8) they carry the
 thinking-skill records too; since 0.12 (format 7) they include the imported games and, on a device with several profiles, carry the profile's name in the
 file name. _Reset everything_ clears this profile's progress, repertoires, library and imported games
-and the device settings, a downloaded full engine included, and disconnects the profile's Lichess
-account (withdrawing the permission); the other profiles are kept, and the dialog says so.
-**Lichess account:** connect, see what the sync does, choose what it keeps in step, and disconnect —
-see below.
+and the device settings, a downloaded full engine included, turns sync between devices off on this
+device first (so the synced copy and the other devices keep their data), and disconnects the
+profile's Lichess account (withdrawing the permission); the other profiles are kept, and the dialog
+says so. With sync between devices on, an import joins the backup with the synced data instead of
+replacing anything, and the dialog says that instead. **Sync between devices** and the **Lichess
+account:** see below.
 
 ### The test lab
 
@@ -303,6 +305,45 @@ _Settings → Open the test lab_ (`/settings/lab`) is a single page for checking
 - **Type and colour:** the colour tokens and the type scale.
 - **Engine:** the diagnostics panel and speed test.
 - **Errors:** a deliberate crash, to see the error page and its report link.
+
+## Sync between devices
+
+_Settings → Sync between devices_ keeps a profile in step across a learner's phone, tablet and
+computer, with no account:
+
+- **Turning it on** gives a **recovery phrase**: 12 words from the BIP-39 list (the first four
+  letters of each are enough), shown with a QR code of a link that carries them. The dialog can
+  copy the words or the link; any device that syncs shows the phrase again (_Show recovery phrase_).
+- **Joining**: scan the code with the other device's camera — the link opens Settings there with the
+  phrase filled in, and takes it out of the address at once — or choose _I have a recovery phrase_
+  and type or paste the words (numbering, line breaks and capitals are fine; a mistyped word is
+  named, and a checksum catches the rest). A device with progress of its own chooses whether it
+  joins the synced data (_Keep both_, the default) or makes way for it, with an export offered first.
+- **What syncs:** progress, ratings, lessons, flashcards, review schedules, repertoires and their
+  cards, saved analyses and imported games — everything a backup holds. Device settings, the
+  Lichess sign-in and the backup reminder stay on each device.
+- **When:** a few seconds after something changes, when the app opens, comes back into view or back
+  online, and every 5 minutes while it is on screen; _Sync now_ runs it at once. Tabs take turns.
+- **Merging, not overwriting.** Each device remembers the version it last agreed with the relay and
+  merges three ways: what only one side changed carries over, deletions included; logs (puzzle
+  attempts, rating points, games, training days) join; counts add up both sides' increments; the
+  puzzle review queue keeps the card with more misses and a repertoire card the latest review; a
+  repertoire or analysis edited on two devices before they synced is kept twice, the other version
+  named "… (other device)". Writes go by version, so two devices syncing at once never overwrite each
+  other: the second merges again.
+- **Private by design.** The data is encrypted on the device (AES-256-GCM, with keys from the phrase
+  by HKDF-SHA-256) before it leaves; the relay stores scrambled bytes under a random name — no
+  account, email or device name — and never sees the phrase. A relay that altered a vault, swapped
+  one for another or rolled one back to an older copy would be caught.
+- **Ending it:** _Turn off_ stops syncing on one device (its data stays); _Delete synced copy_
+  deletes the encrypted copy, and every device keeps what it has — the others say so at their next
+  sync. A synced copy no device has used for a year is deleted. _Reset everything_ turns sync off
+  on the device before clearing it.
+- **Limits:** up to 1.4 MB of compressed data — far more than the app's own storage caps produce.
+  Data from a newer version of the app pauses the sync until the device is updated.
+
+While sync between devices is on, the Lichess account sync leaves repertoires and analyses to it.
+The relay is a small Cloudflare Worker (or a Node server) in `relay/`; see `relay/README.md`.
 
 ## Lichess account sync
 
@@ -353,9 +394,10 @@ and offers to connect again — the sign-in is checked once more when the app op
 Lichess refuses is noted in the card while the rest of the sync goes on. Results and games the
 device recorded without sending — before connecting, while disconnected or while that part was off —
 are offered after connecting and when a part is switched back on (_Send them_ / _Not now_).
-Lessons, flashcards, review schedules and settings stay on the device: a backup moves those. The
-token is kept in this profile's storage on this device, never in a backup; _Disconnect_ revokes
-it on Lichess. Importing a backup starts the matching over, so nothing on Lichess is deleted for
+Lessons, flashcards, review schedules and settings stay on the device: a backup, or sync between
+devices, moves those (settings aside). While sync between devices is on, the repertoires and
+analyses part pauses: those travel with it instead. The token is kept in this profile's storage on
+this device, never in a backup; _Disconnect_ revokes it on Lichess. Importing a backup starts the matching over, so nothing on Lichess is deleted for
 items the backup does not hold.
 
 ## Reference
@@ -405,15 +447,16 @@ sideways.
 
 ## Privacy and network use
 
-There is no sign-up and no server of the app's own: everything you do is stored in your browser, on
-your device. The app talks to the network only when you ask it to — importing your games from
-Lichess or chess.com, the opening explorer and tablebase lookups, which are off by default, and the
-Lichess account sync once you connect an account, which talks to lichess.org alone. Optional
+There is no sign-up: everything you do is stored in your browser, on your device. The app talks to
+the network only when you ask it to — importing your games from Lichess or chess.com, the opening
+explorer and tablebase lookups, which are off by default, the Lichess account sync once you connect
+an account, which talks to lichess.org alone, and sync between devices once you turn it on, which
+sends the relay only data encrypted on the device. Optional
 downloads (the full engine, the human-like opponent, the whole puzzle set) come from the app's own
 site, and the human-like opponent runs on your device like the engine: no position leaves it. Backups are
 files you keep. The page's Content-Security-Policy holds the app to that: it can connect only to
-its own site and those four services (lichess.org, its explorer and tablebase, api.chess.com), runs
-only its own scripts, and refuses to be shown inside another site's frame.
+its own site, those four services (lichess.org, its explorer and tablebase, api.chess.com) and the
+sync relay, runs only its own scripts, and refuses to be shown inside another site's frame.
 
 Browsers allow a site roughly 5 MB of local storage. The app caps what it keeps (300 puzzle
 attempts, 200 imported games — unreviewed ones make room first — 500 saved analyses, 300 own-game

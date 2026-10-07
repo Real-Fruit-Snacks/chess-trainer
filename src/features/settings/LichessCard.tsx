@@ -5,6 +5,7 @@ import { beginLichessLogin, revokeLichessToken } from '@/lib/lichess/auth';
 import { lichessBacklog } from '@/lib/lichess/backlog';
 import { type SyncStatus, syncNow, useLichessSync } from '@/lib/lichess/sync';
 import { siteConfig } from '@/site.config';
+import { useDeviceSyncStore } from '@/store/deviceSync';
 import { useLichess } from '@/store/lichess';
 import { useProgress } from '@/store/progress';
 import { describeReport, describeWhen, plural } from './lichessStatus';
@@ -51,6 +52,7 @@ export function LichessCard() {
   const waitingGames = useLichess((s) => s.outbox.games.length);
   const puzzleRating = useLichess((s) => s.ratings?.puzzle ?? null);
   const status = useLichessSync();
+  const deviceSync = useDeviceSyncStore((s) => s.secret !== null);
   const [connecting, setConnecting] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -276,11 +278,16 @@ export function LichessCard() {
             checked={options.studies}
             onChange={(v) => setOption('studies', v)}
             label="Repertoires and analyses"
-            description="Your own repertoires and saved analyses are kept in private Lichess studies named “Chess Trainer · …”. Edits on either side come across; so do deletions."
+            description={
+              deviceSync
+                ? 'Paused while sync between devices is on: your repertoires and analyses travel between your devices with it.'
+                : 'Your own repertoires and saved analyses are kept in private Lichess studies named “Chess Trainer · …”. Edits on either side come across; so do deletions.'
+            }
           />
           <p className="small faint" style={{ margin: 0 }}>
-            Lessons, flashcards, review schedules and settings stay on this device: a backup moves
-            those.
+            {deviceSync
+              ? 'Lessons, flashcards and review schedules travel with sync between devices; settings stay on this device.'
+              : 'Lessons, flashcards, review schedules and settings stay on this device: a backup, or sync between devices, moves those.'}
           </p>
           <div className="settings__row">
             <span className="small">The sign-in stays on this device, never in a backup.</span>

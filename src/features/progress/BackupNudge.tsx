@@ -1,6 +1,7 @@
 import { Alert, Button } from '@/components/ui';
 import { BACKUP_SNOOZE_DAYS, backupStatus } from '@/lib/backup';
 import { localDateKey } from '@/lib/dates';
+import { deviceSyncedRecently } from '@/lib/sync/enabled';
 import { DAY_MS } from '@/lib/srs';
 import { useGames } from '@/store/games';
 import { useProgress } from '@/store/progress';
@@ -15,11 +16,14 @@ function describeDays(days: number): string {
   return `${days} days ago`;
 }
 
+/** Device sync this recent keeps a copy for the other devices: no reminder needed. */
+const SYNCED_WITHIN_MS = 7 * DAY_MS;
+
 /**
  * A reminder to back up after a stretch of training without one. Progress
  * lives only on this device, so a lost phone is lost progress. Shown once
  * there is anything worth keeping — puzzles, lessons, openings or games — and
- * "Later" hides it for a week.
+ * "Later" hides it for a week. Not shown while device sync keeps a copy.
  */
 export function BackupNudge({ compact = false }: { compact?: boolean }) {
   const ratedAttempts = useProgress((s) => s.ratedAttempts);
@@ -49,7 +53,7 @@ export function BackupNudge({ compact = false }: { compact?: boolean }) {
         (lastTrainingDay !== null && lastTrainingDay > localDateKey(new Date(lastBackupAt))),
     },
   );
-  if (!status.due) return null;
+  if (!status.due || deviceSyncedRecently(SYNCED_WITHIN_MS)) return null;
   const attempts = `${status.attemptsSince} rated puzzle attempt${status.attemptsSince === 1 ? '' : 's'}`;
   const since =
     status.daysSince === null

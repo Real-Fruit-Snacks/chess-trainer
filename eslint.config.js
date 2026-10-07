@@ -16,6 +16,8 @@ export default tseslint.config(
       'public/maia/**',
       'dev-dist/**',
       'scripts/lib/*.d.mts',
+      'relay/src/*.d.mts',
+      '**/.wrangler/**',
     ],
   },
   js.configs.recommended,
@@ -82,6 +84,8 @@ export default tseslint.config(
       'e2e/**/*.ts',
       'scripts/**/*.mjs',
       'scripts/**/*.ts',
+      'relay/**/*.mjs',
+      'relay/**/*.ts',
       'eslint.config.js',
     ],
     languageOptions: {
@@ -103,7 +107,12 @@ export default tseslint.config(
   },
   // Tests
   {
-    files: ['src/**/*.test.{ts,tsx}', 'src/test/**/*.ts', 'scripts/**/*.test.ts'],
+    files: [
+      'src/**/*.test.{ts,tsx}',
+      'src/test/**/*.ts',
+      'scripts/**/*.test.ts',
+      'relay/**/*.test.ts',
+    ],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/unbound-method': 'off',

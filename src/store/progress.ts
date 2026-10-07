@@ -543,10 +543,10 @@ export type BackupPreview =
   | { ok: false; reason: string; problem: BackupProblem };
 
 export const MAX_HISTORY = 500;
-const MAX_ATTEMPTS = 300;
+export const MAX_ATTEMPTS = 300;
 /** Games kept in the game log (the newest). */
 export const MAX_GAMES = 50;
-const MAX_RUSH_RUNS = 30;
+export const MAX_RUSH_RUNS = 30;
 export const MAX_TRAINING_DAYS = 400;
 /** Puzzle ids remembered as seen; the oldest are forgotten first. */
 export const MAX_SEEN = 20_000;
@@ -596,7 +596,7 @@ function emptySelfReview(): SelfReviewStats {
 }
 
 /** Keeps the newest own threats, learned ones going before those still being learned. */
-function capOwnThreats(own: Record<string, OwnThreat>): Record<string, OwnThreat> {
+export function capOwnThreats(own: Record<string, OwnThreat>): Record<string, OwnThreat> {
   const all = Object.values(own);
   if (all.length <= MAX_OWN_THREATS) return own;
   const kept = all
@@ -612,6 +612,8 @@ const emptyLifetime = (): LifetimeStats => ({
   solvedByTheme: {},
   solveTimeMs: 0,
 });
+
+const emptyOddsLadder = (): OddsLadderState => ({ rung: 0, best: 0, results: {} });
 
 const initialState = {
   onboarded: false,
@@ -641,7 +643,7 @@ const initialState = {
   studies: {} as Record<string, StudyResult>,
   arcade: {} as Record<string, ArcadeResult>,
   dailyOpening: null as DailyOpeningState | null,
-  oddsLadder: { rung: 0, best: 0, results: {} },
+  oddsLadder: emptyOddsLadder(),
   ladderHeight: 0,
   bestStreak: 0,
   lifetime: emptyLifetime(),
@@ -661,6 +663,20 @@ const initialState = {
 
 export type PersistedProgress = typeof initialState;
 
+/** A learner with nothing yet: the store's starting state, its nested parts fresh. */
+export function emptyProgress(): PersistedProgress {
+  return {
+    ...initialState,
+    streak: { current: 0, best: 0, lastDate: null },
+    oddsLadder: emptyOddsLadder(),
+    lifetime: emptyLifetime(),
+    blind: emptyBlind(),
+    threatStats: emptyThreatStats(),
+    selfReview: emptySelfReview(),
+    blunderChecks: { stopped: 0, playedAnyway: 0 },
+  };
+}
+
 /**
  * The persisted slice of the store: everything that is not an action,
  * including fields this build does not know (from a newer version), so a
@@ -674,7 +690,7 @@ function persisted(state: ProgressState): PersistedProgress {
   return out as PersistedProgress;
 }
 
-const MAX_OWN_PUZZLES = 300;
+export const MAX_OWN_PUZZLES = 300;
 /** Lichess puzzles kept for the review queue. */
 export const MAX_LICHESS_PUZZLES = 300;
 

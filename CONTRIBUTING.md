@@ -85,6 +85,8 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
 | `npm run readme:screenshots` | Re-render the README's pictures in `docs/screenshots/` (the hero and six screens, WebP) from a running preview (`npm run build && npm run preview` first); seeded, so only a change in the app changes them (the game review's engine analysis aside).                   |
 | `npm run pieces:generate`    | Rebuild the piece-set stylesheets (`src/components/board/pieces/<set>.css`) from the sets' SVGs beside them (sources and licences in `pieces/README.md`).                                                                                                                |
 | `npm run boards:thumbs`      | Re-render the 128-pixel board previews in `public/boards/thumbs/` from the board pictures beside them (Lichess's, AGPL-3.0; see THIRD_PARTY_NOTICES.md), with Playwright's Chromium.                                                                                     |
+| `npm run relay:dev`          | Run the device-sync relay on <http://localhost:8787> with nothing kept (`relay/src/server.mjs --db :memory:`); point `syncRelay` in `src/site.config.ts` at it to try sync locally.                                                                                      |
+| `npm run relay:deploy`       | Deploy the relay to Cloudflare Workers with Wrangler 4 (`relay/wrangler.jsonc`; the first deploy makes its D1 database). See `relay/README.md`.                                                                                                                          |
 
 ## Project layout
 
@@ -98,13 +100,14 @@ src/
                 openings, classics, play, analyze, games, arcade, progress, reference, settings, lab
   store/        persisted settings, progress, repertoires, games, analyses and profiles (zustand)
   lib/          rating maths, scheduling, imports, backups, share links, sound, dates;
-                lichess/: the Lichess account sync
-  test/         test set-up and the stand-in lichess.org the sync's tests talk to
+                lichess/: the Lichess account sync; sync/: sync between devices (phrase, crypto, merge)
+  test/         test set-up, the stand-in lichess.org and the relay the syncs' tests talk to
   sw/, sw.ts    the service worker and the helpers it shares with the page
 scripts/        engine and model downloads, content checks, puzzle and opening imports, build steps, CI helpers
 public/         static assets: engine and maia (downloaded), puzzles, openings and board pictures
                 (committed), icons
 e2e/            Playwright end-to-end tests and the accessibility sweep
+relay/          the device-sync relay: a Cloudflare Worker (or Node server) keeping sealed vaults
 docs/           feature reference, architecture, content and deployment guides
 ```
 

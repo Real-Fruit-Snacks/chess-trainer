@@ -44,6 +44,9 @@ import {
 } from '@/store/settings';
 import { revokeLichessToken } from '@/lib/lichess/auth';
 import { useLichess } from '@/store/lichess';
+import { stopSync } from '@/lib/sync/deviceSync';
+import { useDeviceSyncStore } from '@/store/deviceSync';
+import { DeviceSyncCard } from './DeviceSyncCard';
 import { LichessCard } from './LichessCard';
 import { ProfilesCard } from './ProfilesCard';
 import { useBackupActions } from './useBackupActions';
@@ -115,9 +118,9 @@ export default function SettingsPage() {
       <div className="page-header">
         <h1>Settings</h1>
         <p>
-          Appearance, play, engine and analysis, your puzzle rating, your Lichess account, profiles,
-          backups and the app itself. Everything is stored on this device — and in your Lichess
-          account, if you connect one.
+          Appearance, play, engine and analysis, your puzzle rating, sync between devices, your
+          Lichess account, profiles, backups and the app itself. Everything is stored on this device
+          — and, if you turn them on, encrypted for your other devices or in your Lichess account.
         </p>
       </div>
 
@@ -466,6 +469,7 @@ export default function SettingsPage() {
           </Card>
         </div>
         <div className="stack">
+          <DeviceSyncCard />
           <LichessCard />
           <ProfilesCard />
           <Card>
@@ -584,9 +588,9 @@ export default function SettingsPage() {
                 </div>
               </div>
               <p className="small muted" style={{ margin: 0 }}>
-                No sign-up, no server of our own, no tracking: everything stays in this browser
-                unless you connect your Lichess account. The <Link to="/reference#faq">FAQ</Link>{' '}
-                explains what leaves your device and when.
+                No sign-up, no tracking: everything stays in this browser unless you turn on sync
+                between devices (end-to-end encrypted) or connect your Lichess account. The{' '}
+                <Link to="/reference#faq">FAQ</Link> explains what leaves your device and when.
               </p>
               <StorageUsage />
               <div className="settings__row">
@@ -648,13 +652,18 @@ export default function SettingsPage() {
               variant="danger"
               data-testid="reset-confirm"
               onClick={() => {
-                // The Lichess permission is withdrawn too: the reset forgets the connection.
-                const lichessToken = useLichess.getState().account?.token;
-                if (lichessToken) void revokeLichessToken(lichessToken);
-                progress.resetAll();
-                settings.reset();
-                setConfirmReset(false);
-                toast('This profile’s data and the device settings were cleared.');
+                void (async () => {
+                  // Sync goes off here first, so the empty profile is not synced as deletions:
+                  // the synced copy and the other devices keep their data.
+                  if (useDeviceSyncStore.getState().secret) await stopSync();
+                  // The Lichess permission is withdrawn too: the reset forgets the connection.
+                  const lichessToken = useLichess.getState().account?.token;
+                  if (lichessToken) void revokeLichessToken(lichessToken);
+                  progress.resetAll();
+                  settings.reset();
+                  setConfirmReset(false);
+                  toast('This profile’s data and the device settings were cleared.');
+                })();
               }}
             >
               Yes, reset
@@ -665,9 +674,10 @@ export default function SettingsPage() {
         <p className="muted">
           This deletes the puzzle rating, lesson progress, repertoires, analysis library, game
           history and imported games of this profile, and every device setting: the engine goes back
-          to its defaults, and a downloaded full engine is deleted. A connected Lichess account is
-          disconnected (what was synced stays on Lichess). Export a backup first if you want to keep
-          them.
+          to its defaults, and a downloaded full engine is deleted. Sync between devices is turned
+          off on this device (the synced copy and your other devices keep their data), and a
+          connected Lichess account is disconnected (what was synced stays on Lichess). Export a
+          backup first if you want to keep them.
         </p>
         <p className="muted">
           Kept:{' '}

@@ -10,3 +10,5 @@ public/openings/*.json
 src/features/arcade/positions.json
 dev-dist
 package-lock.json
+# Wrangler writes the D1 database id into it on the first deploy, in its own layout.
+relay/wrangler.jsonc

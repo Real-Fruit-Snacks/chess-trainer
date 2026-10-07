@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { FILLER_PREFIX, PROBE_KEY } from '@/features/lab/labKeys';
 import { consumeLaunchFiles } from '@/lib/launchQueue';
 import { removeFullEngine } from '@/engine/fullEngine';
+import { deviceSyncOn, deviceSyncStorageKey } from '@/lib/sync/enabled';
 import { useLichess } from '@/store/lichess';
 import { useSettings } from '@/store/settings';
 import { syncIsolationFlag } from '@/sw/isolation';
@@ -30,10 +31,10 @@ function hasLabLeftovers(): boolean {
  * are checked and confirmed like any other import, never applied on their own.
  * Also tidies up after the test lab, whose storage filler must not outlive it,
  * keeps the service worker's isolation flag in step with the threads
- * setting, and clears away a full engine that is switched off. While a
- * Lichess account is connected, the account sync runs on its own; a sign-in
- * marked as refused is checked again as the app opens. The import dialog, the
- * lab code and the sync load only when they are needed.
+ * setting, and clears away a full engine that is switched off. While device
+ * sync is on, or a Lichess account is connected, that sync runs on its own; a
+ * Lichess sign-in marked as refused is checked again as the app opens. The
+ * import dialog, the lab code and the syncs load only when they are needed.
  */
 export function PlatformHooks() {
   const due = useDueCount();
@@ -64,6 +65,31 @@ export function PlatformHooks() {
 
   useEffect(() => {
     consumeLaunchFiles((file) => setLaunchFile(file));
+  }, []);
+
+  // Device sync, while it is on for this profile: from the start, or once another tab
+  // turns it on (turning it on in this tab starts it there and then).
+  useEffect(() => {
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    const start = () => {
+      if (!deviceSyncOn()) return;
+      void import('@/lib/sync/deviceSync')
+        .then((sync) => {
+          if (!cancelled) stop = sync.startDeviceSync();
+        })
+        .catch(() => undefined);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === deviceSyncStorageKey()) start();
+    };
+    start();
+    window.addEventListener('storage', onStorage);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('storage', onStorage);
+      stop?.();
+    };
   }, []);
 
   useEffect(() => {

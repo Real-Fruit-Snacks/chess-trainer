@@ -23,6 +23,11 @@ export const CONNECT_ORIGINS = [
   'https://tablebase.lichess.ovh',
 ] as const;
 
+/** The device-sync relay's origin, for connect-src; none when sync is off (an empty URL). */
+export function relayOrigins(relayUrl: string): string[] {
+  return relayUrl ? [new URL(relayUrl).origin] : [];
+}
+
 /** The parts of site.config.ts that index.html quotes. */
 interface SiteMetadata {
   name: string;
@@ -84,13 +89,16 @@ export function hashSource(script: string): string {
  * engine. `frame-ancestors` cannot be set from a meta tag; the service worker
  * adds it as a header (src/sw/framing.ts).
  */
-export function contentSecurityPolicy(scriptHashes: readonly string[]): string {
+export function contentSecurityPolicy(
+  scriptHashes: readonly string[],
+  extraConnect: readonly string[] = [],
+): string {
   const directives: [string, readonly string[]][] = [
     ['default-src', ["'self'"]],
     ['script-src', ["'self'", "'wasm-unsafe-eval'", ...scriptHashes]],
     ['style-src', ["'self'", "'unsafe-inline'"]],
     ['img-src', ["'self'", 'data:', 'blob:']],
-    ['connect-src', ["'self'", ...CONNECT_ORIGINS]],
+    ['connect-src', ["'self'", ...CONNECT_ORIGINS, ...extraConnect]],
     ['worker-src', ["'self'"]],
     ['object-src', ["'none'"]],
     ['base-uri', ["'none'"]],
@@ -103,10 +111,13 @@ export function contentSecurityPolicy(scriptHashes: readonly string[]): string {
  * Adds the policy right after `<meta charset>`: a policy delivered by a meta
  * tag only governs what comes after it, so it has to precede every script.
  */
-export function withContentSecurityPolicy(html: string): string {
+export function withContentSecurityPolicy(
+  html: string,
+  extraConnect: readonly string[] = [],
+): string {
   const charset = /<meta\s+charset=[^>]*>/i.exec(html);
   if (!charset) throw new Error('index.html: no <meta charset> to put the security policy after');
-  const policy = contentSecurityPolicy(inlineScripts(html).map(hashSource));
+  const policy = contentSecurityPolicy(inlineScripts(html).map(hashSource), extraConnect);
   const at = charset.index + charset[0].length;
   const meta = `\n    <meta http-equiv="Content-Security-Policy" content="${policy}" />`;
   return html.slice(0, at) + meta + html.slice(at);

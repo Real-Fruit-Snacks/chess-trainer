@@ -32,6 +32,7 @@ import {
   themeBaseline,
 } from './themeReport';
 import './progress.css';
+import { useDeviceSyncStore } from '@/store/deviceSync';
 import { useLichess } from '@/store/lichess';
 
 /** Puzzle tags that describe length or source rather than a skill. */
@@ -45,6 +46,7 @@ function outcomeLabel(outcome: 'solved' | 'failed', hintUsed: boolean): string {
 export default function ProgressPage() {
   const progress = useProgress();
   const lichessConnected = useLichess((s) => s.account !== null);
+  const syncedDevices = useDeviceSyncStore((s) => s.secret !== null);
   const stats = summarizeProgress(progress);
   // "Games against the computer" means the ordinary ones — the engine's levels and the human-like
   // opponent; arcade, simul and drill games have their own cards.
@@ -102,9 +104,11 @@ export default function ProgressPage() {
         <div>
           <h1>Progress</h1>
           <p>
-            {lichessConnected
-              ? 'Puzzles, games, repertoires and analyses are kept in step with your Lichess account; the rest is stored on this device only — export a backup before switching browsers.'
-              : 'Everything is stored on this device only. Export a backup before switching browsers.'}
+            {syncedDevices
+              ? 'Everything here is kept in step across your devices by sync between devices, end-to-end encrypted.'
+              : lichessConnected
+                ? 'Puzzles, games, repertoires and analyses are kept in step with your Lichess account; the rest is stored on this device only — export a backup before switching browsers.'
+                : 'Everything is stored on this device only. Export a backup before switching browsers.'}
           </p>
         </div>
         <LinkButton to="/settings">

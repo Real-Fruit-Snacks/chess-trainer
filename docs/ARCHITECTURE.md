@@ -45,6 +45,7 @@ This document explains the moving parts and the reasoning behind them.
 │  lib/ srs · puzzleReview · gameImport · clock · sound · haptics       │
 │       shareLink · shareCodes · backup · explorer · tablebase · glicko │
 │       lichess/ account sync: OAuth · outbox · studies ── lichess.org  │
+│       sync/ device sync: phrase · vault crypto · merge ── the relay   │
 │  store/ settings · progress · repertoire · games · analyses           │
 │         profiles (namespaces the four per-learner stores)             │
 │                                                                        │
@@ -53,14 +54,14 @@ This document explains the moving parts and the reasoning behind them.
 └────────────────────────────────────────────────────────────────────────┘
         ▲ static files only (+ optional lichess.org / chess.com API calls:
           game import, tablebase, opening explorer, the Lichess account
-          sync — each opt-in)
-┌───────┴─────────────────────────────┐
-│ GitHub Pages (dist/)                │
-│  index.html, 404.html, assets       │
-│  engine/*.wasm, puzzles/*.json,     │
-│  openings/openings.json,            │
-│  boards/ (the board pictures)       │
-│  maia/ (the human-like opponent,    │
+          sync — and the sync relay's encrypted vaults — each opt-in)
+┌───────┴─────────────────────────────┐   ┌──────────────────────────────┐
+│ GitHub Pages (dist/)                │   │ Sync relay (relay/)          │
+│  index.html, 404.html, assets       │   │  Cloudflare Worker + D1, or  │
+│  engine/*.wasm, puzzles/*.json,     │   │  Node + SQLite: one sealed   │
+│  openings/openings.json,            │   │  vault per recovery phrase,  │
+│  boards/ (the board pictures)       │   │  versioned by ETag           │
+│  maia/ (the human-like opponent,    │   └──────────────────────────────┘
 │  downloaded on request)             │
 └─────────────────────────────────────┘
 ```
@@ -724,6 +725,67 @@ study:read study:write`. Disconnect and Reset everything revoke the token (`DELE
   take, and the sharing setting a study's own export checks). The unit tests reach it through a
   `fetch` stub, the end-to-end tests through page routes.
 
+## Sync between devices (`src/lib/sync/`, `relay/`)
+
+End-to-end encrypted sync of a profile across a learner's devices, with no account: a 128-bit secret
+is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed file per secret.
+
+- **Phrase** (`phrase.ts`, `bip39English.ts`). The 16-byte secret written as 12 BIP-39 English words
+  (11 bits each, the last 4 bits of 132 a SHA-256 checksum), checked against BIP-39's own test
+  vectors and the word list's hash. Reading accepts any separators, numbering and case, and a word's
+  first four letters; an unknown word is named, the checksum catches the rest.
+- **Keys and envelope** (`vaultCrypto.ts`, Web Crypto only). HKDF-SHA-256 over the secret (salt
+  `chess-trainer device sync v1`) derives three independent values: the vault id (`vault id`, 32
+  bytes, the file's name on the relay), the write token (`write token`, 32 bytes, sent as a bearer
+  token; the relay keeps its SHA-256) and an AES-256-GCM key (`encryption key`, not extractable). A
+  sealed snapshot is `CTS1`, a random 12-byte nonce and the ciphertext of the gzipped JSON, with
+  `chess-trainer-sync:1:<vault id>` as additional data, so a vault moved under another id fails to
+  open.
+- **Snapshot** (`snapshot.ts`). The four per-profile stores — progress, repertoire, analyses, games —
+  as a backup file (format 10, `validateBackupFile` reads it back), plus `sync.generation`, one more
+  with every write. A device refuses a vault whose generation is below the one it last agreed: the
+  relay cannot roll the data back. Data from a newer app version pauses sync (`newer`) rather than
+  being read in part and written back.
+- **Merge** (`merge.ts`). Three-way, over the base: the snapshot this device last agreed with the
+  relay (`base.ts`, gzipped in the Cache API, in memory where that is missing). A part only one side
+  changed takes that side, deletions included (`pick`, `mergeRecord`); logs join (attempts, rating
+  points, games, rush runs, training days, sessions), sorted and capped as the stores keep them;
+  counters add both sides' increments (`remote + local − base`; without a base, the larger); bests
+  take the higher, firsts the earlier; the puzzle queue keeps the card with more lapses, repertoire
+  cards the later review; a repertoire or analysis changed on both sides is kept twice, the other
+  version under `<id>~<FNV-1a of it>` and "… (other device)", so every device names the copy alike.
+  The puzzle rating adds both sides' changes. The result goes through `repairProgress`. The backup
+  reminder's fields stay each device's own (`DEVICE_FIELDS`) and are left out of comparisons, or two
+  devices would write their own values over each other's. Comparisons use sorted-key JSON
+  (`canonical.ts`). The tests run random two-device histories through a simulated relay:
+  the devices always agree after a round or two, and no attempt or play is lost or counted twice.
+- **Runs** (`deviceSync.ts`). Read the vault (`X-Known-Version` with the agreed version: an
+  unchanged one is not sent again), merge, apply to the stores (only those that changed; their own
+  change notifications are ignored meanwhile), save the remote copy as the base, and write the
+  merged data back only when the vault lacks something (`If-Match` the version read; a `412` means
+  another device wrote first: read and merge again, up to five rounds). One run at a time per tab
+  and per profile across tabs (Web Locks); a run stops before changing anything more once sync is
+  turned off. A missing vault turns sync off on this device (_deleted_ is shown) and keeps the data.
+  Runs start 1.5 s after start-up, 8 s after a store changes, on `online`, on coming back into view
+  after a minute, and every 5 minutes in view; offline waits for `online`, a busy relay its
+  `Retry-After`, doubling while it stays busy, other failures 5 minutes. `PlatformHooks` loads the
+  module only while sync is on (or once another tab turns it on); the state — the secret, the agreed
+  ETag and generation — is per profile in `store/deviceSync.ts`, never in a backup.
+- **Interplay.** An import (or its undo) forgets the base, so the next run joins the backup with the
+  synced data instead of deleting what the backup lacks everywhere (`forgetSyncBase`; a run that
+  loaded the base before it merges again without). _Reset everything_ turns sync off first. While
+  device sync is on, the Lichess sync skips its studies part: two devices matching the same items to
+  the studies would make copies.
+- **Relay** (`relay/src/handler.mjs`, platform-free; `worker.mjs` for Cloudflare with `d1Store.mjs`,
+  `server.mjs` for Node with `sqliteStore.mjs`). `GET/PUT/DELETE /v1/vaults/:id` with ETag
+  concurrency (`If-None-Match: *` creates), 1.4 MB per vault (base64 in a D1 row of at most 2 MB),
+  one write per second per vault, CORS for the app's origin, no logs; a daily cron deletes vaults
+  unused for a year. `relay/README.md` covers its API, deployment and what it can see.
+- **Tests.** `relay/relay.test.ts` runs the handler over every store (D1 through a stand-in over
+  `node:sqlite`). The app's unit tests run the real relay behind a `fetch` stub
+  (`src/test/fakeRelay.ts`): conflicts, deletion, rollback, newer data, size limits, joining both
+  ways. `e2e/release-0-21-sync.spec.ts` joins two and three browsers through the same relay code.
+
 ## Accessibility
 
 - Every `Board` derives a plain-language description of the last move from consecutive positions
@@ -862,6 +924,6 @@ warning gives way to a confirmation.
 
 ## Non-goals (for now)
 
-- An account or a sync server of the app's own. Cross-device sync goes through the learner's Lichess
-  account (above); backups cover the rest (lessons, flashcards, review schedules, settings).
+- Accounts. Sync between devices needs none, and its relay holds only sealed vaults it cannot read;
+  backups and the Lichess account sync remain the other ways to move data.
 - Human vs human over the network — needs a relay; two people at one device can play on the Play page.

@@ -1,4 +1,5 @@
 import { safeLocalStorage } from '@/lib/persistStorage';
+import { deviceSyncOn } from '@/lib/sync/enabled';
 import { activeProfile, type ProfilesState, useProfiles } from '@/store/profiles';
 import {
   type ImportResult,
@@ -230,13 +231,26 @@ export async function readBackupFile(file: File): Promise<BackupReadResult> {
 /* ------------------------------------------------------------------ */
 
 /**
+ * With device sync on, data that an import replaced is not taken as deleted:
+ * the next sync joins it with the synced data, so nothing goes from the other
+ * devices (see `forgetSyncBase`).
+ */
+function joinImportWithSyncedData(): void {
+  if (!deviceSyncOn()) return;
+  void import('@/lib/sync/deviceSync').then((sync) => sync.forgetSyncBase()).catch(() => undefined);
+}
+
+/**
  * Keeps the current data aside, then imports. The copy lives under one storage
  * key until the next import or a reset; `undoImport` puts it back.
  */
 export function importWithUndo(raw: unknown): ImportResult {
   const previous = useProgress.getState().exportState();
   const result = useProgress.getState().importState(raw);
-  if (result.ok) safeLocalStorage.setItem(PRE_IMPORT_BACKUP_KEY, previous);
+  if (result.ok) {
+    safeLocalStorage.setItem(PRE_IMPORT_BACKUP_KEY, previous);
+    joinImportWithSyncedData();
+  }
   return result;
 }
 
@@ -252,6 +266,9 @@ export function undoImport(): boolean {
   const read = parseBackupText(stashed);
   if (!read.ok) return false;
   const result = useProgress.getState().importState(read.parsed);
-  if (result.ok) safeLocalStorage.removeItem(PRE_IMPORT_BACKUP_KEY);
+  if (result.ok) {
+    safeLocalStorage.removeItem(PRE_IMPORT_BACKUP_KEY);
+    joinImportWithSyncedData();
+  }
   return result.ok;
 }

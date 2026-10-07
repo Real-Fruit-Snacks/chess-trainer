@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Puzzle } from '@/features/puzzles/puzzleService';
+import { deviceSyncOn } from '@/lib/sync/enabled';
 import { onLichessQueue, useLichess } from '@/store/lichess';
 import { ACTIVE_PROFILE_ID } from '@/store/profiles';
 import { useProgress } from '@/store/progress';
@@ -289,7 +290,9 @@ async function runOnce(force: boolean): Promise<void> {
     if (options.games) await step('Games', () => sendGames(token, report));
     if (options.puzzles) await step('Puzzle history', () => bringPuzzles(token, report));
     if (options.games) await step('Games', () => bringGames(token, report, force));
-    if (options.studies) {
+    // With device sync on, repertoires and analyses travel between devices with it: two
+    // devices matching the same items to the studies would make copies of each.
+    if (options.studies && !deviceSyncOn()) {
       await step('Repertoires and analyses', async () => {
         report.studies = await syncStudies(token, username, onStep);
       });

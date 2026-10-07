@@ -19,9 +19,16 @@ const stopSync = vi.hoisted(() => vi.fn());
 const startLichessSync = vi.hoisted(() => vi.fn(() => stopSync));
 const recheckSignIn = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock('@/lib/lichess/sync', () => ({ startLichessSync, recheckSignIn }));
+const stopDeviceSync = vi.hoisted(() => vi.fn());
+const startDeviceSync = vi.hoisted(() => vi.fn(() => stopDeviceSync));
+vi.mock('@/lib/sync/deviceSync', () => ({ startDeviceSync }));
 
+import { deviceSyncStorageKey } from '@/lib/sync/enabled';
 import { useLichess } from '@/store/lichess';
 import { PlatformHooks } from './PlatformHooks';
+
+/** Device sync as stored with it on (what `deviceSyncOn` reads). */
+const SYNC_ON = JSON.stringify({ state: { secret: 'AAAAAAAAAAAAAAAAAAAAAA' }, version: 1 });
 
 type Consumer = (params: { files: { getFile: () => Promise<File> }[] }) => void;
 
@@ -94,6 +101,28 @@ describe('PlatformHooks', () => {
     await act(() => new Promise<void>((r) => setTimeout(r, 0)));
     expect(recheckSignIn).not.toHaveBeenCalled();
     act(() => useLichess.getState().forget());
+  });
+
+  it('runs device sync from the start while it is on, and stops it after', async () => {
+    startDeviceSync.mockClear();
+    stopDeviceSync.mockClear();
+    localStorage.setItem(deviceSyncStorageKey(), SYNC_ON);
+    const view = render(<PlatformHooks />);
+    await waitFor(() => expect(startDeviceSync).toHaveBeenCalledTimes(1));
+    view.unmount();
+    expect(stopDeviceSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts device sync once another tab turns it on, and not before', async () => {
+    startDeviceSync.mockClear();
+    render(<PlatformHooks />);
+    await act(() => new Promise<void>((r) => setTimeout(r, 0)));
+    expect(startDeviceSync).not.toHaveBeenCalled();
+    localStorage.setItem(deviceSyncStorageKey(), SYNC_ON);
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: deviceSyncStorageKey() }));
+    });
+    await waitFor(() => expect(startDeviceSync).toHaveBeenCalledTimes(1));
   });
 
   it('looks again at a sign-in marked as refused as the app opens', async () => {

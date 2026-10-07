@@ -6,19 +6,64 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Changed
+## [0.21.0] - 2026-10-07
 
-- The README shows six screens instead of three, under a new hero image of the puzzle trainer and a
-  game on a phone: game review, a lesson, an opening repertoire, the progress page, the arcade, and
-  the board themes with the piece sets. The pictures are WebP.
+Sync between devices: a phone, a tablet and a computer keep the same progress, with no account. A
+12-word recovery phrase is the key, everything is encrypted on the device before it leaves, and the
+small relay that passes it between devices stores only scrambled data.
 
 ### Added
 
+- **Sync between devices** (_Settings → Sync between devices_). Turning it on gives a **recovery
+  phrase** of 12 BIP-39 words (the first four letters of each are enough) and a QR code of a link
+  that carries them. Another device joins by scanning the code, which opens Settings there with the
+  phrase filled in, or by typing or pasting the words. Progress, ratings, lessons, flashcards, review
+  schedules, repertoires, saved analyses and imported games stay in step. Device settings, the
+  Lichess sign-in and the backup reminder stay on each device.
+- **End-to-end encrypted.** The data is encrypted on the device with AES-256-GCM, using keys made
+  from the phrase by HKDF-SHA-256. The relay keeps one sealed file per phrase under a random name,
+  with no account, email or device name, and keeps no logs. A copy that was changed, swapped for
+  another or rolled back to an older version is refused.
+- **Merged, not overwritten.** Each device merges three ways against the version it last agreed
+  with the relay:
+  - changes from either side carry over, deletions included;
+  - logs join;
+  - counts add up both sides' increments;
+  - a repertoire or analysis edited on two devices before they synced is kept twice, the other
+    version named "… (other device)".
+
+  Two devices syncing at once never overwrite each other. Changes made offline wait, and join the
+  rest when the device is back online. A device joining with progress of its own chooses whether it
+  joins the synced data or makes way for it.
+
+- _Show recovery phrase_ adds another device. _Turn off_ stops syncing on one device, and _Delete
+  synced copy_ removes the encrypted copy; every device keeps its data, and the others say so at
+  their next sync. A synced copy no device has used for a year is deleted.
+- **The relay** (`relay/`) runs as a Cloudflare Worker with a D1 database, which the free plan
+  covers (`npm run relay:deploy`), or as a dependency-free Node server with SQLite for hosting it
+  yourself (`npm run relay:dev` runs one locally). `relay/README.md` covers its API, its deployment
+  and what it can and cannot see. Setting `syncRelay` to `''` in `src/site.config.ts` leaves sync
+  out of a build.
 - `npm run readme:screenshots` renders the README's pictures from a running preview build, so a
   release can refresh them in one command. Its learner, dates and random choices are seeded, the
-  app's own included, so every picture but the game review (whose engine analysis varies a little
-  from run to run) comes out the same until the app changes. It shares its browser set-up,
-  seed and encoder with `npm run screenshots` (`scripts/lib/screenshots.mjs`).
+  app's own included, so every picture comes out the same until the app changes. The exception is
+  the game review, whose engine analysis varies a little from run to run. It shares its browser
+  set-up, seed and encoder with `npm run screenshots` (`scripts/lib/screenshots.mjs`).
+
+### Changed
+
+- While sync between devices is on:
+  - importing a backup joins it with the synced data rather than replacing anything, so nothing is
+    deleted from the other devices, and the import dialog says so;
+  - _Reset everything_ turns sync off on the device before clearing it;
+  - the backup reminder rests while the data has a synced copy from the last week;
+  - the Lichess account sync leaves repertoires and analyses to device sync, because two devices
+    matching the same items to the studies would make copies.
+- The Content-Security-Policy lets the page reach the relay, and nothing more.
+- Settings, the Progress page and the FAQ describe what syncs and what leaves the device.
+- The README shows six screens instead of three, under a new hero image of the puzzle trainer and a
+  game on a phone: game review, a lesson, an opening repertoire, the progress page, the arcade, and
+  the board themes with the piece sets. The pictures are WebP.
 
 ## [0.20.0] - 2026-10-06
 
