@@ -103,7 +103,8 @@ export const relayUrl = () => siteConfig.syncRelay;
 const MAX_ROUNDS = 5;
 /** After a change here, how soon it goes (more changes join it meanwhile). */
 export const CHANGE_DELAY_MS = 8_000;
-const START_DELAY_MS = 1_500;
+/** Once scheduling starts (the app opening, sync turned on or joined), how soon the first run goes. */
+export const START_DELAY_MS = 1_500;
 const PERIODIC_MS = 5 * 60 * 1000;
 const STALE_MS = 60 * 1000;
 const NETWORK_RETRY_MS = 2 * 60 * 1000;

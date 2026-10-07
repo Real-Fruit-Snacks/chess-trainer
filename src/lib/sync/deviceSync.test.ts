@@ -21,6 +21,7 @@ import {
   forgetSyncBase,
   joinLink,
   joinSync,
+  START_DELAY_MS,
   stopSync,
   syncNow,
   turnOnSync,
@@ -64,6 +65,15 @@ async function turnOn(): Promise<string[]> {
   const result = await turnOnSync();
   if (!result.ok) throw new Error(result.reason);
   return result.words;
+}
+
+/**
+ * Lets the run that turning sync on schedules go by, and waits for it, so a
+ * test that times the runs a change starts does not race it.
+ */
+async function afterStartUp() {
+  await vi.advanceTimersByTimeAsync(START_DELAY_MS);
+  await syncNow();
 }
 
 describe('turning sync on', () => {
@@ -162,6 +172,7 @@ describe('syncing', () => {
 
   it('syncs on its own a few seconds after a change', async () => {
     await turnOn();
+    await afterStartUp();
     load(solvePuzzle(takeSnapshot(), 'n1', T));
     await vi.advanceTimersByTimeAsync(CHANGE_DELAY_MS - 1000);
     expect(relay.puts()).toBe(1);
@@ -204,7 +215,7 @@ describe('syncing', () => {
     // A relay that takes one write a minute: the first change after turning on is refused.
     relay.reconfigure({ minWriteIntervalMs: 60_000 });
     await turnOn();
-    await vi.advanceTimersByTimeAsync(2_000); // the start-up run (nothing to send)
+    await afterStartUp(); // nothing to send
     const refused = () => relay.requests.filter((r) => r.status === 429).length;
     load(solvePuzzle(takeSnapshot(), 'n1', T));
     await syncNow();

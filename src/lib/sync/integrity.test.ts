@@ -39,6 +39,7 @@ import {
   CHANGE_DELAY_MS,
   importIntoSync,
   joinSync,
+  START_DELAY_MS,
   startDeviceSync,
   STORAGE_FULL,
   stopSync,
@@ -83,6 +84,16 @@ async function turnOn(): Promise<string[]> {
   const result = await turnOnSync();
   if (!result.ok) throw new Error(result.reason);
   return result.words;
+}
+
+/**
+ * Lets the run that turning sync on schedules go by, and waits for it: a test
+ * that counts the runs a change starts counts that one otherwise, or not,
+ * depending on how fast the machine is.
+ */
+async function afterStartUp() {
+  await vi.advanceTimersByTimeAsync(START_DELAY_MS);
+  await syncNow();
 }
 
 /** Answers lost on their way back, once: the relay handled the request, the device never heard. */
@@ -250,6 +261,7 @@ describe('a full disk', () => {
 
   it('waits, without “room again” or a retry after every change, until room is made or asked', async () => {
     const words = await turnOn();
+    await afterStartUp();
     const other = await otherDevice(words);
     await other.change((s) => saveAnalysis(s, 'an-phone', 'From the phone', T));
     const full = fullFor(storageKeyFor(ANALYSES_STORAGE_KEY), true);

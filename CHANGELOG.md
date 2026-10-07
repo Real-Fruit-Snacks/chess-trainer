@@ -6,6 +6,77 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-07
+
+Sync between devices, made exact: a lost answer, a page closed half-way through a sync, a full disk
+or a second tab no longer makes a device count anything twice or take anything for deleted.
+
+### Added
+
+- **Nothing counted twice, nothing lost.** Each device keeps an exact copy of the version it last
+  agreed with the relay, and the sealed vault records each device's latest write under a random id
+  the device makes for itself, so a device whose write's answer never arrived can tell whether the
+  write went through. A page closed at any moment of a sync, or an import in another tab, never
+  makes a device count something twice or take something for deleted.
+- When the device's storage is full, syncing waits and says so: nothing the device could not save
+  is agreed with the other devices. It carries on by itself once there is room, or at _Sync now_.
+- A round from the Lichess puzzle history that two devices both brought in counts once. With sync
+  between devices on, the Lichess sync first brings the device up to date with the others (waiting
+  up to 10 seconds), so it reads the history knowing what they counted.
+- The relay refuses an upload past 1.4 MB as it arrives, whatever its `Content-Length` says, and an
+  optional rate limit caps the vaults each address can create (see `relay/README.md`). The Node
+  server keeps no more of a request than it needs.
+- The join dialog asks for a phrase from the learner's own devices: whoever made a phrase can read
+  everything synced with it.
+- Tests for the sync drop the relay's answers, close the page at three points of a sync, fill the
+  storage and open a second tab (`src/lib/sync/integrity.test.ts`, `restart.test.ts`), with
+  stand-ins for the Cache API, Web Locks and another device.
+
+### Changed
+
+- **Joining with progress of its own**, _Keep both_ adds up what the two devices did apart, and
+  keeps the puzzle rating, with its chart, of the one that rated a puzzle last. A device restored
+  from the other's backup is recognised by the history they share, so what they have in common is
+  not counted twice.
+- While sync between devices is on, importing a backup joins it with this device's data and the
+  synced data, so nothing done here since the last sync is lost. An item that differs is kept twice,
+  the backup's version as "… (backup)". The device syncs first, so the import needs a connection
+  and adds only what goes beyond the synced data, and an import is undone only while sync is off.
+- Settings' offer to send older results to Lichess counts what this device has not sent, and says
+  other devices may have sent some puzzles already (Lichess rates a puzzle once).
+- Backups are export format 11: they keep the rounds from the Lichess puzzle history counted lately,
+  and a random id of the profile's history, so a backup of the profile, or a device restored from
+  one, is known as such however long ago it was made. Backups from every earlier format import as
+  before.
+- When the sync service cannot be reached while the device is online, Settings says so and the
+  device tries again two minutes later; only a device that is offline shows as offline.
+- The relay's Worker turns base64 around in native code (the `nodejs_compat` flag), so a full vault
+  takes about 2 ms of CPU, well inside the free plan's 10 ms per request.
+- The FAQ covers joining with progress of its own, importing while sync is on, and whose phrase to
+  join with.
+
+### Fixed
+
+- Two devices that did the same thing before syncing (each solved a fork puzzle, played the same
+  arcade game or drill, worked on the same study, threat or odds-ladder rung) both count: the merge
+  saw two equal records and kept one.
+- Two devices that changed the game importer's Lichess or Chess.com username, or the learner's name
+  in the imported games, before syncing settle on the same one straight away.
+- A join link whose phrase was damaged on the way (a broken `%` escape) opens the dialog with the
+  words as they are, and the dialog names any it cannot read, instead of breaking the Settings page.
+- The join dialog stays open while a join is under way: closing it would not have stopped the join.
+- The relay's Node server does not start with a `--port` or `--max-bytes` that is not a whole
+  number, instead of running without a size limit.
+
+## [0.21.1] - 2026-10-07
+
+### Fixed
+
+- With sync between devices on two devices and _Puzzle rating from Lichess_ on, both devices take
+  the same rating from Lichess. The merge added those two changes up, so the rating went past the
+  Lichess one, then back, from sync to sync. Two devices that arrive at the same rating now keep
+  it, and both sides' changes still add up when they differ.
+
 ## [0.21.0] - 2026-10-07
 
 Sync between devices: a phone, a tablet and a computer keep the same progress, with no account. A
@@ -28,37 +99,22 @@ small relay that passes it between devices stores only scrambled data.
   with the relay:
   - changes from either side carry over, deletions included;
   - logs join;
-  - counts add up both sides' increments, so two devices that each solved a fork puzzle count two;
-  - a round from the Lichess puzzle history that two devices both brought in counts once;
-  - the puzzle rating adds up both sides' changes too, unless the two devices arrived at the same
-    rating (taken from Lichess on each, say);
+  - counts add up both sides' increments;
   - a repertoire or analysis edited on two devices before they synced is kept twice, the other
     version named "… (other device)".
 
   Two devices syncing at once never overwrite each other. Changes made offline wait, and join the
-  rest when the device is back online.
-
-- **Nothing counted twice, nothing lost.** A write whose answer never arrives, a page closed at
-  any moment of a sync, a full disk, or an import in another tab never makes a device count
-  something twice or take something for deleted. When the device's storage is full, syncing waits
-  and says so, and carries on once there is room.
-
-- **Joining with progress of its own**, a device chooses whether that joins the synced data (_Keep
-  both_) or makes way for it, with an export offered first. _Keep both_ adds up what the two devices
-  did apart, and keeps the puzzle rating, with its chart, of the one that rated a puzzle last. A
-  device restored from the other's backup is recognised by the history they share, so nothing is
-  counted twice. The dialog asks for a phrase from the learner's own devices: whoever made a phrase
-  can read what is synced with it.
+  rest when the device is back online. A device joining with progress of its own chooses whether it
+  joins the synced data or makes way for it.
 
 - _Show recovery phrase_ adds another device. _Turn off_ stops syncing on one device, and _Delete
   synced copy_ removes the encrypted copy; every device keeps its data, and the others say so at
   their next sync. A synced copy no device has used for a year is deleted.
 - **The relay** (`relay/`) runs as a Cloudflare Worker with a D1 database, which the free plan
   covers (`npm run relay:deploy`), or as a dependency-free Node server with SQLite for hosting it
-  yourself (`npm run relay:dev` runs one locally). It refuses an upload past 1.4 MB as it arrives,
-  and an optional rate limit caps the vaults each address can create. `relay/README.md` covers its
-  API, its deployment and what it can and cannot see. Setting `syncRelay` to `''` in
-  `src/site.config.ts` leaves sync out of a build.
+  yourself (`npm run relay:dev` runs one locally). `relay/README.md` covers its API, its deployment
+  and what it can and cannot see. Setting `syncRelay` to `''` in `src/site.config.ts` leaves sync
+  out of a build.
 - `npm run readme:screenshots` renders the README's pictures from a running preview build, so a
   release can refresh them in one command. Its learner, dates and random choices are seeded, the
   app's own included, so every picture comes out the same until the app changes. The exception is
@@ -68,21 +124,12 @@ small relay that passes it between devices stores only scrambled data.
 ### Changed
 
 - While sync between devices is on:
-  - importing a backup joins it with this device's data and the synced data rather than replacing
-    anything, so nothing done here since the last sync is lost and nothing is deleted from the
-    other devices, and the import dialog says so (an item that differs is kept twice, the
-    backup's version as "… (backup)"); the device syncs first, so only what goes beyond the synced
-    data is added, and an import is undone only while sync is off;
+  - importing a backup joins it with the synced data rather than replacing anything, so nothing is
+    deleted from the other devices, and the import dialog says so;
   - _Reset everything_ turns sync off on the device before clearing it;
   - the backup reminder rests while the data has a synced copy from the last week;
   - the Lichess account sync leaves repertoires and analyses to device sync, because two devices
-    matching the same items to the studies would make copies;
-  - Settings' offer to send older results to Lichess counts what this device has not sent, and says
-    other devices may have sent some puzzles already (Lichess rates a puzzle once).
-- Backups are export format 11: they keep the rounds from the Lichess puzzle history counted
-  lately, which sync between devices needs to count a round two devices both brought in once, and
-  a random id of the profile's history, so a backup of the profile, or a device restored from one,
-  is known as such however long ago it was made.
+    matching the same items to the studies would make copies.
 - The Content-Security-Policy lets the page reach the relay, and nothing more.
 - Settings, the Progress page and the FAQ describe what syncs and what leaves the device.
 - The README shows six screens instead of three, under a new hero image of the puzzle trainer and a

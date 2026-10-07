@@ -433,7 +433,7 @@ export const progressFields = {
   blunderChecks: struct({ stopped: number, playedAnyway: number }),
   // Added in 0.17 (export version 10).
   lichessPuzzles: record(lichessPuzzle),
-  // Added in 0.21 (export version 11).
+  // Added in 0.22 (export version 11).
   lichessRounds: array(struct({ id: string, at: number, win: boolean, themes: string })),
   lineage: array(string),
 } satisfies { [K in keyof PersistedProgress]: Schema<unknown> };

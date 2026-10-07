@@ -2,20 +2,34 @@
 // `npx wrangler deploy` (Wrangler 4.45 or later) creates the D1 database on the
 // first deploy and writes its id back into this file.
 {
-  "name": "chess-trainer-sync",
-  "main": "src/worker.mjs",
-  "compatibility_date": "2026-09-01",
-  // Node's Buffer, for base64 in native code (see src/d1Store.mjs).
-  "compatibility_flags": ["nodejs_compat"],
-  "workers_dev": true,
-  "d1_databases": [{ "binding": "DB", "database_name": "chess-trainer-sync" }],
-  // Once a day, vaults nobody has written or read for a year are deleted.
-  "triggers": { "crons": ["17 3 * * *"] },
-  "vars": {
-    // The app's origin: pages elsewhere cannot read the relay's answers.
-    "ALLOWED_ORIGINS": "https://real-fruit-snacks.github.io",
-    "MAX_BYTES": "1400000",
-  },
-  // No request logs are kept.
-  "observability": { "enabled": false },
+	"name": "chess-trainer-sync",
+	"main": "src/worker.mjs",
+	"compatibility_date": "2026-09-01",
+	// Node's Buffer, for base64 in native code (see src/d1Store.mjs).
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"workers_dev": true,
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "chess-trainer-sync",
+			"database_id": "675bcc92-e6df-4306-aa33-c7fab45e8dc9"
+		}
+	],
+	// Once a day, vaults nobody has written or read for a year are deleted.
+	"triggers": {
+		"crons": [
+			"17 3 * * *"
+		]
+	},
+	"vars": {
+		// The app's origin: pages elsewhere cannot read the relay's answers.
+		"ALLOWED_ORIGINS": "https://real-fruit-snacks.github.io",
+		"MAX_BYTES": "1400000",
+	},
+	// No request logs are kept.
+	"observability": {
+		"enabled": false
+	},
 }

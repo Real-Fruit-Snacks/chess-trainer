@@ -273,22 +273,22 @@ install, a **storage meter**, and backups — export or import as JSON, **share 
 another device, or open a backup file with the installed app. An import is checked field by field,
 then asks first: it shows the backup's date and what it holds (puzzle attempts, imported games, saved
 analyses, custom repertoires), offers to export the current progress, replaces everything in the
-profile at once, and can be undone from the toast that follows. Backups since 0.21 (format 11)
-keep the rounds from the Lichess puzzle history counted lately (so sync between devices counts a
-round two devices both brought in once) and a random id of the profile's history (so a backup of
-the profile is known as such, however long ago it was made); since 0.17 (format 10) they keep the Lichess puzzles
-waiting in the review queue and which games went to Lichess; since 0.16
-(format 9) they keep games against the human-like opponent with its rating; since 0.15 (format 8) they carry the
-thinking-skill records too; since 0.12 (format 7) they include the imported games and, on a device with several profiles, carry the profile's name in the
-file name. _Reset everything_ clears this profile's progress, repertoires, library and imported games
-and the device settings, a downloaded full engine included, turns sync between devices off on this
-device first (so the synced copy and the other devices keep their data), and disconnects the
-profile's Lichess account (withdrawing the permission); the other profiles are kept, and the dialog
-says so. With sync between devices on, an import joins the backup with this device's data and the
-synced data instead of replacing anything (an item that differs is kept twice, the backup's version
-as "… (backup)"), and the dialog says that instead; the device syncs first, so this needs a
-connection, and only what goes beyond the synced data is added. **Sync between devices** and the **Lichess
-account:** see below.
+profile at once, and can be undone from the toast that follows. Backups since 0.22 (format 11) keep
+the rounds from the Lichess puzzle history counted lately (so sync between devices counts a round
+two devices both brought in once) and a random id of the profile's history (so a backup of the
+profile is known as such, however long ago it was made); since 0.17 (format 10) they keep the
+Lichess puzzles waiting in the review queue and which games went to Lichess; since 0.16 (format 9)
+they keep games against the human-like opponent with its rating; since 0.15 (format 8) they carry
+the thinking-skill records too; since 0.12 (format 7) they include the imported games and, on a
+device with several profiles, carry the profile's name in the file name. _Reset everything_ clears
+this profile's progress, repertoires, library and imported games and the device settings, a
+downloaded full engine included, turns sync between devices off on this device first (so the synced
+copy and the other devices keep their data), and disconnects the profile's Lichess account
+(withdrawing the permission); the other profiles are kept, and the dialog says so. With sync between
+devices on, an import joins the backup with this device's data and the synced data instead of
+replacing anything (an item that differs is kept twice, the backup's version as "… (backup)"), and
+the dialog says that instead; the device syncs first, so this needs a connection, and only what goes
+beyond the synced data is added. **Sync between devices** and the **Lichess account:** see below.
 
 ### The test lab
 

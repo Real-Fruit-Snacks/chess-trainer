@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeShare } from '@/lib/shareCodes';
@@ -183,8 +183,11 @@ describe('WoodpeckerPanel with slow puzzle files', () => {
     );
     const offer = await screen.findByTestId('shared-woodpecker', {}, { timeout: 2000 });
     expect(offer).toHaveTextContent('set of 12 puzzles');
-    // The link is tidied away once the set has been checked.
-    expect(screen.getByTestId('where')).toHaveTextContent(/^\/puzzles\/woodpecker$/);
+    // The link is tidied away once the set has been checked (the router may render that a
+    // moment after the offer).
+    await waitFor(() =>
+      expect(screen.getByTestId('where')).toHaveTextContent(/^\/puzzles\/woodpecker$/),
+    );
   });
 });
 
