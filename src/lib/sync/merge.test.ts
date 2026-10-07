@@ -70,7 +70,7 @@ describe('mergeSnapshots', () => {
     for (let i = 0; i < 2; i++) local = solvePuzzle(local, `l${i}`, T + i * MIN);
     let remote = base;
     for (let i = 0; i < 3; i++) remote = solvePuzzle(remote, `r${i}`, T + 10 * MIN + i * MIN);
-    remote = solvePuzzle(remote, 'r-miss', T + 20 * MIN, 'failed');
+    remote = solvePuzzle(remote, 'r-miss', T + 20 * MIN, 'failed', -7);
 
     const merged = mergeSnapshots(base, local, remote).progress;
     const b = base.progress;
@@ -83,7 +83,7 @@ describe('mergeSnapshots', () => {
       failed: (b.themeStats.fork?.failed ?? 0) + 1,
     });
     // Both sides' rating changes count.
-    expect(merged.puzzleRating).toBe(b.puzzleRating + 2 * 5 + 3 * 5 - 5);
+    expect(merged.puzzleRating).toBe(b.puzzleRating + 2 * 5 + 3 * 5 - 7);
     // The logs join, newest first, nothing twice.
     expect(merged.attempts.map((a) => a.id).slice(0, 6)).toEqual([
       'r-miss',
@@ -100,6 +100,25 @@ describe('mergeSnapshots', () => {
     );
     expect(merged.puzzleReviews['r-miss']?.lapses).toBe(1);
     expect(merged.lastRatedAt).toBe(T + 20 * MIN);
+  });
+
+  it('keeps a rating both devices took from Lichess, rather than adding it twice', () => {
+    const base = fixtureSnapshot();
+    const fromLichess = (s: SyncSnapshot, at: number) => {
+      const next = structuredClone(s);
+      next.progress.puzzleRating = 1530;
+      next.progress.lastRatedAt = at;
+      next.progress.ratingHistory = [...next.progress.ratingHistory, { at, rating: 1530 }];
+      return next;
+    };
+    const a = fromLichess(base, T);
+    const b = fromLichess(base, T + MIN);
+    expect(mergeSnapshots(base, a, b).progress.puzzleRating).toBe(1530);
+    expect(mergeSnapshots(base, b, a).progress.puzzleRating).toBe(1530);
+    // And it stays there as the two devices go on syncing.
+    const vault = viaVault(mergeSnapshots(base, a, b));
+    expect(mergeSnapshots(a, a, vault).progress.puzzleRating).toBe(1530);
+    expect(mergeSnapshots(b, fromLichess(b, T + 2 * MIN), vault).progress.puzzleRating).toBe(1530);
   });
 
   it('joins without a base without counting the shared part twice', () => {

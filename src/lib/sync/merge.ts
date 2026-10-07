@@ -277,9 +277,13 @@ function mergeProgressFields(
   const base = b ?? undefined;
   const lastRated = later(l, r, (p) => p.lastRatedAt);
 
-  // Both sides' rating changes count (two equal changes are two changes, not one).
+  // Both sides' rating changes count. Two devices on the same rating agree, though: with
+  // "Puzzle rating from Lichess" on, each takes the same rating from Lichess, and adding
+  // those two changes would push the rating past it, and back, sync after sync.
   const puzzleRating = b
-    ? Math.round(l.puzzleRating + r.puzzleRating - b.puzzleRating)
+    ? pick(true, b.puzzleRating, l.puzzleRating, r.puzzleRating, (x, y) =>
+        Math.round(x + y - b.puzzleRating),
+      )
     : lastRated.puzzleRating;
   const puzzleReviews = capReviews(
     mergeReviews(base?.puzzleReviews, l.puzzleReviews, r.puzzleReviews),

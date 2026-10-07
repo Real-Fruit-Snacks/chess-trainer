@@ -754,11 +754,12 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
   take the higher, firsts the earlier; the puzzle queue keeps the card with more lapses, repertoire
   cards the later review; a repertoire or analysis changed on both sides is kept twice, the other
   version under `<id>~<FNV-1a of it>` and "… (other device)", so every device names the copy alike.
-  The puzzle rating adds both sides' changes. The result goes through `repairProgress`. The backup
-  reminder's fields stay each device's own (`DEVICE_FIELDS`) and are left out of comparisons, or two
-  devices would write their own values over each other's. Comparisons use sorted-key JSON
-  (`canonical.ts`). The tests run random two-device histories through a simulated relay:
-  the devices always agree after a round or two, and no attempt or play is lost or counted twice.
+  The puzzle rating adds both sides' changes, unless both arrived at the same rating (taken from
+  Lichess on each device, say). The result goes through `repairProgress`. The backup reminder's
+  fields stay each device's own (`DEVICE_FIELDS`) and are left out of comparisons, or two devices
+  would write their own values over each other's. Comparisons use sorted-key JSON (`canonical.ts`).
+  The tests run random two-device histories through a simulated relay: the devices always agree
+  after a round or two, and no attempt or play is lost or counted twice.
 - **Runs** (`deviceSync.ts`). Read the vault (`X-Known-Version` with the agreed version: an
   unchanged one is not sent again), merge, apply to the stores (only those that changed; their own
   change notifications are ignored meanwhile), save the remote copy as the base, and write the

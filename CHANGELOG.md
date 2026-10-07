@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-10-07
+
+### Fixed
+
+- With sync between devices on two devices and _Puzzle rating from Lichess_ on, both devices take
+  the same rating from Lichess. The merge added those two changes up, so the rating went past the
+  Lichess one, then back, from sync to sync. Two devices that arrive at the same rating now keep
+  it, and both sides' changes still add up when they differ.
+
 ## [0.21.0] - 2026-10-07
 
 Sync between devices: a phone, a tablet and a computer keep the same progress, with no account. A
