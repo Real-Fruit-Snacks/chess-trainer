@@ -2,6 +2,7 @@ import type { SavedAnalysis } from './analyses';
 import type { StoredGame } from './games';
 import type { PersistedProgress } from './progress';
 import type { PersistedRepertoire } from './repertoire';
+import { learnerSettingsFrom, type LearnerSettings } from './settings';
 
 /**
  * What a backup file — and a saved store — may contain, field by field.
@@ -529,7 +530,7 @@ export const gamesSlice = slice(gamesFields);
 /* ------------------------------------------------------------------ */
 
 /** The export format written by this build (see `exportState`). */
-export const EXPORT_VERSION = 11;
+export const EXPORT_VERSION = 12;
 
 /** Why a file was refused: not ours, ours but broken, not JSON at all, or a PGN by the look of it. */
 export type BackupProblem = 'not-a-backup' | 'damaged' | 'unreadable' | 'looks-like-pgn';
@@ -542,6 +543,8 @@ export interface BackupShape {
   repertoire?: Partial<PersistedRepertoire>;
   analyses?: Partial<{ items: Record<string, SavedAnalysis> }>;
   games?: Partial<{ games: Record<string, StoredGame>; player: string }>;
+  /** The learner's settings (format 12 on); a setting that does not check out is left out. */
+  settings?: Partial<LearnerSettings>;
   /** Damaged entries skipped across every part. */
   dropped: number;
 }
@@ -620,6 +623,10 @@ export function validateBackupFile(raw: unknown, current = EXPORT_VERSION): Back
     const part = gamesSlice(file.games, 'games', ctx);
     if (!part.ok) return damaged(part.reason);
     shape.games = part.value;
+  }
+  // Settings never make a file damaged: one that does not check out is left out, as a load does.
+  if (enveloped && typeof file.settings === 'object' && file.settings !== null) {
+    shape.settings = learnerSettingsFrom(file.settings);
   }
   shape.dropped = ctx.dropped;
   return warning ? { ok: true, shape, warning } : { ok: true, shape };

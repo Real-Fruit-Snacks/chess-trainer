@@ -46,7 +46,7 @@ import { useAnalyses } from './analyses';
 import { useGames } from './games';
 import { useLichess } from './lichess';
 import { storageKeyFor } from './profiles';
-import { takeLegacyLearnerFields } from './settings';
+import { learnerSettingsOf, takeLegacyLearnerFields, useSettings } from './settings';
 import {
   type BackupProblem,
   type BackupShape,
@@ -555,6 +555,8 @@ export interface BackupSummary {
   games: number;
   analyses: number;
   repertoires: number;
+  /** It holds the learner's settings (format 12 on). */
+  settings: boolean;
   /** Damaged entries that were skipped. */
   dropped: number;
 }
@@ -955,6 +957,7 @@ function summarize(shape: BackupShape): BackupSummary {
     games: Object.keys(shape.games?.games ?? {}).length,
     analyses: Object.keys(shape.analyses?.items ?? {}).length,
     repertoires: shape.repertoire?.custom?.length ?? 0,
+    settings: shape.settings !== undefined && Object.keys(shape.settings).length > 0,
     dropped: shape.dropped,
   };
 }
@@ -1679,6 +1682,7 @@ export const useProgress = create<ProgressState>()(
               ),
               analyses: { items: useAnalyses.getState().items },
               games: { games, player },
+              settings: learnerSettingsOf(useSettings.getState()),
             },
             null,
             2,
@@ -1702,6 +1706,8 @@ export const useProgress = create<ProgressState>()(
           useRepertoire.getState().replaceState(shape.repertoire ?? {});
           useAnalyses.getState().replaceState(shape.analyses ?? {});
           useGames.getState().replaceState(shape.games ?? {});
+          // A backup from before settings were in backups leaves the settings as they are.
+          if (shape.settings) useSettings.setState(shape.settings);
           set(next);
           // The Lichess sync matches the new data afresh: nothing on Lichess is deleted for
           // items the backup does not hold, and the history is read again.

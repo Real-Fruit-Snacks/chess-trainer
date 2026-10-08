@@ -6,7 +6,8 @@ import { activeProfile, nameTaken, useProfiles } from '@/store/profiles';
 
 /**
  * Profiles: several learners on one device. Each profile has its own progress,
- * repertoires, games and analysis library; device settings are shared.
+ * repertoires, games, analysis library and settings; the engine settings are
+ * the device's, shared.
  */
 export function ProfilesCard() {
   const profiles = useProfiles((s) => s.profiles);
@@ -26,9 +27,9 @@ export function ProfilesCard() {
     <Card id="profiles" data-testid="profiles">
       <h2 style={{ fontSize: '1.15rem' }}>Profiles</h2>
       <p className="small muted" style={{ margin: '0 0 12px' }}>
-        Sharing this device? Each profile keeps its own progress, ratings, repertoires, games and
-        library. Appearance and other device settings are shared. You are{' '}
-        <strong>{current.name}</strong>.
+        Sharing this device? Each profile keeps its own progress, ratings, repertoires, games,
+        library and settings — a new one starts with the settings of this one. The engine settings
+        are the device’s, shared. You are <strong>{current.name}</strong>.
       </p>
       <ul role="list" className="profiles__list">
         {profiles.map((profile) => {

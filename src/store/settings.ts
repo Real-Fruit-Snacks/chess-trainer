@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import {
   keepCorruptBlob,
   rehydrateOnStorageChange,
   safeLocalStorage,
   warnNewerSave,
 } from '@/lib/persistStorage';
+import { storageKeyFor } from '@/store/profiles';
 import { removeFullEngine } from '@/engine/fullEngine';
 import { DEFAULT_HUMAN_RATING, isHumanRating } from '@/engine/maia/ratings';
 import { BLIND_DEPTHS, type BlindDepth } from '@/features/puzzles/blind';
@@ -255,6 +256,30 @@ export type PersistedSettings = typeof DEFAULT_SETTINGS;
 export const SETTINGS_STORAGE_KEY = 'chess-trainer:settings';
 export const SETTINGS_VERSION = 5;
 
+/**
+ * The settings that belong to the device rather than to a learner: the engine
+ * build it runs (threads need the service worker's headers, the full engine a
+ * download kept on the device) and when its install prompt was dismissed.
+ * They are kept once for every profile, under a key of their own, and never
+ * synced. Everything else is the learner's: each profile keeps its own, and
+ * sync between devices can carry them.
+ */
+export const DEVICE_SETTING_KEYS = ['engineThreads', 'engineFull', 'installDismissedAt'] as const;
+export type DeviceSettingKey = (typeof DEVICE_SETTING_KEYS)[number];
+export const DEVICE_SETTINGS_STORAGE_KEY = 'chess-trainer:device-settings';
+
+/** The learner's settings: all but the device's. */
+export type LearnerSettings = Omit<PersistedSettings, DeviceSettingKey>;
+
+export const LEARNER_SETTING_KEYS = (
+  Object.keys(DEFAULT_SETTINGS) as (keyof PersistedSettings)[]
+).filter(
+  (key): key is keyof LearnerSettings => !(DEVICE_SETTING_KEYS as readonly string[]).includes(key),
+);
+
+/** This profile's settings key (the main profile's is the one settings always had). */
+export const settingsStorageKey = (): string => storageKeyFor(SETTINGS_STORAGE_KEY);
+
 /* ------------------------------------------------------------------ */
 /* Validation on load                                                 */
 /* ------------------------------------------------------------------ */
@@ -377,6 +402,19 @@ export function sanitizeSettings(
   return out;
 }
 
+/** The learner's settings among `settings` (a store's state, or a save checked already). */
+export function learnerSettingsOf(settings: Partial<PersistedSettings>): Partial<LearnerSettings> {
+  const out: Record<string, unknown> = {};
+  for (const key of LEARNER_SETTING_KEYS) {
+    if (settings[key] !== undefined) out[key] = settings[key];
+  }
+  return out;
+}
+
+/** Settings from a file (a backup, a synced copy), checked as a load checks them: the learner's only. */
+export const learnerSettingsFrom = (raw: unknown): Partial<LearnerSettings> =>
+  learnerSettingsOf(sanitizeSettings(raw));
+
 /* ------------------------------------------------------------------ */
 /* Fields that moved to the progress store in version 4               */
 /* ------------------------------------------------------------------ */
@@ -426,6 +464,73 @@ function pickLegacyLearnerFields(stored: Record<string, unknown>): LegacyLearner
   return picked;
 }
 
+/* ------------------------------------------------------------------ */
+/* Storage: the learner's settings per profile, the device's apart     */
+/* ------------------------------------------------------------------ */
+
+interface StoredSettings {
+  state: Record<string, unknown>;
+  version: number;
+}
+
+function readStored(key: string): StoredSettings | null {
+  const raw = safeLocalStorage.getItem(key);
+  if (typeof raw !== 'string') return null;
+  try {
+    const parsed = JSON.parse(raw) as { state?: unknown; version?: unknown } | null;
+    if (typeof parsed?.state !== 'object' || parsed.state === null) return null;
+    return {
+      state: parsed.state as Record<string, unknown>,
+      version: typeof parsed.version === 'number' ? parsed.version : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function pick(state: Record<string, unknown>, keys: readonly string[], keep: boolean) {
+  return Object.fromEntries(Object.entries(state).filter(([key]) => keys.includes(key) === keep));
+}
+
+/**
+ * The store's one saved value, made of two: the profile's settings, and the
+ * device's (`DEVICE_SETTING_KEYS`) under their own key. A profile with no
+ * settings of its own yet (made before settings were per profile) starts from
+ * the main profile's, and saves made before the device's were kept apart give
+ * theirs from the profile's save.
+ */
+const settingsStorage: StateStorage = {
+  getItem: (name) => {
+    const own = safeLocalStorage.getItem(name);
+    const learner =
+      readStored(name) ?? (name !== SETTINGS_STORAGE_KEY ? readStored(SETTINGS_STORAGE_KEY) : null);
+    // A save that cannot be read goes to the store as it is, which keeps a copy of it.
+    if (typeof own === 'string' && readStored(name) === null) return own;
+    const device = readStored(DEVICE_SETTINGS_STORAGE_KEY);
+    if (!learner && !device) return null;
+    const state = {
+      ...pick(learner?.state ?? {}, DEVICE_SETTING_KEYS, false),
+      ...pick(device?.state ?? learner?.state ?? {}, DEVICE_SETTING_KEYS, true),
+    };
+    return JSON.stringify({
+      state,
+      version: learner?.version ?? device?.version ?? SETTINGS_VERSION,
+    });
+  },
+  setItem: (name, value) => {
+    const { state, version } = JSON.parse(value) as StoredSettings;
+    safeLocalStorage.setItem(
+      name,
+      JSON.stringify({ state: pick(state, DEVICE_SETTING_KEYS, false), version }),
+    );
+    safeLocalStorage.setItem(
+      DEVICE_SETTINGS_STORAGE_KEY,
+      JSON.stringify({ state: pick(state, DEVICE_SETTING_KEYS, true), version }),
+    );
+  },
+  removeItem: (name) => safeLocalStorage.removeItem(name),
+};
+
 export const useSettings = create<SettingsState>()(
   persist<SettingsState, [], [], PersistedSettings>(
     (set) => ({
@@ -439,16 +544,16 @@ export const useSettings = create<SettingsState>()(
       },
     }),
     {
-      name: SETTINGS_STORAGE_KEY,
+      name: settingsStorageKey(),
       version: SETTINGS_VERSION,
-      storage: createJSONStorage(() => safeLocalStorage),
+      storage: createJSONStorage(() => settingsStorage),
       migrate: (stored, version): PersistedSettings => {
         const input =
           typeof stored === 'object' && stored !== null
             ? { ...(stored as Record<string, unknown>) }
             : {};
         if (version > SETTINGS_VERSION) {
-          warnNewerSave(SETTINGS_STORAGE_KEY, version, SETTINGS_VERSION);
+          warnNewerSave(settingsStorageKey(), version, SETTINGS_VERSION);
           return { ...DEFAULT_SETTINGS, ...sanitizeSettings(input) };
         }
         if (version < 4) {
@@ -467,9 +572,11 @@ export const useSettings = create<SettingsState>()(
         const { update: _u, reset: _r, ...rest } = state;
         return rest;
       },
-      onRehydrateStorage: keepCorruptBlob(SETTINGS_STORAGE_KEY),
+      onRehydrateStorage: keepCorruptBlob(settingsStorageKey()),
     },
   ),
 );
 
-rehydrateOnStorageChange(useSettings, SETTINGS_STORAGE_KEY);
+rehydrateOnStorageChange(useSettings, settingsStorageKey());
+// The device's settings changed in another tab (of any profile).
+rehydrateOnStorageChange(useSettings, DEVICE_SETTINGS_STORAGE_KEY);

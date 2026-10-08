@@ -14,6 +14,7 @@ import {
   withRatingDefaults,
 } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
+import { learnerSettingsOf, useSettings } from '@/store/settings';
 import type { SyncWrites } from './base';
 import { DEVICE_SYNC_STORAGE_KEY } from './enabled';
 import { same } from './canonical';
@@ -21,14 +22,16 @@ import type { SyncSnapshot } from './merge';
 
 /**
  * What device sync carries: the profile's four data stores — progress, the
- * opening repertoires, the analysis library and the imported games — exactly
- * what a backup holds. In the vault the snapshot is a backup file, so a
- * decrypted vault could be imported like any other. Settings, the Lichess
- * connection and the sync's own state stay on each device.
+ * opening repertoires, the analysis library and the imported games — and the
+ * learner's settings: exactly what a backup holds. In the vault the snapshot
+ * is a backup file, so a decrypted vault could be imported like any other.
+ * The device's own settings (the engine build, the install prompt), the
+ * Lichess connection and the sync's own state stay on each device.
  */
 
-/** The storage keys (before the profile's suffix) of the four stores, and of the sync's own. */
+/** The storage keys (before the profile's suffix) of the synced stores, and of the sync's own. */
 const SYNCED_STORAGE_KEYS = [
+  'chess-trainer:settings',
   'chess-trainer:progress',
   'chess-trainer:repertoire',
   'chess-trainer:analyses',
@@ -52,6 +55,7 @@ export function takeSnapshot(): SyncSnapshot {
     repertoire: { cards, custom, sessions },
     analyses: { items: useAnalyses.getState().items },
     games: { games, player },
+    settings: learnerSettingsOf(useSettings.getState()),
   };
 }
 
@@ -136,6 +140,7 @@ function snapshotFromShape(shape: BackupShape): SyncSnapshot {
     repertoire: { cards: {}, custom: [], sessions: [], ...shape.repertoire },
     analyses: { items: shape.analyses?.items ?? {} },
     games: { games: shape.games?.games ?? {}, player: shape.games?.player ?? '' },
+    settings: shape.settings ?? {},
   };
 }
 
@@ -190,6 +195,14 @@ export function applySnapshot(next: SyncSnapshot, current: SyncSnapshot): void {
   }
   if (!same(next.analyses, current.analyses)) useAnalyses.getState().replaceState(next.analyses);
   if (!same(next.games, current.games)) useGames.getState().replaceState(next.games);
+  // Settings one by one, and only those `next` has a value for.
+  const settings = Object.fromEntries(
+    Object.entries(next.settings).filter(
+      ([key, value]) =>
+        value !== undefined && !same(value, current.settings[key as keyof typeof next.settings]),
+    ),
+  );
+  if (Object.keys(settings).length > 0) useSettings.setState(settings);
 }
 
 /**
@@ -215,6 +228,7 @@ export function emptySyncSnapshot(): SyncSnapshot {
     repertoire: { cards: {}, custom: [], sessions: [] },
     analyses: { items: {} },
     games: { games: {}, player: '' },
+    settings: {},
   };
 }
 

@@ -78,9 +78,10 @@ key moments explained in words — or analyse the game yourself first and let th
 you found — Lichess and chess.com imports, and shareable links that carry the whole game.
 
 **Sync** — turn on sync between devices and your phone, tablet and computer stay in step: progress,
-lessons, review schedules, repertoires, analyses and games. There is no account, only a 12-word
-recovery phrase (or its QR code), and everything is encrypted on the device before it leaves.
-Changes made offline are merged, not overwritten. Or connect your Lichess account and the app keeps
+lessons, review schedules, repertoires, analyses, games and settings, so any device is ready to
+play as you left it — and each device can keep any of them to itself. There is no account, only a
+12-word recovery phrase (or its QR code), and everything is encrypted on the device before it
+leaves. Changes made offline are merged, not overwritten. Or connect your Lichess account and the app keeps
 in step with it, both ways: puzzles you solve here count on Lichess, your Lichess puzzle history and
 its misses come here, games you play are imported to Lichess, and your own repertoires and saved
 analyses live in private Lichess studies.

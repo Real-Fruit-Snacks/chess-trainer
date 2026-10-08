@@ -251,7 +251,10 @@ of lessons and themes. Rows resting on fewer than 3 games or 20 reviewed moves a
 
 ## Settings
 
-Settings is in five tabs: **Appearance**, **Play**, **Engine**, **Sync & data** and **App**. The
+Settings is in five tabs: **Appearance**, **Play**, **Engine**, **Sync & data** and **App**. Each
+profile keeps its own settings (a new profile starts with those of the one it was made from), and
+sync between devices can carry them; the engine's threads, the full engine download and the install
+prompt belong to the device, shared by its profiles, and never sync. The
 address names the open tab (`/settings#engine`), so a reload or a shared link opens it again, and a
 link to a card (`/settings#profiles` from the profile badge, `#lichess` after the Lichess sign-in, a
 join link's `#sync=…`) opens the card's tab and scrolls to it. The tabs are one tab stop: the arrow
@@ -286,8 +289,9 @@ speed test.
 Backups export or import as JSON, **share a backup** straight to another device, or open a backup
 file with the installed app. An import is checked field by field, then asks first: it shows the
 backup's date and what it holds (puzzle attempts, imported games, saved analyses, custom
-repertoires), offers to export the current progress, replaces everything in the profile at once, and
-can be undone from the toast that follows. Backups since 0.22 (format 11) keep the rounds from the
+repertoires, the settings), offers to export the current progress, replaces everything in the profile
+at once, and can be undone from the toast that follows. Backups since 0.24 (format 12) hold the
+profile's settings (an older backup leaves them as they are); since 0.22 (format 11) they keep the rounds from the
 Lichess puzzle history counted lately (so sync between devices counts a round two devices both
 brought in once) and a random id of the profile's history (so a backup of the profile is known as
 such, however long ago it was made); since 0.17 (format 10) they keep the Lichess puzzles waiting
@@ -295,14 +299,14 @@ in the review queue and which games went to Lichess; since 0.16 (format 9) they 
 the human-like opponent with its rating; since 0.15 (format 8) they carry the thinking-skill records
 too; since 0.12 (format 7) they include the imported games and, on a device with several profiles,
 carry the profile's name in the file name. _Reset everything_ clears this profile's progress,
-repertoires, library and imported games and the device settings, a downloaded full engine included,
+repertoires, library, imported games and settings and the device's engine settings, a downloaded full engine included,
 turns sync between devices off on this device first (so the synced copy and the other devices keep
 their data), and disconnects the profile's Lichess account (withdrawing the permission); the other
 profiles are kept, and the dialog says so. With sync between devices on, an import joins the backup
 with this device's data and the synced data instead of replacing anything (an item that differs is
 kept twice, the backup's version as "… (backup)"), and the dialog says that instead; the device
 syncs first, so this needs a connection, and only what goes beyond the synced data is added — the
-toast counts what it added.
+toast counts what it added. The settings stay as they are.
 
 **App.** Installing the app, the badge of due reviews on its icon, the offline puzzle download (it
 keeps going when you change page), the test lab, and the version.
@@ -345,14 +349,24 @@ tablet and computer, with no account:
   the one that rated a puzzle last. A device restored from the other's backup is recognised by the
   history they share, so what they have in common is not counted twice.
 - **What syncs:** progress, ratings, lessons, flashcards, review schedules, repertoires and their
-  cards, saved analyses and imported games — everything a backup holds. Device settings, the
-  Lichess sign-in and the backup reminder stay on each device.
+  cards, saved analyses, imported games and the settings — everything a backup holds — so every
+  device is ready to play as the learner left it. The engine's threads and full download, the
+  install prompt, the Lichess sign-in and the backup reminder stay on each device. A setting changed
+  on two devices before they synced takes the value of the one that synced first, and a device
+  joining takes the synced settings.
+- **What syncs on this device:** a switch for each part — _Progress_, _Repertoires_, _Saved
+  analyses_, _Imported games_ and _Settings_ — all on by default, and also offered before sync is
+  turned on or joined. A part switched off stays as it is on the device and the vault keeps its own
+  of it, for the other devices; switched on again, what changed on both sides meanwhile comes
+  together, merged against the version the two last shared, so nothing is counted twice. Each
+  device chooses for itself.
 - **When:** a few seconds after something changes, when the app opens, comes back into view or back
   online, and every 5 minutes while it is on screen; _Sync now_ runs it at once. Tabs take turns.
 - **Counted.** The card counts what is kept in step — puzzles played, lessons completed, the
-  learner's own repertoires, repertoire moves in review, saved analyses and imported games — and,
-  after each sync, says what came in and what went out: "4 puzzles and 1 analysis from your other
-  devices; 2 imported games sent." Joining says what came in, and importing a backup what it added.
+  learner's own repertoires, repertoire moves in review, saved analyses and imported games, of the
+  parts the device syncs — and, after each sync, says what came in and what went out: "4 puzzles
+  and 1 analysis from your other devices; 2 settings sent." Turning sync on counts the settings
+  changed from their defaults, joining says what came in, and importing a backup what it added.
 - **Merging, not overwriting.** Each device remembers the version it last agreed with the relay and
   merges three ways: what only one side changed carries over, deletions included; logs (puzzle
   attempts, rating points, games, training days) join; counts add up both sides' increments; the
@@ -429,7 +443,7 @@ Lichess refuses is noted in the card while the rest of the sync goes on. Results
 device recorded without sending — before connecting, while disconnected or while that part was off —
 are offered after connecting and when a part is switched back on (_Send them_ / _Not now_).
 Lessons, flashcards, review schedules and settings stay on the device: a backup, or sync between
-devices, moves those (settings aside). While sync between devices is on, the repertoires and
+devices, moves those. While sync between devices is on, the repertoires and
 analyses part pauses: those travel with it instead. The token is kept in this profile's storage on
 this device, never in a backup; _Disconnect_ revokes it on Lichess. Importing a backup starts the matching over, so nothing on Lichess is deleted for
 items the backup does not hold.
@@ -568,9 +582,10 @@ suite on every run.
   Compression Streams API), so nothing is sent to a server and a link opens the same game at the same
   move. Repertoires (`/openings#rep=…`) and Woodpecker sets (`/puzzles/woodpecker#wp=…`) travel the
   same way.
-- **Profiles** namespace the persisted stores: the first profile keeps the plain `localStorage`
-  keys, every other one gets `<key>:<profile id>`; switching reloads the app into the other
-  namespace. Device settings are shared.
+- **Profiles** namespace the persisted stores, the settings included: the first profile keeps the
+  plain `localStorage` keys, every other one gets `<key>:<profile id>`; switching reloads the app
+  into the other namespace. The device's own settings (the engine build, the install prompt) are
+  kept once, under `chess-trainer:device-settings`, for every profile.
 - **Openings.** `scripts/import-openings.mjs` turns the lichess-org/chess-openings dataset (CC0) into
   a table keyed by position, so the analysis board can name an opening even after a transposition.
 - **Move commentary and the coach** explain mistakes with rules, not generated prose: static exchange

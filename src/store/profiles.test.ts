@@ -39,6 +39,16 @@ describe('profiles', () => {
     expect(loadProfiles().profiles).toHaveLength(2);
   });
 
+  it('starts a new profile with the settings of the one it was made from', () => {
+    localStorage.setItem('chess-trainer:settings', '{"state":{"boardTheme":"blue"},"version":5}');
+    const added = useProfiles.getState().add('Guest')!;
+    expect(localStorage.getItem(storageKeyFor('chess-trainer:settings', added.id))).toBe(
+      '{"state":{"boardTheme":"blue"},"version":5}',
+    );
+    // Its own from then on.
+    expect(PROFILE_SCOPED_KEYS).toContain('chess-trainer:settings');
+  });
+
   it('removes an inactive profile together with its stores', () => {
     const added = useProfiles.getState().add('Guest')!;
     for (const base of PROFILE_SCOPED_KEYS) {

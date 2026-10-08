@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addRepertoire,
+  changeSettings,
   deleteAnalysis,
   deleteRepertoire,
   doLessonStep,
@@ -26,6 +27,7 @@ const T = 1_791_000_000_000;
 
 const none = (): SyncChanges => ({
   changed: { puzzles: 0, lessons: 0, repertoires: 0, moves: 0, analyses: 0, games: 0 },
+  settings: 0,
   removed: 0,
   other: false,
 });
@@ -42,6 +44,18 @@ describe('syncTotals', () => {
       games: Object.keys(s.games.games).length,
     });
     expect(syncTotals(emptySnapshot())).toEqual(none().changed);
+  });
+
+  it('counts none of a part kept to the device', () => {
+    const s = fixtureSnapshot();
+    const totals = syncTotals(s);
+    expect(syncTotals(s, new Set(['progress', 'games']))).toEqual({
+      ...totals,
+      puzzles: 0,
+      lessons: 0,
+      games: 0,
+    });
+    expect(syncTotals(s, new Set(['repertoire']))).toMatchObject({ repertoires: 0, moves: 0 });
   });
 
   it('counts a lesson once it is completed, marked done included', () => {
@@ -100,6 +114,15 @@ describe('syncChanges', () => {
     expect(changesOrNull(syncChanges(before, after))).not.toBeNull();
   });
 
+  it('counts the settings changed, one by one, and nothing else for them', () => {
+    const before = changeSettings(fixtureSnapshot(), { boardTheme: 'blue', sounds: true });
+    const after = changeSettings(before, { boardTheme: 'green', sounds: true, pieceSet: 'merida' });
+    expect(syncChanges(before, after)).toEqual({ ...none(), settings: 2 });
+    // A side that has no value for a setting counts no change to it.
+    expect(syncChanges(after, { ...after, settings: {} })).toEqual(none());
+    expect(nothingChanged({ ...none(), settings: 1 })).toBe(false);
+  });
+
   it('counts only what one side has over the other, never less than none', () => {
     const before = solvePuzzle(fixtureSnapshot(), 'a', T);
     // The other way round: the older copy has no puzzles the newer one lacks.
@@ -112,11 +135,13 @@ describe('addChanges', () => {
     const a: SyncChanges = { ...none(), changed: { ...none().changed, puzzles: 2 } };
     const b: SyncChanges = {
       changed: { ...none().changed, puzzles: 1, analyses: 1 },
+      settings: 2,
       removed: 1,
       other: true,
     };
-    expect(addChanges(a, b)).toEqual({
+    expect(addChanges({ ...a, settings: 1 }, b)).toEqual({
       changed: { ...none().changed, puzzles: 3, analyses: 1 },
+      settings: 3,
       removed: 1,
       other: true,
     });

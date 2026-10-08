@@ -54,6 +54,7 @@ export function JoinSyncDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const alreadyOn = useDeviceSyncStore((s) => s.secret !== null);
+  const ownSettings = useDeviceSyncStore((s) => s.off.includes('settings'));
   const backup = useBackupActions();
   // Asked as the dialog opens: does this device hold anything a learner would miss?
   const ownData = useMemo(() => open && hasProgress(), [open]);
@@ -134,6 +135,11 @@ export function JoinSyncDialog({
         <p className="small muted" style={{ margin: 0 }}>
           Join only with a phrase from one of your own devices: whoever made it can read everything
           this device syncs.
+        </p>
+        <p className="small muted" style={{ margin: 0 }} data-testid="sync-join-settings">
+          {ownSettings
+            ? 'This device keeps its own settings, as chosen under What syncs on this device.'
+            : 'This device takes the settings of your other devices: the board, the sounds and the rest.'}
         </p>
         {ownData ? (
           <>

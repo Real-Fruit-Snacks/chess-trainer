@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Alert, Button, Card, ConfirmDialog, Stat } from '@/components/ui';
+import { Alert, Button, Card, ConfirmDialog, Stat, Switch } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import {
   currentPhrase,
   deleteSyncedCopy,
+  setSyncPart,
   stopSync,
   syncNow,
   turnOnSync,
   useDeviceSync,
 } from '@/lib/sync/deviceSync';
-import { completedLessons, SYNC_KINDS, type SyncCounts } from '@/lib/sync/counts';
+import { completedLessons, KIND_PART, SYNC_KINDS, type SyncCounts } from '@/lib/sync/counts';
 import { deviceSyncOffered } from '@/lib/sync/enabled';
+import { SYNC_PARTS } from '@/lib/sync/parts';
 import { splitWords } from '@/lib/sync/phrase';
 import { useAnalyses } from '@/store/analyses';
 import { useDeviceSyncStore } from '@/store/deviceSync';
@@ -23,6 +25,7 @@ import {
   deviceSyncNeedsAttention,
   deviceSyncStatusLine,
   formatCount,
+  SYNC_PART_TEXT,
   TOTAL_LABELS,
 } from './deviceSyncStatus';
 import { JoinSyncDialog } from './JoinSyncDialog';
@@ -59,15 +62,53 @@ function useTotals(): SyncCounts {
   };
 }
 
-/** What sync keeps in step, counted: puzzles, lessons, repertoires, analyses, games. */
+/**
+ * What sync keeps in step, counted: puzzles, lessons, repertoires, analyses,
+ * games — those of the parts this device syncs.
+ */
 function SyncTotals() {
   const totals = useTotals();
+  const off = useDeviceSyncStore((s) => s.off);
+  const kinds = SYNC_KINDS.filter((kind) => !off.includes(KIND_PART[kind]));
+  if (kinds.length === 0) return null;
   return (
-    <div className="stats sync-totals" data-testid="sync-totals">
-      {SYNC_KINDS.map((kind) => (
-        <Stat key={kind} value={formatCount(totals[kind])} label={TOTAL_LABELS[kind]} />
+    <>
+      <p className="small" style={{ margin: 0 }}>
+        Kept in step on every device with your recovery phrase:
+      </p>
+      <div className="stats sync-totals" data-testid="sync-totals">
+        {kinds.map((kind) => (
+          <Stat key={kind} value={formatCount(totals[kind])} label={TOTAL_LABELS[kind]} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+/**
+ * What syncs on this device, part by part: a part switched off stays as it is
+ * here, and the other devices keep theirs. Each device chooses for itself.
+ */
+function SyncParts() {
+  const off = useDeviceSyncStore((s) => s.off);
+  return (
+    <fieldset className="settings__fieldset sync-parts" data-testid="sync-parts">
+      <legend>What syncs on this device</legend>
+      {SYNC_PARTS.map((part) => (
+        <Switch
+          key={part}
+          checked={!off.includes(part)}
+          onChange={(on) => setSyncPart(part, on)}
+          label={SYNC_PART_TEXT[part].label}
+          description={SYNC_PART_TEXT[part].description}
+        />
       ))}
-    </div>
+      <p className="small muted" style={{ margin: 0 }}>
+        Switched off, a part stays as it is on this device, and your other devices keep theirs.
+        Switched on again, what changed on both sides meanwhile comes together. The Lichess sign-in
+        always stays on each device.
+      </p>
+    </fieldset>
   );
 }
 
@@ -178,14 +219,8 @@ function DeviceSync() {
               Sync now
             </Button>
           </div>
-          <p className="small" style={{ margin: 0 }}>
-            Kept in step on every device with your recovery phrase:
-          </p>
           <SyncTotals />
-          <p className="small muted" style={{ margin: 0 }}>
-            With the ratings, review schedules, training days and every other result. Device
-            settings and the Lichess sign-in stay on each device.
-          </p>
+          <SyncParts />
           <div className="settings__row">
             <span className="small">Add a device: show the recovery phrase, or its QR code.</span>
             <Button size="sm" onClick={() => void showPhrase()} data-testid="sync-show-phrase">
@@ -237,12 +272,17 @@ function DeviceSync() {
           </p>
           <ul className="small settings__list">
             <li>
-              Progress, lessons, review schedules, repertoires, saved analyses and imported games
-              sync; device settings stay on each device.
+              Progress, lessons, review schedules, repertoires, saved analyses, imported games and
+              settings sync, so every device is ready to play as you left it. Each device can keep
+              any of them to itself.
             </li>
             <li>Changes made offline wait, and join the rest when the device is back online.</li>
             <li>A 12-word recovery phrase, or its QR code, adds a device.</li>
           </ul>
+          <details className="settings__diagnostics" data-testid="sync-parts-choice">
+            <summary>Choose what this device syncs</summary>
+            <SyncParts />
+          </details>
           <div className="row">
             <Button
               variant="primary"

@@ -5,6 +5,7 @@ import { syncTotals } from '@/lib/sync/counts';
 import { currentPhrase, stopSync } from '@/lib/sync/deviceSync';
 import { applySnapshot, takeSnapshot } from '@/lib/sync/snapshot';
 import { useDeviceSyncStore } from '@/store/deviceSync';
+import { DEFAULT_SETTINGS, useSettings } from '@/store/settings';
 import { installFakeRelay, type FakeRelay } from '@/test/fakeRelay';
 import { otherDevice } from '@/test/syncDevices';
 import { emptySnapshot, fixtureSnapshot, saveAnalysis, solvePuzzle } from '@/test/syncFixtures';
@@ -50,9 +51,18 @@ beforeEach(() => {
 afterEach(async () => {
   await act(() => stopSync());
   useDeviceSyncStore.getState().clearStopped();
+  useDeviceSyncStore.setState({ off: [] });
   vi.unstubAllGlobals();
   applySnapshot(emptySnapshot(), takeSnapshot());
+  useSettings.setState({ ...DEFAULT_SETTINGS });
 });
+
+/** Turns sync on from the card, and closes the phrase. */
+async function turnOnFromCard() {
+  fireEvent.click(screen.getByTestId('sync-turn-on'));
+  await screen.findByTestId('sync-phrase-words', {}, SLOW);
+  fireEvent.click(screen.getByTestId('sync-phrase-done'));
+}
 
 describe('Settings → Sync between devices', () => {
   it('turns sync on and shows the new recovery phrase with its QR code', async () => {
@@ -66,7 +76,11 @@ describe('Settings → Sync between devices', () => {
     expect(relay.store.size()).toBe(1);
 
     fireEvent.click(screen.getByTestId('sync-phrase-done'));
-    expect(screen.getByTestId('sync-status')).toHaveTextContent('Synced just now.');
+    // The first run after turning on may be under way by now, on a slow machine.
+    await waitFor(
+      () => expect(screen.getByTestId('sync-status')).toHaveTextContent('Synced just now.'),
+      SLOW,
+    );
     expect(screen.getByTestId('sync-show-phrase')).toBeInTheDocument();
   });
 
@@ -131,6 +145,9 @@ describe('Settings → Sync between devices', () => {
     const dialog = openDialog();
     expect(within(dialog).getByTestId('sync-join-keep')).toBeInTheDocument();
     expect(within(dialog).getByRole('radio', { name: /Keep both/ })).toBeChecked();
+    expect(within(dialog).getByTestId('sync-join-settings')).toHaveTextContent(
+      'This device takes the settings of your other devices',
+    );
     fireEvent.change(within(dialog).getByTestId('sync-join-phrase'), {
       target: { value: PHRASE },
     });
@@ -193,6 +210,63 @@ describe('Settings → Sync between devices', () => {
       'Nothing is synced under this phrase',
     );
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+  });
+
+  it('counts the settings changed from the defaults among what turning on sent', async () => {
+    useSettings.setState({ boardTheme: 'blue', pieceSet: 'merida', engineThreads: false });
+    renderCard();
+    await turnOnFromCard();
+    expect(screen.getByTestId('sync-status')).toHaveTextContent(/ and 2 settings sent\.$/);
+  });
+
+  it('lets this device keep any part to itself, counting only what it syncs', async () => {
+    renderCard();
+    await turnOnFromCard();
+    const parts = screen.getByRole('group', { name: 'What syncs on this device' });
+    // Everything syncs, until this device keeps something to itself.
+    expect(
+      within(parts)
+        .getAllByRole('switch')
+        .map((s) => (s as HTMLInputElement).checked),
+    ).toEqual([true, true, true, true, true]);
+    for (const name of [
+      'Progress',
+      'Repertoires',
+      'Saved analyses',
+      'Imported games',
+      'Settings',
+    ]) {
+      expect(within(parts).getByRole('switch', { name })).toBeChecked();
+    }
+    const totals = screen.getByTestId('sync-totals');
+    expect(within(totals).getByText('Your repertoires')).toBeInTheDocument();
+
+    fireEvent.click(within(parts).getByRole('switch', { name: 'Repertoires' }));
+    expect(useDeviceSyncStore.getState().off).toEqual(['repertoire']);
+    expect(within(parts).getByRole('switch', { name: 'Repertoires' })).not.toBeChecked();
+    expect(within(totals).queryByText('Your repertoires')).toBeNull();
+    expect(within(totals).queryByText('Repertoire moves')).toBeNull();
+
+    // On again: it syncs straight away.
+    relay.requests = [];
+    fireEvent.click(within(parts).getByRole('switch', { name: 'Repertoires' }));
+    expect(useDeviceSyncStore.getState().off).toEqual([]);
+    await waitFor(() => expect(relay.requests.length).toBeGreaterThan(0), SLOW);
+    expect(within(totals).getByText('Your repertoires')).toBeInTheDocument();
+  });
+
+  it('offers the choice before sync is turned on, kept for when it is', () => {
+    renderCard();
+    const choice = screen.getByTestId('sync-parts-choice');
+    expect(choice.tagName).toBe('DETAILS');
+    fireEvent.click(within(choice).getByRole('switch', { name: 'Settings' }));
+    expect(useDeviceSyncStore.getState().off).toEqual(['settings']);
+    expect(relay.requests).toEqual([]);
+    // Joining then keeps this device's settings, and says so.
+    fireEvent.click(screen.getByTestId('sync-join'));
+    expect(within(openDialog()).getByTestId('sync-join-settings')).toHaveTextContent(
+      'This device keeps its own settings',
+    );
   });
 
   it('says when sync stopped because the synced copy was deleted', () => {

@@ -54,8 +54,10 @@ const changes = (
   changed: Partial<SyncChanges['changed']>,
   removed = 0,
   other = false,
+  settings = 0,
 ): SyncChanges => ({
   changed: { puzzles: 0, lessons: 0, repertoires: 0, moves: 0, analyses: 0, games: 0, ...changed },
+  settings,
   removed,
   other,
 });
@@ -86,6 +88,16 @@ describe('describeChanges', () => {
     expect(describeChanges(changes({}, 0, true))).toBe('progress');
     // Progress beside counted changes goes without saying (a rating moves with puzzles).
     expect(describeChanges(changes({ puzzles: 2 }, 0, true))).toBe('2 puzzles');
+  });
+
+  it('counts the settings after the data, before the deletions', () => {
+    expect(describeChanges(changes({}, 0, false, 1))).toBe('1 setting');
+    expect(describeChanges(changes({ puzzles: 3 }, 1, false, 2))).toBe(
+      '3 puzzles, 2 settings and 1 deletion',
+    );
+    // Progress that changed uncounted is said beside the settings: they say nothing of it.
+    expect(describeChanges(changes({}, 0, true, 2))).toBe('progress and 2 settings');
+    expect(describeChanges(changes({ puzzles: 1 }, 0, true, 2))).toBe('1 puzzle and 2 settings');
   });
 
   it('says nothing for no changes', () => {

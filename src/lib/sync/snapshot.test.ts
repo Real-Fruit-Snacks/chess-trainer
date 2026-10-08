@@ -5,7 +5,9 @@ import { useGames } from '@/store/games';
 import { type StudyLink, useLichess } from '@/store/lichess';
 import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
+import { DEFAULT_SETTINGS, learnerSettingsOf, useSettings } from '@/store/settings';
 import {
+  changeSettings,
   deleteAnalysis,
   deleteRepertoire,
   emptySnapshot,
@@ -40,6 +42,7 @@ function load(snapshot: SyncSnapshot) {
 afterEach(() => {
   load(emptySnapshot());
   useLichess.setState({ links: {}, deleted: [] });
+  useSettings.setState({ ...DEFAULT_SETTINGS });
 });
 
 describe('snapshotJson and readSnapshotJson', () => {
@@ -58,6 +61,19 @@ describe('snapshotJson and readSnapshotJson', () => {
     const read = readSnapshotJson(json);
     expect(read.ok && read.generation).toBe(7);
     expect(read.ok && canonical(read.snapshot)).toBe(canonical(fixtureSnapshot()));
+  });
+
+  it("carry the settings, checked as a load checks them, and none of the device's", () => {
+    const file = {
+      ...vaultFile(2),
+      settings: { boardTheme: 'green', pieceSet: 'no-such-set', engineThreads: false },
+    };
+    const read = readSnapshotJson(JSON.stringify(file));
+    expect(read.ok && read.snapshot.settings).toEqual({ boardTheme: 'green' });
+    // A file from before settings were in backups has none.
+    const { settings: _none, ...before } = vaultFile(2);
+    const old = readSnapshotJson(JSON.stringify({ ...before, version: 11 }));
+    expect(old.ok && old.snapshot.settings).toEqual({});
   });
 
   it('read a backup without a generation as generation 0', () => {
@@ -82,10 +98,12 @@ describe('snapshotJson and readSnapshotJson', () => {
 });
 
 describe('takeSnapshot and applySnapshot', () => {
-  it('read the four stores, and put a snapshot back into them', () => {
+  it('read the stores, and put a snapshot back into them', () => {
     const fixture = fixtureSnapshot();
     load(fixture);
-    expect(canonical(takeSnapshot())).toBe(canonical(fixture));
+    // The fixture has no settings: the store's stay, and are read with the rest.
+    expect(canonical({ ...takeSnapshot(), settings: {} })).toBe(canonical(fixture));
+    expect(takeSnapshot().settings).toEqual(learnerSettingsOf(useSettings.getState()));
     expect(useRepertoire.getState().custom.map((r) => r.id)).toEqual([REP]);
     expect(Object.keys(useAnalyses.getState().items)).toEqual([ANALYSIS]);
     expect(Object.keys(useGames.getState().games)).toHaveLength(2);
@@ -102,6 +120,32 @@ describe('takeSnapshot and applySnapshot', () => {
     expect(useRepertoire.getState()).toBe(repertoire);
     expect(useAnalyses.getState()).toBe(analyses);
     expect(useGames.getState()).toBe(games);
+  });
+
+  it("read the learner's settings, never the device's own", () => {
+    useSettings.setState({ boardTheme: 'blue', engineThreads: false, installDismissedAt: 5 });
+    const { settings } = takeSnapshot();
+    expect(settings).toMatchObject({ boardTheme: 'blue' });
+    expect(settings).not.toHaveProperty('engineThreads');
+    expect(settings).not.toHaveProperty('engineFull');
+    expect(settings).not.toHaveProperty('installDismissedAt');
+  });
+
+  it('put in the settings a snapshot has a value for, and leave the rest', () => {
+    useSettings.setState({ boardTheme: 'blue', sounds: false, engineThreads: false });
+    const before = useSettings.getState();
+    // Settings it does not change are no change to the store.
+    applySnapshot({ ...takeSnapshot() }, takeSnapshot());
+    expect(useSettings.getState()).toBe(before);
+    applySnapshot(
+      changeSettings({ ...takeSnapshot(), settings: {} }, { boardTheme: 'green' }),
+      takeSnapshot(),
+    );
+    expect(useSettings.getState()).toMatchObject({
+      boardTheme: 'green',
+      sounds: false,
+      engineThreads: false,
+    });
   });
 
   it('tell the Lichess studies about repertoires and analyses deleted on another device', () => {

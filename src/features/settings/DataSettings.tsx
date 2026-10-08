@@ -112,7 +112,8 @@ function StorageCard() {
         <StorageUsage />
         <div className="settings__row">
           <span className="small">
-            Delete this profile’s progress and imported games, and the device settings.
+            Delete this profile’s progress, imported games and settings, and this device’s engine
+            settings.
           </span>
           <Button size="sm" variant="danger" onClick={() => setConfirming(true)}>
             Reset everything
@@ -143,7 +144,7 @@ function StorageCard() {
                   resetAll();
                   resetSettings();
                   setConfirming(false);
-                  toast('This profile’s data and the device settings were cleared.');
+                  toast('This profile’s data and settings, and the engine settings, were cleared.');
                 })();
               }}
             >
@@ -154,11 +155,11 @@ function StorageCard() {
       >
         <p className="muted">
           This deletes the puzzle rating, lesson progress, repertoires, analysis library, game
-          history and imported games of this profile, and every device setting: the engine goes back
-          to its defaults, and a downloaded full engine is deleted. Sync between devices is turned
-          off on this device (the synced copy and your other devices keep their data), and a
-          connected Lichess account is disconnected (what was synced stays on Lichess). Export a
-          backup first if you want to keep them.
+          history, imported games and settings of this profile, and this device’s engine settings:
+          the engine goes back to its defaults, and a downloaded full engine is deleted. Sync
+          between devices is turned off on this device (the synced copy and your other devices keep
+          their data), and a connected Lichess account is disconnected (what was synced stays on
+          Lichess). Export a backup first if you want to keep them.
         </p>
         <p className="muted">
           Kept:{' '}

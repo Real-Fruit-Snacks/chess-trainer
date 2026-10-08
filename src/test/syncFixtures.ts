@@ -196,3 +196,10 @@ export function deleteAnalysis(s: SyncSnapshot, id: string): SyncSnapshot {
   next.analyses.items = items;
   return next;
 }
+
+/** Settings changed, as Settings changes them. */
+export function changeSettings(s: SyncSnapshot, patch: SyncSnapshot['settings']): SyncSnapshot {
+  const next = clone(s);
+  next.settings = { ...next.settings, ...patch };
+  return next;
+}

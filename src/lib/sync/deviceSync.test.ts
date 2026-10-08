@@ -5,6 +5,7 @@ import { useAnalyses } from '@/store/analyses';
 import { useDeviceSyncStore } from '@/store/deviceSync';
 import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
+import { DEFAULT_SETTINGS, useSettings } from '@/store/settings';
 import { installFakeRelay, type FakeRelay } from '@/test/fakeRelay';
 import { otherDevice } from '@/test/syncDevices';
 import {
@@ -46,6 +47,10 @@ function load(snapshot: SyncSnapshot) {
   applySnapshot(snapshot, takeSnapshot());
 }
 
+/** Whether two profiles hold the same data, the settings aside (the fixtures have none). */
+const sameProfileData = (a: SyncSnapshot, b: SyncSnapshot) =>
+  sameData({ ...a, settings: {} }, { ...b, settings: {} });
+
 let relay: FakeRelay;
 
 beforeEach(() => {
@@ -57,9 +62,11 @@ beforeEach(() => {
 afterEach(async () => {
   await stopSync();
   useDeviceSyncStore.getState().clearStopped();
+  useDeviceSyncStore.setState({ off: [] });
   vi.useRealTimers();
   vi.unstubAllGlobals();
   load(emptySnapshot());
+  useSettings.setState({ ...DEFAULT_SETTINGS });
 });
 
 async function turnOn(): Promise<string[]> {
@@ -340,7 +347,7 @@ describe('joining from another device', () => {
     });
     const here = takeSnapshot();
     expect(here.progress.attempts.map((a) => a.id)).not.toContain('mine');
-    expect(sameData(here, named(fixtureSnapshot()))).toBe(true);
+    expect(sameProfileData(here, named(fixtureSnapshot()))).toBe(true);
     expect(here.progress.lastBackupAt).toBe(123);
   });
 
@@ -374,7 +381,7 @@ describe('ending sync', () => {
       stoppedBecause: 'deleted',
     });
     expect(useDeviceSync.getState().phase).toBe('off');
-    expect(sameData(takeSnapshot(), named(fixtureSnapshot()))).toBe(true);
+    expect(sameProfileData(takeSnapshot(), named(fixtureSnapshot()))).toBe(true);
   });
 
   it('deletes the synced copy', async () => {

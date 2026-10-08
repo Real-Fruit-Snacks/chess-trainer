@@ -148,6 +148,7 @@ describe('atomic import', () => {
         games: 2,
         analyses: 1,
         repertoires: 1,
+        settings: false,
         dropped: 0,
       });
     }

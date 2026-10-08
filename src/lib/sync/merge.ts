@@ -25,9 +25,11 @@ import {
   type ThemeStat,
 } from '@/store/progress';
 import type { PersistedRepertoire } from '@/store/repertoire';
+import { LEARNER_SETTING_KEYS, type LearnerSettings } from '@/store/settings';
 import type { PuzzleReviewCard } from '@/lib/puzzleReview';
 import type { SrsCard } from '@/lib/srs';
 import { canonical, same } from './canonical';
+import type { SyncPart } from './parts';
 
 /**
  * Merging two devices' data. Every sync merges three versions of a profile:
@@ -46,7 +48,12 @@ import { canonical, same } from './canonical';
  * - schedules keep the card reviewed last (or, for the puzzle queue, the one
  *   with more misses, so nothing is let off a review);
  * - a repertoire or analysis edited on both sides is kept twice, the other
- *   version as "(other device)", so no work is lost.
+ *   version as "(other device)", so no work is lost;
+ * - a setting changed on both sides takes the relay's value (the device that
+ *   synced first), and a device that has no version of the settings to
+ *   compare with takes the synced ones (joining), but for those the learner
+ *   changed on it since its last sync (its copy of that version lost): the
+ *   relay decides, so the devices still end up alike.
  *
  * A device joining with progress of its own merges without a shared version.
  * If the two have no history in common (used apart until now), an empty
@@ -64,6 +71,22 @@ export interface SyncSnapshot {
   repertoire: PersistedRepertoire;
   analyses: { items: Record<string, SavedAnalysis> };
   games: { games: Record<string, StoredGame>; player: string };
+  /** The learner's settings, as far as they are known (data from before 0.24 has none). */
+  settings: Partial<LearnerSettings>;
+}
+
+/** A merge's base, part by part: null for a part with no version both sides grew from. */
+export type SyncBase = { [P in SyncPart]: SyncSnapshot[P] | null };
+
+/** A snapshot (or nothing) as a base for every part. */
+export function baseOf(snapshot: SyncSnapshot | null): SyncBase {
+  return {
+    progress: snapshot?.progress ?? null,
+    repertoire: snapshot?.repertoire ?? null,
+    analyses: snapshot?.analyses ?? null,
+    games: snapshot?.games ?? null,
+    settings: snapshot?.settings ?? null,
+  };
 }
 
 export interface MergeOptions {
@@ -79,6 +102,13 @@ export interface MergeOptions {
    * keeps its id, and the other is kept as "… (<incoming>)".
    */
   incoming?: string;
+  /**
+   * The settings the learner changed on this device since its last sync, with
+   * the value each was changed to (see `changedSettings` in
+   * `store/deviceSync.ts`): with no version of the settings to compare with,
+   * these stand rather than the relay's.
+   */
+  changedHere?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -843,6 +873,50 @@ export function mergeGames(
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* Settings                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The settings, one at a time. One the relay's side kept as it was takes this
+ * device's change; otherwise the relay's value stands: when only it changed,
+ * and when both changed (the device that synced first decides). With no
+ * version to compare with, the relay's value stands too (a device joining
+ * takes the synced settings), but for a setting the learner changed on this
+ * device since its last sync (`changedHere`): a device that lost its copy of
+ * the version it last agreed keeps the learner's latest changes. A setting
+ * the relay has no value for yet takes this device's. Data brought in from
+ * elsewhere (`incoming`, a backup) leaves this device's settings as they are.
+ */
+function mergeSettings(
+  base: Partial<LearnerSettings> | null,
+  local: Partial<LearnerSettings>,
+  remote: Partial<LearnerSettings>,
+  { incoming, changedHere }: MergeOptions,
+): Partial<LearnerSettings> {
+  if (incoming !== undefined) return local;
+  const out: Record<string, unknown> = {};
+  const known = (side: Partial<LearnerSettings> | null, key: keyof LearnerSettings) =>
+    side?.[key] !== undefined;
+  for (const key of LEARNER_SETTING_KEYS) {
+    if (!known(remote, key)) {
+      if (known(local, key)) out[key] = local[key];
+      continue;
+    }
+    if (!known(local, key)) {
+      out[key] = remote[key];
+      continue;
+    }
+    const mine = known(base, key)
+      ? // The relay's side kept it as it was: this device's change stands.
+        same(remote[key], base?.[key])
+      : // No version to compare with: a change the learner made here since the last sync stands.
+        changedHere !== undefined && key in changedHere && same(changedHere[key], local[key]);
+    out[key] = mine ? local[key] : remote[key];
+  }
+  return out;
+}
+
 /** Merges whole snapshots (see the top of this file). */
 export function mergeSnapshots(
   base: SyncSnapshot | null,
@@ -850,16 +924,22 @@ export function mergeSnapshots(
   remote: SyncSnapshot,
   options: MergeOptions = {},
 ): SyncSnapshot {
+  return mergeParts(baseOf(base), local, remote, options);
+}
+
+/** Merges whole snapshots over a base given part by part. */
+export function mergeParts(
+  base: SyncBase,
+  local: SyncSnapshot,
+  remote: SyncSnapshot,
+  options: MergeOptions = {},
+): SyncSnapshot {
   const { incoming } = options;
   return {
-    progress: mergeProgress(base?.progress ?? null, local.progress, remote.progress, options),
-    repertoire: mergeRepertoire(
-      base?.repertoire ?? null,
-      local.repertoire,
-      remote.repertoire,
-      incoming,
-    ),
-    analyses: mergeAnalyses(base?.analyses ?? null, local.analyses, remote.analyses, incoming),
-    games: mergeGames(base?.games ?? null, local.games, remote.games),
+    progress: mergeProgress(base.progress, local.progress, remote.progress, options),
+    repertoire: mergeRepertoire(base.repertoire, local.repertoire, remote.repertoire, incoming),
+    analyses: mergeAnalyses(base.analyses, local.analyses, remote.analyses, incoming),
+    games: mergeGames(base.games, local.games, remote.games),
+    settings: mergeSettings(base.settings, local.settings, remote.settings, options),
   };
 }

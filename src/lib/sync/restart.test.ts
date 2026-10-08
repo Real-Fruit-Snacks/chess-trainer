@@ -99,3 +99,42 @@ describe('the page closing in the middle of a sync', () => {
     });
   }
 });
+
+describe('a part kept to this device', () => {
+  it('keeps the version it last shared across a restart, and counts once when synced again', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    const caches = fakeCaches();
+    vi.stubGlobal('caches', caches.api);
+    installFakeRelay();
+    vi.resetModules();
+
+    const first = await page();
+    const { fixtureSnapshot, solvePuzzle } = first.fixtures;
+    const take = () => first.snapshot.takeSnapshot();
+    first.snapshot.applySnapshot(fixtureSnapshot(), take());
+    const on = await first.sync.turnOnSync();
+    if (!on.ok) throw new Error(on.reason);
+    const other = await first.devices.otherDevice(on.words);
+    first.sync.setSyncPart('progress', false);
+    await first.sync.syncNow();
+    first.snapshot.applySnapshot(solvePuzzle(take(), 'here', T), take());
+    await other.change((s) => solvePuzzle(s, 'there', T + 1000));
+    await first.sync.syncNow();
+
+    // The app starts again, and the learner syncs progress again.
+    vi.resetModules();
+    const second = await page();
+    expect(second.store.useDeviceSyncStore.getState().off).toEqual(['progress']);
+    second.sync.setSyncPart('progress', true);
+    await second.sync.syncNow();
+
+    const before = fixtureSnapshot().progress;
+    const vault = await other.read();
+    for (const p of [vault.snapshot.progress, second.snapshot.takeSnapshot().progress]) {
+      expect(p.attempts.slice(0, 2).map((a) => a.id)).toEqual(['there', 'here']);
+      expect(p.lifetime.attempts).toBe(before.lifetime.attempts + 2);
+      expect(p.ratedAttempts).toBe(before.ratedAttempts + 2);
+    }
+    await second.sync.stopSync();
+  });
+});

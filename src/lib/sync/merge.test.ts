@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { trainingStreak } from '@/lib/dates';
 import {
   addRepertoire,
+  changeSettings,
   deleteAnalysis,
   deleteRepertoire,
   doLessonStep,
@@ -14,7 +15,14 @@ import {
   solvePuzzle,
 } from '@/test/syncFixtures';
 import { canonical } from './canonical';
-import { mergeSnapshots, sameData, type SyncSnapshot, withDeviceFields } from './merge';
+import {
+  baseOf,
+  mergeParts,
+  mergeSnapshots,
+  sameData,
+  type SyncSnapshot,
+  withDeviceFields,
+} from './merge';
 import { emptySyncSnapshot, readSnapshotJson, snapshotJson } from './snapshot';
 
 /** A moment after everything in the fixture. */
@@ -452,6 +460,82 @@ describe('mergeSnapshots', () => {
     );
     expectSame(viaVault(merged), merged);
     expectSame(viaVault(emptySnapshot()), emptySnapshot());
+  });
+});
+
+describe('merging the settings', () => {
+  const base = changeSettings(fixtureSnapshot(), {
+    boardTheme: 'brown',
+    pieceSet: 'classic',
+    sounds: true,
+  });
+
+  it("takes this device's change to a setting the relay kept as it was", () => {
+    const local = changeSettings(base, { boardTheme: 'blue' });
+    expect(mergeSnapshots(base, local, base).settings).toEqual(local.settings);
+  });
+
+  it("takes the relay's change, and the relay's value when both changed one", () => {
+    const local = changeSettings(base, { boardTheme: 'blue' });
+    const remote = changeSettings(base, { boardTheme: 'green', sounds: false });
+    expect(mergeSnapshots(base, local, remote).settings).toEqual(remote.settings);
+  });
+
+  it('keeps changes to different settings from both sides', () => {
+    const local = changeSettings(base, { boardTheme: 'blue' });
+    const remote = changeSettings(base, { pieceSet: 'merida' });
+    expect(mergeSnapshots(base, local, remote).settings).toEqual({
+      ...base.settings,
+      boardTheme: 'blue',
+      pieceSet: 'merida',
+    });
+  });
+
+  it('takes the synced settings when there is no version to compare with (joining)', () => {
+    const local = changeSettings(fixtureSnapshot(), { boardTheme: 'blue', soundVolume: 0.5 });
+    const remote = changeSettings(fixtureSnapshot(), { boardTheme: 'green' });
+    const expected = { boardTheme: 'green', soundVolume: 0.5 };
+    expect(mergeSnapshots(null, local, remote).settings).toEqual(expected);
+    expect(
+      mergeSnapshots(emptySyncSnapshot(), local, remote, { independent: true }).settings,
+    ).toEqual(expected);
+    // A setting the relay has no value for yet (data from before 0.24) takes this device's.
+    expect(mergeSnapshots(base, local, { ...remote, settings: {} }).settings).toEqual(
+      local.settings,
+    );
+  });
+
+  it('with no version to compare with, keeps the settings changed here since the last sync', () => {
+    const local = changeSettings(base, { boardTheme: 'blue', pieceSet: 'merida' });
+    const remote = changeSettings(base, { boardTheme: 'green', sounds: false });
+    // Only the board was changed here (a merge put the pieces in since).
+    const changedHere = { boardTheme: 'blue', pieceSet: 'celtic' };
+    expect(mergeSnapshots(null, local, remote, { changedHere }).settings).toEqual({
+      ...remote.settings,
+      boardTheme: 'blue',
+    });
+    // With a version to compare with, three ways as ever: both changed the board, the relay's stands.
+    expect(mergeSnapshots(base, local, remote, { changedHere }).settings).toEqual({
+      ...remote.settings,
+      pieceSet: 'merida',
+    });
+  });
+
+  it("keeps this device's settings when a backup comes in", () => {
+    const local = changeSettings(base, { boardTheme: 'blue' });
+    const backup = changeSettings(base, { boardTheme: 'green', pieceSet: 'merida' });
+    expect(mergeSnapshots(null, local, backup, { incoming: 'backup' }).settings).toEqual(
+      local.settings,
+    );
+  });
+
+  it('measures each part against its own base', () => {
+    // Settings merged with no base, progress with one: as a part switched back on merges.
+    const local = changeSettings(solvePuzzle(base, 'mine', T), { boardTheme: 'blue' });
+    const remote = changeSettings(solvePuzzle(base, 'theirs', T + MIN), { boardTheme: 'green' });
+    const merged = mergeParts({ ...baseOf(base), settings: null }, local, remote);
+    expect(merged.settings.boardTheme).toBe('green');
+    expect(merged.progress.lifetime.attempts).toBe(base.progress.lifetime.attempts + 2);
   });
 });
 

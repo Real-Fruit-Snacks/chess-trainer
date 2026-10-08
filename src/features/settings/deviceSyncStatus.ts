@@ -1,5 +1,6 @@
 import type { DeviceSyncStatus, SyncExchange } from '@/lib/sync/deviceSync';
 import { SYNC_KINDS, type SyncChanges, type SyncCounts, type SyncKind } from '@/lib/sync/counts';
+import type { SyncPart } from '@/lib/sync/parts';
 import { siteConfig } from '@/site.config';
 import { describeWhen } from './lichessStatus';
 
@@ -51,6 +52,26 @@ const HELD: Record<SyncKind, [string, string]> = {
   analyses: ['saved analysis', 'saved analyses'],
 };
 
+/** Each part of the profile a device can keep to itself, as its switch names it. */
+export const SYNC_PART_TEXT: Record<SyncPart, { label: string; description: string }> = {
+  progress: {
+    label: 'Progress',
+    description:
+      'Puzzles, lessons, ratings, review schedules, training days and every other result.',
+  },
+  repertoire: {
+    label: 'Repertoires',
+    description: 'Your own repertoires, and the review schedule of every repertoire move.',
+  },
+  analyses: { label: 'Saved analyses', description: 'The analysis library.' },
+  games: { label: 'Imported games', description: 'Games fetched from Lichess or chess.com.' },
+  settings: {
+    label: 'Settings',
+    description:
+      'How the app looks, sounds and plays. The engine’s threads and its full download stay with each device.',
+  },
+};
+
 /** Each kind's heading over its total on the card. */
 export const TOTAL_LABELS: Record<SyncKind, string> = {
   puzzles: 'Puzzles',
@@ -73,14 +94,16 @@ export function listOf(parts: readonly string[]): string {
   return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1] ?? ''}`;
 }
 
-/** Changes as a list: "4 puzzles, 1 lesson and 2 deletions"; null when nothing changed. */
+/** Changes as a list: "4 puzzles, 1 lesson, 2 settings and 2 deletions"; null when nothing changed. */
 export function describeChanges(changes: SyncChanges | null): string | null {
   if (!changes) return null;
   const parts = SYNC_KINDS.filter((kind) => changes.changed[kind] > 0).map((kind) =>
     counted(changes.changed[kind], CHANGED[kind]),
   );
+  // Data that changed uncounted (a rating, a drill): said only when no counted data changed.
+  if (parts.length === 0 && changes.removed === 0 && changes.other) parts.push('progress');
+  if (changes.settings > 0) parts.push(counted(changes.settings, ['setting', 'settings']));
   if (changes.removed > 0) parts.push(counted(changes.removed, ['deletion', 'deletions']));
-  if (parts.length === 0 && changes.other) parts.push('progress');
   return parts.length > 0 ? listOf(parts) : null;
 }
 

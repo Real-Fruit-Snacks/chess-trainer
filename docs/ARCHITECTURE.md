@@ -439,7 +439,7 @@ letters.
 Five zustand stores persisted to `localStorage` with versioned keys (and `migrate` functions), plus the
 profile list:
 
-- `settings` (version 5) — device-wide preferences only: appearance (colour scheme, notation), board
+- `settings` (version 5) — the learner's preferences, per profile, and the device's: appearance (colour scheme, notation), board
   (theme, piece set, highlights, drag feel, material display), sound theme and volume, focus mode, the
   engine level for the next game, the opponent (`playOpponent`: the engine, the human-like opponent or
   two players) and the human-like opponent's rating (`playHumanRating`), review depth, threads (on by default — version 5 switched them on
@@ -448,7 +448,13 @@ profile list:
   tablebase opt-in. Enum fields are validated on
   load (an unknown board theme falls back to the default) and nested defaults (`simul`) are merged
   field by field. The learner-scoped fields it used to hold (backup reminder, tour flag, import
-  usernames) moved to `progress` in 0.12; `migrate` hands them over once.
+  usernames) moved to `progress` in 0.12; `migrate` hands them over once. Since 0.24 its one saved
+  value is made of two (`settingsStorage`): the learner's settings under the profile's key, and the
+  device's (`DEVICE_SETTING_KEYS`: threads, the full engine, the install prompt) under
+  `chess-trainer:device-settings`, once for every profile and never synced. A profile with no
+  settings of its own yet reads the main profile's, a new profile is given a copy of the current
+  one's, and a save from before the split gives the device's from the profile's. Backups (format 12) and sync carry the learner's (`learnerSettingsOf`, checked on the way in by
+  `learnerSettingsFrom`). The page's inline script reads the active profile's colour scheme.
 - `progress` (version 8) — onboarding flag, puzzle rating and history, attempts (capped) plus
   `lifetime` counters that never forget (attempts, solved, failed, solves per theme, solve time), seen
   puzzle IDs (capped at 20,000), streaks (`puzzleStreak()` gives the live value, `bestStreak` the
@@ -742,7 +748,7 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
   `chess-trainer-sync:1:<vault id>` as additional data, so a vault moved under another id fails to
   open.
 - **Snapshot** (`snapshot.ts`). The four per-profile stores — progress, repertoire, analyses, games —
-  as a backup file (format 11, `validateBackupFile` reads it back), plus `sync.generation`, one more
+  and the learner's settings, as a backup file (format 12, `validateBackupFile` reads it back), plus `sync.generation`, one more
   with every write, and `sync.writes`, each device's latest write in the vault (a random device id,
   made when sync is turned on or joined there, and the generation it wrote; the 64 latest). A device
   refuses a vault whose generation is below the one it last agreed: the relay cannot roll the data
@@ -757,7 +763,14 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
   firsts the earlier; the puzzle queue keeps the card with more lapses, repertoire cards the later
   review; a repertoire or analysis changed on both sides is kept twice, the other version under
   `<id>~<FNV-1a of it>` and "… (other device)", so every device names the copy alike. Every rule
-  gives the same result whichever side is local. Rounds from the Lichess puzzle history are counted
+  gives the same result whichever side is local, but one: the settings go one by one, and a setting
+  the relay's side kept as it was takes this device's change, while one changed on both sides, or
+  merged with no base (a device joining), takes the relay's — the device that synced first decides,
+  and the devices still end up alike. With no base, a setting the learner changed on the device
+  since its last sync stands all the same (`changedHere`): the device-sync store notes each change
+  made here (`changedSettings`, in localStorage, so it outlives a copy the Cache API lost — some
+  private windows keep none across a reload) and forgets it once the vault holds it, or a merge
+  replaced it. A backup coming in (`incoming`) leaves the settings as they are. Rounds from the Lichess puzzle history are counted
   once: the progress store remembers the last 500 it counted (`lichessRounds`), and a round two
   devices both counted since the base (both read the history before syncing, or one played the
   puzzle here and the other read it back from Lichess) is taken out of the theme statistics once.
@@ -801,10 +814,24 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
   (`last` in the status): what the stores took in (the merge against the local data before it)
   and what the vault was sent (the merge against the vault as read), counted by `counts.ts` —
   puzzles played (the lifetime count's difference), lessons, repertoires, repertoire moves,
-  analyses and imported games new or changed, deletions, and whether anything else changed;
-  rounds that met another device's write add up. Turning on reports everything as sent, joining
-  what came in, and an import into sync what it added. The Settings card shows the profile's
-  totals beside it (`syncTotals`, read from the stores as they change).
+  analyses and imported games new or changed, settings changed, deletions, and whether anything
+  else changed; rounds that met another device's write add up, and so do the runs of one sync (a
+  run asked for during a run follows it). Turning on reports everything as sent (the settings that
+  differ from the defaults), joining what came in, and an import into sync what it added. The
+  Settings card shows the profile's totals beside it (`syncTotals`, read from the stores as they
+  change), of the parts the device syncs.
+- **Parts** (`parts.ts`). Progress, repertoire, analyses, games and settings: a device can keep any
+  of them to itself (`off` in `store/deviceSync.ts`, the learner's choice for the device, kept when
+  sync goes off and on). A run merges only the parts the device syncs: for the others the vault
+  keeps its version and the stores theirs (`keepParts`). The copy agreed with the relay records,
+  for each part kept here, the version the device and the vault last shared (`parked`, carried from
+  copy to copy); a part switched on again is merged over that version (`baseFor`, `mergeParts`
+  with a base per part), so what both sides did meanwhile comes together and nothing is counted
+  twice. A part with no shared version (kept here since sync was turned on or joined, or after the
+  base was forgotten) merges as a device joining does. When a part is switched on and the vault has
+  not changed, the agreed copy is saved again without that part parked, so the next run measures
+  against what was merged. Turning sync on leaves a kept part empty in the new vault; joining
+  leaves it as it is here.
 - **An exact base.** With a wrong base, increments count twice and data looks deleted, so:
   - copies of the synced data (`base.ts`) are gzipped in the Cache API under random ids, written
     once and never changed, and the store names the one agreed; this tab also keeps them in memory
@@ -851,7 +878,9 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
 - **Tests.** `relay/relay.test.ts` runs the handler over every store (D1 through a stand-in over
   `node:sqlite`). The app's unit tests run the real relay behind a `fetch` stub
   (`src/test/fakeRelay.ts`): conflicts, deletion, rollback, newer data, size limits, joining both
-  ways. `e2e/release-0-21-sync.spec.ts` joins two and three browsers through the same relay code.
+  ways; `parts.test.ts` switches parts off and on around other devices' writes.
+  `e2e/release-0-21-sync.spec.ts` joins two and three browsers through the same relay code, and
+  `e2e/release-0-24-sync.spec.ts` syncs the settings and switches a part off and on again.
 
 ## Accessibility
 

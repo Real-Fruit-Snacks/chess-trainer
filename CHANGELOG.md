@@ -6,6 +6,42 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-07
+
+Sync between devices carries the settings too, so any device is ready to play as you left it, and
+each device chooses what it syncs.
+
+### Added
+
+- **Settings sync between devices.** The theme, the board and pieces, the sounds, the notation and
+  the puzzle and play options go with the rest of the profile. A setting changed on two devices
+  before they synced takes the value of the one that synced first, and a device joining takes the
+  synced settings. The engine's threads, the full engine download and the install prompt stay with
+  each device.
+- **What syncs on this device:** a switch for each part — Progress, Repertoires, Saved analyses,
+  Imported games and Settings — all on by default, and offered before sync is turned on or joined
+  as well. A part switched off stays as it is on the device while the other devices keep theirs;
+  switched on again, what changed on both sides meanwhile comes together, merged against the version
+  the two last shared, so nothing is counted twice.
+- Backups hold the profile's settings (format 12). Imported with sync off, a backup restores them;
+  with sync on, the settings stay as they are. An older backup leaves them as they are.
+- The sync status counts settings with the rest: "2 settings from your other devices." Turning
+  sync on counts the settings changed from their defaults.
+
+### Changed
+
+- Settings belong to a profile: each keeps its own, and a new profile starts with the settings of
+  the one it was made from. The engine settings and the install prompt belong to the device and
+  are the same in every profile. A profile made before keeps reading the main profile's settings
+  until one of them changes there.
+- _Reset everything_ resets the profile's settings with its data, and the device's engine settings.
+- The sync card's totals count the parts the device syncs.
+
+### Fixed
+
+- The sync status no longer forgets what a sync moved when a second run followed it straight away
+  (something changed while it ran): it says what both moved.
+
 ## [0.23.0] - 2026-10-07
 
 Settings in tabs, and sync between devices that counts what it keeps in step and what each sync

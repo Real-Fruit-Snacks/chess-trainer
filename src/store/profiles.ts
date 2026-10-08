@@ -18,6 +18,7 @@ export const PROFILES_STORAGE_KEY = 'chess-trainer:profiles';
 export const DEFAULT_PROFILE_ID = 'default';
 /** Storage keys that belong to a profile (not shared device settings). */
 export const PROFILE_SCOPED_KEYS = [
+  'chess-trainer:settings',
   'chess-trainer:progress',
   'chess-trainer:repertoire',
   'chess-trainer:games',
@@ -126,6 +127,9 @@ export interface ProfilesState extends StoredProfiles {
   switchTo: (id: string) => void;
 }
 
+/** The settings' storage key (see store/settings.ts, which imports this module). */
+const SETTINGS_KEY = 'chess-trainer:settings';
+
 const newId = () => `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
 /** Names are compared without case or surrounding spaces. */
@@ -143,6 +147,11 @@ export const useProfiles = create<ProfilesState>()((set, get) => ({
     const profile: Profile = { id: newId(), name: trimmed, createdAt: Date.now() };
     const next = { profiles: [...get().profiles, profile], activeId: get().activeId };
     if (!saveProfiles(next)) return null;
+    // A new learner starts with the settings of the profile it was made from.
+    const settings = safeLocalStorage.getItem(storageKeyFor(SETTINGS_KEY, get().activeId));
+    if (typeof settings === 'string') {
+      writeStorage(storageKeyFor(SETTINGS_KEY, profile.id), settings);
+    }
     set(next);
     return profile;
   },

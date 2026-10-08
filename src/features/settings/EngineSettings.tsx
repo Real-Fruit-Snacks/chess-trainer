@@ -54,6 +54,10 @@ export function EngineSettings() {
           />
           <EngineThreadsSetting />
           <EngineFullSetting />
+          <p className="small muted" style={{ margin: 0 }} data-testid="engine-device-note">
+            Threads and the full engine belong to this device: every profile on it uses them, and
+            sync between devices leaves them here.
+          </p>
           <EngineDiagnostics />
         </div>
       </Card>

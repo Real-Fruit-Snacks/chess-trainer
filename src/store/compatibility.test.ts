@@ -11,6 +11,8 @@ import backupV7 from './fixtures/backup-v7.json';
 import backupV8 from './fixtures/backup-v8.json';
 import backupV9 from './fixtures/backup-v9.json';
 import backupV10 from './fixtures/backup-v10.json';
+import backupV11 from './fixtures/backup-v11.json';
+import backupV12 from './fixtures/backup-v12.json';
 import { useGames } from './games';
 import {
   type PersistedProgress,
@@ -20,7 +22,12 @@ import {
   withRatingDefaults,
 } from './progress';
 import { useRepertoire } from './repertoire';
-import { SETTINGS_STORAGE_KEY, useSettings } from './settings';
+import {
+  DEFAULT_SETTINGS,
+  DEVICE_SETTINGS_STORAGE_KEY,
+  SETTINGS_STORAGE_KEY,
+  useSettings,
+} from './settings';
 
 /**
  * The compatibility promise: a backup made by any earlier version imports
@@ -38,6 +45,8 @@ const FIXTURES = [
   ['v8 (0.15)', backupV8],
   ['v9 (0.16)', backupV9],
   ['v10 (0.17)', backupV10],
+  ['v11 (0.22)', backupV11],
+  ['v12 (0.24)', backupV12],
 ] as const;
 
 describe('backups from earlier versions', () => {
@@ -201,6 +210,34 @@ describe('backups from earlier versions', () => {
     expect(s.games.find((g) => g.id === 'g-humanlike-1')?.lichessId).toBe('aBcD1234');
   });
 
+  it('imports a 0.22-era backup (export v11: Lichess puzzle rounds, the history’s name)', () => {
+    const result = useProgress.getState().importState(backupV11);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.summary).toMatchObject({ version: 11, settings: false });
+    const s = useProgress.getState();
+    expect(s.lichessRounds).toEqual([
+      { id: 'k3Rt9', at: 1_790_950_000_000, win: true, themes: 'fork short' },
+    ]);
+    expect(s.lineage).toEqual(['M_a9sVHCgDIh']);
+  });
+
+  it('imports a 0.24-era backup (export v12: the settings), leaving the device’s own', () => {
+    useSettings.setState({ engineThreads: false, engineFull: true });
+    const result = useProgress.getState().importState(backupV12);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.summary).toMatchObject({ version: 12, settings: true });
+    expect(useSettings.getState()).toMatchObject({
+      colorScheme: 'dark',
+      boardTheme: 'blue',
+      pieceSet: 'merida',
+      soundVolume: 0.6,
+      playHumanRating: 1500,
+      engineThreads: false,
+      engineFull: true,
+    });
+    useSettings.setState({ ...DEFAULT_SETTINGS });
+  });
+
   it('gives an older backup the new records empty', () => {
     expect(useProgress.getState().importState(backupV7).ok).toBe(true);
     const s = useProgress.getState();
@@ -246,6 +283,8 @@ async function rehydrate(
   version: number,
 ) {
   localStorage.setItem(key, JSON.stringify({ state, version }));
+  // Saves from before 0.24 kept the device's settings with the rest.
+  if (key === SETTINGS_STORAGE_KEY) localStorage.removeItem(DEVICE_SETTINGS_STORAGE_KEY);
   await store.persist.rehydrate();
 }
 

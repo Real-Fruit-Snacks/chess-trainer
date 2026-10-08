@@ -129,19 +129,34 @@ export function ImportBackupDialog({
             A backup from {describeExportedAt(summary)} (format {summary.version}) holding{' '}
             <strong>{count(summary.attempts, 'puzzle attempt')}</strong>,{' '}
             <strong>{count(summary.games, 'imported game')}</strong>,{' '}
-            <strong>{count(summary.analyses, 'saved analysis', 'saved analyses')}</strong> and{' '}
-            <strong>{count(summary.repertoires, 'custom repertoire')}</strong>.
+            <strong>{count(summary.analyses, 'saved analysis', 'saved analyses')}</strong>
+            {summary.settings ? ', ' : ' and '}
+            <strong>{count(summary.repertoires, 'custom repertoire')}</strong>
+            {summary.settings ? (
+              <>
+                {' '}
+                and <strong>the profile’s settings</strong>
+              </>
+            ) : null}
+            .
           </p>
           {synced ? (
             <p className="muted" style={{ margin: 0 }} data-testid="import-synced">
               Sync between devices is on, so what the file holds joins the data on all your devices:
-              nothing is replaced or deleted, here or on them. To replace this device’s data with
-              the file instead, turn sync off here first.
+              nothing is replaced or deleted, here or on them.
+              {summary.settings ? ' Your settings stay as they are.' : ''} To replace this device’s
+              data with the file instead, turn sync off here first.
+            </p>
+          ) : summary.settings ? (
+            <p className="muted" style={{ margin: 0 }}>
+              Everything in this profile — progress, ratings, repertoires, library, games and
+              settings — is replaced by what the file holds. Other profiles, and the engine settings
+              of this device, are kept. You can undo the import right after it.
             </p>
           ) : (
             <p className="muted" style={{ margin: 0 }}>
               Everything in this profile — progress, ratings, repertoires, library and games — is
-              replaced by what the file holds. Other profiles and device settings are kept. You can
+              replaced by what the file holds. Other profiles and the settings are kept. You can
               undo the import right after it.
             </p>
           )}

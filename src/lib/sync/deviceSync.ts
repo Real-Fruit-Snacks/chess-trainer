@@ -7,9 +7,23 @@ import type { BackupShape } from '@/store/backupSchema';
 import { type DeviceSyncState, useDeviceSyncStore } from '@/store/deviceSync';
 import { useGames } from '@/store/games';
 import { ACTIVE_PROFILE_ID } from '@/store/profiles';
-import { useProgress } from '@/store/progress';
+import { emptyProgress, useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
-import { baseMark, dropCopies, forgetBase, loadCopy, saveCopy, type SyncWrites } from './base';
+import {
+  DEFAULT_SETTINGS,
+  LEARNER_SETTING_KEYS,
+  learnerSettingsOf,
+  useSettings,
+} from '@/store/settings';
+import {
+  baseMark,
+  dropCopies,
+  forgetBase,
+  loadCopy,
+  saveCopy,
+  type SyncCopy,
+  type SyncWrites,
+} from './base';
 import { same } from './canonical';
 import {
   addChanges,
@@ -19,7 +33,16 @@ import {
   type SyncCounts,
   syncTotals,
 } from './counts';
-import { mergeSnapshots, sameData, type SyncSnapshot, withDeviceFields } from './merge';
+import {
+  baseOf,
+  mergeParts,
+  mergeSnapshots,
+  sameData,
+  type SyncBase,
+  type SyncSnapshot,
+  withDeviceFields,
+} from './merge';
+import { SYNC_PARTS, type SyncPart } from './parts';
 import { newSecret, phraseToSecret, secretToPhrase } from './phrase';
 import { randomId } from './randomId';
 import { deleteVault, readVault, RelayError, writeVault } from './relayClient';
@@ -226,9 +249,7 @@ interface RemoteCopy {
   copy: string | null;
 }
 
-interface Agreed {
-  snapshot: SyncSnapshot;
-  writes: SyncWrites;
+interface Agreed extends SyncCopy {
   etag: string;
   generation: number;
   copy: string;
@@ -278,6 +299,90 @@ function agreementOf(state: DeviceSyncState) {
   return { etag, generation, base, mark, pending, lastSyncAt };
 }
 
+/** Notes settings the learner changed here, until they reach the vault (see `changedSettings`). */
+function noteSettings(changed: Record<string, unknown>): void {
+  const store = useDeviceSyncStore;
+  quietly(() =>
+    store.setState({ changedSettings: { ...store.getState().changedSettings, ...changed } }),
+  );
+}
+
+/**
+ * After an agreement: the settings changes noted here that `vault` holds, or
+ * that a merge has replaced since, are no longer news.
+ */
+function settleSettings(vault: SyncSnapshot): void {
+  const store = useDeviceSyncStore;
+  const noted = store.getState().changedSettings;
+  const now = useSettings.getState() as unknown as Record<string, unknown>;
+  const sent = vault.settings as Record<string, unknown>;
+  const left = Object.fromEntries(
+    Object.entries(noted).filter(
+      ([key, value]) => same(value, now[key]) && !same(value, sent[key]),
+    ),
+  );
+  if (Object.keys(left).length < Object.keys(noted).length) {
+    quietly(() => store.setState({ changedSettings: left }));
+  }
+}
+
+/** `merged`, with the parts in `off` as `kept` has them. */
+function keepParts(
+  merged: SyncSnapshot,
+  kept: SyncSnapshot,
+  off: ReadonlySet<SyncPart>,
+): SyncSnapshot {
+  const out = { ...merged };
+  for (const part of off) (out as Record<SyncPart, unknown>)[part] = kept[part];
+  return out;
+}
+
+/**
+ * For the copy agreed next: what each part this device keeps to itself last
+ * shared with the vault — what the copy had parked already, or, for a part
+ * kept here since, the copy's own version of it (null when there is no copy).
+ */
+function parkedFor(off: ReadonlySet<SyncPart>, copy: SyncCopy | null): Partial<SyncBase> {
+  const parked: Partial<SyncBase> = {};
+  for (const part of off) {
+    const was = copy?.parked && part in copy.parked ? copy.parked[part] : copy?.snapshot[part];
+    (parked as Record<SyncPart, unknown>)[part] = was ?? null;
+  }
+  return parked;
+}
+
+/**
+ * The base of a merge, part by part: for a part this device syncs, what it
+ * and the vault last shared — the copy's version, or, for a part this device
+ * kept to itself until now, the version they shared before it did. A part
+ * with no version in common merges as a device joining does (see joinSync):
+ * progress that shares history with the vault's joins with no base, progress
+ * that shares none adds up from nothing.
+ */
+function baseFor(
+  copy: SyncCopy | null,
+  off: ReadonlySet<SyncPart>,
+  local: SyncSnapshot,
+  remote: SyncSnapshot,
+): { base: SyncBase; independent: boolean } {
+  const base = baseOf(null);
+  let independent = false;
+  if (!copy) return { base, independent };
+  for (const part of SYNC_PARTS) {
+    if (off.has(part)) continue;
+    const parked = copy.parked && part in copy.parked ? copy.parked[part] : undefined;
+    if (parked === undefined) {
+      (base as Record<SyncPart, unknown>)[part] = copy.snapshot[part];
+    } else if (parked !== null) {
+      (base as Record<SyncPart, unknown>)[part] = parked;
+    } else if (part === 'progress' && !shareHistory(local, remote)) {
+      base.progress = emptyProgress();
+      independent = true;
+    }
+  }
+  return { base, independent };
+}
+
 /**
  * Merges with the vault and writes back what it lacks. Returns what the
  * stores took in and what the vault was sent. Sync turned off meanwhile (here,
@@ -300,6 +405,8 @@ async function reconcile(
     const start = store.getState();
     const device = start.device ?? '';
     const mark = baseMark();
+    // The parts this device keeps to itself: the vault keeps its own of them, and so does it.
+    const off = new Set(start.off);
     // Nothing else moved the agreement, and the base was not forgotten, since `start`.
     const unmoved = () => {
       const now = store.getState();
@@ -334,17 +441,20 @@ async function reconcile(
       throw new SyncStop('failed', OLDER_COPY);
     }
 
-    let base = agreed?.snapshot ?? null;
+    let shared: SyncCopy | null = agreed;
     const pending = start.mark === mark ? start.pending : null;
     if (pending && (remote.writes[device] ?? 0) >= pending.generation) {
       // A write whose answer never came went through: the vault and this device both hold
       // what it wrote, so that is what both grew from.
-      base = (await loadCopy(pending.copy))?.snapshot ?? null;
+      shared = await loadCopy(pending.copy);
     }
-    // The copy of the vault as read is kept before anything here changes.
-    const remoteCopy = remote.copy ?? randomId();
-    if (remote.copy === null) {
-      await saveCopy(remoteCopy, { snapshot: remote.snapshot, writes: remote.writes });
+    // The copy of the vault as read is kept before anything here changes, with what the parts
+    // kept here last shared. The agreed copy serves again while the vault and those are the same.
+    const parked = parkedFor(off, shared);
+    let remoteCopy = remote.copy;
+    if (remoteCopy === null || !same(agreed?.parked ?? {}, parked)) {
+      remoteCopy = randomId();
+      await saveCopy(remoteCopy, { snapshot: remote.snapshot, writes: remote.writes, parked });
     }
 
     // From here to the agreement nothing is waited for: the stores and the base move together.
@@ -352,7 +462,15 @@ async function reconcile(
     if (!unmoved()) continue;
     if (unsavedData()) throw storageFull();
     const local = localSnapshot();
-    const merged = mergeSnapshots(base, local, remote.snapshot);
+    const { base, independent } = baseFor(shared, off, local, remote.snapshot);
+    const merged = mergeParts(base, local, remote.snapshot, {
+      independent,
+      // Read with `local`: a change made while the vault was read is in both.
+      changedHere: store.getState().changedSettings,
+    });
+    // The parts kept here stay as each side has them.
+    const toVault = keepParts(merged, remote.snapshot, off);
+    const toStores = keepParts(merged, local, off);
     // The agreement first: if it does not fit, nothing else has changed.
     const previous = agreementOf(store.getState());
     let applied: ReturnType<typeof applySaved>;
@@ -370,7 +488,7 @@ async function reconcile(
         quietly(() => store.setState(previous));
         throw noRoomHere(remote.etag, announce);
       }
-      applied = applySaved(merged, local);
+      applied = applySaved(toStores, local);
     } catch (err) {
       if (err instanceof SyncStop) throw err;
       // Storage failed some other way part-way through: what it holds may be neither side now.
@@ -402,16 +520,19 @@ async function reconcile(
     }
     noRoom = null;
     if (applied === 'changed') {
-      brought = addChanges(brought, changesOrNull(syncChanges(local, merged)));
+      brought = addChanges(brought, changesOrNull(syncChanges(local, toStores)));
     }
     void dropCopies(ACTIVE_PROFILE_ID, [remoteCopy]);
-    if (sameData(merged, remote.snapshot)) return { brought, sent: null };
+    if (sameData(toVault, remote.snapshot)) {
+      settleSettings(toVault);
+      return { brought, sent: null };
+    }
 
     const next = remote.generation + 1;
     const writes = withWrite(remote.writes, device, next);
     const mergedCopy = randomId();
-    await saveCopy(mergedCopy, { snapshot: merged, writes });
-    const sealed = await sealSnapshot(keys, snapshotJson(merged, next, writes));
+    await saveCopy(mergedCopy, { snapshot: toVault, writes, parked });
+    const sealed = await sealSnapshot(keys, snapshotJson(toVault, next, writes));
     if (!on()) return { brought, sent: null };
     if (baseMark() !== mark || store.getState().base !== remoteCopy) continue;
     // A write is sent only once the note of it is stored: its answer may never come.
@@ -422,7 +543,7 @@ async function reconcile(
       throw noRoomHere(remote.etag, announce);
     }
     const write = await writeVault(relayUrl(), keys, sealed, remote.etag);
-    const sent = () => changesOrNull(syncChanges(remote.snapshot, merged));
+    const sent = () => changesOrNull(syncChanges(remote.snapshot, toVault));
     if (!on()) return { brought, sent: write.ok ? sent() : null };
     const noted = store.getState().pending?.copy === mergedCopy;
     if (write.ok) {
@@ -431,6 +552,7 @@ async function reconcile(
         store.getState().agreed({ etag: write.etag, generation: next, base: mergedCopy, mark });
         void dropCopies(ACTIVE_PROFILE_ID, [mergedCopy]);
       }
+      settleSettings(toVault);
       return { brought, sent: sent() };
     }
     // Another device wrote first, so this write did not happen: read it, merge and write again.
@@ -492,9 +614,18 @@ function failed(err: unknown): void {
   retry(SERVER_RETRY_MS);
 }
 
-async function runOnce(asked: boolean): Promise<void> {
+/** What runs moved: changes brought in, changes sent. */
+type Moved = Omit<SyncExchange, 'at'>;
+const NOTHING_MOVED: Moved = { brought: null, sent: null };
+
+/**
+ * One run. `earlier`: what the runs before it in the same sync moved (a run
+ * asked for during a run follows it), reported with its own. Returns the two
+ * together.
+ */
+async function runOnce(asked: boolean, earlier: Moved = NOTHING_MOVED): Promise<Moved> {
   const secret = useDeviceSyncStore.getState().secret;
-  if (!secret || !relayUrl()) return;
+  if (!secret || !relayUrl()) return earlier;
   // Data only in memory is not agreed on: syncing waits until it is saved.
   if (unsavedData()) throw storageFull();
 
@@ -502,16 +633,21 @@ async function runOnce(asked: boolean): Promise<void> {
   const keys = await keysFor(secret);
   const result = await reconcile(keys, secret, asked);
   busyStreak = 0;
-  if (useDeviceSyncStore.getState().secret !== secret) return;
+  if (useDeviceSyncStore.getState().secret !== secret) return earlier;
+  const moved = {
+    brought: addChanges(earlier.brought, result.brought),
+    sent: addChanges(earlier.sent, result.sent),
+  };
   const now = Date.now();
   const previous = useDeviceSync.getState().last;
   const keep =
-    !result.brought &&
-    !result.sent &&
+    !moved.brought &&
+    !moved.sent &&
     previous !== null &&
     (previous.brought !== null || previous.sent !== null) &&
     now - previous.at < REPORT_KEPT_MS;
-  setStatus({ phase: 'done', error: null, last: keep ? previous : { at: now, ...result } });
+  setStatus({ phase: 'done', error: null, last: keep ? previous : { at: now, ...moved } });
+  return moved;
 }
 
 /**
@@ -553,11 +689,14 @@ export function syncNow({ asked = false }: { asked?: boolean } = {}): Promise<vo
   retryTimer = null;
   running = (async () => {
     let ask = asked;
+    let moved = NOTHING_MOVED;
     try {
       do {
         again = false;
         const thisRun = ask;
-        await exclusively(() => runOnce(thisRun));
+        await exclusively(async () => {
+          moved = await runOnce(thisRun, moved);
+        });
         ask = askedAgain;
         askedAgain = false;
       } while (again);
@@ -610,6 +749,13 @@ export function startDeviceSync(): () => void {
     useRepertoire.subscribe(onChange),
     useAnalyses.subscribe(onChange),
     useGames.subscribe(onChange),
+    // The learner's settings: the device's own (the engine build, the install prompt) stay here.
+    useSettings.subscribe((state, previous) => {
+      const changed = LEARNER_SETTING_KEYS.filter((key) => !same(state[key], previous[key]));
+      if (changed.length === 0 || applying) return;
+      noteSettings(Object.fromEntries(changed.map((key) => [key, state[key]])));
+      onChange();
+    }),
     // Turned off in another tab: this one stops too.
     useDeviceSyncStore.subscribe((state) => {
       if (!state.secret) {
@@ -670,18 +816,20 @@ export async function turnOnSync(): Promise<SyncActionResult<{ words: string[] }
       const secret = newSecret();
       const keys = await deriveVaultKeys(secret);
       const device = randomId();
-      const local = localSnapshot();
+      // This device's data, but for the parts it keeps to itself: those start the vault empty.
+      const off = new Set(useDeviceSyncStore.getState().off);
+      const shared = keepParts(localSnapshot(), emptySyncSnapshot(), off);
       const writes = withWrite({}, device, 1);
       const write = await writeVault(
         relayUrl(),
         keys,
-        await sealSnapshot(keys, snapshotJson(local, 1, writes)),
+        await sealSnapshot(keys, snapshotJson(shared, 1, writes)),
         null,
       );
       // A vault by that name already (never seen in practice): another secret.
       if (!write.ok) continue;
       const copy = randomId();
-      await saveCopy(copy, { snapshot: local, writes });
+      await saveCopy(copy, { snapshot: shared, writes, parked: parkedFor(off, null) });
       useDeviceSyncStore.getState().turnOn({
         secret: toBase64Url(secret),
         device,
@@ -691,14 +839,12 @@ export async function turnOnSync(): Promise<SyncActionResult<{ words: string[] }
         mark: baseMark(),
       });
       void dropCopies(ACTIVE_PROFILE_ID, [copy]);
+      // Settings as they come out of the box are no news: those changed from them are counted.
+      const fresh = { ...emptySyncSnapshot(), settings: learnerSettingsOf(DEFAULT_SETTINGS) };
       setStatus({
         phase: 'done',
         error: null,
-        last: {
-          at: Date.now(),
-          brought: null,
-          sent: changesOrNull(syncChanges(emptySyncSnapshot(), local)),
-        },
+        last: { at: Date.now(), brought: null, sent: changesOrNull(syncChanges(fresh, shared)) },
       });
       startDeviceSync();
       return { ok: true, words: await secretToPhrase(secret) };
@@ -742,20 +888,29 @@ export async function joinSync(
           'Nothing is synced under this phrase. Check the words, or turn sync on from the other device first.',
       };
     }
+    // The parts this device keeps to itself have shared nothing with the vault yet.
+    const off = new Set(useDeviceSyncStore.getState().off);
     const copy = randomId();
-    await saveCopy(copy, { snapshot: remote.snapshot, writes: remote.writes });
+    await saveCopy(copy, {
+      snapshot: remote.snapshot,
+      writes: remote.writes,
+      parked: parkedFor(off, null),
+    });
     // Turned on meanwhile, in another tab.
     if (useDeviceSyncStore.getState().secret) {
       return { ok: false, reason: 'This device syncs already.' };
     }
     if (unsavedData()) return { ok: false, reason: STORAGE_FULL };
     const local = localSnapshot();
-    const merged =
+    const merged = keepParts(
       keep === 'replace'
         ? withDeviceFields(remote.snapshot, local)
         : shareHistory(local, remote.snapshot)
           ? mergeSnapshots(null, local, remote.snapshot)
-          : mergeSnapshots(emptySyncSnapshot(), local, remote.snapshot, { independent: true });
+          : mergeSnapshots(emptySyncSnapshot(), local, remote.snapshot, { independent: true }),
+      local,
+      off,
+    );
     const applied = applySaved(merged, local);
     if (applied === 'no-room' || applied === 'lost') {
       // Sync is not on yet: no base to forget, and what storage holds is this device's own.
@@ -775,8 +930,8 @@ export async function joinSync(
     setStatus({ phase: 'done', error: null, last: { at: Date.now(), brought, sent: null } });
     startDeviceSync();
     // What this device adds goes up with the first run.
-    if (!sameData(merged, remote.snapshot)) void syncNow();
-    return { ok: true, brought, totals: syncTotals(merged) };
+    if (!sameData(keepParts(merged, remote.snapshot, off), remote.snapshot)) void syncNow();
+    return { ok: true, brought, totals: syncTotals(merged, off) };
   } catch (err) {
     return { ok: false, reason: reasonOf(err) };
   }
@@ -893,4 +1048,17 @@ export function forgetSyncBase(): void {
   if (!useDeviceSyncStore.getState().secret) return;
   forgetBase();
   void syncNow();
+}
+
+/**
+ * Syncs a part of the profile on this device, or keeps it to this device
+ * (Settings → What syncs on this device). A part kept here keeps the version
+ * it last shared with the vault, so syncing it again later merges what
+ * changed on both sides meanwhile; turned on, it syncs straight away.
+ */
+export function setSyncPart(part: SyncPart, on: boolean): void {
+  const store = useDeviceSyncStore.getState();
+  if (store.off.includes(part) !== on) return;
+  store.setPart(part, on);
+  if (on && store.secret) void syncNow({ asked: true });
 }

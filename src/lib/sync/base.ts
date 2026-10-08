@@ -1,6 +1,7 @@
 import { safeLocalStorage, writeStorage } from '@/lib/persistStorage';
 import { ACTIVE_PROFILE_ID, storageKeyFor } from '@/store/profiles';
-import type { SyncSnapshot } from './merge';
+import type { SyncBase, SyncSnapshot } from './merge';
+import { isSyncPart } from './parts';
 import { randomId } from './randomId';
 import { gunzipText, gzipText } from './vaultCrypto';
 
@@ -31,6 +32,12 @@ import { gunzipText, gzipText } from './vaultCrypto';
 export interface SyncCopy {
   snapshot: SyncSnapshot;
   writes: SyncWrites;
+  /**
+   * The parts this device kept to itself when the copy was agreed, each with
+   * the version this device and the vault last shared (null when none is
+   * known): a part synced again is merged against it.
+   */
+  parked?: Partial<SyncBase>;
 }
 
 /**
@@ -90,7 +97,7 @@ function inTime<T>(work: Promise<T>): Promise<T> {
 /** A stored copy read back; null when it is not one. */
 function asCopy(value: unknown): SyncCopy | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { snapshot, writes } = value as Partial<SyncCopy>;
+  const { snapshot, writes, parked } = value as Partial<SyncCopy>;
   const parts = snapshot as Partial<SyncSnapshot> | undefined;
   if (
     typeof parts?.progress !== 'object' ||
@@ -102,7 +109,18 @@ function asCopy(value: unknown): SyncCopy | null {
   ) {
     return null;
   }
-  return { snapshot: snapshot as SyncSnapshot, writes };
+  const copy: SyncCopy = {
+    // A copy kept before settings synced holds none.
+    snapshot: { ...(snapshot as SyncSnapshot), settings: parts.settings ?? {} },
+    writes,
+  };
+  if (typeof parked === 'object' && parked !== null) {
+    const kept = Object.entries(parked).filter(
+      ([part, version]) => isSyncPart(part) && (version === null || typeof version === 'object'),
+    );
+    copy.parked = Object.fromEntries(kept);
+  }
+  return copy;
 }
 
 /** Keeps a copy under `id` (a new id: copies are never replaced). */

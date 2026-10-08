@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { rehydrateOnStorageChange, safeLocalStorage } from '@/lib/persistStorage';
 import { DEVICE_SYNC_STORAGE_KEY } from '@/lib/sync/enabled';
+import { isSyncPart, type SyncPart } from '@/lib/sync/parts';
 import { randomId } from '@/lib/sync/randomId';
 import { storageKeyFor } from './profiles';
 
@@ -57,6 +58,18 @@ export interface DeviceSyncState {
   since: number | null;
   /** Why sync went off by itself (the synced copy was deleted), until it is read. */
   stoppedBecause: 'deleted' | null;
+  /**
+   * The parts this device keeps to itself: the learner's choice for this
+   * device, kept when sync goes off and on again.
+   */
+  off: SyncPart[];
+  /**
+   * The learner's settings changed on this device since they last reached the
+   * vault, each with the value it was changed to. A merge that has no version
+   * of the settings to compare with (its copy lost, as some private windows
+   * lose them) keeps these rather than take the vault's (merge.ts).
+   */
+  changedSettings: Record<string, unknown>;
 
   turnOn: (on: Agreement & { secret: string; device: string }, now?: number) => void;
   /** The vault at this version is the base from here; any pending write is settled. */
@@ -65,6 +78,8 @@ export interface DeviceSyncState {
   sending: (pending: PendingWrite | null) => void;
   turnOff: (because?: 'deleted') => void;
   clearStopped: () => void;
+  /** Syncs a part on this device, or keeps it to this device. */
+  setPart: (part: SyncPart, on: boolean) => void;
 }
 
 const initialState = {
@@ -78,6 +93,8 @@ const initialState = {
   lastSyncAt: null as number | null,
   since: null as number | null,
   stoppedBecause: null as 'deleted' | null,
+  off: [] as SyncPart[],
+  changedSettings: {} as Record<string, unknown>,
 };
 
 type PersistedDeviceSync = typeof initialState;
@@ -115,6 +132,14 @@ function repair(stored: unknown): PersistedDeviceSync {
     lastSyncAt: on ? time(s.lastSyncAt) : null,
     since: on ? time(s.since) : null,
     stoppedBecause: s.stoppedBecause === 'deleted' ? 'deleted' : null,
+    off: Array.isArray(s.off) ? [...new Set(s.off.filter(isSyncPart))] : [],
+    changedSettings:
+      on &&
+      typeof s.changedSettings === 'object' &&
+      s.changedSettings !== null &&
+      !Array.isArray(s.changedSettings)
+        ? (s.changedSettings as Record<string, unknown>)
+        : {},
   };
 }
 
@@ -134,12 +159,20 @@ export const useDeviceSyncStore = create<DeviceSyncState>()(
           lastSyncAt: now,
           since: now,
           stoppedBecause: null,
+          // Everything here was just agreed with the vault.
+          changedSettings: {},
         }),
       agreed: ({ etag, generation, base, mark }, now = Date.now()) =>
         set({ etag, generation, base, mark, pending: null, lastSyncAt: now }),
       sending: (pending) => set({ pending }),
-      turnOff: (because) => set({ ...initialState, stoppedBecause: because ?? null }),
+      // What this device keeps to itself is its own choice: it stays for the next time.
+      turnOff: (because) =>
+        set(({ off }) => ({ ...initialState, off, stoppedBecause: because ?? null })),
       clearStopped: () => set({ stoppedBecause: null }),
+      setPart: (part, on) =>
+        set(({ off }) => ({
+          off: on ? off.filter((p) => p !== part) : [...new Set([...off, part])],
+        })),
     }),
     {
       name: storageKeyFor(DEVICE_SYNC_STORAGE_KEY),
@@ -156,7 +189,11 @@ export const useDeviceSyncStore = create<DeviceSyncState>()(
         lastSyncAt,
         since,
         stoppedBecause,
+        off,
+        changedSettings,
       }) => ({
+        off,
+        changedSettings,
         secret,
         device,
         etag,

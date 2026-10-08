@@ -363,7 +363,7 @@ describe('SettingsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset everything' }));
     expect(screen.getByRole('heading', { name: 'Reset everything?' })).toBeInTheDocument();
-    expect(screen.getByText(/imported games of this profile/)).toBeInTheDocument();
+    expect(screen.getByText(/imported games and settings of this profile/)).toBeInTheDocument();
     expect(screen.getByText(/Kept:/)).toHaveTextContent('the profile list');
     expect(useProgress.getState().puzzleRating).toBe(1800);
 

@@ -74,6 +74,24 @@ describe('the device-sync store', () => {
     });
   });
 
+  it('keeps the parts kept here and the settings changed here, each in its own way', async () => {
+    const state = await stored({
+      secret: SECRET,
+      device: 'device-abc-123',
+      off: ['settings', 'nonsense', 'games', 'settings'],
+      changedSettings: { boardTheme: 'blue' },
+    });
+    expect(state.off).toEqual(['settings', 'games']);
+    expect(state.changedSettings).toEqual({ boardTheme: 'blue' });
+    // Sync turned off forgets what changed here, and keeps what this device keeps to itself.
+    useDeviceSyncStore.getState().turnOff();
+    expect(useDeviceSyncStore.getState()).toMatchObject({
+      off: ['settings', 'games'],
+      changedSettings: {},
+    });
+    expect((await stored({ secret: SECRET, changedSettings: ['x'] })).changedSettings).toEqual({});
+  });
+
   it('settles a pending write when a version is agreed', () => {
     const store = useDeviceSyncStore.getState();
     store.turnOn({

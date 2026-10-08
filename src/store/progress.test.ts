@@ -7,6 +7,7 @@ import { DEFAULT_VOLATILITY, INITIAL_RD } from '@/lib/glicko';
 import { REPEAT_WEIGHT } from '@/lib/puzzleScore';
 import { CALIBRATION_PUZZLES, CALIBRATION_START_RATING, SELF_ASSESSED_RD } from '@/lib/rating';
 import { useRepertoire } from './repertoire';
+import { DEFAULT_SETTINGS, useSettings } from './settings';
 
 const attempt = (
   id: string,
@@ -114,6 +115,34 @@ describe('progress store', () => {
     expect(useProgress.getState().themeStats.fork?.solved).toBe(1);
     expect(useRepertoire.getState().cards['italian|e2e4']?.reps).toBe(1);
     expect(useProgress.getState().importState({ nonsense: true }).ok).toBe(false);
+  });
+
+  it("backs up the learner's settings and restores them, leaving the device's alone", () => {
+    useSettings.setState({ boardTheme: 'blue', pieceSet: 'merida', engineFull: true });
+    const json = useProgress.getState().exportState();
+    const file = JSON.parse(json) as { version: number; settings: Record<string, unknown> };
+    expect(file.version).toBe(EXPORT_VERSION);
+    expect(file.settings).toMatchObject({ boardTheme: 'blue', pieceSet: 'merida' });
+    expect(file.settings).not.toHaveProperty('engineFull');
+
+    useSettings.setState({ ...DEFAULT_SETTINGS, engineThreads: false });
+    const result = useProgress.getState().importState(JSON.parse(json));
+    expect(result.ok && result.summary.settings).toBe(true);
+    expect(useSettings.getState()).toMatchObject({
+      boardTheme: 'blue',
+      pieceSet: 'merida',
+      // The device's own stay as this device has them.
+      engineThreads: false,
+      engineFull: false,
+    });
+
+    // A backup from before settings were in backups leaves the settings as they are.
+    const { settings: _none, ...older } = JSON.parse(json) as Record<string, unknown>;
+    useSettings.setState({ boardTheme: 'green' });
+    const old = useProgress.getState().importState({ ...older, version: 11 });
+    expect(old.ok && old.summary.settings).toBe(false);
+    expect(useSettings.getState().boardTheme).toBe('green');
+    useSettings.setState({ ...DEFAULT_SETTINGS });
   });
 
   it('names the profile’s history in its first backup, and keeps that name', () => {

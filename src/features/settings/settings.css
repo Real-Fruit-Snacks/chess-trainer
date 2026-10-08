@@ -220,6 +220,17 @@
 }
 
 /* ---------- Sync between devices ---------- */
+/* What syncs on this device: a titled group of switches. */
+.sync-parts {
+  margin-top: var(--space-2);
+}
+
+.sync-parts > legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+  font-weight: 600;
+}
+
 /* The recovery phrase: the numbered words beside the QR code, stacked on narrow screens. */
 .sync-phrase {
   display: flex;
