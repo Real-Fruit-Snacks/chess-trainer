@@ -537,8 +537,10 @@ describe('importing a backup while sync is on', () => {
     });
     // Back online, the learner imports an older backup without the repertoire.
     relay.offline = false;
+    // It holds nothing the synced data does not: nothing is added, and nothing deleted.
     expect(await importIntoSync(backupOf(deleteRepertoire(fixtureSnapshot(), REP)))).toEqual({
       ok: true,
+      added: null,
     });
     await syncNow();
     expect(useDeviceSync.getState().phase).toBe('done');
@@ -557,7 +559,7 @@ describe('importing a backup while sync is on', () => {
       playArcade(solvePuzzle(solvePuzzle(s, 'there-1', T), 'there-2', T + 1000), 'fortress', 5, T),
     );
     load(playArcade(solvePuzzle(takeSnapshot(), 'here-1', T + 2000), 'fortress', 3, T + 2000));
-    expect(await importIntoSync(backupOf(fixtureSnapshot()))).toEqual({ ok: true });
+    expect(await importIntoSync(backupOf(fixtureSnapshot()))).toMatchObject({ ok: true });
     await syncNow();
     const p = (await other.read()).snapshot.progress;
     expect(p.ratedAttempts).toBe(before().ratedAttempts + 3);
@@ -571,7 +573,9 @@ describe('importing a backup while sync is on', () => {
     // The laptop solves two puzzles and syncs, then exports a backup; this device has not
     // synced since, and the learner imports the laptop's backup here.
     await laptop.change((s) => solvePuzzle(solvePuzzle(s, 'laptop-1', T), 'laptop-2', T + 1000));
-    expect(await importIntoSync(backupOf((await laptop.read()).snapshot))).toEqual({ ok: true });
+    expect(await importIntoSync(backupOf((await laptop.read()).snapshot))).toMatchObject({
+      ok: true,
+    });
     await syncNow();
     const p = (await laptop.read()).snapshot.progress;
     expect(p.lifetime.attempts).toBe(before().lifetime.attempts + 2);
@@ -596,7 +600,7 @@ describe('importing a backup while sync is on', () => {
     now.progress.games = [];
     load(now);
     const words = await turnOn();
-    expect(await importIntoSync(backupOf(old))).toEqual({ ok: true });
+    expect(await importIntoSync(backupOf(old))).toMatchObject({ ok: true });
     await syncNow();
     const p = (await (await otherDevice(words)).read()).snapshot.progress;
     expect(p.lifetime.attempts).toBe(now.progress.lifetime.attempts);
@@ -608,7 +612,7 @@ describe('importing a backup while sync is on', () => {
     const other = await otherDevice(words);
     await other.change((s) => editRepertoire(s, REP, '1. d4 d5 2. c4 *'));
     const old = fixtureSnapshot().repertoire.custom.find((r) => r.id === REP);
-    expect(await importIntoSync(backupOf(fixtureSnapshot()))).toEqual({ ok: true });
+    expect(await importIntoSync(backupOf(fixtureSnapshot()))).toMatchObject({ ok: true });
     await syncNow();
     // The edit stays where it was; the backup's older version is kept as a copy, named so.
     const custom = (await other.read()).snapshot.repertoire.custom;
@@ -618,7 +622,7 @@ describe('importing a backup while sync is on', () => {
     ]);
     // Deleted elsewhere, and a backup that does not hold it: it stays deleted.
     await other.change((s) => deleteRepertoire(s, REP));
-    expect(await importIntoSync(backupOf(emptySnapshot()))).toEqual({ ok: true });
+    expect(await importIntoSync(backupOf(emptySnapshot()))).toMatchObject({ ok: true });
     await syncNow();
     expect((await other.read()).snapshot.repertoire.custom.map((r) => r.id)).not.toContain(REP);
   });
@@ -627,7 +631,7 @@ describe('importing a backup while sync is on', () => {
     const words = await turnOn();
     let apart = emptySnapshot();
     for (let i = 0; i < 2; i++) apart = solvePuzzle(apart, `apart-${i}`, T + i * 60_000);
-    expect(await importIntoSync(backupOf(apart))).toEqual({ ok: true });
+    expect(await importIntoSync(backupOf(apart))).toMatchObject({ ok: true });
     await syncNow();
     const p = (await (await otherDevice(words)).read()).snapshot.progress;
     expect(p.lifetime.attempts).toBe(before().lifetime.attempts + 2);
@@ -636,7 +640,7 @@ describe('importing a backup while sync is on', () => {
     load(editRepertoire(takeSnapshot(), REP, '1. e4 c5 *'));
     expect(
       await importIntoSync(backupOf(editRepertoire(fixtureSnapshot(), REP, '1. c4 *'))),
-    ).toEqual({ ok: true });
+    ).toMatchObject({ ok: true });
     const custom = takeSnapshot().repertoire.custom;
     expect(custom.find((r) => r.id === REP)?.pgn).toBe('1. e4 c5 *');
     expect(custom.find((r) => r.name.endsWith('(backup)'))?.pgn).toBe('1. c4 *');
@@ -671,7 +675,7 @@ describe('joining from a device used apart', () => {
     for (let i = 0; i < 3; i++) phone = solvePuzzle(phone, `phone-${i}`, T + i * 60_000);
     load(phone);
     expect(shareHistory(takeSnapshot(), withGame(fixtureSnapshot(), true))).toBe(false);
-    expect(await joinSync(on.join(' '), 'merge')).toEqual({ ok: true });
+    expect(await joinSync(on.join(' '), 'merge')).toMatchObject({ ok: true });
     const p = takeSnapshot().progress;
     const laptop = before();
     expect(p.lifetime.attempts).toBe(laptop.lifetime.attempts + 3);
@@ -708,7 +712,7 @@ describe('an import while a sync of this tab is under way', () => {
     void syncNow();
     release();
     await run;
-    expect(await importing).toEqual({ ok: true });
+    expect(await importing).toMatchObject({ ok: true });
     relay.beforeRequest = null;
     await syncNow();
     expect(useDeviceSync.getState().phase).toBe('done');

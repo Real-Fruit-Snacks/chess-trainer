@@ -12,6 +12,8 @@ import {
   ProgressBar,
   Segmented,
   Switch,
+  TabPanel,
+  Tabs,
 } from './index';
 
 // jsdom has no modal dialog support; the real element fires `close` on close().
@@ -256,6 +258,87 @@ describe('Segmented', () => {
     // Clicking the first option chooses it: it was not chosen before.
     fireEvent.click(radios[0]!);
     expect(onChange).toHaveBeenCalledWith('rated');
+  });
+});
+
+describe('Tabs', () => {
+  const TABS = [
+    { id: 'one', label: 'One', icon: 'palette' },
+    { id: 'two', label: 'Two' },
+    { id: 'three', label: 'Three' },
+  ] as const;
+  type Id = (typeof TABS)[number]['id'];
+
+  function Host({ onChange }: { onChange?: (id: Id) => void }) {
+    const [open, setOpen] = useState<Id>('one');
+    return (
+      <>
+        <Tabs
+          tabs={TABS}
+          value={open}
+          onChange={(id) => {
+            setOpen(id);
+            onChange?.(id);
+          }}
+          ariaLabel="Sections"
+          idPrefix="t"
+        />
+        {TABS.map(({ id, label }) => (
+          <TabPanel key={id} idPrefix="t" id={id} active={id === open}>
+            <p>{label} content</p>
+          </TabPanel>
+        ))}
+      </>
+    );
+  }
+
+  it('ties each tab to its panel and shows only the open one', () => {
+    render(<Host />);
+    const tabs = within(screen.getByRole('tablist', { name: 'Sections' })).getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['One', 'Two', 'Three']);
+    // Every tab points at a panel in the page; only the open one is shown, with its content.
+    for (const t of tabs) {
+      const panel = document.getElementById(t.getAttribute('aria-controls') ?? '');
+      expect(panel).toHaveAttribute('role', 'tabpanel');
+      expect(panel).toHaveAttribute('aria-labelledby', t.id);
+    }
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('One content');
+    expect(screen.queryByText('Two content')).toBeNull();
+    // An icon is decoration: the tab's name is its label.
+    expect(tabs[0]?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Three' }));
+    expect(screen.getByRole('tab', { name: 'Three' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('Three content');
+  });
+
+  it('has one tab stop, and the arrow keys, Home and End open the tabs in turn', () => {
+    const onChange = vi.fn();
+    render(<Host onChange={onChange} />);
+    const list = screen.getByRole('tablist');
+    expect(
+      within(list)
+        .getAllByRole('tab')
+        .map((t) => t.tabIndex),
+    ).toEqual([0, -1, -1]);
+    fireEvent.keyDown(list, { key: 'ArrowRight' });
+    expect(onChange).toHaveBeenLastCalledWith('two');
+    expect(screen.getByRole('tab', { name: 'Two' })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Two' }).tabIndex).toBe(0);
+    fireEvent.keyDown(list, { key: 'ArrowDown' });
+    expect(onChange).toHaveBeenLastCalledWith('three');
+    fireEvent.keyDown(list, { key: 'ArrowRight' });
+    expect(onChange).toHaveBeenLastCalledWith('one');
+    fireEvent.keyDown(list, { key: 'ArrowUp' });
+    expect(onChange).toHaveBeenLastCalledWith('three');
+    fireEvent.keyDown(list, { key: 'Home' });
+    expect(onChange).toHaveBeenLastCalledWith('one');
+    fireEvent.keyDown(list, { key: 'End' });
+    expect(onChange).toHaveBeenLastCalledWith('three');
+    // Other keys are left alone.
+    onChange.mockClear();
+    fireEvent.keyDown(list, { key: 'a' });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 

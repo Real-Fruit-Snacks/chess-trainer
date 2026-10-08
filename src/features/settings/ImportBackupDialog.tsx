@@ -5,6 +5,7 @@ import { formatDate } from '@/lib/dates';
 import { deviceSyncOn } from '@/lib/sync/enabled';
 import { siteConfig } from '@/site.config';
 import type { BackupPreview, BackupSummary } from '@/store/progress';
+import { describeChanges } from './deviceSyncStatus';
 import { useBackupActions } from './useBackupActions';
 
 export interface PendingImport {
@@ -58,7 +59,13 @@ export function ImportBackupDialog({
         return;
       }
       const dropped = skipped(pending.preview.summary.dropped);
-      toast(`Backup imported — it joins your synced data.${dropped}`, { tone: 'success' });
+      const added = describeChanges(joined.added);
+      toast(
+        added
+          ? `Backup imported: ${added} joined your synced data.${dropped}`
+          : `Backup imported: your synced data held all of it already.${dropped}`,
+        { tone: 'success' },
+      );
       if (pending.preview.warning) {
         toast(pending.preview.warning, { tone: 'warning', duration: 12000 });
       }

@@ -27,6 +27,7 @@ import {
   turnOnSync,
   useDeviceSync,
 } from './deviceSync';
+import { syncTotals } from './counts';
 import { sameData, type SyncSnapshot } from './merge';
 import { applySnapshot, snapshotJson, takeSnapshot } from './snapshot';
 
@@ -130,7 +131,25 @@ describe('syncing', () => {
     const vault = await (await otherDevice(words)).read();
     expect(vault.generation).toBe(2);
     expect(vault.snapshot.progress.attempts[0]?.id).toBe('n1');
-    expect(useDeviceSync.getState().last).toMatchObject({ pulled: false, pushed: true });
+    // What went: the one puzzle, and nothing came in.
+    expect(useDeviceSync.getState().last).toMatchObject({
+      brought: null,
+      sent: { changed: { puzzles: 1, lessons: 0, analyses: 0 }, removed: 0 },
+    });
+  });
+
+  it('keeps reporting what a sync moved over the syncs straight after that move nothing', async () => {
+    await turnOn();
+    const report = useDeviceSync.getState().last;
+    expect(report?.sent).not.toBeNull();
+    await syncNow();
+    expect(useDeviceSync.getState().last).toBe(report);
+    // A minute on, "Synced just now" no longer covers it.
+    const later = Date.now() + 61_000;
+    vi.spyOn(Date, 'now').mockReturnValue(later);
+    await syncNow();
+    expect(useDeviceSync.getState().last).toEqual({ at: later, brought: null, sent: null });
+    vi.restoreAllMocks();
   });
 
   it("brings in another device's changes without writing them back", async () => {
@@ -141,7 +160,10 @@ describe('syncing', () => {
     await syncNow();
     expect(takeSnapshot().analyses.items['an-phone']?.name).toBe('From the phone');
     expect(relay.puts()).toBe(0);
-    expect(useDeviceSync.getState().last).toMatchObject({ pulled: true, pushed: false });
+    expect(useDeviceSync.getState().last).toMatchObject({
+      brought: { changed: { analyses: 1, puzzles: 0 }, removed: 0 },
+      sent: null,
+    });
     expect(useDeviceSyncStore.getState()).toMatchObject({ etag: '"2"', generation: 2 });
   });
 
@@ -285,8 +307,18 @@ describe('joining from another device', () => {
     const words = await vaultFromAnotherDevice();
     load(solvePuzzle(emptySnapshot(), 'mine', T));
     relay.requests = [];
-    expect(await joinSync(words.join(' '), 'merge')).toEqual({ ok: true });
+    const joined = await joinSync(words.join(' '), 'merge');
     const here = takeSnapshot();
+    // What came in: everything the other device had (used apart, nothing was here already).
+    const there = syncTotals(fixtureSnapshot());
+    expect(joined).toMatchObject({
+      ok: true,
+      brought: {
+        changed: { puzzles: there.puzzles, repertoires: there.repertoires, games: there.games },
+        removed: 0,
+      },
+      totals: syncTotals(here),
+    });
     expect(here.repertoire.custom.map((r) => r.id)).toEqual([REP]);
     expect(here.progress.attempts.map((a) => a.id)).toContain('mine');
     // Used apart until now: both devices' counts add up.
@@ -302,7 +334,10 @@ describe('joining from another device', () => {
     const mine = solvePuzzle(emptySnapshot(), 'mine', T);
     mine.progress.lastBackupAt = 123;
     load(mine);
-    expect(await joinSync(words.join(' '), 'replace')).toEqual({ ok: true });
+    expect(await joinSync(words.join(' '), 'replace')).toMatchObject({
+      ok: true,
+      totals: syncTotals(fixtureSnapshot()),
+    });
     const here = takeSnapshot();
     expect(here.progress.attempts.map((a) => a.id)).not.toContain('mine');
     expect(sameData(here, named(fixtureSnapshot()))).toBe(true);

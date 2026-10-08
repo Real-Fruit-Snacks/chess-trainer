@@ -126,7 +126,7 @@ const lichessCard = (page: Page) => page.getByTestId('lichess-card');
 test('connects through lichess.org, syncs at once, and disconnects', async ({ page }) => {
   const fake = await standIn(page);
   await seed(page);
-  await page.goto('settings');
+  await page.goto('settings#lichess');
   await expect(lichessCard(page)).toContainText(
     'Keep this device in step with your Lichess account',
   );
@@ -163,7 +163,7 @@ test('connects through lichess.org, syncs at once, and disconnects', async ({ pa
 test('connects with a personal token pasted from lichess.org', async ({ page }) => {
   const fake = await standIn(page);
   await seed(page);
-  await page.goto('settings');
+  await page.goto('settings#lichess');
   await page.getByText('Connect with a personal token instead').click();
   const create = page.getByRole('link', { name: 'Create a token on Lichess' });
   await expect(create).toHaveAttribute('href', /account\/oauth\/token\/create\?scopes/);
@@ -179,7 +179,7 @@ test('connects with a personal token pasted from lichess.org', async ({ page }) 
 test('says so when the connection is cancelled on lichess.org', async ({ page }) => {
   await standIn(page);
   await seed(page);
-  await page.goto('settings');
+  await page.goto('settings#lichess');
   await page.getByTestId('lichess-connect').click();
   await page.locator('#deny').click();
   await expect(page.getByRole('alert')).toHaveText('The connection was cancelled on Lichess.');
@@ -253,7 +253,7 @@ test('another device’s repertoires, analyses, games and missed puzzles come in
   fake.addRounds([{ id: '6Mhmf', win: false, rating: 1369, themes: ['mateIn2'] }]);
   await seed(page, fake.issueToken());
 
-  await page.goto('settings');
+  await page.goto('settings#lichess');
   await expect(page.getByTestId('lichess-status')).toContainText(
     'Synced just now. 1 puzzle from your Lichess history (1 to review), 1 game from other devices, 2 repertoires and analyses updated here.',
   );
@@ -293,7 +293,7 @@ test('an account 0.17.0 signed out by mistake carries on, its study read all the
   // …and took that refusal for a lost sign-in.
   await seed(page, fake.issueToken(), { needsReconnect: true });
 
-  await page.goto('settings');
+  await page.goto('settings#lichess');
   await expect(page.getByTestId('lichess-status')).toContainText('Synced just now.');
   await expect(lichessCard(page)).not.toContainText('no longer accepts');
   expect(fake.requests).toContain('POST /api/token/test');

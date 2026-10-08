@@ -571,6 +571,59 @@ a.btn:focus {
   }
 }
 
+/* ---------- Tabs ---------- */
+/* A page's sections, side by side; on phones they wrap and share the width. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.tabs__tab:hover {
+  color: var(--text);
+}
+
+.tabs__tab[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.tabs__tab[aria-selected='true'] svg {
+  color: var(--accent);
+}
+
+@media (max-width: 599px) {
+  .tabs {
+    width: 100%;
+  }
+
+  .tabs__tab {
+    flex: 1 1 auto;
+    padding: 6px 10px;
+  }
+}
+
 /* ---------- Slider ---------- */
 .slider {
   display: flex;
@@ -938,6 +991,21 @@ a.btn:focus {
     background: Highlight;
     color: HighlightText;
     border-color: Highlight;
+  }
+
+  .tabs__tab {
+    border: 1px solid transparent;
+  }
+
+  .tabs__tab[aria-selected='true'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
+  }
+
+  .tabs__tab[aria-selected='true'] svg {
+    color: HighlightText;
   }
 
   .progress {

@@ -85,14 +85,15 @@ async function device(
 
 /** Turns sync on and reads the recovery phrase off the dialog. */
 async function turnOn(page: Page): Promise<string[]> {
-  await page.goto('/settings');
+  await page.goto('/settings#sync');
   await page.getByTestId('sync-turn-on').click();
   const list = page.getByTestId('sync-phrase-words');
   await expect(list.locator('li')).toHaveCount(12);
   await expect(page.getByTestId('sync-qr')).toBeVisible();
   const words = (await list.locator('li').allTextContents()).map((t) => t.replace(/^\d+/, ''));
   await page.getByTestId('sync-phrase-done').click();
-  await expect(page.getByTestId('sync-status')).toHaveText('Synced just now.');
+  // Turning on sends what this device has (counted, when there is anything to count).
+  await expect(page.getByTestId('sync-status')).toHaveText(/^Synced just now\. .* sent\.$/);
   return words;
 }
 
@@ -126,22 +127,32 @@ test.describe('sync between devices', () => {
     expect(bytes.includes('Sicilian')).toBe(false);
     expect(bytes.includes('chess-trainer')).toBe(false);
 
-    await b.goto('/settings');
+    await b.goto('/settings#sync');
     await b.getByTestId('sync-join').click();
     await b.getByTestId('sync-join-phrase').fill(words.join(' '));
     // B has a repertoire of its own: both are kept by default.
     await expect(b.getByRole('radio', { name: /Keep both/ })).toBeChecked();
     await b.getByTestId('sync-join-confirm').click();
-    await expect(b.getByTestId('sync-status')).toHaveText('Synced just now.');
+    // The toast says what came in.
+    await expect(b.locator('.toast').first()).toContainText(
+      'This device now syncs with your other devices: 1 repertoire came in.',
+    );
+    await expect(b.getByTestId('sync-status')).toContainText('Synced just now.');
     await expect.poll(() => repertoireNames(b)).toEqual(['London on B', 'Sicilian on A']);
     // What B added went up as it joined: the vault's second version.
     await expect
       .poll(async () => (await relay.store.get([...relay.ids][0] ?? ''))?.version)
       .toBe(2);
 
-    // A brings in what B added.
+    // A brings in what B added, and says so, counted.
     await a.getByTestId('sync-now').click();
     await expect.poll(() => repertoireNames(a)).toEqual(['London on B', 'Sicilian on A']);
+    await expect(a.getByTestId('sync-status')).toHaveText(
+      'Synced just now. 1 repertoire from your other devices.',
+    );
+    await expect(
+      a.getByTestId('sync-totals').locator('.stat', { hasText: 'Your repertoires' }),
+    ).toContainText('2');
     await a.goto('/openings');
     await expect(a.locator('.repertoire-card', { hasText: 'London on B' })).toBeVisible();
   });
@@ -158,7 +169,7 @@ test.describe('sync between devices', () => {
     await expect(c.getByTestId('sync-join-phrase')).toHaveValue(words.join(' '));
     await expect(c).toHaveURL(/\/settings$/);
     await c.getByTestId('sync-join-confirm').click();
-    await expect(c.getByTestId('sync-status')).toHaveText('Synced just now.');
+    await expect(c.getByTestId('sync-status')).toContainText('Synced just now.');
   });
 
   test('deleting the synced copy stops every device, which keep their data', async ({
@@ -171,11 +182,11 @@ test.describe('sync between devices', () => {
     });
     const b = await device(await browser.newContext(), relay, null);
     const words = await turnOn(a);
-    await b.goto('/settings');
+    await b.goto('/settings#sync');
     await b.getByTestId('sync-join').click();
     await b.getByTestId('sync-join-phrase').fill(words.join(' '));
     await b.getByTestId('sync-join-confirm').click();
-    await expect(b.getByTestId('sync-status')).toHaveText('Synced just now.');
+    await expect(b.getByTestId('sync-status')).toContainText('Synced just now.');
 
     await a.getByTestId('sync-delete').click();
     await a.getByTestId('sync-card').getByTestId('confirm-accept').click();

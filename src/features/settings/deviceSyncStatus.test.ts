@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { DeviceSyncStatus } from '@/lib/sync/deviceSync';
-import { deviceSyncNeedsAttention, deviceSyncStatusLine } from './deviceSyncStatus';
+import type { SyncChanges } from '@/lib/sync/counts';
+import {
+  describeChanges,
+  describeExchange,
+  describeTotals,
+  deviceSyncNeedsAttention,
+  deviceSyncStatusLine,
+  listOf,
+} from './deviceSyncStatus';
 
 const NOW = 1_791_000_000_000;
 const status = (patch: Partial<DeviceSyncStatus>): DeviceSyncStatus => ({
@@ -39,5 +47,90 @@ describe('deviceSyncStatusLine', () => {
     expect(deviceSyncNeedsAttention(status({ phase: 'too-large' }))).toBe(true);
     expect(deviceSyncNeedsAttention(status({ phase: 'offline' }))).toBe(false);
     expect(deviceSyncNeedsAttention(status({ phase: 'done' }))).toBe(false);
+  });
+});
+
+const changes = (
+  changed: Partial<SyncChanges['changed']>,
+  removed = 0,
+  other = false,
+): SyncChanges => ({
+  changed: { puzzles: 0, lessons: 0, repertoires: 0, moves: 0, analyses: 0, games: 0, ...changed },
+  removed,
+  other,
+});
+
+describe('listOf', () => {
+  it('joins one, two or more parts as a sentence does', () => {
+    expect(listOf([])).toBe('');
+    expect(listOf(['a'])).toBe('a');
+    expect(listOf(['a', 'b'])).toBe('a and b');
+    expect(listOf(['a', 'b', 'c'])).toBe('a, b and c');
+  });
+});
+
+describe('describeChanges', () => {
+  it('lists each kind that changed, in order, with its count', () => {
+    expect(describeChanges(changes({ analyses: 1, puzzles: 4, lessons: 1 }))).toBe(
+      '4 puzzles, 1 lesson and 1 analysis',
+    );
+    expect(describeChanges(changes({ moves: 12, games: 2 }))).toBe(
+      '12 repertoire moves and 2 imported games',
+    );
+    expect(describeChanges(changes({ puzzles: 1240 }))).toBe('1,240 puzzles');
+  });
+
+  it('counts deletions, and calls anything else progress', () => {
+    expect(describeChanges(changes({ repertoires: 1 }, 2))).toBe('1 repertoire and 2 deletions');
+    expect(describeChanges(changes({}, 1))).toBe('1 deletion');
+    expect(describeChanges(changes({}, 0, true))).toBe('progress');
+    // Progress beside counted changes goes without saying (a rating moves with puzzles).
+    expect(describeChanges(changes({ puzzles: 2 }, 0, true))).toBe('2 puzzles');
+  });
+
+  it('says nothing for no changes', () => {
+    expect(describeChanges(null)).toBeNull();
+    expect(describeChanges(changes({}))).toBeNull();
+  });
+});
+
+describe('describeTotals', () => {
+  it('lists what a profile holds, leaving out what it has none of', () => {
+    expect(
+      describeTotals({
+        puzzles: 1240,
+        lessons: 1,
+        repertoires: 0,
+        moves: 0,
+        analyses: 12,
+        games: 0,
+      }),
+    ).toBe('1,240 puzzles, 1 lesson completed and 12 saved analyses');
+    expect(
+      describeTotals({ puzzles: 0, lessons: 0, repertoires: 0, moves: 0, analyses: 0, games: 0 }),
+    ).toBeNull();
+  });
+});
+
+describe('describeExchange', () => {
+  it('says what came in and what went out', () => {
+    expect(
+      describeExchange({
+        at: NOW,
+        brought: changes({ puzzles: 4, analyses: 1 }),
+        sent: changes({ games: 2 }),
+      }),
+    ).toBe('4 puzzles and 1 analysis from your other devices; 2 imported games sent.');
+    expect(describeExchange({ at: NOW, brought: null, sent: changes({ puzzles: 1 }) })).toBe(
+      '1 puzzle sent.',
+    );
+    expect(describeExchange({ at: NOW, brought: changes({}, 0, true), sent: null })).toBe(
+      'Progress from your other devices.',
+    );
+  });
+
+  it('says nothing when a run moved nothing', () => {
+    expect(describeExchange(null)).toBeNull();
+    expect(describeExchange({ at: NOW, brought: null, sent: null })).toBeNull();
   });
 });

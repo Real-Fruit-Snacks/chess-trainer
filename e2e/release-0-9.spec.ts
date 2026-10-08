@@ -18,9 +18,10 @@ test.describe('test lab', () => {
     page,
   }) => {
     await seedProgress(page, { onboarded: true });
-    await page.goto('/settings');
+    await page.goto('/settings#storage');
     await page.getByTestId('storage-usage').waitFor();
     await expect(page.getByTestId('storage-usage')).toContainText(/Local data: \d+ (B|KB|MB)/);
+    await page.getByRole('tab', { name: 'App', exact: true }).click();
     await page.getByTestId('open-lab').click();
     await expect(page).toHaveURL(/\/settings\/lab$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Test lab');
@@ -112,6 +113,7 @@ test.describe('sound theme and volume', () => {
     expect(settings).toMatchObject({ soundTheme: 'retro', soundVolume: 0.7 });
 
     // The lab shows the same controls, the retro haptic patterns and the loss cue.
+    await page.getByRole('tab', { name: 'App', exact: true }).click();
     await page.getByTestId('open-lab').click();
     await expect(page.getByTestId('volume-slider')).toHaveValue('70');
     await expect(page.getByTestId('haptic-capture')).toContainText('8·12·8·12·8·12·30ms');

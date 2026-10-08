@@ -6,6 +6,43 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-07
+
+Settings in tabs, and sync between devices that counts what it keeps in step and what each sync
+moved.
+
+### Added
+
+- **Settings in tabs:** Appearance, Play, Engine, Sync & data and App. The address names the open
+  tab (`/settings#engine`), so a reload or a link opens it again, and a link to a card (the profile
+  badge's, the way back from the Lichess sign-in, a join link) opens the card's tab and scrolls to
+  it. The tabs are one tab stop: the arrow keys, Home and End move between them, and on phones they
+  wrap onto two rows.
+- **Sync between devices, counted.** The card shows what is kept in step — puzzles played, lessons
+  completed, your own repertoires, repertoire moves in review, saved analyses and imported games —
+  and, after each sync, what came in from the other devices and what went out: "4 puzzles and 1
+  analysis from your other devices; 2 imported games sent." Turning sync on says what it sent;
+  joining says what came in, or, when the device made way for the synced data, what it now has; a
+  backup imported with sync on says what it added, or that the synced data held all of it already.
+- A `Tabs` component in the UI kit (the WAI-ARIA tabs pattern), and palette, chip, sync and device
+  icons for the tabs.
+
+### Changed
+
+- The settings are regrouped across the tabs. _Display_ (colour scheme and notation) and _Sound &
+  vibration_ (the sounds, their theme and volume, and vibration, which was under Play) sit with the
+  _Board_. The human-like opponent has a card of its own beside Play and the puzzle rating. Backups
+  have their own card, and the storage meter shares one with _Reset everything_, beside sync, the
+  Lichess account and the profiles, under a line that says what leaves the device. Installing the
+  app, the icon badge, offline puzzles, the test lab and the version are under App.
+- The Progress page's Settings button opens Sync & data, and the test lab's way back opens App.
+- The accessibility sweep covers every tab.
+
+### Fixed
+
+- On a phone, the engine diagnostics no longer widen the page when they say why the engine runs on
+  one thread: the reason wraps.
+
 ## [0.22.0] - 2026-10-07
 
 Sync between devices, made exact: a lost answer, a page closed half-way through a sync, a full disk

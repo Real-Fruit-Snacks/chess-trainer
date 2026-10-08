@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Dialog, Field } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
-import { joinSync } from '@/lib/sync/deviceSync';
+import { type JoinResult, joinSync } from '@/lib/sync/deviceSync';
 import { splitWords } from '@/lib/sync/phrase';
 import { hasProgress } from '@/lib/sync/snapshot';
 import { useDeviceSyncStore } from '@/store/deviceSync';
+import { describeChanges, describeTotals } from './deviceSyncStatus';
 import { useBackupActions } from './useBackupActions';
 
 type Keep = 'merge' | 'replace';
@@ -21,6 +22,17 @@ const KEEP_OPTIONS: { value: Keep; label: string; description: string }[] = [
     description: 'This device’s own progress, repertoires and games are replaced.',
   },
 ];
+
+/** What joining did, for the toast: what came in, or (making way for the synced data) what is here now. */
+function joinedMessage(result: JoinResult, replaced: boolean): string {
+  const joined = 'This device now syncs with your other devices';
+  if (replaced) {
+    const held = describeTotals(result.totals);
+    return held ? `${joined}, and has their data: ${held}.` : `${joined}.`;
+  }
+  const came = describeChanges(result.brought);
+  return came ? `${joined}: ${came} came in.` : `${joined}.`;
+}
 
 /**
  * Joins the sync another device turned on, with its recovery phrase (typed,
@@ -57,13 +69,14 @@ export function JoinSyncDialog({
   const join = async (close: () => void) => {
     setBusy(true);
     setError(null);
-    const result = await joinSync(text, ownData ? keep : 'merge');
+    const mode = ownData ? keep : 'merge';
+    const result = await joinSync(text, mode);
     setBusy(false);
     if (!result.ok) {
       setError(result.reason);
       return;
     }
-    toast('This device now syncs with your other devices.', { tone: 'success' });
+    toast(joinedMessage(result, mode === 'replace'), { tone: 'success' });
     close();
   };
 

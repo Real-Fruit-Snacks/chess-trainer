@@ -151,7 +151,7 @@ test.describe('my games', () => {
     await expect(page.getByTestId('deviations')).toContainText('Caro-Kann');
 
     // Batch review at the fast depth, then save the learner's mistakes as puzzles.
-    await page.goto('/settings');
+    await page.goto('/settings#engine');
     await page.getByRole('combobox', { name: 'Game review depth' }).selectOption('fast');
     await page.goto('/games');
     await page.getByRole('button', { name: /Review all \(3\)/ }).click();
@@ -616,7 +616,7 @@ test.describe('settings: piece set, sound theme and engine diagnostics', () => {
   test('the diagnostics panel reports the environment and benchmarks the engine', async ({
     page,
   }) => {
-    await page.goto('/settings');
+    await page.goto('/settings#engine');
     const panel = page.getByTestId('engine-diagnostics');
     await panel.locator('summary').click();
     await expect(panel).toContainText('Build selected');

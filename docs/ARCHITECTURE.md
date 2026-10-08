@@ -35,7 +35,7 @@ This document explains the moving parts and the reasoning behind them.
 │  │                      useArbiter · useGhostKnight (no engine)      │
 │  ├─ features/reference  rules, notation, glossary                    │
 │  ├─ features/progress   charts, weekly summary, arcade records       │
-│  ├─ features/settings   appearance · engine · profiles · backups     │
+│  ├─ features/settings   tabs: appearance · play · engine · data · app│
 │  └─ features/lab        test lab: platform · sounds · icons · board  │
 │                                                                      │
 │  ├─ features/home       adaptive daily plan · courses · first-run tour│
@@ -797,7 +797,14 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
   of reach 2 minutes, a busy one its `Retry-After`, doubling while it stays busy, other failures 5
   minutes. `PlatformHooks` loads the module only while sync is on (or once another tab turns it
   on); the state — the secret, the device id, the agreed ETag, generation and base, a pending
-  write — is per profile in `store/deviceSync.ts`, never in a backup.
+  write — is per profile in `store/deviceSync.ts`, never in a backup. A run reports what it moved
+  (`last` in the status): what the stores took in (the merge against the local data before it)
+  and what the vault was sent (the merge against the vault as read), counted by `counts.ts` —
+  puzzles played (the lifetime count's difference), lessons, repertoires, repertoire moves,
+  analyses and imported games new or changed, deletions, and whether anything else changed;
+  rounds that met another device's write add up. Turning on reports everything as sent, joining
+  what came in, and an import into sync what it added. The Settings card shows the profile's
+  totals beside it (`syncTotals`, read from the stores as they change).
 - **An exact base.** With a wrong base, increments count twice and data looks deleted, so:
   - copies of the synced data (`base.ts`) are gzipped in the Cache API under random ids, written
     once and never changed, and the store names the one agreed; this tab also keeps them in memory

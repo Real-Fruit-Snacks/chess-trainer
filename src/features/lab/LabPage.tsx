@@ -203,7 +203,7 @@ export default function LabPage() {
     <div className="lab">
       <div className="page-header">
         <p className="card__eyebrow">
-          <Link to="/settings">Settings</Link> / Test lab
+          <Link to="/settings#app">Settings</Link> / Test lab
         </p>
         <h1>Test lab</h1>
         <p>

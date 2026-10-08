@@ -62,7 +62,11 @@ export type IconName =
   | 'alert'
   | 'swap'
   | 'whistle'
-  | 'ghost';
+  | 'ghost'
+  | 'palette'
+  | 'chip'
+  | 'sync'
+  | 'device';
 
 /** Path data per icon; `fill` marks icons drawn as filled shapes. */
 const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
@@ -178,6 +182,22 @@ const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
   // A sheet ghost with a ragged hem (Ghost Knight).
   ghost: {
     d: 'M6 20.5V10a6 6 0 0 1 12 0v10.5l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5zM10 10.5h.01M14 10.5h.01',
+  },
+  // A painter's palette with four dabs of paint (Settings: appearance).
+  palette: {
+    d: 'M12 3a9 9 0 0 0 0 18c1.1 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.7 1.8-1.7H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3zM7.5 11.5h.01M9.5 7.5h.01M14.5 7.5h.01M17 11h.01',
+  },
+  // A chip with its pins: the engine.
+  chip: {
+    d: 'M7 7h10v10H7zM10 10h4v4h-4zM9.5 3v4M14.5 3v4M9.5 17v4M14.5 17v4M3 9.5h4M3 14.5h4M17 9.5h4M17 14.5h4',
+  },
+  // Two arrows chasing each other round: sync.
+  sync: {
+    d: 'M20 11a8 8 0 0 0-14.6-4.4L4 8.5M4 4v4.5h4.5M4 13a8 8 0 0 0 14.6 4.4l1.4-1.9M20 20v-4.5h-4.5',
+  },
+  // A phone: the device the app is installed on.
+  device: {
+    d: 'M8 2.5h8a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-15a2 2 0 0 1 2-2zM11 18h2',
   },
 };
 

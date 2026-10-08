@@ -70,7 +70,7 @@ test.describe('backup import', () => {
     page,
   }) => {
     await seed(page);
-    await page.goto('/settings');
+    await page.goto('/settings#backups');
     await expect(page.getByTestId('settings')).toBeVisible();
     expect(await storedRating(page)).toBe(1800);
 
@@ -108,7 +108,7 @@ test.describe('backup import', () => {
 
   test('refuses a crafted file and changes nothing', async ({ page }) => {
     await seed(page);
-    await page.goto('/settings');
+    await page.goto('/settings#backups');
     await expect(page.getByTestId('settings')).toBeVisible();
 
     // The shape that used to brick the app: a table where a list belongs.
@@ -142,7 +142,7 @@ test.describe('reset and rating', () => {
     await page.goto('/games');
     await expect(page.getByTestId('games-table')).toContainText('Me – You');
 
-    await page.goto('/settings');
+    await page.goto('/settings#storage');
     await page.getByRole('button', { name: 'Reset everything' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText('imported games');
@@ -161,7 +161,7 @@ test.describe('reset and rating', () => {
     page,
   }) => {
     await seed(page);
-    await page.goto('/settings');
+    await page.goto('/settings#rating');
     const card = page.getByTestId('rating-settings');
     await card.getByLabel('Start again from').selectOption('casual');
     // Choosing alone changes nothing.
@@ -205,13 +205,20 @@ test.describe('the lab', () => {
     // unmounts, which can come a moment after the next page is drawn)
     await page.getByRole('link', { name: 'Settings' }).first().click();
     await expect(page.getByTestId('settings')).toBeVisible();
+    // The way back from the lab opens the tab it lives on.
+    await expect(page.getByRole('tab', { name: 'App', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     await expect.poll(fillerKeys).toBe(0);
     expect(await page.evaluate(() => localStorage.getItem('chess-trainer:lab-probe'))).toBeNull();
 
     // … and a save works again straight away.
+    await page.getByRole('tab', { name: 'Appearance' }).click();
     await page.getByRole('switch', { name: 'Show coordinates' }).click();
     const stored = await page.evaluate(() => localStorage.getItem('chess-trainer:settings'));
     expect(stored).toContain('"showCoordinates":false');
+    await page.getByRole('tab', { name: 'Sync & data' }).click();
     await expect(page.getByTestId('storage-usage')).not.toContainText('Storage is full');
   });
 });

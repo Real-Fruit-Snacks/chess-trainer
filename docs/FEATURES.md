@@ -251,48 +251,65 @@ of lessons and themes. Rows resting on fewer than 3 games or 20 reviewed moves a
 
 ## Settings
 
-**Appearance:** the colour scheme (system, light, dark, or black for OLED screens), **move
-notation** — figurines drawn from the piece set (♘f3) or letters (Nf3), everywhere a move is
-written — and the sounds. **Board:** every Lichess board — the flat Brown, Blue, Green, IC and
-Purple, and twenty pictures from Wood and Maple to Marble, Metal and Newspaper (each downloaded the
-first time it is chosen, then kept for offline use; the picker shows small previews) — plus the
-app's own Ice, Walnut and colour-blind-safe High contrast; nine piece sets from the Lichess collection
-(the classic cburnett figurines, Merida, Chessnut, MPChess, Celtic, California, Maestro, Staunty and
-Cardinal, each credited with its author and licence) shown as strips to pick from, coordinates, legal-move dots, last-move and check highlights, animation, a
-**magnified dragged piece** with a circle or square **drag target**, moving by tap, drag or either,
-and captured material beside the player bars as the difference, every capture, or nothing.
-**Play:** defaults plus **focus mode**, which hides the header and navigation while you play the
-computer: in Play, the simul and the arcade games; and the **human-like opponent**'s download, with
-its progress, and a Delete that frees its 25 MB. **Single-key shortcuts** can be turned off.
-Engine and analysis options (the engine level for the next game, review and analysis depth,
-threads — on by default — and the optional **full engine** download with its progress, coach mode),
-the puzzle rating reset or calibration (a button with a
-confirmation; the rating history is kept), **profiles** for several learners on one device, an engine
-diagnostics panel with a speed test, offline puzzle download (it keeps going when you change page),
-install, a **storage meter**, and backups — export or import as JSON, **share a backup** straight to
-another device, or open a backup file with the installed app. An import is checked field by field,
-then asks first: it shows the backup's date and what it holds (puzzle attempts, imported games, saved
-analyses, custom repertoires), offers to export the current progress, replaces everything in the
-profile at once, and can be undone from the toast that follows. Backups since 0.22 (format 11) keep
-the rounds from the Lichess puzzle history counted lately (so sync between devices counts a round
-two devices both brought in once) and a random id of the profile's history (so a backup of the
-profile is known as such, however long ago it was made); since 0.17 (format 10) they keep the
-Lichess puzzles waiting in the review queue and which games went to Lichess; since 0.16 (format 9)
-they keep games against the human-like opponent with its rating; since 0.15 (format 8) they carry
-the thinking-skill records too; since 0.12 (format 7) they include the imported games and, on a
-device with several profiles, carry the profile's name in the file name. _Reset everything_ clears
-this profile's progress, repertoires, library and imported games and the device settings, a
-downloaded full engine included, turns sync between devices off on this device first (so the synced
-copy and the other devices keep their data), and disconnects the profile's Lichess account
-(withdrawing the permission); the other profiles are kept, and the dialog says so. With sync between
-devices on, an import joins the backup with this device's data and the synced data instead of
-replacing anything (an item that differs is kept twice, the backup's version as "… (backup)"), and
-the dialog says that instead; the device syncs first, so this needs a connection, and only what goes
-beyond the synced data is added. **Sync between devices** and the **Lichess account:** see below.
+Settings is in five tabs: **Appearance**, **Play**, **Engine**, **Sync & data** and **App**. The
+address names the open tab (`/settings#engine`), so a reload or a shared link opens it again, and a
+link to a card (`/settings#profiles` from the profile badge, `#lichess` after the Lichess sign-in, a
+join link's `#sync=…`) opens the card's tab and scrolls to it. The tabs are one tab stop: the arrow
+keys, Home and End move between them, and on phones they wrap onto two rows.
+
+**Appearance.** _Display_: the colour scheme (system, light, dark, or black for OLED screens) and
+**move notation** — figurines drawn from the piece set (♘f3) or letters (Nf3), everywhere a move is
+written. _Sound & vibration_: the sounds, their theme (which also picks the vibration patterns) and
+volume, and vibration. _Board_: every Lichess board — the flat Brown, Blue, Green, IC and Purple,
+and twenty pictures from Wood and Maple to Marble, Metal and Newspaper (each downloaded the first
+time it is chosen, then kept for offline use; the picker shows small previews) — plus the app's own
+Ice, Walnut and colour-blind-safe High contrast; nine piece sets from the Lichess collection (the
+classic cburnett figurines, Merida, Chessnut, MPChess, Celtic, California, Maestro, Staunty and
+Cardinal, each credited with its author and licence) shown as strips to pick from, coordinates,
+legal-move dots, last-move and check highlights, animation, a **magnified dragged piece** with a
+circle or square **drag target**, moving by tap, drag or either, and captured material beside the
+player bars as the difference, every capture, or nothing.
+
+**Play.** The defaults (always promote to a queen, auto-advance puzzles, keyboard move entry, coach
+mode, the blunder check, the engine level for the next game), **focus mode**, which hides the header
+and navigation while you play the computer (in Play, the simul and the arcade games), and
+**single-key shortcuts**, which can be turned off. The puzzle rating reset or calibration (a button
+with a confirmation; the rating history is kept), and the **human-like opponent**'s download, with
+its progress, and a Delete that frees its 25 MB.
+
+**Engine.** Review and analysis depth, the tablebase and opening-explorer lookups, threads (on by
+default), the optional **full engine** download with its progress, and a diagnostics panel with a
+speed test.
+
+**Sync & data.** **Sync between devices** and the **Lichess account** (see below), backups,
+**profiles** for several learners on one device, and the **storage meter** with _Reset everything_.
+Backups export or import as JSON, **share a backup** straight to another device, or open a backup
+file with the installed app. An import is checked field by field, then asks first: it shows the
+backup's date and what it holds (puzzle attempts, imported games, saved analyses, custom
+repertoires), offers to export the current progress, replaces everything in the profile at once, and
+can be undone from the toast that follows. Backups since 0.22 (format 11) keep the rounds from the
+Lichess puzzle history counted lately (so sync between devices counts a round two devices both
+brought in once) and a random id of the profile's history (so a backup of the profile is known as
+such, however long ago it was made); since 0.17 (format 10) they keep the Lichess puzzles waiting
+in the review queue and which games went to Lichess; since 0.16 (format 9) they keep games against
+the human-like opponent with its rating; since 0.15 (format 8) they carry the thinking-skill records
+too; since 0.12 (format 7) they include the imported games and, on a device with several profiles,
+carry the profile's name in the file name. _Reset everything_ clears this profile's progress,
+repertoires, library and imported games and the device settings, a downloaded full engine included,
+turns sync between devices off on this device first (so the synced copy and the other devices keep
+their data), and disconnects the profile's Lichess account (withdrawing the permission); the other
+profiles are kept, and the dialog says so. With sync between devices on, an import joins the backup
+with this device's data and the synced data instead of replacing anything (an item that differs is
+kept twice, the backup's version as "… (backup)"), and the dialog says that instead; the device
+syncs first, so this needs a connection, and only what goes beyond the synced data is added — the
+toast counts what it added.
+
+**App.** Installing the app, the badge of due reviews on its icon, the offline puzzle download (it
+keeps going when you change page), the test lab, and the version.
 
 ### The test lab
 
-_Settings → Open the test lab_ (`/settings/lab`) is a single page for checking a device by hand:
+_Settings → App → Open the test lab_ (`/settings/lab`) is a single page for checking a device by hand:
 
 - **Platform:** installed-app mode, service worker, online state, WebAssembly, workers, shared memory
   and cross-origin isolation, CPU cores, Web Audio, vibration, the app badge, Web Share (with files),
@@ -313,8 +330,8 @@ _Settings → Open the test lab_ (`/settings/lab`) is a single page for checking
 
 ## Sync between devices
 
-_Settings → Sync between devices_ keeps a profile in step across a learner's phone, tablet and
-computer, with no account:
+_Settings → Sync & data → Sync between devices_ keeps a profile in step across a learner's phone,
+tablet and computer, with no account:
 
 - **Turning it on** gives a **recovery phrase**: 12 words from the BIP-39 list (the first four
   letters of each are enough), shown with a QR code of a link that carries them. The dialog can
@@ -332,6 +349,10 @@ computer, with no account:
   Lichess sign-in and the backup reminder stay on each device.
 - **When:** a few seconds after something changes, when the app opens, comes back into view or back
   online, and every 5 minutes while it is on screen; _Sync now_ runs it at once. Tabs take turns.
+- **Counted.** The card counts what is kept in step — puzzles played, lessons completed, the
+  learner's own repertoires, repertoire moves in review, saved analyses and imported games — and,
+  after each sync, says what came in and what went out: "4 puzzles and 1 analysis from your other
+  devices; 2 imported games sent." Joining says what came in, and importing a backup what it added.
 - **Merging, not overwriting.** Each device remembers the version it last agreed with the relay and
   merges three ways: what only one side changed carries over, deletions included; logs (puzzle
   attempts, rating points, games, training days) join; counts add up both sides' increments; the
@@ -360,7 +381,7 @@ The relay is a small Cloudflare Worker (or a Node server) in `relay/`; see `rela
 
 ## Lichess account sync
 
-_Settings → Lichess account_ connects the profile to a Lichess account, which then keeps the
+_Settings → Sync & data → Lichess account_ connects the profile to a Lichess account, which then keeps the
 device in step with it — and, through it, with the learner's other devices. The sign-in happens on
 lichess.org (the OAuth authorization-code flow with PKCE, which Lichess offers to apps without a
 server): Lichess asks whether the app may read and write the puzzle activity and the studies, and

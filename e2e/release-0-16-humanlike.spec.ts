@@ -144,7 +144,7 @@ test.describe('the human-like opponent with the service worker', () => {
       await context.setOffline(false);
     }
 
-    await page.goto('/settings');
+    await page.goto('/settings#play');
     const section = page.getByTestId('human-opponent-setting');
     await expect(section.getByTestId('human-download-status')).toContainText('On this device');
     expect(await axe(page)).toEqual([]);

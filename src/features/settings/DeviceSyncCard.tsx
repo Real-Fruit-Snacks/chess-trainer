@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Alert, Button, Card, ConfirmDialog } from '@/components/ui';
+import { Alert, Button, Card, ConfirmDialog, Stat } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
 import {
   currentPhrase,
@@ -10,10 +10,21 @@ import {
   turnOnSync,
   useDeviceSync,
 } from '@/lib/sync/deviceSync';
+import { completedLessons, SYNC_KINDS, type SyncCounts } from '@/lib/sync/counts';
 import { deviceSyncOffered } from '@/lib/sync/enabled';
 import { splitWords } from '@/lib/sync/phrase';
+import { useAnalyses } from '@/store/analyses';
 import { useDeviceSyncStore } from '@/store/deviceSync';
-import { deviceSyncNeedsAttention, deviceSyncStatusLine } from './deviceSyncStatus';
+import { useGames } from '@/store/games';
+import { useProgress } from '@/store/progress';
+import { useRepertoire } from '@/store/repertoire';
+import {
+  describeExchange,
+  deviceSyncNeedsAttention,
+  deviceSyncStatusLine,
+  formatCount,
+  TOTAL_LABELS,
+} from './deviceSyncStatus';
 import { JoinSyncDialog } from './JoinSyncDialog';
 import { SyncPhraseDialog } from './SyncPhraseDialog';
 
@@ -34,6 +45,30 @@ function useOnline(): boolean {
     };
   }, []);
   return online;
+}
+
+/** How much of each kind this profile holds, kept up to date as it changes. */
+function useTotals(): SyncCounts {
+  return {
+    puzzles: useProgress((s) => s.lifetime.attempts),
+    lessons: useProgress((s) => completedLessons(s.lessons)),
+    repertoires: useRepertoire((s) => s.custom.length),
+    moves: useRepertoire((s) => Object.keys(s.cards).length),
+    analyses: useAnalyses((s) => Object.keys(s.items).length),
+    games: useGames((s) => Object.keys(s.games).length),
+  };
+}
+
+/** What sync keeps in step, counted: puzzles, lessons, repertoires, analyses, games. */
+function SyncTotals() {
+  const totals = useTotals();
+  return (
+    <div className="stats sync-totals" data-testid="sync-totals">
+      {SYNC_KINDS.map((kind) => (
+        <Stat key={kind} value={formatCount(totals[kind])} label={TOTAL_LABELS[kind]} />
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -112,7 +147,10 @@ function DeviceSync() {
   };
 
   // A run that finished after the last tick reads "just now", not some minutes in the future.
-  const statusText = deviceSyncStatusLine(status, lastSyncAt, Math.max(now, lastSyncAt ?? 0));
+  const statusLine = deviceSyncStatusLine(status, lastSyncAt, Math.max(now, lastSyncAt ?? 0));
+  // What the last run moved, while its "Synced …" is the line shown.
+  const moved = status.phase === 'done' ? describeExchange(status.last) : null;
+  const statusText = moved ? `${statusLine} ${moved}` : statusLine;
 
   return (
     <Card id="sync" data-testid="sync-card">
@@ -141,9 +179,12 @@ function DeviceSync() {
             </Button>
           </div>
           <p className="small" style={{ margin: 0 }}>
-            Progress, lessons, review schedules, repertoires, saved analyses and imported games are
-            kept in step on every device with your recovery phrase. Device settings and the Lichess
-            sign-in stay on each device.
+            Kept in step on every device with your recovery phrase:
+          </p>
+          <SyncTotals />
+          <p className="small muted" style={{ margin: 0 }}>
+            With the ratings, review schedules, training days and every other result. Device
+            settings and the Lichess sign-in stay on each device.
           </p>
           <div className="settings__row">
             <span className="small">Add a device: show the recovery phrase, or its QR code.</span>

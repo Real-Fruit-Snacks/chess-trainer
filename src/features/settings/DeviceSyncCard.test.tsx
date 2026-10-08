@@ -1,12 +1,15 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { stopSync } from '@/lib/sync/deviceSync';
+import { syncTotals } from '@/lib/sync/counts';
+import { currentPhrase, stopSync } from '@/lib/sync/deviceSync';
 import { applySnapshot, takeSnapshot } from '@/lib/sync/snapshot';
 import { useDeviceSyncStore } from '@/store/deviceSync';
 import { installFakeRelay, type FakeRelay } from '@/test/fakeRelay';
-import { emptySnapshot, fixtureSnapshot } from '@/test/syncFixtures';
+import { otherDevice } from '@/test/syncDevices';
+import { emptySnapshot, fixtureSnapshot, saveAnalysis, solvePuzzle } from '@/test/syncFixtures';
 import { DeviceSyncCard } from './DeviceSyncCard';
+import { formatCount } from './deviceSyncStatus';
 
 vi.hoisted(() => {
   HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
@@ -65,6 +68,42 @@ describe('Settings → Sync between devices', () => {
     fireEvent.click(screen.getByTestId('sync-phrase-done'));
     expect(screen.getByTestId('sync-status')).toHaveTextContent('Synced just now.');
     expect(screen.getByTestId('sync-show-phrase')).toBeInTheDocument();
+  });
+
+  it('counts what it keeps in step, and says what each sync moved', async () => {
+    renderCard();
+    fireEvent.click(screen.getByTestId('sync-turn-on'));
+    await screen.findByTestId('sync-phrase-words', {}, SLOW);
+    fireEvent.click(screen.getByTestId('sync-phrase-done'));
+    // Turning on sends everything: the status says how much, counted.
+    const fixture = syncTotals(fixtureSnapshot());
+    expect(screen.getByTestId('sync-status')).toHaveTextContent(
+      new RegExp(`^Synced just now\\. ${formatCount(fixture.puzzles)} puzzles, .* sent\\.$`),
+    );
+    const totals = screen.getByTestId('sync-totals');
+    const figure = (label: string) =>
+      within(totals).getByText(label).parentElement?.querySelector('.stat__value')?.textContent;
+    expect(figure('Puzzles')).toBe(formatCount(fixture.puzzles));
+    expect(figure('Your repertoires')).toBe(String(fixture.repertoires));
+    expect(figure('Saved analyses')).toBe(String(fixture.analyses));
+    expect(figure('Imported games')).toBe(String(fixture.games));
+
+    // Another device saves an analysis and solves a puzzle; this one solves one too.
+    const words = await currentPhrase();
+    const other = await otherDevice(words ?? []);
+    await other.change((s) => solvePuzzle(saveAnalysis(s, 'an-phone', 'Phone', 1), 'there', 2));
+    act(() => applySnapshot(solvePuzzle(takeSnapshot(), 'here', 3), takeSnapshot()));
+    fireEvent.click(screen.getByTestId('sync-now'));
+    await waitFor(
+      () =>
+        expect(screen.getByTestId('sync-status')).toHaveTextContent(
+          'Synced just now. 1 puzzle and 1 analysis from your other devices; 1 puzzle sent.',
+        ),
+      SLOW,
+    );
+    // The totals follow.
+    expect(figure('Puzzles')).toBe(formatCount(fixture.puzzles + 2));
+    expect(figure('Saved analyses')).toBe(String(fixture.analyses + 1));
   });
 
   it('shows the phrase again, and turns sync off after asking', async () => {

@@ -16,7 +16,7 @@ test.describe('puzzle library', () => {
   test('serves 48,000 puzzles in chunks and can store them all offline', async ({ page }) => {
     // 88 chunk downloads compete with the other workers for the preview server.
     test.slow();
-    await page.goto('/settings');
+    await page.goto('/settings#app');
     const row = page.getByTestId('offline-puzzles');
     await expect(row).toContainText('48,000 puzzles in the library');
     // Wait for the service worker to control the page so the runtime cache fills.
@@ -190,7 +190,7 @@ test.describe('opening explorer', () => {
     expect(requests.some((r) => r.startsWith('lichess:'))).toBe(true);
 
     // The choice persists as a setting, which the settings page also exposes.
-    await page.goto('/settings');
+    await page.goto('/settings#engine');
     const toggle = page.getByRole('switch', { name: /Opening explorer lookups/ });
     await expect(toggle).toBeChecked();
     await page.getByText('Opening explorer lookups', { exact: true }).click();
@@ -448,7 +448,7 @@ test.describe('platform', () => {
     await expect(nudge).toHaveCount(0);
     await page.reload();
     await expect(page.getByTestId('backup-nudge')).toHaveCount(0);
-    await page.goto('/settings');
+    await page.goto('/settings#backups');
     await expect(page.getByText(/Last backup/)).toBeVisible();
   });
 
@@ -540,7 +540,7 @@ test.describe('platform', () => {
       .poll(() => page.evaluate(() => (window as unknown as { __badges: unknown[] }).__badges))
       .toContain(2);
     // Switching the badge off clears it.
-    await page.goto('/settings');
+    await page.goto('/settings#app');
     await page.getByText('Badge on the app icon', { exact: true }).click();
     await expect
       .poll(async () => {

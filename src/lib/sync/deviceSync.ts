@@ -11,6 +11,14 @@ import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
 import { baseMark, dropCopies, forgetBase, loadCopy, saveCopy, type SyncWrites } from './base';
 import { same } from './canonical';
+import {
+  addChanges,
+  changesOrNull,
+  type SyncChanges,
+  syncChanges,
+  type SyncCounts,
+  syncTotals,
+} from './counts';
 import { mergeSnapshots, sameData, type SyncSnapshot, withDeviceFields } from './merge';
 import { newSecret, phraseToSecret, secretToPhrase } from './phrase';
 import { randomId } from './randomId';
@@ -84,8 +92,18 @@ export type DeviceSyncPhase =
 export interface DeviceSyncStatus {
   phase: DeviceSyncPhase;
   error: string | null;
-  /** What the last finished run did: brought changes in, sent them out. */
-  last: { at: number; pulled: boolean; pushed: boolean } | null;
+  /**
+   * What the last finished run did: what it brought in from the other devices
+   * and what it sent them (null for nothing).
+   */
+  last: SyncExchange | null;
+}
+
+/** What one run moved: changes brought in here, and changes sent to the other devices. */
+export interface SyncExchange {
+  at: number;
+  brought: SyncChanges | null;
+  sent: SyncChanges | null;
 }
 
 export const useDeviceSync = create<DeviceSyncStatus>()(() => ({
@@ -107,6 +125,12 @@ export const CHANGE_DELAY_MS = 8_000;
 export const START_DELAY_MS = 1_500;
 const PERIODIC_MS = 5 * 60 * 1000;
 const STALE_MS = 60 * 1000;
+/**
+ * What a sync moved stays reported over the syncs that move nothing for this
+ * long (the one that follows turning sync on, say), while "Synced just now"
+ * still covers both.
+ */
+const REPORT_KEPT_MS = 60 * 1000;
 const NETWORK_RETRY_MS = 2 * 60 * 1000;
 const SERVER_RETRY_MS = 5 * 60 * 1000;
 
@@ -255,18 +279,18 @@ function agreementOf(state: DeviceSyncState) {
 }
 
 /**
- * Merges with the vault and writes back what it lacks. Returns whether the
- * stores changed and whether the vault was written. Sync turned off meanwhile
- * (here, or in another tab) ends the run before it changes anything more.
+ * Merges with the vault and writes back what it lacks. Returns what the
+ * stores took in and what the vault was sent. Sync turned off meanwhile (here,
+ * or in another tab) ends the run before it changes anything more.
  */
 async function reconcile(
   keys: VaultKeys,
   secret: string,
   asked: boolean,
-): Promise<{ pulled: boolean; pushed: boolean }> {
+): Promise<Omit<SyncExchange, 'at'>> {
   const store = useDeviceSyncStore;
   const on = () => store.getState().secret === secret;
-  let pulled = false;
+  let brought: SyncChanges | null = null;
   // A merge that did not fit waits until there is more room, the vault changes, or the learner
   // asks: until then the run only asks whether the vault is still at that version.
   const paused = noRoom && !asked && storageUsage().bytes >= noRoom.bytes ? noRoom.etag : null;
@@ -299,7 +323,7 @@ async function reconcile(
       throw err;
     }
     if (remote === 'unchanged') throw storageFull();
-    if (!on()) return { pulled, pushed: false };
+    if (!on()) return { brought, sent: null };
     if (!remote) {
       // Deleted from another device (or unused for a year): sync ends here, the data stays.
       await stopSync('deleted');
@@ -324,7 +348,7 @@ async function reconcile(
     }
 
     // From here to the agreement nothing is waited for: the stores and the base move together.
-    if (!on()) return { pulled, pushed: false };
+    if (!on()) return { brought, sent: null };
     if (!unmoved()) continue;
     if (unsavedData()) throw storageFull();
     const local = localSnapshot();
@@ -377,16 +401,18 @@ async function reconcile(
       throw noRoomHere(remote.etag, announce);
     }
     noRoom = null;
-    pulled = applied === 'changed' || pulled;
+    if (applied === 'changed') {
+      brought = addChanges(brought, changesOrNull(syncChanges(local, merged)));
+    }
     void dropCopies(ACTIVE_PROFILE_ID, [remoteCopy]);
-    if (sameData(merged, remote.snapshot)) return { pulled, pushed: false };
+    if (sameData(merged, remote.snapshot)) return { brought, sent: null };
 
     const next = remote.generation + 1;
     const writes = withWrite(remote.writes, device, next);
     const mergedCopy = randomId();
     await saveCopy(mergedCopy, { snapshot: merged, writes });
     const sealed = await sealSnapshot(keys, snapshotJson(merged, next, writes));
-    if (!on()) return { pulled, pushed: false };
+    if (!on()) return { brought, sent: null };
     if (baseMark() !== mark || store.getState().base !== remoteCopy) continue;
     // A write is sent only once the note of it is stored: its answer may never come.
     const unsent = storageRefusals();
@@ -396,18 +422,19 @@ async function reconcile(
       throw noRoomHere(remote.etag, announce);
     }
     const write = await writeVault(relayUrl(), keys, sealed, remote.etag);
-    if (!on()) return { pulled, pushed: write.ok };
-    const sent = store.getState().pending?.copy === mergedCopy;
+    const sent = () => changesOrNull(syncChanges(remote.snapshot, merged));
+    if (!on()) return { brought, sent: write.ok ? sent() : null };
+    const noted = store.getState().pending?.copy === mergedCopy;
     if (write.ok) {
       // Forgotten meanwhile (an import): the next run measures against nothing instead.
-      if (sent && baseMark() === mark) {
+      if (noted && baseMark() === mark) {
         store.getState().agreed({ etag: write.etag, generation: next, base: mergedCopy, mark });
         void dropCopies(ACTIVE_PROFILE_ID, [mergedCopy]);
       }
-      return { pulled, pushed: true };
+      return { brought, sent: sent() };
     }
     // Another device wrote first, so this write did not happen: read it, merge and write again.
-    if (sent) store.getState().sending(null);
+    if (noted) store.getState().sending(null);
   }
   throw new RelayError('busy', 'Other devices kept syncing at the same time.', 10_000);
 }
@@ -476,7 +503,15 @@ async function runOnce(asked: boolean): Promise<void> {
   const result = await reconcile(keys, secret, asked);
   busyStreak = 0;
   if (useDeviceSyncStore.getState().secret !== secret) return;
-  setStatus({ phase: 'done', error: null, last: { at: Date.now(), ...result } });
+  const now = Date.now();
+  const previous = useDeviceSync.getState().last;
+  const keep =
+    !result.brought &&
+    !result.sent &&
+    previous !== null &&
+    (previous.brought !== null || previous.sent !== null) &&
+    now - previous.at < REPORT_KEPT_MS;
+  setStatus({ phase: 'done', error: null, last: keep ? previous : { at: now, ...result } });
 }
 
 /**
@@ -659,7 +694,11 @@ export async function turnOnSync(): Promise<SyncActionResult<{ words: string[] }
       setStatus({
         phase: 'done',
         error: null,
-        last: { at: Date.now(), pulled: false, pushed: true },
+        last: {
+          at: Date.now(),
+          brought: null,
+          sent: changesOrNull(syncChanges(emptySyncSnapshot(), local)),
+        },
       });
       startDeviceSync();
       return { ok: true, words: await secretToPhrase(secret) };
@@ -673,6 +712,12 @@ export async function turnOnSync(): Promise<SyncActionResult<{ words: string[] }
 const NO_ROOM =
   'This device does not have room for the synced data. Remove old analyses or games here, then try again.';
 
+/** What joining brought: the changes to this device's data, and what it now holds. */
+export interface JoinResult {
+  brought: SyncChanges | null;
+  totals: SyncCounts;
+}
+
 /**
  * Joins the sync another device turned on, from its recovery phrase.
  * `keep`: what happens to this device's own data — 'merge' joins it with the
@@ -681,7 +726,7 @@ const NO_ROOM =
 export async function joinSync(
   phrase: string,
   keep: 'merge' | 'replace',
-): Promise<SyncActionResult> {
+): Promise<SyncActionResult<JoinResult>> {
   const check = await phraseToSecret(phrase);
   if (!check.ok) return { ok: false, reason: check.reason };
   if (unsavedData()) return { ok: false, reason: STORAGE_FULL };
@@ -726,15 +771,12 @@ export async function joinSync(
       mark: baseMark(),
     });
     void dropCopies(ACTIVE_PROFILE_ID, [copy]);
-    setStatus({
-      phase: 'done',
-      error: null,
-      last: { at: Date.now(), pulled: true, pushed: false },
-    });
+    const brought = changesOrNull(syncChanges(local, merged));
+    setStatus({ phase: 'done', error: null, last: { at: Date.now(), brought, sent: null } });
     startDeviceSync();
     // What this device adds goes up with the first run.
     if (!sameData(merged, remote.snapshot)) void syncNow();
-    return { ok: true };
+    return { ok: true, brought, totals: syncTotals(merged) };
   } catch (err) {
     return { ok: false, reason: reasonOf(err) };
   }
@@ -754,7 +796,9 @@ const IMPORT_NEEDS_SYNC =
  * the vault is not added again. It is then a change made here like any other,
  * and the next sync takes it to every device.
  */
-export async function importIntoSync(shape: BackupShape): Promise<SyncActionResult> {
+export async function importIntoSync(
+  shape: BackupShape,
+): Promise<SyncActionResult<{ added: SyncChanges | null }>> {
   const secret = useDeviceSyncStore.getState().secret;
   if (!secret) return { ok: false, reason: 'Sync between devices is off.' };
   if (unsavedData()) return { ok: false, reason: STORAGE_FULL };
@@ -762,7 +806,7 @@ export async function importIntoSync(shape: BackupShape): Promise<SyncActionResu
   let result = {
     ok: false,
     reason: `${IMPORT_NEEDS_SYNC} another tab is syncing. Try again in a moment.`,
-  } as SyncActionResult<{ changed: boolean }>;
+  } as SyncActionResult<{ added: SyncChanges | null }>;
   await exclusively(async () => {
     try {
       await runOnce(true);
@@ -777,12 +821,12 @@ export async function importIntoSync(shape: BackupShape): Promise<SyncActionResu
     }
     result = joinBackup(backupSnapshot(shape));
   }, true);
-  if (result.ok && result.changed) void syncNow();
-  return result.ok ? { ok: true } : result;
+  if (result.ok && result.added) void syncNow();
+  return result;
 }
 
-/** Joins a backup's data into this device's (see `importIntoSync`). */
-function joinBackup(backup: SyncSnapshot): SyncActionResult<{ changed: boolean }> {
+/** Joins a backup's data into this device's (see `importIntoSync`); returns what it added. */
+function joinBackup(backup: SyncSnapshot): SyncActionResult<{ added: SyncChanges | null }> {
   const local = localSnapshot();
   const merged = shareHistory(local, backup)
     ? mergeSnapshots(null, local, backup, { incoming: 'backup' })
@@ -796,7 +840,10 @@ function joinBackup(backup: SyncSnapshot): SyncActionResult<{ changed: boolean }
         'This device does not have room for the backup. Remove old analyses or games here, then try again.',
     };
   }
-  return { ok: true, changed: applied === 'changed' };
+  return {
+    ok: true,
+    added: applied === 'changed' ? changesOrNull(syncChanges(local, merged)) : null,
+  };
 }
 
 /** Stops syncing on this device: the phrase is forgotten here, the data and the vault stay. */

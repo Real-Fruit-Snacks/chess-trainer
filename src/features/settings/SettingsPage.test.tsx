@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { useToasts } from '@/components/ui/toastStore';
 import type { ImportedGame } from '@/lib/gameImport';
@@ -56,13 +56,23 @@ const importedGame = (n: string): ImportedGame => ({
 
 import SettingsPage from './SettingsPage';
 
+/** The address, as the page leaves it. */
+function Where() {
+  const { pathname, hash } = useLocation();
+  return <output data-testid="where">{pathname + hash}</output>;
+}
+
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <SettingsPage />
+      <Where />
     </MemoryRouter>,
   );
 }
+
+const tab = (name: string) => screen.getByRole('tab', { name });
+const headings = () => screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
 
 describe('SettingsPage', () => {
   beforeEach(() => {
@@ -74,21 +84,71 @@ describe('SettingsPage', () => {
     vi.mocked(Element.prototype.scrollIntoView).mockClear();
   });
 
-  it('groups every setting into its own card', () => {
+  it('puts the settings in tabs, each card on its own tab', () => {
     renderAt('/settings');
-    for (const heading of [
-      'Appearance',
-      'Board',
-      'Play',
-      'Profiles',
-      'Puzzle rating',
-      'Engine & analysis',
-      'App',
-    ]) {
-      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
-    }
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Settings');
     expect(document.title).toMatch(/^Settings · /);
+    const tabs = screen.getByRole('tablist', { name: 'Settings sections' });
+    expect(
+      within(tabs)
+        .getAllByRole('tab')
+        .map((t) => t.textContent),
+    ).toEqual(['Appearance', 'Play', 'Engine', 'Sync & data', 'App']);
+    // The first tab is open, and its panel is the one shown.
+    expect(tab('Appearance')).toHaveAttribute('aria-selected', 'true');
+    const panel = screen.getByRole('tabpanel');
+    expect(panel).toHaveAttribute('aria-labelledby', tab('Appearance').id);
+    expect(tab('Appearance')).toHaveAttribute('aria-controls', panel.id);
+    expect(headings()).toEqual(['Board', 'Display', 'Sound & vibration']);
+
+    fireEvent.click(tab('Play'));
+    expect(headings()).toEqual(['Play', 'Puzzle rating', 'Human-like opponent']);
+    fireEvent.click(tab('Engine'));
+    expect(headings()).toEqual(['Engine & analysis']);
+    fireEvent.click(tab('Sync & data'));
+    expect(headings()).toEqual([
+      'Sync between devices',
+      'Backups',
+      'Storage',
+      'Lichess account',
+      'Profiles',
+    ]);
+    fireEvent.click(tab('App'));
+    expect(headings()).toEqual(['App']);
+    expect(tab('App')).toHaveAttribute('aria-selected', 'true');
+    expect(tab('Appearance')).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('names the open tab in the address, and opens the tab an address names', () => {
+    renderAt('/settings#engine');
+    expect(tab('Engine')).toHaveAttribute('aria-selected', 'true');
+    // A tab is not a card: nothing scrolls.
+    expect(vi.mocked(Element.prototype.scrollIntoView)).not.toHaveBeenCalled();
+    fireEvent.click(tab('Sync & data'));
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/settings#data$/);
+    // The first tab needs no name: the address goes back to plain /settings.
+    fireEvent.click(tab('Appearance'));
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/settings$/);
+  });
+
+  it('moves between the tabs with the arrow keys, Home and End', () => {
+    renderAt('/settings');
+    const tabs = screen.getByRole('tablist');
+    // One tab stop: the open tab.
+    expect(tab('Appearance')).toHaveAttribute('tabindex', '0');
+    expect(tab('Play')).toHaveAttribute('tabindex', '-1');
+    fireEvent.keyDown(tabs, { key: 'ArrowRight' });
+    expect(tab('Play')).toHaveAttribute('aria-selected', 'true');
+    expect(tab('Play')).toHaveFocus();
+    fireEvent.keyDown(tabs, { key: 'End' });
+    expect(tab('App')).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(tabs, { key: 'ArrowRight' });
+    expect(tab('Appearance')).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(tabs, { key: 'ArrowLeft' });
+    expect(tab('App')).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(tabs, { key: 'Home' });
+    expect(tab('Appearance')).toHaveAttribute('aria-selected', 'true');
+    expect(headings()).toContain('Board');
   });
 
   it('changes a setting from its switch', () => {
@@ -242,6 +302,7 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Nothing beside the player bars.')).toBeInTheDocument();
 
     // Focus mode lives with the other play settings.
+    fireEvent.click(tab('Play'));
     fireEvent.click(screen.getByRole('switch', { name: /^Focus mode/ }));
     expect(useSettings.getState().playFocus).toBe(true);
 
@@ -252,11 +313,43 @@ describe('SettingsPage', () => {
     expect(useSettings.getState().keyboardShortcuts).toBe(false);
   });
 
-  it('scrolls to the card a hash link points at', () => {
+  it('opens the tab of the card a link points at, and scrolls to the card', () => {
     renderAt('/settings#profiles');
+    expect(tab('Sync & data')).toHaveAttribute('aria-selected', 'true');
     const scroll = vi.mocked(Element.prototype.scrollIntoView);
     expect(scroll).toHaveBeenCalledTimes(1);
     expect(scroll.mock.instances[0]).toBe(screen.getByTestId('profiles'));
+    // At once: a click right after the page opens lands where it is aimed.
+    expect(scroll).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' });
+  });
+
+  it('keeps the sync tab open once a join link has left the address', async () => {
+    installFakeRelay();
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
+    renderAt('/settings#sync=legal-winner-thank');
+    expect(tab('Sync & data')).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(/^\/settings$/));
+    expect(tab('Sync & data')).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() =>
+      expect(screen.getByTestId('sync-join-phrase')).toHaveValue('legal winner thank'),
+    );
+  });
+
+  it('opens the tab of every card that links point at', () => {
+    for (const [hash, name] of [
+      ['#board', 'Appearance'],
+      ['#rating', 'Play'],
+      ['#lichess', 'Sync & data'],
+      ['#backups', 'Sync & data'],
+      ['#storage', 'Sync & data'],
+      ['#unknown', 'Appearance'],
+    ] as const) {
+      const { unmount } = renderAt(`/settings${hash}`);
+      expect(tab(name)).toHaveAttribute('aria-selected', 'true');
+      unmount();
+    }
   });
 
   it('asks before resetting, says what is kept, then clears progress, games, settings and the flag', () => {
@@ -266,7 +359,7 @@ describe('SettingsPage', () => {
     useGames.getState().setPlayer('me');
     useGames.getState().addGames([importedGame('a')], 'pgn');
     localStorage.setItem(PRE_IMPORT_BACKUP_KEY, '{}');
-    renderAt('/settings');
+    renderAt('/settings#storage');
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset everything' }));
     expect(screen.getByRole('heading', { name: 'Reset everything?' })).toBeInTheDocument();
@@ -288,7 +381,7 @@ describe('SettingsPage', () => {
 
   it('resets the puzzle rating from a button with a confirmation, keeping the history', () => {
     useProgress.getState().completeOnboarding(1800);
-    renderAt('/settings');
+    renderAt('/settings#rating');
     const choice = screen.getByLabelText('Start again from');
     fireEvent.change(choice, { target: { value: 'casual' } });
     // Changing the choice alone changes nothing.
@@ -307,7 +400,7 @@ describe('SettingsPage', () => {
   it('imports a backup only after a confirmation that shows what it holds, with undo', async () => {
     useProgress.getState().completeOnboarding(1800);
     useProgress.getState().recordDrill('lab-drill', 7);
-    renderAt('/settings');
+    renderAt('/settings#backups');
     const input = screen.getByTestId<HTMLInputElement>('import-file');
     expect(input).toHaveAttribute('accept', '.json,application/json');
 
@@ -358,7 +451,7 @@ describe('SettingsPage', () => {
   });
 
   it('does not undo an import once sync between devices is on', async () => {
-    renderAt('/settings');
+    renderAt('/settings#backups');
     const file = new File([JSON.stringify(backupV6)], 'backup.json', { type: 'application/json' });
     await act(async () => {
       fireEvent.change(screen.getByTestId('import-file'), { target: { files: [file] } });
@@ -391,7 +484,7 @@ describe('SettingsPage', () => {
       await stopSync();
       vi.unstubAllGlobals();
     });
-    renderAt('/settings');
+    renderAt('/settings#backups');
     const file = new File([JSON.stringify(backupV6)], 'backup.json', { type: 'application/json' });
     await act(async () => {
       fireEvent.change(screen.getByTestId('import-file'), { target: { files: [file] } });
@@ -408,13 +501,17 @@ describe('SettingsPage', () => {
     // The device syncs first, then the backup joins: nothing here is replaced, the drill
     // stays, and the backup's analysis joins the library.
     await waitFor(() =>
-      expect(useToasts.getState().toasts.some((t) => t.message.includes('joins your synced'))).toBe(
-        true,
-      ),
+      expect(
+        useToasts.getState().toasts.some((t) => t.message.includes('joined your synced data')),
+      ).toBe(true),
     );
     expect(useProgress.getState().drills['lab-drill']?.best).toBe(7);
     expect(Object.keys(useAnalyses.getState().items)).toHaveLength(analyses + 1);
-    const toast = useToasts.getState().toasts.find((t) => t.message.includes('joins your synced'));
+    const toast = useToasts
+      .getState()
+      .toasts.find((t) => t.message.includes('joined your synced data'));
+    // What it added, counted.
+    expect(toast?.message).toMatch(/^Backup imported: .*1 analysis.* joined your synced data\.$/);
     expect(toast?.actionLabel).toBeUndefined();
   });
 });

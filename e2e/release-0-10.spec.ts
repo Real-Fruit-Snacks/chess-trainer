@@ -230,7 +230,7 @@ test.describe('play', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Resign' }).click();
     await expect(page.locator('header.shell__header')).toBeVisible();
     // Leaving the page never leaves the chrome hidden.
-    await page.goto('/settings');
+    await page.goto('/settings#play');
     await expect(page.locator('header.shell__header')).toBeVisible();
     await expect(page.getByRole('switch', { name: /^Focus mode/ })).toBeChecked();
   });

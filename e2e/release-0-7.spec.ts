@@ -612,7 +612,7 @@ test.describe('share links', () => {
 test.describe('profiles', () => {
   test('a second profile has its own progress and can be switched to', async ({ page }) => {
     await seedProgress(page, { onboarded: true, puzzleRating: 1500, puzzleRd: 60 });
-    await page.goto('/settings');
+    await page.goto('/settings#profiles');
     await expect(page.getByTestId('profile-badge')).toHaveCount(0);
     await page.getByTestId('new-profile-name').fill('Ada');
     await page.getByRole('button', { name: 'Add profile' }).click();
@@ -632,7 +632,7 @@ test.describe('profiles', () => {
     );
     expect(stored.state?.puzzleRating).toBe(1500);
     // Switching back restores the first learner.
-    await page.goto('/settings');
+    await page.goto('/settings#profiles');
     await page.getByTestId('profiles').getByRole('button', { name: 'Switch' }).click();
     await expect(page.getByTestId('profile-badge')).toHaveText('Me', { timeout: 15_000 });
     await page.goto('/progress');

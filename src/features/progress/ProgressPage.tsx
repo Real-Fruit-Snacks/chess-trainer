@@ -111,7 +111,7 @@ export default function ProgressPage() {
                 : 'Everything is stored on this device only. Export a backup before switching browsers.'}
           </p>
         </div>
-        <LinkButton to="/settings">
+        <LinkButton to="/settings#data">
           <Icon name="settings" size={16} />
           <span>Settings</span>
         </LinkButton>

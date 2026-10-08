@@ -282,17 +282,24 @@ test.describe('settings', () => {
     await seedProgress(page, { onboarded: true });
     await page.goto('/progress');
     await page.getByRole('link', { name: 'Settings' }).click();
-    await expect(page).toHaveURL(/\/settings$/);
+    // From Progress, Settings opens where sync and backups are.
+    await expect(page).toHaveURL(/\/settings#data$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Settings');
-    for (const name of [
-      'Appearance',
-      'Play',
-      'Puzzle rating',
-      'Profiles',
-      'Engine & analysis',
-      'App',
-    ]) {
-      await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Sync & data' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    for (const [tab, headings] of [
+      ['Appearance', ['Board', 'Display', 'Sound & vibration']],
+      ['Play', ['Play', 'Puzzle rating']],
+      ['Engine', ['Engine & analysis']],
+      ['Sync & data', ['Backups', 'Storage', 'Profiles']],
+      ['App', ['App']],
+    ] as const) {
+      await page.getByRole('tab', { name: tab, exact: true }).click();
+      for (const name of headings) {
+        await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+      }
     }
 
     // Progress keeps the statistics only.
@@ -319,7 +326,7 @@ test.describe('settings', () => {
 
   test('the profile badge opens the profiles card in Settings', async ({ page }) => {
     await seedProgress(page, { onboarded: true });
-    await page.goto('/settings');
+    await page.goto('/settings#profiles');
     await page.getByLabel('New profile name').fill('Ada');
     await page.getByRole('button', { name: 'Add profile' }).click();
     await page.goto('/');

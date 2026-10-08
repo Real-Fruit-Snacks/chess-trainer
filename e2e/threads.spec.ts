@@ -40,7 +40,7 @@ test.describe('multi-threaded engine', () => {
   });
 
   test('is on by default and starts from the second load', async ({ page }) => {
-    await page.goto('settings');
+    await page.goto('settings#engine');
     await expect(threadsSwitch(page)).toBeChecked();
     // The first visit has no service worker yet, so no headers: one thread for now.
     expect(await page.evaluate(() => crossOriginIsolated)).toBe(false);
@@ -65,7 +65,7 @@ test.describe('multi-threaded engine', () => {
   });
 
   test('switching threads off restores a plain document, and on again', async ({ page }) => {
-    await page.goto('settings');
+    await page.goto('settings#engine');
     await reloadIsolated(page);
 
     await threadsSwitch(page).click();
@@ -84,7 +84,7 @@ test.describe('multi-threaded engine', () => {
     await expect(engineStatus(page)).not.toContainText('threads');
 
     // The choice survives the reload; switching back on isolates the next load again.
-    await page.goto('settings');
+    await page.goto('settings#engine');
     await dismissToasts(page);
     await threadsSwitch(page).click();
     await reloadNow(page);
@@ -96,7 +96,7 @@ test.describe('multi-threaded engine', () => {
     // isolated, so the mock below would be bypassed for the real lichess.org (where the
     // call works too: such a run imports real games).
     test.skip(browserName === 'webkit', 'Playwright cannot mock this request in WebKit');
-    await page.goto('settings');
+    await page.goto('settings#engine');
     await reloadIsolated(page);
 
     // CORS requests are allowed under COEP require-corp; mock the network so the test
@@ -145,7 +145,7 @@ test.describe('full engine', () => {
     baseURL,
     browserName,
   }) => {
-    await page.goto('settings');
+    await page.goto('settings#engine');
     await reloadIsolated(page);
     const status = page.getByTestId('engine-full-status');
     await expect(status).toContainText(/^Off — the lite engine runs/);
@@ -182,7 +182,7 @@ test.describe('full engine', () => {
     }
 
     // Switching it off deletes the download; the lite engine runs again.
-    await page.goto('settings');
+    await page.goto('settings#engine');
     await dismissToasts(page);
     await fullSwitch(page).click();
     await expect(
@@ -205,7 +205,7 @@ test.describe('full engine', () => {
   }, testInfo) => {
     // The network is slowed through the DevTools protocol, which only Chromium speaks.
     test.skip(testInfo.project.name !== 'desktop-chromium', 'Needs Chromium network throttling');
-    await page.goto('settings');
+    await page.goto('settings#engine');
     await reloadIsolated(page);
     const status = page.getByTestId('engine-full-status');
 
@@ -239,7 +239,7 @@ test.describe('full engine', () => {
     });
 
     // Its own button starts it again.
-    await page.goto('settings');
+    await page.goto('settings#engine');
     await throttle(-1);
     await page.getByTestId('engine-full-download').click();
     await expect(status).toContainText('Downloaded — every page that starts the engine', {

@@ -15,7 +15,7 @@ import {
   useRef,
 } from 'react';
 import { Link, type LinkProps } from 'react-router';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 import './ui.css';
 
 /* ------------------------------------------------------------------ */
@@ -388,6 +388,121 @@ export function Segmented<T extends string | number>({
           {opt.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Tabs                                                               */
+/* ------------------------------------------------------------------ */
+
+export interface TabItem<T extends string> {
+  id: T;
+  label: string;
+  icon?: IconName;
+}
+
+/**
+ * Tabs that switch what a page shows (the WAI-ARIA tabs pattern): one tab
+ * stop, the arrow keys move between the tabs and open them, Home and End jump
+ * to the ends. Tab `id` controls the panel `${idPrefix}-panel-${id}`, which
+ * `TabPanel` renders.
+ */
+export function Tabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+  ariaLabel,
+  idPrefix,
+}: {
+  tabs: readonly TabItem<T>[];
+  value: T;
+  onChange: (id: T) => void;
+  ariaLabel: string;
+  idPrefix: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = Math.max(
+    0,
+    tabs.findIndex((tab) => tab.id === value),
+  );
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const count = tabs.length;
+    let next: number;
+    switch (event.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+        next = (selected + 1) % count;
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        next = (selected - 1 + count) % count;
+        break;
+      case 'Home':
+        next = 0;
+        break;
+      case 'End':
+        next = count - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const tab = tabs[next];
+    if (!tab) return;
+    if (tab.id !== value) onChange(tab.id);
+    ref.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+  };
+
+  return (
+    <div className="tabs" role="tablist" aria-label={ariaLabel} ref={ref} onKeyDown={onKeyDown}>
+      {tabs.map((tab, index) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          id={`${idPrefix}-tab-${tab.id}`}
+          aria-controls={`${idPrefix}-panel-${tab.id}`}
+          aria-selected={tab.id === value}
+          tabIndex={index === selected ? 0 : -1}
+          className="tabs__tab"
+          onClick={() => onChange(tab.id)}
+        >
+          {tab.icon ? <Icon name={tab.icon} size={18} /> : null}
+          <span>{tab.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The panel a tab of `Tabs` controls. Every tab's panel is in the page (so
+ * each tab points at one), but only the open one holds its content.
+ */
+export function TabPanel({
+  idPrefix,
+  id,
+  active,
+  children,
+  className,
+}: {
+  idPrefix: string;
+  id: string;
+  active: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      role="tabpanel"
+      id={`${idPrefix}-panel-${id}`}
+      aria-labelledby={`${idPrefix}-tab-${id}`}
+      hidden={!active}
+      className={className}
+    >
+      {active ? children : null}
     </div>
   );
 }
