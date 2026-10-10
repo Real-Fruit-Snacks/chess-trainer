@@ -59,7 +59,7 @@ the learner moves, the coach answers, the opponent replies, and the line goes on
       'Nd6+': 'Check, but the rook is not attacked from d6. …',    // a string is the answer alone
     },
     failure: 'Look for a knight move that gives check and attacks d5.',   // any other wrong move
-    reply: 'Ke7',                   // optional scripted opponent reply, played after a correct answer
+    reply: 'Ke7',                   // optional scripted opponent reply, played when the learner goes on
     replyNote: 'The king steps out of check, and the rook is left alone.',  // the coach on the reply
     then: { prompt: 'Now collect.', moves: ['Nxd5+'], … },   // the line goes on: the next move
   },
@@ -67,8 +67,9 @@ the learner moves, the coach answers, the opponent replies, and the line goes on
 ```
 
 How a step plays: the coach's `text` opens it and the `prompt` waits for a move. A right move is
-answered with `success` and then `why` (labelled "Why it works"); if there is a `reply`, the opponent
-plays it, the coach adds `replyNote`, and the `then` task asks for the next move. A wrong move listed in
+answered with `success` and then `why` (labelled "Why it works"); if there is a `reply`, the lesson
+waits there until the learner presses _Continue_ (so `success` and `why` can be read at leisure), then
+the opponent plays it, the coach adds `replyNote`, and the `then` task asks for the next move. A wrong move listed in
 `wrong` gets its answer, and its `refute` is played on the board (with a red arrow) until the learner
 takes the move back. Any other wrong move gets the board's own answer when there is a plain one — a mate
 it allows, a stalemate it gives, a piece it leaves to be taken, followed through the captures that come

@@ -323,9 +323,11 @@ const TILES = {
   async lesson(page) {
     await page.goto(new URL('learn/forks', BASE).href);
     await page.getByTestId('lesson-task').waitFor();
-    // The fork, then the coach: what the move does, why it works, Black's reply and the next question.
+    // The fork, then the coach: what the move does and why it works; Continue, then Black's reply
+    // and the next question.
     await clickSquare(page, 'e4');
     await clickSquare(page, 'f6');
+    await page.getByTestId('lesson-play-on').click();
     await page.getByTestId('coach-note').waitFor();
     await page.getByTestId('lesson-task').waitFor();
   },

@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-10-10
+
+Lessons at your own pace: the coach's words stay up until you have read them.
+
+### Changed
+
+- **You go on when you are ready.** After a right move (or a shown answer), the coach explains it
+  and the lesson waits. **Continue** (or →, or Enter) plays the opponent's reply and asks the next
+  question. Before, the reply and the next question came 0.6 seconds after the move, while the
+  explanation was still being read. On a phone, Continue also sits under the coach's words, below
+  the board. Lesson recall works the same way.
+- Each answer from the coach starts at the top of the conversation box and stays there until you
+  do something else. Under the board on a phone, the coach's newest words replace the last ones
+  only when you move or go on.
+
+### Fixed
+
+- On a phone, a wrong move that the opponent punishes no longer makes the page jump down to the
+  _Take back_ button, which took the board and the coach's words out of sight. _Take back_,
+  _Continue_ and recall's _Next_ now take the keyboard focus without scrolling, and the board gets
+  the focus back afterwards.
+- A hint now comes into view in the conversation box. Before, the box scrolled back to its top
+  (or to your last move) and the hint landed out of sight.
+- Scrolling the conversation box to read something again is no longer undone when the punishing
+  reply to a wrong move arrives.
+- A step already done can be played through again: _Take back_ and _Continue_ show there too.
+- After _Continue_ or _Take back_ on a phone, the board scrolls back into view if the page was
+  scrolled past it.
+
 ## [0.26.0] - 2026-10-10
 
 Play online: a waiting room for live games against people, refereed by the app's own relay, and

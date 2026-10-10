@@ -2,6 +2,7 @@ import { type Ref, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button, Icon } from '@/components/ui';
 import { San } from '@/chess/San';
 import type { LongColor } from '@/chess/types';
+import { scrollIntoContainer } from '@/lib/scroll';
 import { renderInline } from './inline';
 import { LessonText } from './LessonText';
 import type { CoachTone, LessonMessage } from './useLessonStep';
@@ -15,6 +16,29 @@ const LABELS: Partial<Record<CoachTone, string>> = {
 };
 
 const SIDE: Record<LongColor, string> = { white: 'White', black: 'Black' };
+
+/**
+ * The first message of the newest turn (see `LessonMessage`): where what the
+ * coach has said in answer to the learner's latest doing begins. None while
+ * the step's opening question is the newest turn.
+ */
+function turnStart(messages: readonly LessonMessage[]): number | null {
+  const turn = messages.at(-1)?.turn ?? 0;
+  if (turn === 0) return null;
+  return messages.find((m) => m.turn === turn)?.id ?? null;
+}
+
+/** What the conversation box last looked like, to tell what changed since. */
+interface Seen {
+  /** The first message: another one means a new step (or Replay). */
+  first: LessonMessage | undefined;
+  /** How many messages there were; -1 before the first look. */
+  count: number;
+  anchor: number | null;
+  /** The box that scrolled and where it was left, to tell whether the learner has scrolled it since. */
+  box: HTMLElement | null;
+  top: number;
+}
 
 /**
  * A lesson step as a conversation with the coach: what the coach says to open
@@ -37,10 +61,13 @@ export function CoachLog({
   promptRef?: Ref<HTMLDivElement>;
 }) {
   const regionRef = useRef<HTMLDivElement>(null);
+  const anchor = turnStart(messages);
+  const seen = useRef<Seen>({ first: undefined, count: -1, anchor: null, box: null, top: 0 });
   // Where the conversation scrolls in a box (its own on the lesson page on wide screens,
-  // the side panel on a phone held sideways), keep in view what has happened since the
-  // learner's last move, or since the answer was shown: the newest words never land out
-  // of sight below the box.
+  // the side panel on a phone held sideways), the coach's answer to the learner's latest
+  // move (or shown answer, or going on) starts at the top of the box, and the words stay
+  // where they are until the learner does something else: nothing scrolls them away while
+  // they are read. A hint asked for is brought into view.
   useLayoutEffect(() => {
     const region = regionRef.current;
     if (!region) return;
@@ -49,15 +76,33 @@ export function CoachLog({
     if (own) region.tabIndex = 0;
     else region.removeAttribute('tabindex');
     const box = own ? region : scrollingAncestor(region);
+    const last = seen.current;
+    const restarted = last.count < 0 || messages[0] !== last.first;
+    const added = restarted ? messages : messages.slice(last.count);
+    seen.current = { first: messages[0], count: messages.length, anchor, box, top: 0 };
     if (!box) return;
-    const anchors = region.querySelectorAll<HTMLElement>('[data-anchor]');
-    const last = anchors[anchors.length - 1];
-    // At the start of a step (no move yet), the box opens at the top.
-    const top = last
-      ? last.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 8
-      : 0;
-    box.scrollTop = Math.max(0, top);
-  }, [messages]);
+    const toAnchor = () => {
+      const el = region.querySelector<HTMLElement>('[data-anchor]');
+      // At the start of a step (no move yet), the box opens at the top.
+      const top = el
+        ? el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 8
+        : 0;
+      box.scrollTop = Math.max(0, top);
+    };
+    const newest = added.length === 1 ? added[0] : undefined;
+    const untouched = box === last.box && Math.abs(box.scrollTop - last.top) <= 2;
+    if (restarted || anchor !== last.anchor) {
+      toAnchor();
+    } else if (newest?.kind === 'coach' && newest.tone === 'hint') {
+      const el = region.querySelector<HTMLElement>('.coach__log')?.lastElementChild;
+      if (el instanceof HTMLElement) scrollIntoContainer(box, el);
+    } else if (added.length > 0 && (untouched || box !== last.box)) {
+      // More of the same answer (the reply that punishes a wrong move): shown from its start,
+      // unless the learner has scrolled the box meanwhile.
+      toAnchor();
+    }
+    seen.current.top = box.scrollTop;
+  }, [messages, anchor]);
 
   // When the newest words run on below the box, a button says so and scrolls down to them.
   const endRef = useRef<HTMLDivElement>(null);
@@ -100,7 +145,7 @@ export function CoachLog({
       >
         {messages.map((message) =>
           message.kind === 'move' ? (
-            <MoveLine key={message.id} message={message} />
+            <MoveLine key={message.id} message={message} anchor={message.id === anchor} />
           ) : message.tone === 'prompt' && message.id === activePrompt ? (
             <div
               key={message.id}
@@ -109,6 +154,7 @@ export function CoachLog({
               className="lesson__task coach__question"
               role="note"
               data-testid="lesson-task"
+              data-anchor={message.id === anchor ? '' : undefined}
             >
               <span className={`turn-dot turn-dot--${turn}`} aria-hidden="true" />
               {SIDE[turn]} to move — {renderInline(message.text)}
@@ -118,7 +164,7 @@ export function CoachLog({
               key={message.id}
               className={`coach__msg coach__msg--${message.tone}`}
               data-testid={`coach-${message.tone}`}
-              data-anchor={message.tone === 'answer' ? '' : undefined}
+              data-anchor={message.id === anchor ? '' : undefined}
             >
               {LABELS[message.tone] ? (
                 <span className="coach__label">{LABELS[message.tone]}</span>
@@ -151,7 +197,13 @@ function scrollingAncestor(from: HTMLElement): HTMLElement | null {
   return null;
 }
 
-function MoveLine({ message }: { message: Extract<LessonMessage, { kind: 'move' }> }) {
+function MoveLine({
+  message,
+  anchor,
+}: {
+  message: Extract<LessonMessage, { kind: 'move' }>;
+  anchor: boolean;
+}) {
   const mine = message.who === 'you';
   return (
     <div
@@ -162,7 +214,7 @@ function MoveLine({ message }: { message: Extract<LessonMessage, { kind: 'move' 
       ]
         .filter(Boolean)
         .join(' ')}
-      data-anchor={mine ? '' : undefined}
+      data-anchor={anchor ? '' : undefined}
     >
       {mine ? (
         <Icon name={message.wrong ? 'close' : 'check'} size={14} />
@@ -186,39 +238,34 @@ export function CoachAvatar() {
 }
 
 /**
- * What the coach has said since the learner's last move (or since the answer
- * was shown), for phones, where the conversation sits below the board: shown
- * right under it, so the answer to a move is read without scrolling. Nothing
- * before the first move of a step: the step opens with the coach's words in
- * the panel, read in order. A copy for the eye only (the conversation itself
- * is what assistive technology reads), with the take-back as a tap target.
+ * What the coach has said in answer to the learner's latest move (or shown
+ * answer, or going on to the reply), for phones, where the conversation sits
+ * below the board: shown right under it, so it is read without scrolling,
+ * and kept there until the learner does something else. Before the first move
+ * of a step only a hint shows: the step opens with the coach's words in the
+ * panel, read in order. A copy for the eye only (the conversation itself is
+ * what assistive technology reads), with the way on — "Take back",
+ * "Continue" — as a tap target after the words.
  */
 export function CoachLatest({
   messages,
   canTakeBack,
   onTakeBack,
+  canPlayOn,
+  onPlayOn,
 }: {
   messages: readonly LessonMessage[];
   canTakeBack: boolean;
   onTakeBack: () => void;
+  canPlayOn: boolean;
+  onPlayOn: () => void;
 }) {
-  let from = -1;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m?.kind === 'move' && m.who === 'you') {
-      from = i + 1;
-      break;
-    }
-    if (m?.kind === 'coach' && m.tone === 'answer') {
-      from = i;
-      break;
-    }
-  }
-  if (from < 0) return null;
-  const words = messages
-    .slice(from)
-    .filter((m): m is Extract<LessonMessage, { kind: 'coach' }> => m.kind === 'coach');
-  if (words.length === 0 && !canTakeBack) return null;
+  const turn = messages.at(-1)?.turn ?? 0;
+  const words = messages.filter(
+    (m): m is Extract<LessonMessage, { kind: 'coach' }> =>
+      m.kind === 'coach' && m.turn === turn && (turn > 0 || m.tone === 'hint'),
+  );
+  if (words.length === 0 && !canTakeBack && !canPlayOn) return null;
   return (
     <div className="coach__latest" aria-hidden="true" data-testid="coach-latest">
       {words.map((message) => (
@@ -232,6 +279,10 @@ export function CoachLatest({
       {canTakeBack ? (
         <Button variant="primary" size="sm" tabIndex={-1} onClick={onTakeBack}>
           Take back
+        </Button>
+      ) : canPlayOn ? (
+        <Button variant="primary" size="sm" tabIndex={-1} onClick={onPlayOn}>
+          Continue
         </Button>
       ) : null}
     </div>

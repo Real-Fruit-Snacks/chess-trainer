@@ -115,7 +115,7 @@ describe('useLessonStep', () => {
     expect(result.current.shapes).not.toContainEqual({ orig: 'e8', dest: 'd8', brush: 'red' });
   });
 
-  it('walks a line: the coach on each move, the reply, the next question', () => {
+  it('walks a line: the coach on each move, then the reply and the next question when the learner goes on', () => {
     const onSolved = vi.fn<(result: StepResult) => void>();
     const { result } = renderHook(() => useLessonStep(forkStep, onSolved));
     // A tempting wrong move gets the coach's own answer, and its refutation.
@@ -131,16 +131,29 @@ describe('useLessonStep', () => {
     act(() => result.current.takeBack());
 
     act(() => result.current.playMove('e4', 'f6'));
-    expect(result.current.phase).toBe('replying');
+    expect(result.current.phase).toBe('explained');
+    expect(result.current.canPlayOn).toBe(true);
+    expect(result.current.activePrompt).toBeNull();
     expect(texts(result.current.messages).slice(-3)).toEqual([
       'you:Nf6+',
       'good:Check, and the rook is attacked.',
       'why:The check comes first, so the rook cannot be saved.',
     ]);
+    // Nothing moves on by itself: the words stay up for as long as they take to read.
+    const explained = result.current.messages;
     act(() => {
-      vi.advanceTimersByTime(700);
+      vi.advanceTimersByTime(60_000);
     });
+    expect(result.current.phase).toBe('explained');
+    expect(result.current.messages).toBe(explained);
+    expect(result.current.lastMove).toEqual(['e4', 'f6']);
+    // The board waits too.
+    expect(result.current.dests.size).toBe(0);
+
+    act(() => result.current.playOn());
     expect(result.current.phase).toBe('awaiting');
+    expect(result.current.canPlayOn).toBe(false);
+    expect(result.current.lastMove).toEqual(['e8', 'e7']);
     expect(texts(result.current.messages).slice(-3)).toEqual([
       'them:Ke7',
       'note:The king steps out of check.',
@@ -162,7 +175,47 @@ describe('useLessonStep', () => {
     ]);
   });
 
-  it('shows an answer in a line and carries on to the next question', () => {
+  it('numbers the turns: each move, shown answer or going on starts one, a hint joins it', () => {
+    const { result } = renderHook(() => useLessonStep(forkStep, vi.fn()));
+    act(() => result.current.playMove('e4', 'c5'));
+    act(() => {
+      vi.advanceTimersByTime(700);
+    });
+    act(() => result.current.takeBack());
+    act(() => result.current.playMove('e4', 'f6'));
+    act(() => result.current.playOn());
+    act(() => result.current.reveal());
+    const turns = (messages: LessonMessage[]) => messages.map((m) => `${m.turn} ${texts([m])[0]}`);
+    expect(turns(result.current.messages)).toEqual([
+      '0 prompt:Fork the king and the rook.',
+      // The punishing reply and the coach's words answer the wrong move: the same turn.
+      '1 you:Nc5?',
+      '1 them:Rxc5',
+      '1 wrong:That attacks nothing that matters.',
+      '2 you:Nf6+',
+      '2 good:Check, and the rook is attacked.',
+      '2 why:The check comes first, so the rook cannot be saved.',
+      '3 them:Ke7',
+      '3 note:The king steps out of check.',
+      '3 prompt:Collect the rook.',
+      '4 answer:Here is the move: Nxd5+.',
+      '4 good:A whole rook up.',
+    ]);
+
+    const opening = renderHook(() => useLessonStep(rookStep, vi.fn())).result;
+    act(() => opening.current.hint());
+    expect(opening.current.messages.at(-1)).toMatchObject({ tone: 'hint', turn: 0 });
+
+    const later = renderHook(() => useLessonStep(rookStep, vi.fn())).result;
+    act(() => later.current.playMove('d4', 'a4'));
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    act(() => later.current.hint());
+    expect(later.current.messages.at(-1)).toMatchObject({ tone: 'hint', turn: 1 });
+  });
+
+  it('shows an answer in a line and waits there too before the reply', () => {
     const onSolved = vi.fn<(result: StepResult) => void>();
     const { result } = renderHook(() => useLessonStep(forkStep, onSolved));
     act(() => result.current.reveal());
@@ -172,8 +225,10 @@ describe('useLessonStep', () => {
       'why:The check comes first, so the rook cannot be saved.',
     ]);
     act(() => {
-      vi.advanceTimersByTime(700);
+      vi.advanceTimersByTime(5000);
     });
+    expect(result.current.phase).toBe('explained');
+    act(() => result.current.playOn());
     expect(result.current.phase).toBe('awaiting');
     act(() => result.current.playMove('f6', 'd5'));
     expect(result.current.phase).toBe('revealed');
@@ -201,19 +256,31 @@ describe('useLessonStep', () => {
     expect(result.current.hintShapes).toEqual([]);
   });
 
-  it('does not reveal once the right move is in and the reply is on its way', () => {
+  it('ends a line on a reply once the learner goes on, and only once', () => {
     const onSolved = vi.fn<(result: StepResult) => void>();
     const { result } = renderHook(() => useLessonStep(replyStep, onSolved));
     act(() => result.current.playMove('d1', 'g4'));
-    expect(result.current.phase).toBe('replying');
+    expect(result.current.phase).toBe('explained');
+    // Nothing to show or hint at once the right move is in.
     act(() => result.current.reveal());
-    expect(result.current.phase).toBe('replying');
+    act(() => result.current.hint());
+    expect(result.current.phase).toBe('explained');
+    expect(onSolved).not.toHaveBeenCalled();
+
+    // A double press plays the reply once.
     act(() => {
-      vi.advanceTimersByTime(700);
+      result.current.playOn();
+      result.current.playOn();
     });
     expect(result.current.phase).toBe('correct');
+    expect(texts(result.current.messages).filter((t) => t.startsWith('them:'))).toEqual([
+      'them:hxg4',
+    ]);
     expect(onSolved).toHaveBeenCalledTimes(1);
     expect(onSolved).toHaveBeenCalledWith({ revealed: false, mistakes: 0, hinted: false });
+    // Going on does nothing more.
+    act(() => result.current.playOn());
+    expect(onSolved).toHaveBeenCalledTimes(1);
   });
 
   it('starts the count again on Replay and on a new step', () => {
@@ -234,5 +301,17 @@ describe('useLessonStep', () => {
     act(() => result.current.hint());
     act(() => result.current.playMove('d4', 'h4'));
     expect(onSolved).toHaveBeenLastCalledWith({ revealed: false, mistakes: 0, hinted: true });
+  });
+
+  it('forgets a reply left waiting on Replay', () => {
+    const { result } = renderHook(() => useLessonStep(forkStep, vi.fn()));
+    act(() => result.current.playMove('e4', 'f6'));
+    expect(result.current.canPlayOn).toBe(true);
+    act(() => result.current.retry());
+    expect(result.current.phase).toBe('awaiting');
+    act(() => result.current.playOn());
+    expect(result.current.phase).toBe('awaiting');
+    expect(result.current.fen).toBe(forkStep.fen);
+    expect(texts(result.current.messages)).toEqual(['prompt:Fork the king and the rook.']);
   });
 });

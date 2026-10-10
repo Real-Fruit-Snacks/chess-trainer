@@ -5,6 +5,7 @@ import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
 import { getLesson } from './lessons';
 import { lessonPromise } from './lessons/load';
+import { lessonStepKeys, taskStepKeys } from './stepKeys';
 
 vi.mock('@/lib/sound', () => ({ playSound: vi.fn(), playMoveSound: vi.fn() }));
 
@@ -41,6 +42,7 @@ describe('LessonPage', () => {
   // The page loads a lesson's file on demand; loaded once, it renders at once.
   beforeAll(async () => {
     await lessonPromise('how-pieces-move');
+    await lessonPromise('basic-checkmates');
   });
 
   beforeEach(() => {
@@ -83,6 +85,8 @@ describe('LessonPage', () => {
 
   it('shows what punishes a wrong move, until it is taken back', () => {
     renderLesson('/learn/how-pieces-move');
+    const app = screen.getByRole('application');
+    app.focus();
     act(() => board.props?.onMove?.('d4', 'd8'));
     act(() => {
       vi.advanceTimersByTime(700);
@@ -90,10 +94,67 @@ describe('LessonPage', () => {
     expect(screen.getByTestId('coach-log')).toHaveTextContent('Black simply takes it with Kxd8');
     expect(board.props?.fen).toBe('3k4/8/8/8/8/8/8/4K3 w - - 0 2');
     const takeBack = screen.getByTestId('lesson-take-back');
+    // The way on has the focus (Enter takes it back); the board gets it back after.
+    expect(takeBack).toHaveFocus();
     expect(screen.queryByRole('button', { name: 'Show answer' })).toBeNull();
     fireEvent.click(takeBack);
     expect(board.props?.fen).toBe('4k3/8/8/8/3R4/8/8/4K3 w - - 0 1');
     expect(screen.getByRole('button', { name: 'Show answer' })).toBeEnabled();
+    expect(app).toHaveFocus();
+  });
+
+  it('waits for the learner after a move is explained: Continue (or →) plays the reply', () => {
+    renderLesson('/learn/basic-checkmates?step=2');
+    const app = screen.getByRole('application');
+    app.focus();
+    act(() => board.props?.onMove?.('h1', 'h6'));
+    expect(screen.getByTestId('coach-why')).toHaveTextContent('So it has to step back.');
+    const goOn = screen.getByTestId('lesson-play-on');
+    expect(goOn).toHaveTextContent('Continue');
+    expect(goOn).toHaveFocus();
+    // No question waiting, no hint or answer to give, and nothing moves on by itself.
+    expect(screen.queryByTestId('lesson-task')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show answer' })).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(screen.queryByTestId('coach-note')).toBeNull();
+    expect(board.props?.fen).toBe('8/8/4k2R/R7/8/8/8/6K1 b - - 1 1');
+    // The copy under the board (for phones) ends with its own Continue.
+    const latest = screen.getByTestId('coach-latest');
+    expect(latest).toHaveTextContent('So it has to step back.');
+    expect(within(latest).getByRole('button', { name: 'Continue', hidden: true })).toBeVisible();
+
+    fireEvent.click(goOn);
+    expect(board.props?.fen).toBe('8/3k4/7R/R7/8/8/8/6K1 w - - 2 2');
+    expect(screen.getByTestId('coach-note')).toHaveTextContent('The king steps back');
+    expect(screen.getByTestId('lesson-task')).toHaveTextContent('Now the rooks swap roles');
+    // Under the board: the answer to going on, the reply's note and the new question.
+    expect(latest).not.toHaveTextContent('So it has to step back.');
+    expect(latest).toHaveTextContent('Now the rooks swap roles');
+    // The board has the focus again, for the next move.
+    expect(app).toHaveFocus();
+
+    act(() => board.props?.onMove?.('a5', 'a7'));
+    expect(screen.getByTestId('lesson-play-on')).toHaveFocus();
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(screen.getByTestId('lesson-task')).toHaveTextContent('checkmate in one');
+    expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
+
+    // The end of the line: the next step is the way on.
+    act(() => board.props?.onMove?.('h6', 'h8'));
+    expect(screen.getByTestId('lesson-continue')).toHaveFocus();
+    expect(screen.queryByTestId('lesson-play-on')).toBeNull();
+  });
+
+  it('plays a line again on a step already done, Continue and all', () => {
+    const mates = getLesson('basic-checkmates')!;
+    const keys = lessonStepKeys(mates);
+    useProgress.getState().markLessonStep(mates.id, keys[1]!, keys, taskStepKeys(mates));
+    renderLesson('/learn/basic-checkmates?step=2');
+    act(() => board.props?.onMove?.('h1', 'h6'));
+    fireEvent.click(screen.getByTestId('lesson-play-on'));
+    expect(screen.getByTestId('lesson-task')).toHaveTextContent('Now the rooks swap roles');
   });
 
   it('ignores letter and arrow shortcuts with a modifier or from the board, in any case', () => {

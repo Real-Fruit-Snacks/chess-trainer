@@ -111,38 +111,54 @@ export async function expectBoard(page: Page): Promise<Locator> {
 }
 
 /**
- * Clicks a lesson's Continue button and waits for the next step to render, so the
- * caller never reads the previous step's buttons by mistake.
+ * Clicks a lesson's Continue button (the one to the next step) and waits for the
+ * next step to render, so the caller never reads the previous step's buttons by
+ * mistake.
  */
 export async function continueLesson(page: Page) {
   const current = page.locator('.lesson__stepdot[aria-current="step"]');
   const before = await current.getAttribute('aria-label');
-  await page.getByRole('button', { name: /Continue/ }).click();
+  await page.getByTestId('lesson-continue').click();
   await expect(current).not.toHaveAttribute('aria-label', before ?? '');
 }
 
 /**
+ * Goes on in a lesson's line once the coach has explained a move: Continue
+ * plays the opponent's reply and asks the next question (or ends the line).
+ */
+export async function playOnInLesson(page: Page) {
+  const playOn = page.getByTestId('lesson-play-on');
+  await playOn.click();
+  await expect(playOn).toHaveCount(0);
+}
+
+/**
  * Works through a lesson from the current step to its end: "Show answer" for
- * every move of every line (the opponent's reply and the next question come
- * after each), "Continue" between steps, "Finish" at the end. `solve` plays a
- * move by hand instead whenever its question is the one waiting.
+ * every move of every line, Continue to the opponent's reply and the next
+ * question after each, Continue between steps, "Finish" at the end. `solve`
+ * plays a move by hand instead whenever its question is the one waiting.
  */
 export async function showAnswersToTheEnd(
   page: Page,
   solve?: { prompt: string; play: () => Promise<void> },
 ) {
   const question = page.getByTestId('lesson-task');
+  const playOn = page.getByTestId('lesson-play-on');
+  const next = page.getByTestId('lesson-continue');
   const action = page.locator(
-    'button:has-text("Show answer"):enabled, button:has-text("Finish"), button:has-text("Continue")',
+    '[data-testid="lesson-play-on"], button:has-text("Show answer"):enabled, [data-testid="lesson-continue"]',
   );
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 120; i++) {
     await action.first().waitFor();
-    const finish = page.getByRole('button', { name: /Finish/ });
-    if (await finish.isVisible()) {
-      await finish.click();
-      return;
+    if (await playOn.isVisible()) {
+      await playOnInLesson(page);
+      continue;
     }
-    if (await page.getByRole('button', { name: /Continue/ }).isVisible()) {
+    if (await next.isVisible()) {
+      if (((await next.textContent()) ?? '').includes('Finish')) {
+        await next.click();
+        return;
+      }
       await continueLesson(page);
       continue;
     }

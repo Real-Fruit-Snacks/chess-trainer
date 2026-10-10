@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { expectBoard, playMove, waitForBoardIdle } from './helpers';
+import { expectBoard, playMove, playOnInLesson, waitForBoardIdle } from './helpers';
 
 /**
  * 0.25: lessons as a conversation with a coach — the reason after every move,
  * the answer to a tempting wrong move with the reply that punishes it on the
- * board until it is taken back, and lines that go on after the opponent's reply.
+ * board until it is taken back, and lines that go on after the opponent's reply
+ * (since 0.26.1, once the learner presses Continue).
  */
 test.describe('the coach', () => {
   test('answers a tempting wrong move with the reply that punishes it, until it is taken back', async ({
@@ -40,16 +41,19 @@ test.describe('the coach', () => {
     await expect(question).toContainText('Where does the other rook check?');
 
     await playMove(board, 'h1', 'h6');
+    await expect(page.getByTestId('coach-why')).toContainText('So it has to step back');
+    await playOnInLesson(page);
     await expect(page.getByTestId('coach-note')).toContainText('The king steps back');
     await expect(question).toContainText('Climb one more rank');
     await waitForBoardIdle(page);
     await playMove(board, 'a5', 'a7');
+    await playOnInLesson(page);
     await expect(page.getByTestId('coach-note').last()).toContainText('Back on the edge');
     await expect(question).toContainText('checkmate in one');
     await waitForBoardIdle(page);
     await playMove(board, 'h6', 'h8');
     await expect(page.getByTestId('coach-good').last()).toContainText('check on the eighth rank');
-    await expect(page.getByRole('button', { name: /Continue/ })).toBeVisible();
+    await expect(page.getByTestId('lesson-continue')).toBeVisible();
   });
 
   test('keeps the board and the newest words in view', async ({ page, isMobile }) => {

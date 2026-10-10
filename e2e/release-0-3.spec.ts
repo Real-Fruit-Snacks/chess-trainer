@@ -1,5 +1,11 @@
 import { expect, type Page, test } from '@playwright/test';
-import { completeOnboarding, expectBoard, playMove, waitForBoardIdle } from './helpers';
+import {
+  completeOnboarding,
+  expectBoard,
+  playMove,
+  playOnInLesson,
+  waitForBoardIdle,
+} from './helpers';
 
 const PROGRESS_KEY = 'chess-trainer:progress';
 const SETTINGS_KEY = 'chess-trainer:settings';
@@ -391,6 +397,7 @@ test.describe('new training content', () => {
     // Step 1: the fork trick, Black to move — Nxe4, and the coach plays the line on.
     await playMove(board, 'f6', 'e4', 'black');
     await expect(page.getByTestId('coach-good')).toContainText('d5 forks the bishop');
+    await playOnInLesson(page);
     await expect(page.getByTestId('lesson-task')).toContainText(
       'Which pawn move wins a piece back',
     );

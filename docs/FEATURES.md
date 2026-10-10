@@ -16,8 +16,11 @@ The complete reference of what Chess Trainer does, section by section. For how i
   opponent's punishing reply played on the board (and a red arrow) until you take the move back; any
   other move that drops a piece, allows a mate or stalemates is explained from the board itself.
   Combinations, mating nets and techniques are **lines** of two to four moves: the opponent replies,
-  the coach comments, and you play on. The conversation stays on screen to read back; on phones the
-  coach's latest words sit right under the board. "Show answer" plays the move with the explanation.
+  the coach comments, and you play on. **You set the pace**: after the coach explains a move, the
+  reply and the next question wait for _Continue_ (or →), so nothing moves on while you read. The
+  conversation stays on screen to read back; on phones the coach's latest words sit right under the
+  board, with _Continue_ and _Take back_ beside them, and nothing scrolls the page out from under
+  you. "Show answer" plays the move with the explanation.
 - **Three courses** with unlockable units — a lesson opened from a course leads back to it and on to
   the next item — and a two-minute **placement quiz** that recommends a course (the one Home suggests
   until you start another) and seeds your starting puzzle rating.

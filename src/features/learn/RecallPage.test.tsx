@@ -119,5 +119,27 @@ describe('RecallPage', () => {
     act(() => board.props?.onMove?.('d4', 'h4'));
     expect(screen.getByTestId('recall-result')).toHaveTextContent('Recalled!');
     expect(useProgress.getState().lessonRecall[CARD]?.step).toBe(2);
+    // "Next" has the focus (Enter takes it), given without scrolling to it.
+    expect(screen.getByRole('button', { name: /Next/ })).toHaveFocus();
+  });
+
+  it('gives "Take back" the focus after a punished move, and the board after', () => {
+    vi.useFakeTimers();
+    try {
+      renderPage();
+      const app = screen.getByRole('application');
+      app.focus();
+      act(() => board.props?.onMove?.('d4', 'd8'));
+      act(() => {
+        vi.advanceTimersByTime(700);
+      });
+      const takeBack = screen.getByRole('button', { name: 'Take back' });
+      expect(takeBack).toHaveFocus();
+      fireEvent.click(takeBack);
+      expect(app).toHaveFocus();
+      expect(screen.getByRole('button', { name: 'Show answer' })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

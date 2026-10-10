@@ -1,4 +1,4 @@
-import { use, useEffect, useMemo, useState } from 'react';
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
@@ -6,7 +6,9 @@ import { Badge, Button, Card, Kbd, LinkButton } from '@/components/ui';
 import { formatDate } from '@/lib/dates';
 import { NONE } from '@/lib/format';
 import { dueReviews, nextReview, PUZZLE_REVIEW_STEPS_DAYS } from '@/lib/puzzleReview';
+import { scrollBackTo } from '@/lib/scroll';
 import { pageShortcutKey } from '@/lib/shortcutKey';
+import { useFocusWhile } from '@/lib/useFocusWhile';
 import { useNow } from '@/lib/useNow';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
@@ -152,24 +154,46 @@ function RecallCard({
     setGraded(grade);
   });
 
+  // Going on to the reply, or taking a wrong move back, happens on the board: on a phone,
+  // scrolled down to the words under it, bring it back into view.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const { playOn: stepPlayOn, takeBack: stepTakeBack } = state;
+  const playOn = useCallback(() => {
+    stepPlayOn();
+    scrollBackTo(boardRef.current);
+  }, [stepPlayOn]);
+  const takeBack = useCallback(() => {
+    stepTakeBack();
+    scrollBackTo(boardRef.current);
+  }, [stepTakeBack]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const key = pageShortcutKey(e);
       if (key === 'h' && !graded) state.hint();
+      else if (key === 'ArrowRight' && state.canPlayOn) playOn();
       else if ((key === 'n' || key === 'ArrowRight') && graded) onNext();
       else return;
       e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [state, graded, onNext]);
+  }, [state, graded, onNext, playOn]);
+
+  // The way on has the focus, so Enter takes it — without scrolling the page to it.
+  const takeBackRef = useRef<HTMLButtonElement>(null);
+  const playOnRef = useRef<HTMLButtonElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
+  useFocusWhile(takeBackRef, state.canTakeBack);
+  useFocusWhile(playOnRef, state.canPlayOn);
+  useFocusWhile(nextRef, graded !== null);
 
   const task = step.task;
   const orientation = step.orientation ?? 'white';
 
   return (
     <div className="trainer">
-      <div className="trainer__board" style={{ position: 'relative' }}>
+      <div className="trainer__board" style={{ position: 'relative' }} ref={boardRef}>
         <Board
           fen={state.fen}
           orientation={orientation}
@@ -193,7 +217,9 @@ function RecallCard({
       <CoachLatest
         messages={state.messages}
         canTakeBack={state.canTakeBack}
-        onTakeBack={state.takeBack}
+        onTakeBack={takeBack}
+        canPlayOn={state.canPlayOn}
+        onPlayOn={playOn}
       />
       <aside className="trainer__panel stack">
         <Card>
@@ -218,23 +244,31 @@ function RecallCard({
             </p>
           ) : null}
           <div className="lesson__actions">
-            {!graded ? (
-              state.canTakeBack ? (
-                <Button variant="primary" onClick={state.takeBack} autoFocus>
-                  Take back
+            {state.canTakeBack ? (
+              <Button key="take-back" ref={takeBackRef} variant="primary" onClick={takeBack}>
+                Take back
+              </Button>
+            ) : state.canPlayOn ? (
+              <Button
+                key="play-on"
+                ref={playOnRef}
+                variant="primary"
+                onClick={playOn}
+                data-testid="recall-play-on"
+              >
+                Continue
+              </Button>
+            ) : !graded ? (
+              <>
+                <Button onClick={state.hint} disabled={state.phase !== 'awaiting'}>
+                  Hint <Kbd>H</Kbd>
                 </Button>
-              ) : (
-                <>
-                  <Button onClick={state.hint} disabled={state.phase !== 'awaiting'}>
-                    Hint <Kbd>H</Kbd>
-                  </Button>
-                  <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
-                    Show answer
-                  </Button>
-                </>
-              )
+                <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
+                  Show answer
+                </Button>
+              </>
             ) : (
-              <Button variant="primary" onClick={onNext} autoFocus>
+              <Button key="next" ref={nextRef} variant="primary" onClick={onNext}>
                 Next <Kbd>N</Kbd>
               </Button>
             )}

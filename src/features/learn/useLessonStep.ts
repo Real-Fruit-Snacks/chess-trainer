@@ -17,8 +17,12 @@ export type StepPhase =
   | 'wrong'
   /** A wrong move and the reply that punishes it are on the board, until taken back. */
   | 'refuted'
-  /** The right move is in; the opponent's reply is on its way. */
-  | 'replying'
+  /**
+   * The right move is in (found or shown) and the coach has said why: the
+   * opponent's reply and the next question wait until the learner goes on
+   * (`playOn`), so the words stay up for as long as they take to read.
+   */
+  | 'explained'
   /** The line is done, every move found. */
   | 'correct'
   /** The line is done, with an answer shown. */
@@ -42,10 +46,18 @@ export interface StepResult {
  */
 export type CoachTone = 'prompt' | 'good' | 'why' | 'wrong' | 'hint' | 'answer' | 'note';
 
+/**
+ * One line of the conversation. `turn` counts the learner's doings that the
+ * coach answers — a move, a shown answer, going on to the reply — from 0 for
+ * the step's opening question: the messages of the newest turn are what the
+ * coach has said in answer to the latest of them (a hint joins the turn it is
+ * asked in).
+ */
 export type LessonMessage =
-  | { id: number; kind: 'coach'; tone: CoachTone; text: string }
+  | { id: number; turn: number; kind: 'coach'; tone: CoachTone; text: string }
   | {
       id: number;
+      turn: number;
       kind: 'move';
       who: 'you' | 'them';
       san: string;
@@ -77,26 +89,32 @@ export interface LessonStepState {
   canReveal: boolean;
   /** A wrong move and its punishment stand on the board: "Take back" puts the position back. */
   canTakeBack: boolean;
+  /** The coach has explained a move and the opponent's reply waits: "Continue" plays it. */
+  canPlayOn: boolean;
   playMove: (from: Square, to: Square, promotion?: PromotionPiece) => void;
   resolvePromotion: (piece: PromotionPiece | null) => void;
   hint: () => void;
   reveal: () => void;
   takeBack: () => void;
+  /** Plays the opponent's reply and asks the line's next question (or ends the line). */
+  playOn: () => void;
   retry: () => void;
 }
 
 const colorOf = (fen: Fen): LongColor => (fen.split(' ')[1] === 'b' ? 'black' : 'white');
 
-/** Pause before the opponent's reply, and before a wrong move without an answer is taken back. */
+/** Pause before the reply that punishes a wrong move, and before a wrong move without one is taken back. */
 const REPLY_MS = 600;
 const TAKE_BACK_MS = 900;
 
 /**
  * Drives one lesson step: the line of moves the learner is asked for, judged
  * against each task, with the opponent's scripted replies, the coach's words
- * for every move (right, wrong, shown) and the board state to render.
- * `onSolved` is called once, when the line is finished — found or shown —
- * with how it went, so a caller can grade it on the spot.
+ * for every move (right, wrong, shown) and the board state to render. The
+ * learner sets the pace: after the coach explains a move, the opponent's
+ * reply waits for `playOn`. `onSolved` is called once, when the line is
+ * finished — found or shown — with how it went, so a caller can grade it on
+ * the spot.
  */
 export function useLessonStep(
   step: LessonStep,
@@ -122,6 +140,10 @@ export function useLessonStep(
   const taskFenRef = useRef<Fen>(step.fen);
   const taskLastMoveRef = useRef<[Square, Square] | null>(null);
   const nextId = useRef(1);
+  /** The turn the coach is answering (see `LessonMessage`). */
+  const turnRef = useRef(0);
+  /** The task whose reply waits for the learner to go on, while `explained`. */
+  const pendingRef = useRef<LessonTask | null>(null);
   // Counted synchronously, so the result handed to `onSolved` is never a render behind.
   const mistakesRef = useRef(0);
   const hintedRef = useRef(false);
@@ -137,12 +159,21 @@ export function useLessonStep(
 
   const coach = (tone: CoachTone, text: string): LessonMessage => ({
     id: nextId.current++,
+    turn: turnRef.current,
     kind: 'coach',
     tone,
     text,
   });
   const moveMessage = (who: 'you' | 'them', san: string, color: LongColor, wrong = false) =>
-    ({ id: nextId.current++, kind: 'move', who, san, color, wrong }) satisfies LessonMessage;
+    ({
+      id: nextId.current++,
+      turn: turnRef.current,
+      kind: 'move',
+      who,
+      san,
+      color,
+      wrong,
+    }) satisfies LessonMessage;
   const push = useCallback((...added: (LessonMessage | null)[]) => {
     const kept = added.filter((m): m is LessonMessage => m !== null);
     if (kept.length > 0) setMessages((prev) => [...prev, ...kept]);
@@ -158,6 +189,8 @@ export function useLessonStep(
     hintedRef.current = false;
     revealedRef.current = false;
     nextId.current = 1;
+    turnRef.current = 0;
+    pendingRef.current = null;
     setFen(step.fen);
     setLastMove(null);
     setIndex(0);
@@ -194,42 +227,53 @@ export function useLessonStep(
     });
   }, []);
 
-  /** After a right (or shown) move: the reply and the next question, or the end of the line. */
+  /**
+   * After a right (or shown) move: the end of the line, or — the coach having
+   * said why — a pause until the learner goes on to the reply (`playOn`).
+   */
   const carryOn = useCallback(
     (task: LessonTask) => {
       if (!task.reply) {
         finish();
         return;
       }
-      setPhase('replying');
-      later(() => {
-        const chess = chessRef.current;
-        const color = colorOf(chess.fen());
-        const reply = tryMove(chess, task.reply as string);
-        if (reply) {
-          playMoveSound(reply, chess);
-          sync([reply.from, reply.to]);
-          taskLastMoveRef.current = [reply.from, reply.to];
-        }
-        const next = line[indexRef.current + 1];
-        push(
-          moveMessage('them', reply?.san ?? (task.reply as string), color),
-          task.replyNote ? coach('note', task.replyNote) : null,
-          next ? coach('prompt', next.prompt) : null,
-        );
-        if (!next) {
-          finish();
-          return;
-        }
-        indexRef.current += 1;
-        setIndex(indexRef.current);
-        taskFenRef.current = chess.fen();
-        setHintLevel(0);
-        setPhase('awaiting');
-      }, REPLY_MS);
+      pendingRef.current = task;
+      setPhase('explained');
     },
-    [line, finish, push, sync],
+    [finish],
   );
+
+  /** The opponent's reply, the coach's word on it and the next question, or the end of the line. */
+  const playOn = useCallback(() => {
+    const task = pendingRef.current;
+    // Once only: a second press before the next render finds nothing waiting.
+    if (!task?.reply) return;
+    pendingRef.current = null;
+    turnRef.current += 1;
+    const chess = chessRef.current;
+    const color = colorOf(chess.fen());
+    const reply = tryMove(chess, task.reply);
+    if (reply) {
+      playMoveSound(reply, chess);
+      sync([reply.from, reply.to]);
+      taskLastMoveRef.current = [reply.from, reply.to];
+    }
+    const next = line[indexRef.current + 1];
+    push(
+      moveMessage('them', reply?.san ?? task.reply, color),
+      task.replyNote ? coach('note', task.replyNote) : null,
+      next ? coach('prompt', next.prompt) : null,
+    );
+    if (!next) {
+      finish();
+      return;
+    }
+    indexRef.current += 1;
+    setIndex(indexRef.current);
+    taskFenRef.current = chess.fen();
+    setHintLevel(0);
+    setPhase('awaiting');
+  }, [line, finish, push, sync]);
 
   /** Puts the position of the task back, after a wrong move (and its punishment). */
   const takeBack = useCallback(() => {
@@ -253,6 +297,7 @@ export function useLessonStep(
         sync(lastMove);
         return;
       }
+      turnRef.current += 1;
       if (judgeTaskMove(task, move, chess) === 'correct') {
         playMoveSound(move, chess);
         setHintLevel(0);
@@ -348,9 +393,10 @@ export function useLessonStep(
   const reveal = useCallback(() => {
     const task = line[indexRef.current];
     // Only while a move is awaited: not while a wrong move is on the board, nor once the
-    // right move is in and the reply is on its way.
+    // right move is in and explained.
     if (!task || phase !== 'awaiting') return;
     clearTimers();
+    turnRef.current += 1;
     const chess = new Chess(taskFenRef.current);
     chessRef.current = chess;
     const answer = task.moves[0];
@@ -431,11 +477,13 @@ export function useLessonStep(
     done: line.length === 0 || phase === 'correct' || phase === 'revealed',
     canReveal: line.length > 0 && phase === 'awaiting',
     canTakeBack: phase === 'refuted',
+    canPlayOn: phase === 'explained',
     playMove,
     resolvePromotion,
     hint,
     reveal,
     takeBack,
+    playOn,
     retry: reset,
   };
 }
@@ -443,5 +491,5 @@ export function useLessonStep(
 /** The conversation a step starts with: the first question, when there is a task. */
 function openingMessages(line: LessonTask[]): LessonMessage[] {
   const first = line[0];
-  return first ? [{ id: 0, kind: 'coach', tone: 'prompt', text: first.prompt }] : [];
+  return first ? [{ id: 0, turn: 0, kind: 'coach', tone: 'prompt', text: first.prompt }] : [];
 }

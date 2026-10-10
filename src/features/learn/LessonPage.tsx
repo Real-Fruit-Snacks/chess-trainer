@@ -4,7 +4,9 @@ import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { Button, Card, Kbd, LinkButton, Icon, NotFound } from '@/components/ui';
 import { dueReviews } from '@/lib/puzzleReview';
+import { scrollBackTo } from '@/lib/scroll';
 import { pageShortcutKey } from '@/lib/shortcutKey';
+import { useFocusWhile } from '@/lib/useFocusWhile';
 import { useNow } from '@/lib/useNow';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
@@ -114,12 +116,26 @@ function LessonView({ lesson }: { lesson: Lesson }) {
     goTo(current + 1);
   }, [step.task, markStep, lesson.id, key, keys, taskKeys, goTo, current]);
 
+  const boardRef = useRef<HTMLDivElement>(null);
+  // Going on to the reply, or taking a wrong move back, happens on the board: on a phone,
+  // scrolled down to the words under it, bring it back into view.
+  const { playOn: stepPlayOn, takeBack: stepTakeBack } = state;
+  const playOn = useCallback(() => {
+    stepPlayOn();
+    scrollBackTo(boardRef.current);
+  }, [stepPlayOn]);
+  const takeBack = useCallback(() => {
+    stepTakeBack();
+    scrollBackTo(boardRef.current);
+  }, [stepTakeBack]);
+
   // Keyboard navigation (never from the board, a field or with a modifier held).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (finished) return;
       const pressed = pageShortcutKey(e);
-      if (pressed === 'ArrowRight' && (isDone || !step.task)) advance();
+      if (pressed === 'ArrowRight' && state.canPlayOn) playOn();
+      else if (pressed === 'ArrowRight' && (isDone || !step.task)) advance();
       else if (pressed === 'ArrowLeft') goTo(current - 1);
       else if (pressed === 'h' && step.task) state.hint();
       else return;
@@ -127,14 +143,24 @@ function LessonView({ lesson }: { lesson: Lesson }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [advance, goTo, current, isDone, step.task, state, finished]);
+  }, [advance, playOn, goTo, current, isDone, step.task, state, finished]);
+
+  // The way on has the focus, so Enter takes it — without scrolling the page to it.
+  const takeBackRef = useRef<HTMLButtonElement>(null);
+  const playOnRef = useRef<HTMLButtonElement>(null);
+  const continueRef = useRef<HTMLButtonElement>(null);
+  useFocusWhile(takeBackRef, state.canTakeBack);
+  useFocusWhile(playOnRef, state.canPlayOn);
+  useFocusWhile(
+    continueRef,
+    !!step.task && (state.phase === 'correct' || state.phase === 'revealed'),
+  );
 
   // Focus follows the lesson: the task prompt (or the step) after moving to another
   // step, the heading of the closing card at the end. Not on the first render.
   const promptRef = useRef<HTMLDivElement>(null);
   const stepRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLHeadingElement>(null);
-  const boardRef = useRef<HTMLDivElement>(null);
   const shown = useRef({ index: current, finished });
   useEffect(() => {
     if (shown.current.index === current && shown.current.finished === finished) return;
@@ -146,12 +172,8 @@ function LessonView({ lesson }: { lesson: Lesson }) {
     // The conversation box keeps its own scroll (it opens on the coach's first words).
     (promptRef.current ?? stepRef.current)?.focus({ preventScroll: true });
     // A new step starts from its diagram: bring the board back into view when the page
-    // was scrolled past it (phones, where the conversation runs on below the board). At
-    // once, not smoothly: a tap during a smooth scroll lands where the button was.
-    const board = boardRef.current;
-    if (board && board.getBoundingClientRect().top < 0) {
-      board.scrollIntoView?.({ block: 'start', behavior: 'instant' });
-    }
+    // was scrolled past it (phones, where the conversation runs on below the board).
+    scrollBackTo(boardRef.current);
   }, [current, finished]);
 
   const following = LESSON_META[LESSON_META.findIndex((l) => l.id === lesson.id) + 1];
@@ -273,7 +295,9 @@ function LessonView({ lesson }: { lesson: Lesson }) {
         <CoachLatest
           messages={state.messages}
           canTakeBack={state.canTakeBack}
-          onTakeBack={state.takeBack}
+          onTakeBack={takeBack}
+          canPlayOn={state.canPlayOn}
+          onPlayOn={playOn}
         />
 
         <aside className="trainer__panel lesson__panel stack">
@@ -307,6 +331,8 @@ function LessonView({ lesson }: { lesson: Lesson }) {
             <div ref={stepRef} tabIndex={-1} className="lesson__step">
               {step.title ? <h2 style={{ fontSize: '1.25rem' }}>{step.title}</h2> : null}
               <CoachLog
+                // Each step's conversation starts afresh, from the top of its box.
+                key={current}
                 intro={step.text}
                 messages={state.messages}
                 activePrompt={state.activePrompt}
@@ -319,29 +345,38 @@ function LessonView({ lesson }: { lesson: Lesson }) {
               <Button onClick={() => goTo(current - 1)} disabled={current === 0}>
                 ← Back
               </Button>
-              {step.task && !isDone ? (
-                state.canTakeBack ? (
-                  <Button
-                    variant="primary"
-                    onClick={state.takeBack}
-                    autoFocus
-                    data-testid="lesson-take-back"
-                  >
-                    Take back
+              {state.canTakeBack ? (
+                <Button
+                  key="take-back"
+                  ref={takeBackRef}
+                  variant="primary"
+                  onClick={takeBack}
+                  data-testid="lesson-take-back"
+                >
+                  Take back
+                </Button>
+              ) : state.canPlayOn ? (
+                <Button
+                  key="play-on"
+                  ref={playOnRef}
+                  variant="primary"
+                  onClick={playOn}
+                  data-testid="lesson-play-on"
+                >
+                  Continue
+                </Button>
+              ) : step.task && !isDone ? (
+                <>
+                  <Button onClick={state.hint} disabled={state.phase !== 'awaiting'}>
+                    Hint <Kbd>H</Kbd>
                   </Button>
-                ) : (
-                  <>
-                    <Button onClick={state.hint} disabled={state.phase !== 'awaiting'}>
-                      Hint <Kbd>H</Kbd>
-                    </Button>
-                    <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
-                      Show answer
-                    </Button>
-                    <Button variant="ghost" onClick={advance}>
-                      Skip
-                    </Button>
-                  </>
-                )
+                  <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
+                    Show answer
+                  </Button>
+                  <Button variant="ghost" onClick={advance}>
+                    Skip
+                  </Button>
+                </>
               ) : (
                 <>
                   {step.task && state.phase !== 'awaiting' ? (
@@ -349,7 +384,13 @@ function LessonView({ lesson }: { lesson: Lesson }) {
                       Replay
                     </Button>
                   ) : null}
-                  <Button variant="primary" onClick={advance} autoFocus={isDone && !!step.task}>
+                  <Button
+                    key="continue"
+                    ref={continueRef}
+                    variant="primary"
+                    onClick={advance}
+                    data-testid="lesson-continue"
+                  >
                     {current + 1 === total ? 'Finish' : 'Continue'} →
                   </Button>
                 </>
