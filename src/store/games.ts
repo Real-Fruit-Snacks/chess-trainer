@@ -12,7 +12,12 @@ import type { ReviewDigest } from '@/features/games/insights';
 import { gamesSlice, parse } from './backupSchema';
 import { storageKeyFor } from './profiles';
 
-export type GameSource = 'lichess' | 'chesscom' | 'pgn';
+/**
+ * Where a game came from: imported from Lichess or chess.com, pasted as PGN,
+ * or played online through the app's own relay (a live game; live games
+ * played on Lichess count as Lichess games, with their URL).
+ */
+export type GameSource = 'lichess' | 'chesscom' | 'pgn' | 'online';
 
 /** A stored review: enough for the games table and the daily plan, not the full move list. */
 export interface StoredReview {

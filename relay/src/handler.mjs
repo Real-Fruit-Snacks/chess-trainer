@@ -9,7 +9,7 @@
  * stores, per vault, the bytes, a version number, when it was last written
  * and read, and a hash of the vault's write token. Nothing is logged.
  *
- *   GET    /v1/health            → 200 { ok, maxBytes }
+ *   GET    /v1/health            → 200 { ok, maxBytes, live? } (live: whether live games are on)
  *   GET    /v1/vaults/:id        → 200 the bytes, ETag "<version>"; 204 (no body) when
  *                                  X-Known-Version names the current version; 404
  *   PUT    /v1/vaults/:id        → 201 created (If-None-Match: *), 200 updated (If-Match: "<version>");
@@ -61,6 +61,7 @@ const TOUCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
  *   allowedOrigins?: readonly string[],
  *   minWriteIntervalMs?: number,
  *   allowCreate?: (request: Request) => boolean | Promise<boolean>,
+ *   live?: boolean,
  *   now?: () => number,
  * }} RelayOptions
  */
@@ -120,12 +121,23 @@ function versionOf(tag) {
 const etag = (version) => `"${version}"`;
 
 /**
+ * Whether a page on `origin` may use the relay: any page when `*` is allowed,
+ * otherwise only the listed origins (a request that names none is refused).
+ * The vault API answers such pages without CORS headers; live games' sockets
+ * are refused outright.
+ * @param {readonly string[]} allowed
+ * @param {string | null | undefined} origin
+ */
+export function originAllowed(allowed, origin) {
+  return allowed.includes('*') || (!!origin && allowed.includes(origin));
+}
+
+/**
  * The CORS headers for a request from `origin`. With `*` allowed, every page
  * may call the relay (it carries no cookies, so that gives nothing away);
  * otherwise only the listed origins get an answer they can read.
  */
 function corsHeaders(origin, allowed) {
-  const any = allowed.includes('*');
   const headers = {
     'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers':
@@ -133,8 +145,8 @@ function corsHeaders(origin, allowed) {
     'Access-Control-Expose-Headers': 'ETag, Retry-After',
     'Access-Control-Max-Age': '86400',
   };
-  if (any) return { ...headers, 'Access-Control-Allow-Origin': '*' };
-  if (origin && allowed.includes(origin)) {
+  if (allowed.includes('*')) return { ...headers, 'Access-Control-Allow-Origin': '*' };
+  if (originAllowed(allowed, origin)) {
     return { ...headers, 'Access-Control-Allow-Origin': origin, Vary: 'Origin' };
   }
   return { Vary: 'Origin' };
@@ -152,8 +164,11 @@ export function createRelay(options) {
     allowedOrigins = ['*'],
     minWriteIntervalMs = DEFAULT_MIN_WRITE_INTERVAL_MS,
     allowCreate,
+    live,
     now = Date.now,
   } = options;
+  /** The health check's answer: whether live games are on, when the caller says. */
+  const health = { ok: true, maxBytes, ...(live === undefined ? {} : { live }) };
 
   return async function handle(request) {
     const cors = corsHeaders(request.headers.get('Origin'), allowedOrigins);
@@ -175,9 +190,7 @@ export function createRelay(options) {
     try {
       const { pathname } = new URL(request.url);
       if (request.method === 'OPTIONS') return empty(204);
-      if (pathname === '/v1/health' && request.method === 'GET') {
-        return json(200, { ok: true, maxBytes });
-      }
+      if (pathname === '/v1/health' && request.method === 'GET') return json(200, health);
       const match = VAULT_PATH.exec(pathname);
       if (!match) return fail(404, 'Not found.');
       const id = match[1] ?? '';

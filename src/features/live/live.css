@@ -1,0 +1,458 @@
+/* Live games: the waiting room (LivePage.tsx), the game (LiveGamePage.tsx) and the bar under the
+   header (LiveBar.tsx). */
+
+/* ---------- The waiting room ---------- */
+/* Phones: posting first, then the open games, then the name. From 900px: posting and the name on
+   the left, the open games beside them. */
+.live__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'post' 'open' 'name';
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.live__post {
+  grid-area: post;
+  min-width: 0;
+}
+
+.live__open {
+  grid-area: open;
+  min-width: 0;
+}
+
+.live__name {
+  grid-area: name;
+  min-width: 0;
+}
+
+@media (min-width: 900px) {
+  .live__layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    /* The second row takes what the open games add below the posting card: the name card stays
+       right under it rather than drifting down. */
+    grid-template-rows: auto 1fr;
+    grid-template-areas: 'post open' 'name open';
+  }
+}
+
+.live__title {
+  font-size: 1.15rem;
+  margin: 0 0 var(--space-3);
+}
+
+/* A card's title with something beside it (the waiting time) or under it (the head count). */
+.card > .row--between:first-child > .live__title,
+.live__head > .live__title {
+  margin: 0;
+}
+
+.card > .row--between:first-child:has(> .live__title),
+.live__head {
+  margin-bottom: var(--space-3);
+}
+
+.live__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.live__label {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.live__aside {
+  margin: 0;
+}
+
+.live__connection {
+  min-height: 24px;
+}
+
+/* A notice or a suggestion with its button: side by side when they fit. */
+.live__notice,
+.live__nudge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* The time controls: Lichess's quick pairing grid, the clock big and its speed under it. */
+.live__tcs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+@media (min-width: 480px) {
+  .live__tcs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.live__tc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 68px;
+  min-width: 0;
+  padding: var(--space-2) var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: center;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    transform var(--transition);
+}
+
+.live__tc:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.live__tc:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.live__tc:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.live__tc-time {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.live__tc--custom .live__tc-time {
+  font-size: 1.05rem;
+}
+
+.live__tc-speed {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Waiting */
+.live__elapsed {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.live__summary {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.live__places {
+  list-style: none;
+  margin: var(--space-3) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.live__place {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.925rem;
+  overflow-wrap: anywhere;
+}
+
+.live__place-mark {
+  flex: none;
+}
+
+.live__place--done .live__place-mark {
+  color: var(--success);
+}
+
+.live__place--problem .live__place-mark {
+  color: var(--warning);
+}
+
+.live__allow {
+  margin-bottom: var(--space-3);
+}
+
+.live__actions {
+  margin-bottom: var(--space-3);
+}
+
+.live__nudge {
+  font-size: 0.925rem;
+}
+
+.live__later {
+  margin-top: var(--space-3);
+}
+
+/* The open games: who, then what, with Join beside both. */
+.live__seeks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.live__aside + .live__seeks {
+  margin-top: var(--space-2);
+}
+
+.live__seek {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'who join' 'what join';
+  align-items: center;
+  gap: 2px var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.live__seek:first-child {
+  border-top: 1px solid var(--border);
+}
+
+.live__seek-who {
+  grid-area: who;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.live__seek-name {
+  font-weight: 700;
+}
+
+.live__seek-rating {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.live__seek-what {
+  grid-area: what;
+  min-width: 0;
+}
+
+.live__seek-join {
+  grid-area: join;
+}
+
+.live__empty {
+  max-width: 40ch;
+  margin: 0 auto;
+}
+
+.live__playas {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- The game ---------- */
+.live-game__absent-title {
+  font-size: 1.35rem;
+  margin-bottom: var(--space-2);
+}
+
+.live-game__title {
+  font-size: 1.05rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.live-game__subtitle {
+  font-size: 1rem;
+  margin: 0 0 var(--space-2);
+}
+
+.live-game__status {
+  margin: var(--space-1) 0 0;
+  font-weight: 600;
+}
+
+.live-game__status--you {
+  color: var(--accent);
+}
+
+.live-game__note {
+  margin: var(--space-3) 0 0;
+}
+
+.live-game__error {
+  margin: var(--space-2) 0 0;
+  color: var(--danger);
+}
+
+.live-game__player {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A Lichess title (GM, IM…), as Lichess marks it. */
+.live-game__ptitle {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--warning);
+}
+
+.live-game__rating {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-game__player .badge {
+  align-self: center;
+}
+
+.live-game__first {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.live-game__alerts {
+  margin-top: var(--space-2);
+}
+
+.live-game__offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.live-game__left {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.live-game__left-text {
+  margin: 0;
+}
+
+.live-game__phrases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The list stays in the page while empty (a live region must be there before its first line), but
+   takes no room. */
+.live-game__chat {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 0.925rem;
+  overflow-wrap: anywhere;
+}
+
+.live-game__chat:not(:empty) {
+  margin-top: var(--space-3);
+}
+
+.live-game__chat-by {
+  font-weight: 600;
+}
+
+/* ---------- The bar under the header ---------- */
+.live-bar {
+  position: sticky;
+  top: var(--header-height);
+  /* Under the header (and its menus), over the page. */
+  z-index: 45;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.live-bar--paired {
+  background: var(--accent-soft);
+  border-bottom-color: var(--accent);
+}
+
+.live-bar--game {
+  background: var(--info-soft);
+}
+
+/* Focused controls scroll clear of the bar as well as of the header. */
+html:has(.live-bar) {
+  scroll-padding-top: calc(var(--header-height) + 56px);
+}
+
+.live-bar__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-height: 44px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.live-bar__icon {
+  color: var(--accent);
+}
+
+.live-bar__text {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.live-bar__time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.live-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+@media (forced-colors: active) {
+  .live__tc,
+  .live-bar {
+    border-color: CanvasText;
+  }
+}

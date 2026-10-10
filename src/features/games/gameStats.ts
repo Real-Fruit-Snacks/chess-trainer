@@ -6,11 +6,15 @@ import { displayOpeningName, findOpening, type Opening } from '@/lib/openings';
 
 export type GameOutcome = 'win' | 'draw' | 'loss';
 
-/** Which side the learner played, by name (case-insensitive), or null when unknown. */
+/**
+ * Which side the learner played: the side the game itself records (a live
+ * game the app played), else by name (case-insensitive); null when unknown.
+ */
 export function learnerColor(
-  game: Pick<ImportedGame, 'white' | 'black'>,
+  game: Pick<ImportedGame, 'white' | 'black' | 'side'>,
   player: string,
 ): LongColor | null {
+  if (game.side === 'white' || game.side === 'black') return game.side;
   const me = player.trim().toLowerCase();
   if (!me) return null;
   if (game.white.trim().toLowerCase() === me) return 'white';

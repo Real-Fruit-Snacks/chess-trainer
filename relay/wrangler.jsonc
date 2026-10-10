@@ -23,6 +23,31 @@
 			"17 3 * * *"
 		]
 	},
+	// Live games: the waiting room is one Durable Object, and each game another
+	// (see src/live/cloudflare.mjs). They keep their data in SQLite, the kind the
+	// free plan has, and hibernate while their sockets are quiet.
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "LIVE_LOBBY",
+				"class_name": "LiveLobby"
+			},
+			{
+				"name": "LIVE_ROOMS",
+				"class_name": "LiveRoom"
+			}
+		]
+	},
+	// The first deploy with this migration creates the two classes.
+	"migrations": [
+		{
+			"tag": "live-v1",
+			"new_sqlite_classes": [
+				"LiveLobby",
+				"LiveRoom"
+			]
+		}
+	],
 	"vars": {
 		// The app's origin: pages elsewhere cannot read the relay's answers.
 		"ALLOWED_ORIGINS": "https://real-fruit-snacks.github.io",

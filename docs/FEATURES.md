@@ -145,6 +145,54 @@ the engine rates yours as good. Filter by era, difficulty and what you have play
   solved puzzle or a moment of a reviewed game. A position the engine cannot play (the side not to move
   in check, or a game already over) is refused with a message.
 
+## Play online
+
+_Play → Play a person online_ (`/play/online`) is a waiting room for live games against people, with
+no account:
+
+- **Post a game** with a tap on a time control — 1+0, 2+1, 3+0, 3+2, 5+0, 5+3, 10+0, 10+5, 15+10,
+  30+0 or 30+20, or a custom one (1 to 180 minutes, 0 to 180 seconds a move) — and a colour (random,
+  white or black). If someone is already waiting for the same game, the two are paired at once.
+  Otherwise it is listed for everyone in the waiting room, with your name and, if you choose, your
+  puzzle rating, and anyone can join it.
+- **Join** a game from the list. The list shows how many other players are in the waiting room.
+- **Private games.** _Only people with the link_ keeps the game out of the list; _Share link_
+  opens the phone's share sheet or copies the link. Whoever opens it joins the game. The link keeps
+  working if your connection drops and comes back.
+- **Wait anywhere.** A posted game stays up while you use the rest of the app. A slim bar under the
+  header shows the waiting time, with _Cancel_ and a way back to the waiting room. When someone
+  joins, a sound plays and the bar offers _Go to the board_. In the waiting room itself, the board
+  opens at once. A game in progress elsewhere in the app gets a _Back to the board_ bar, even after
+  the app has been closed or reloaded (the phone closing it in the background, say). Closing the
+  app withdraws a post that is still waiting. After three minutes with nobody, the waiting room suggests the human-like
+  opponent meanwhile, and the post stays up.
+- **Names, not accounts.** You play under a name the app makes up from two word lists, such as
+  "Patient Bishop" (_New name_ picks another). Messages are a few set phrases (_Good luck_, _Well
+  played_, _Good game_…), so nothing anyone types ever reaches anyone else.
+- **The game.** The relay is the referee: it takes only legal moves and keeps both clocks, which
+  start with Black's first move. Each side's first move must come within 45 seconds, or the game is
+  aborted, and either side can abort before both have moved. Then you can resign, offer a draw (it
+  stands until a move is made or it is declined) or ask to take back a move (never past the first
+  moves). Mate, stalemate, a dead position, threefold repetition and the fifty-move rule end the
+  game by themselves. A flag that falls when the other side could never mate is a draw. If your
+  opponent's connection has been gone for 30 seconds, you can claim the win or a draw. Rematches
+  swap the colours. Focus mode and the move sounds work as in Play. If the connection drops, the
+  board stays playable and catches up when it is back; a move made meanwhile is sent then.
+- **No engine help.** The live board has no hints, evaluation or threats.
+- **Afterwards**, the game is in My games (_played online_), from your side, ready for the engine
+  review. Aborted games and games of fewer than two moves are not kept.
+- **Also look on Lichess.** When a Lichess account is connected, a switch posts the same game on
+  Lichess as well, rated or casual. Whoever accepts first plays you. The other post is withdrawn at
+  once, and a game that slipped through on the other side in the same moment is aborted. Lichess
+  takes only rapid and slower games from apps (the initial time plus 40 increments comes to eight
+  minutes or more), so faster games wait in the app's own room only. Private games never go to
+  Lichess.
+  A Lichess game is played on the board here with Lichess's clocks: moves, resign, abort, draws,
+  takebacks and claims, but no chat. It stays in your Lichess history, opens there from a link, and
+  joins My games with its Lichess address. The account needs Lichess's permission to play. Sign-ins
+  made before 0.26 lack it, and the waiting room offers _Allow live games on Lichess_, which signs
+  in again and comes back.
+
 ## Arcade
 
 Eleven games that are not puzzles, each with a score to beat:
@@ -506,13 +554,16 @@ sideways.
 There is no sign-up: everything you do is stored in your browser, on your device. The app talks to
 the network only when you ask it to — importing your games from Lichess or chess.com, the opening
 explorer and tablebase lookups, which are off by default, the Lichess account sync once you connect
-an account, which talks to lichess.org alone, and sync between devices once you turn it on, which
-sends the relay only data encrypted on the device. Optional
+an account, which talks to lichess.org alone, sync between devices once you turn it on, which
+sends the relay only data encrypted on the device, and live games once you open the waiting room.
+A live game goes through the relay, which referees it: the relay sees the made-up names, the
+ratings you choose to show and the moves, keeps a game until 10 minutes after it ends, and logs
+nothing. Optional
 downloads (the full engine, the human-like opponent, the whole puzzle set) come from the app's own
 site, and the human-like opponent runs on your device like the engine: no position leaves it. Backups are
 files you keep. The page's Content-Security-Policy holds the app to that: it can connect only to
 its own site, those four services (lichess.org, its explorer and tablebase, api.chess.com) and the
-sync relay, runs only its own scripts, and refuses to be shown inside another site's frame.
+sync relay (whose live games use WebSockets), runs only its own scripts, and refuses to be shown inside another site's frame.
 
 Browsers allow a site roughly 5 MB of local storage. The app caps what it keeps (300 puzzle
 attempts, 200 imported games — unreviewed ones make room first — 500 saved analyses, 300 own-game

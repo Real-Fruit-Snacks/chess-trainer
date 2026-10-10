@@ -90,6 +90,29 @@ describe('the backup validator', () => {
     expect(validateBackupFile(games)).toMatchObject({ ok: false, problem: 'damaged' });
   });
 
+  it('keeps games played online with the learner’s side, and drops a side that is not one', () => {
+    const file = clone(backupV7);
+    const games = (file as { games: { games: Record<string, Record<string, unknown>> } }).games
+      .games;
+    const base = games['pgn-fixture']!;
+    games['online-1'] = { ...base, id: 'online-1', source: 'online', side: 'black' };
+    games['online-2'] = { ...base, id: 'online-2', source: 'online', side: 'green' };
+    games.elsewhere = { ...base, id: 'elsewhere', source: 'somewhere' };
+    const result = validateBackupFile(file);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.shape.games?.games?.['online-1']).toMatchObject({
+        source: 'online',
+        side: 'black',
+      });
+      expect(result.shape.games?.games?.['online-2']).toBeUndefined();
+      expect(result.shape.games?.games?.elsewhere).toBeUndefined();
+      expect(result.shape.dropped).toBe(2);
+      // A game without a side stays as it was: the side is for games the app played itself.
+      expect(result.shape.games?.games?.['pgn-fixture']).not.toHaveProperty('side');
+    }
+  });
+
   it('imports a newer format with a warning rather than refusing it', () => {
     const future = { ...clone(backupV7), version: EXPORT_VERSION + 3 };
     (future.progress as Record<string, unknown>).fromTheFuture = [1, 2, 3];

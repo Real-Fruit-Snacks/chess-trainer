@@ -24,6 +24,7 @@ import { useColorScheme, usePieceSet } from './theme';
 import { useShortcutsDialog } from './useShortcutsDialog';
 import './shell.css';
 import { useFocus } from './focus';
+import { useLiveBar } from './liveBar';
 import { navSection } from './navSection';
 
 /**
@@ -31,6 +32,14 @@ import { navSection } from './navSection';
  * footer shows the default set's credit, the same words for most visitors, so nothing reflows.
  */
 const PieceCredit = lazy(() => import('@/components/board/PieceCredit'));
+
+/**
+ * The live-games bar, in its own chunk and loaded only once live games turn it on: start-up
+ * carries none of the feature. A chunk that cannot load leaves no bar rather than a crash page.
+ */
+const LiveBar = lazy(() =>
+  import('@/features/live/LiveBar').catch(() => ({ default: () => null })),
+);
 
 const CLASSIC_CREDIT = (
   <>
@@ -394,6 +403,7 @@ export function Shell() {
   }, [location.pathname]);
 
   const focus = useFocus((s) => s.active);
+  const liveBar = useLiveBar((s) => s.active);
 
   // Focus the page directly: following the fragment would rewrite the URL hash,
   // which carries shared positions and openings (/analyze#z=…).
@@ -445,6 +455,11 @@ export function Shell() {
           </div>
         </div>
       </header>
+      {liveBar ? (
+        <Suspense fallback={null}>
+          <LiveBar />
+        </Suspense>
+      ) : null}
 
       <main id="main" className="shell__main container" tabIndex={-1} ref={mainRef}>
         {/* A page that crashes takes only the page with it: the header and the

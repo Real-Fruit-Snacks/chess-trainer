@@ -7,6 +7,7 @@ import { siteConfig } from '../../src/site.config.ts';
 import {
   CONNECT_ORIGINS,
   fillSitePlaceholders,
+  relayOrigins,
   sitePlaceholders,
   withContentSecurityPolicy,
 } from './html.ts';
@@ -93,6 +94,35 @@ describe('Content-Security-Policy of index.html', () => {
     expect(used.size).toBe(4);
     expect(directives.get('connect-src')).toEqual(["'self'", ...CONNECT_ORIGINS]);
     expect(new Set(CONNECT_ORIGINS)).toEqual(used);
+  });
+
+  it('lets the app reach its relay, over WebSockets too for live games', () => {
+    expect(relayOrigins('https://relay.example.workers.dev/')).toEqual([
+      'https://relay.example.workers.dev',
+      'wss://relay.example.workers.dev',
+    ]);
+    expect(relayOrigins('http://localhost:8787')).toEqual([
+      'http://localhost:8787',
+      'ws://localhost:8787',
+    ]);
+    expect(relayOrigins('https://relay.example:8443/v1')).toEqual([
+      'https://relay.example:8443',
+      'wss://relay.example:8443',
+    ]);
+    expect(relayOrigins('')).toEqual([]);
+
+    // As the build adds it (vite.config.ts): the page may open sockets to the relay, and only it.
+    const html = withContentSecurityPolicy(
+      fillSitePlaceholders(read('index.html'), sitePlaceholders(siteConfig)),
+      relayOrigins(siteConfig.syncRelay),
+    );
+    const relay = new URL(siteConfig.syncRelay);
+    expect(policyOf(html).directives.get('connect-src')).toEqual([
+      "'self'",
+      ...CONNECT_ORIGINS,
+      relay.origin,
+      `wss://${relay.host}`,
+    ]);
   });
 
   it('needs a <meta charset> to follow', () => {

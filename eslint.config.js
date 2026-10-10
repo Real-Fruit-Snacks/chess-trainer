@@ -16,7 +16,7 @@ export default tseslint.config(
       'public/maia/**',
       'dev-dist/**',
       'scripts/lib/*.d.mts',
-      'relay/src/*.d.mts',
+      'relay/src/**/*.d.mts',
       '**/.wrangler/**',
     ],
   },
@@ -93,6 +93,10 @@ export default tseslint.config(
     },
     rules: {
       'no-console': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
     },
   },
   // Plain JS files can't carry type information

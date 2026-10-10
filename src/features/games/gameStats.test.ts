@@ -61,6 +61,24 @@ describe('game statistics', () => {
     expect(outcomeFor('*', 'white')).toBeNull();
   });
 
+  it('takes the side a live game records over any name', () => {
+    // A live game: the learner played under a generated name, and the game says which side.
+    const live: ImportedGame = {
+      ...game('g6', 'Patient Bishop', 'Swift Knight', '0-1', '1. f3 e5'),
+      side: 'black',
+    };
+    expect(learnerColor(live, '')).toBe('black');
+    // The side wins even when the learner's import name happens to be the other player's.
+    expect(learnerColor(live, 'Patient Bishop')).toBe('black');
+    expect(outcomeFor(live.result, learnerColor(live, 'alice')!)).toBe('win');
+    // Counted with the rest: the summary and the openings know whose game it was.
+    const summary = resultSummary([...GAMES, live], 'alice');
+    expect(summary).toEqual({ games: 5, wins: 3, draws: 1, losses: 1, unknown: 1 });
+    const stats = openingStats([live], 'alice', TABLE);
+    expect(stats.unknown).toBe(0);
+    expect(stats.black).toHaveLength(1);
+  });
+
   it('tells the learner’s side of a game on the board from its headers', () => {
     // Games against the engine call the learner "You".
     expect(learnerSideOf({ White: 'You', Black: 'Stockfish level 3' }, '')).toBe('white');

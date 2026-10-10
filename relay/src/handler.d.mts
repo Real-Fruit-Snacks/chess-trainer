@@ -36,6 +36,8 @@ export interface RelayOptions {
   minWriteIntervalMs?: number;
   /** Asked before a vault is created: false refuses it with 429 (a limit per address, say). */
   allowCreate?: (request: Request) => boolean | Promise<boolean>;
+  /** Whether live games are on: the health check says so when this is given. */
+  live?: boolean;
   now?: () => number;
 }
 
@@ -44,5 +46,10 @@ export const DEFAULT_MIN_WRITE_INTERVAL_MS: number;
 export const KEEP_UNUSED_MS: number;
 
 export function hashToken(token: string): Promise<string>;
+/** Whether a page on `origin` may use the relay (`*` allows any; otherwise it must be listed). */
+export function originAllowed(
+  allowed: readonly string[],
+  origin: string | null | undefined,
+): boolean;
 export function createRelay(options: RelayOptions): (request: Request) => Promise<Response>;
 export function expireVaults(store: VaultStore, now?: number): Promise<number>;

@@ -23,9 +23,16 @@ export const CONNECT_ORIGINS = [
   'https://tablebase.lichess.ovh',
 ] as const;
 
-/** The device-sync relay's origin, for connect-src; none when sync is off (an empty URL). */
+/**
+ * The relay's origins, for connect-src: its own (device sync's requests) and the same host over
+ * WebSockets (live games), `wss:` for an https relay and `ws:` for a plain-http one such as a
+ * local relay. Both are listed because an https source does not cover a secure WebSocket. None
+ * when the build has no relay (an empty URL).
+ */
 export function relayOrigins(relayUrl: string): string[] {
-  return relayUrl ? [new URL(relayUrl).origin] : [];
+  if (!relayUrl) return [];
+  const url = new URL(relayUrl);
+  return [url.origin, `${url.protocol === 'http:' ? 'ws:' : 'wss:'}//${url.host}`];
 }
 
 /** The parts of site.config.ts that index.html quotes. */

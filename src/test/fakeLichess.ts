@@ -24,8 +24,11 @@
  *   export of all an account's studies does not ask.
  * - Names: a study's is cleaned like a public text and cut to 100 characters,
  *   a chapter's cleaned more gently and cut to 80 (`lichessNames.ts`).
+ * - Tokens: one made by the sign-in allows exactly the scopes it asked for.
+ * - Live games (the Board API): `fakeLichessBoard.ts`, reached as `board`.
  */
 import { cutUnits, fullCleanUp, softCleanUp } from '../lib/lichess/lichessNames';
+import { FakeBoard, type FakeStream } from './fakeLichessBoard';
 
 export const FAKE_ORIGIN = 'https://lichess.org';
 
@@ -41,6 +44,19 @@ export interface FakeResponse {
   status: number;
   headers: Record<string, string>;
   body: string;
+  /** An answer that stays open: a Board API stream, when asked for with `{ streams: true }`. */
+  stream?: FakeStream;
+}
+
+/** How a client takes the stand-in's answers. */
+export interface FakeHandleOptions {
+  /**
+   * Streams stay open and receive each line as it happens (the unit tests'
+   * `fetch` stub); without this they are long polls (Playwright's routes).
+   */
+  streams?: boolean;
+  /** The client gave the request up: a long poll answers at once. */
+  signal?: AbortSignal;
 }
 
 export interface FakeChapter {
@@ -91,7 +107,8 @@ interface Failure {
   body: string;
 }
 
-const ALL_SCOPES = ['puzzle:read', 'puzzle:write', 'study:read', 'study:write'];
+/** What the app asks for: the sync's permissions, and live play's. */
+const ALL_SCOPES = ['puzzle:read', 'puzzle:write', 'study:read', 'study:write', 'board:play'];
 const studyNameOf = (name: string) => cutUnits(fullCleanUp(name), 100);
 const chapterNameOf = (name: string) => cutUnits(softCleanUp(name), 80);
 const MAX_CHAPTERS = 64;
@@ -204,7 +221,7 @@ export class FakeLichess {
   refusePgn: ((pgn: string) => string | null) | null = null;
   private readonly codes = new Map<
     string,
-    { challenge: string; redirectUri: string; clientId: string }
+    { challenge: string; redirectUri: string; clientId: string; scopes: string[] }
   >();
   private readonly failures: { match: RegExp; failure: Failure }[] = [];
   private seq = 0;
@@ -223,7 +240,22 @@ export class FakeLichess {
     return this.clock;
   }
 
-  /** A token as if the learner had approved this app (all the sync's permissions by default). */
+  /** Live games: seeks, streams and the games themselves (`fakeLichessBoard.ts`). */
+  readonly board = new FakeBoard({
+    clock: () => this.clock,
+    advanceClock: (ms) => {
+      this.clock += ms;
+    },
+    account: () => ({ id: this.userId, name: this.username, perfs: this.perfs }),
+    tokenOf: (req) => {
+      const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
+      const scopes = token ? this.tokens.get(token) : undefined;
+      return token && scopes ? { token, scopes } : null;
+    },
+    nextId: (prefix, length) => this.nextId(prefix, length),
+  });
+
+  /** A token as if the learner had approved this app (all the app's permissions by default). */
   issueToken(scopes: readonly string[] = ALL_SCOPES): string {
     const token = this.nextId('lip_', 24);
     this.tokens.set(token, [...scopes]);
@@ -314,7 +346,7 @@ export class FakeLichess {
     }
   }
 
-  async handle(req: FakeRequest): Promise<FakeResponse> {
+  async handle(req: FakeRequest, options: FakeHandleOptions = {}): Promise<FakeResponse> {
     const url = new URL(req.url);
     this.requests.push(`${req.method} ${url.pathname}${url.search}`);
     if (req.method === 'OPTIONS') {
@@ -340,14 +372,20 @@ export class FakeLichess {
       }
     }
     try {
-      return await this.route(req, url);
+      return await this.route(req, url, options);
     } catch (err) {
       if (err instanceof Answer) return err.response;
       throw err;
     }
   }
 
-  private route(req: FakeRequest, url: URL): Promise<FakeResponse> | FakeResponse {
+  private route(
+    req: FakeRequest,
+    url: URL,
+    options: FakeHandleOptions,
+  ): Promise<FakeResponse> | FakeResponse {
+    const board = this.board.route(req, url, options);
+    if (board) return board;
     const { pathname: path } = url;
     const m = req.method;
     let match: RegExpExecArray | null;
@@ -409,6 +447,7 @@ export class FakeLichess {
       challenge: p.get('code_challenge') ?? '',
       redirectUri,
       clientId: p.get('client_id') ?? '',
+      scopes: (p.get('scope') ?? '').split(' ').filter(Boolean),
     });
     const back = (params: Record<string, string>) => {
       const target = new URL(redirectUri);
@@ -447,7 +486,8 @@ export class FakeLichess {
     }
     return json({
       token_type: 'Bearer',
-      access_token: this.issueToken(),
+      // The token allows what the sign-in asked for, and nothing else.
+      access_token: this.issueToken(pending.scopes),
       expires_in: 31_536_000,
     });
   }

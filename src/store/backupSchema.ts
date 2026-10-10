@@ -503,7 +503,7 @@ export const storedGame = struct(
     speed: nullable(literal('bullet', 'blitz', 'rapid', 'classical', 'correspondence')),
     rated: nullable(boolean),
     timestamp: nullable(number),
-    source: literal('lichess', 'chesscom', 'pgn'),
+    source: literal('lichess', 'chesscom', 'pgn', 'online'),
     importedAt: number,
     review: nullable(
       struct(
@@ -517,7 +517,7 @@ export const storedGame = struct(
       ),
     ),
   },
-  { headers: record(string), startFen: string },
+  { headers: record(string), startFen: string, side: longColor },
 ) satisfies Schema<StoredGame>;
 
 /** The imported games store (see `GamesState`). */

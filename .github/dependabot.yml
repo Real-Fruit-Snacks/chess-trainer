@@ -20,6 +20,14 @@ updates:
         versions: ['>=7.0.0']
     labels: [dependencies]
 
+  # The relay's own dependencies (chess.js, for live games), installed with `npm ci --prefix relay`.
+  - package-ecosystem: npm
+    directory: /relay
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies]
+
   # Workflows pin every action to a commit SHA with its version in a comment;
   # Dependabot moves both. The composite setup action is watched too.
   - package-ecosystem: github-actions

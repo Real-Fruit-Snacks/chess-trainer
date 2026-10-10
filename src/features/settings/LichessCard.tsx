@@ -335,7 +335,7 @@ export function LichessCard() {
           </div>
           <p className="small faint" style={{ margin: 0 }}>
             {online
-              ? 'You sign in on lichess.org, which asks whether this app may read and write your puzzle activity and your studies. The permission stays on this device (never in a backup); Disconnect withdraws it.'
+              ? 'You sign in on lichess.org, which asks whether this app may read and write your puzzle activity and your studies, and play games: only the live games you start here. The permission stays on this device (never in a backup); Disconnect withdraws it.'
               : 'Connecting needs a connection: try again when this device is online.'}
           </p>
           {homeScreenApp() ? (

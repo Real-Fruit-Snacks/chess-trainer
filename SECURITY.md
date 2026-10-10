@@ -3,11 +3,12 @@
 Chess Trainer is a static, client-only application: there are no accounts, and everything you do is
 stored in your browser, on your device. The app talks to the network only when you ask it to —
 importing your games from Lichess or chess.com, the opening explorer and tablebase lookups, which are
-off by default, the Lichess account sync, and sync between devices, whose relay
-([`relay/`](relay/README.md)) stores only data encrypted on the device (see
-[Privacy and network use](docs/FEATURES.md#privacy-and-network-use)). The attack surface is therefore
-small, but not zero: the app parses user-supplied PGN/FEN, share links and imported JSON backups,
-calls those public APIs on request, opens synced vaults, and ships a service worker.
+off by default, the Lichess account sync, sync between devices, whose relay
+([`relay/`](relay/README.md)) stores only data encrypted on the device, and live games, which the
+same relay referees (see [Privacy and network use](docs/FEATURES.md#privacy-and-network-use)). The
+attack surface is therefore small, but not zero: the app parses user-supplied PGN/FEN, share links
+and imported JSON backups, calls those public APIs on request, opens synced vaults, exchanges
+messages with other players through the relay, and ships a service worker.
 
 ## Reporting a vulnerability
 
@@ -31,6 +32,9 @@ In scope:
   change, roll back or delete a learner's data unnoticed (beyond deleting a whole vault, which the
   devices report), learn the phrase, or link vaults to people; and the relay itself
   (`relay/src/`)
+- Live games: anything that lets someone take a player's seat, move or act for a player, join a
+  private game without its link, bend the rules or the clocks the relay keeps, or put anything a
+  player typed in front of another player; and the referee (`relay/src/live/`)
 
 Out of scope:
 
@@ -42,7 +46,7 @@ Out of scope:
 - **Content-Security-Policy.** Every page carries a policy (a meta tag written at build time) that
   runs only the site's own scripts and its one inline theme script, by hash; allows connections only
   to the site itself, lichess.org, explorer.lichess.ovh, tablebase.lichess.ovh, api.chess.com and
-  the sync relay named in `src/site.config.ts`; and
+  the sync relay named in `src/site.config.ts` (its WebSockets included); and
   forbids plugins, `<base>` changes and form posts elsewhere. The service worker adds
   `frame-ancestors 'none'` to the pages it serves, so the app cannot be framed by another site.
 - **Cross-origin isolation.** Unless threads are switched off in Settings, the service worker serves
@@ -56,10 +60,12 @@ Out of scope:
   it — not just this tab's storage, because an installed app on Android finishes the sign-in in a
   browser tab of its own), the answer is refused unless its state matches, and the one-time code is removed from
   the address bar before it is used. The token asks only for `puzzle:read puzzle:write study:read
-study:write`; it is kept in the profile's local storage on this device, sent only to lichess.org,
-  never written into a backup, an export or a link, and revoked on Lichess by Disconnect and by Reset
-  everything. A personal token pasted instead is checked with Lichess (it must allow those four
-  permissions) and kept the same way. Studies the sync creates are private, with chat and cloning
+study:write`, and `board:play` for live games on Lichess (optional: the sync works without it); it
+  is kept in the profile's local storage on this device, sent only to lichess.org, never written
+  into a backup, an export or a link, and revoked on Lichess by Disconnect and by Reset everything.
+  A personal token pasted instead is checked with Lichess (it must allow those four permissions)
+  and kept the same way. The token plays only games the learner started from the waiting room, and
+  the live board has no engine, as Lichess's rules require. Studies the sync creates are private, with chat and cloning
   off, and only their owner may share or export them.
 
 - **Sync between devices.** The design assumes the relay may be hostile, and keeps it from learning or
@@ -87,6 +93,25 @@ study:write`; it is kept in the profile's local storage on this device, sent onl
     data. Anyone holding the phrase holds the data, so the app tells learners to keep it to
     themselves, and to join only with a phrase from their own devices: a device that joins with
     someone else's phrase sends its data to whoever made it.
+
+- **Live games.** The relay is the referee, so it sees what it needs to referee and nothing more:
+  - **Seats.** Pairing makes two random 256-bit seat tokens and sends each player their own; the
+    game's room keeps their SHA-256 only. A socket must give a seat's token within 10 seconds, or
+    it is closed. Game ids and private games' ids are random 128-bit values.
+  - **Rules.** The room takes only legal moves (chess.js), on the mover's own turn and in order,
+    keeps both clocks itself, and ends the game by the rules; a player's client cannot move for
+    the other, stop a clock or declare a result.
+  - **No typed text.** Names must be made of the two word lists the app and the relay share, and
+    the relay refuses any other; messages are phrase ids from a fixed list. Nothing a player types
+    reaches another player. Lichess chat is not shown.
+  - **What the relay sees.** The made-up names, the ratings players choose to show, the moves, the
+    phrases sent, and, like any server, each socket's IP address (used only to allow at most 10
+    sockets from one address, and kept no longer than the socket). It keeps no logs; a game room
+    is deleted 10 minutes after its game ends, 6 hours after it was made at most, and a posted game
+    goes with its socket. Live games are not encrypted end to end: the referee has to read the moves.
+  - **Abuse.** Sockets come only from the app's origins; a message is at most 2 KB, a socket may send
+    20 every 10 seconds, the waiting room holds at most 100 games and 2,000 sockets, and one phrase
+    every 2 seconds is passed on per player.
 
 ## Supply chain
 

@@ -66,7 +66,8 @@ export type IconName =
   | 'palette'
   | 'chip'
   | 'sync'
-  | 'device';
+  | 'device'
+  | 'people';
 
 /** Path data per icon; `fill` marks icons drawn as filled shapes. */
 const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
@@ -198,6 +199,10 @@ const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
   // A phone: the device the app is installed on.
   device: {
     d: 'M8 2.5h8a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-15a2 2 0 0 1 2-2zM11 18h2',
+  },
+  // Two people, one behind the other: playing someone online.
+  people: {
+    d: 'M9 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM3.5 19.5a5.5 5.5 0 0 1 11 0M16 5.5a2.5 2.5 0 0 1 0 5M17 14a5 5 0 0 1 4 5.5',
   },
 };
 

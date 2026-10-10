@@ -13,6 +13,8 @@ import {
   ConfirmDialog,
   Dialog,
   Field,
+  Icon,
+  LinkButton,
   Select,
   Spinner,
   Switch,
@@ -29,7 +31,7 @@ import { useMaiaDownload } from '@/engine/maia/maiaDownload';
 import { HUMAN_MAX_RATING, HUMAN_RATINGS } from '@/engine/maia/ratings';
 import { TIME_CONTROLS } from '@/lib/clock';
 import { siteConfig } from '@/site.config';
-import { useSettings } from '@/store/settings';
+import { PLAY_OPPONENTS, useSettings } from '@/store/settings';
 import { useRepertoire } from '@/store/repertoire';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
 import { HumanOpponentDownload } from './HumanOpponentDownload';
@@ -94,10 +96,13 @@ export default function PlayPage() {
     return ENGINE_LEVELS.some((l) => l.id === requested) ? requested : settings.playLevel;
   });
   const [timeControlId, setTimeControlId] = useState(settings.playTimeControl);
-  // The last kind of opponent, unless a link asks for an engine level.
-  const [opponent, setOpponent] = useState<Opponent>(() =>
-    searchParams.has('level') ? 'engine' : settings.playOpponent,
-  );
+  // The last kind of opponent, unless a link asks for one (the waiting room suggests the
+  // human-like one) or for an engine level.
+  const [opponent, setOpponent] = useState<Opponent>(() => {
+    const requested = PLAY_OPPONENTS.find((o) => o === searchParams.get('opponent'));
+    if (requested) return requested;
+    return searchParams.has('level') ? 'engine' : settings.playOpponent;
+  });
   const [humanRating, setHumanRating] = useState(settings.playHumanRating);
   const lichessRatings = useLichess((s) => (s.options.rating ? s.ratings : null));
   const lichessHint = useMemo(() => maiaRatingFromLichess(lichessRatings), [lichessRatings]);
@@ -136,7 +141,8 @@ export default function PlayPage() {
       searchParams.has('fen') ||
       searchParams.has('color') ||
       searchParams.has('level') ||
-      searchParams.has('book')
+      searchParams.has('book') ||
+      searchParams.has('opponent')
     ) {
       setSearchParams({}, { replace: true });
     }
@@ -340,7 +346,20 @@ export default function PlayPage() {
   return (
     <div>
       <div className="page-header page-header--lean">
-        <h1>Play</h1>
+        {/* The way to a person: beside the title, so a phone's board keeps its room (the new
+            game's dialog says the rest). */}
+        <div className="row row--between">
+          <h1>Play</h1>
+          <LinkButton
+            to="/play/online"
+            size="sm"
+            title="Post a game in the waiting room, or join one."
+            data-testid="play-online"
+          >
+            <Icon name="people" size={18} />
+            <span>Play a person online</span>
+          </LinkButton>
+        </div>
         <p>
           Eight engine levels, from “just learned the rules” to master; a human-like opponent at any
           rating from 600 to 2600; or two players at one device. With or without a clock — take back
@@ -617,7 +636,15 @@ export default function PlayPage() {
               </Button>
             </Alert>
           ) : null}
-          <Field label="Opponent">
+          <Field
+            label="Opponent"
+            hint={
+              <>
+                Or play a person online: post a game in{' '}
+                <Link to="/play/online">the waiting room</Link>, or join one.
+              </>
+            }
+          >
             {(id) => (
               <Select
                 id={id}

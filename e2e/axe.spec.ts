@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
+import { type LiveRelay, startLiveRelay } from './live';
 
 /**
  * An automated accessibility sweep (axe-core, WCAG 2.1 A/AA) over every page —
@@ -31,6 +32,8 @@ const PAGES = [
   '/openings',
   '/openings/italian',
   '/play',
+  '/play/online',
+  '/play/online/AAAAAAAAAAAAAAAAAAAAAA',
   '/analyze',
   '/games',
   '/studies',
@@ -100,10 +103,35 @@ async function audit(page: Page, path: string) {
   }));
 }
 
+/**
+ * The waiting room's sockets go to the relay's own code in this process, with a
+ * game posted by someone else, so the list the sweep sees has a game in it.
+ */
+let relay: LiveRelay | null = null;
+test.beforeAll(async () => {
+  relay = startLiveRelay();
+  const other = relay.hub.openLobby({ send: () => undefined, close: () => undefined });
+  await other.message(
+    JSON.stringify({
+      t: 'seek',
+      tc: '10+5',
+      color: 'random',
+      name: 'Patient Bishop',
+      rating: 1500,
+      private: false,
+    }),
+  );
+});
+test.afterAll(async () => {
+  await relay?.stop();
+  relay = null;
+});
+
 for (const scheme of ['light', 'dark', 'black'] as const) {
   test.describe(`axe sweep (${scheme})`, () => {
     for (const path of PAGES) {
       test(`${path} has no WCAG A/AA violations`, async ({ page }) => {
+        if (relay) await relay.attach(page.context());
         await seed(page, scheme);
         const violations = await audit(page, path);
         expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);

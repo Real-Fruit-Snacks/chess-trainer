@@ -810,6 +810,7 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
                     ? formatDate(game.timestamp, siteConfig.locale)
                     : (formatPgnDate(game.date, siteConfig.locale) ?? 'Date unknown')}
                   {game.speed ? ` · ${game.speed}` : ''}
+                  {game.source === 'online' ? ' · played online' : ''}
                   {' · '}
                   <span data-testid="game-accuracy">
                     {accuracy ? `accuracy ${accuracy}` : 'not reviewed'}

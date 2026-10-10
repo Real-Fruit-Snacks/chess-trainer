@@ -15,6 +15,17 @@ import { codeChallenge, createCodeVerifier, randomToken } from './pkce';
 export const LICHESS_SCOPES = ['puzzle:read', 'puzzle:write', 'study:read', 'study:write'] as const;
 
 /**
+ * Playing live games on Lichess (its Board API). Optional: every new sign-in
+ * asks for it, but a sign-in without it — one made before live games, or a
+ * personal token created without it — still syncs; only live play asks to
+ * connect again.
+ */
+export const LICHESS_PLAY_SCOPE = 'board:play';
+
+/** Everything a sign-in asks Lichess for. */
+export const LICHESS_REQUESTED_SCOPES = [...LICHESS_SCOPES, LICHESS_PLAY_SCOPE] as const;
+
+/**
  * Where the flow's secrets wait while the learner is on lichess.org. Local
  * storage, not this tab's: an installed app on Android finishes the sign-in
  * in a browser tab of its own, which shares local storage with it.
@@ -28,6 +39,22 @@ export interface PendingLogin {
   state: string;
   profileId: string;
   startedAt: number;
+  /** The page of the app to go back to once connected; Settings when null. */
+  returnTo: string | null;
+}
+
+/**
+ * `value` when it is a path inside the app ("/play/online"), else null. The
+ * answer from Lichess must never lead anywhere else: not "//elsewhere.example"
+ * (another site), nor "/\elsewhere.example", which browsers read the same way.
+ */
+export function appPath(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 512) return null;
+  if (!value.startsWith('/') || value.startsWith('//')) return null;
+  if (/[\\\s]/.test(value) || [...value].some((char) => char < ' ' || char === '\u007f')) {
+    return null;
+  }
+  return value;
 }
 
 export interface LichessPerf {
@@ -91,11 +118,7 @@ function savePending(pending: PendingLogin): void {
   store.setItem(PENDING_LOGIN_KEY, JSON.stringify(pending));
 }
 
-/** Takes the pending login (once: it is removed as it is read). */
-export function takePendingLogin(now = Date.now()): PendingLogin | null {
-  const store = loginStore();
-  const raw = store?.getItem(PENDING_LOGIN_KEY) ?? null;
-  store?.removeItem(PENDING_LOGIN_KEY);
+function readPending(raw: string | null, now: number): PendingLogin | null {
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Partial<PendingLogin>;
@@ -108,10 +131,34 @@ export function takePendingLogin(now = Date.now()): PendingLogin | null {
     ) {
       return null;
     }
-    return value as PendingLogin;
+    return {
+      verifier: value.verifier,
+      state: value.state,
+      profileId: value.profileId,
+      startedAt: value.startedAt,
+      // A login saved before return paths existed has none; an odd one is ignored.
+      returnTo: appPath(value.returnTo),
+    };
   } catch {
     return null;
   }
+}
+
+/** Takes the pending login (once: it is removed as it is read). */
+export function takePendingLogin(now = Date.now()): PendingLogin | null {
+  const store = loginStore();
+  const raw = store?.getItem(PENDING_LOGIN_KEY) ?? null;
+  store?.removeItem(PENDING_LOGIN_KEY);
+  return readPending(raw, now);
+}
+
+/**
+ * Where the pending login means to go back to (null: Settings), without
+ * taking it: the page Lichess sends the learner back to offers that way back
+ * even when the connection fails.
+ */
+export function pendingReturnTo(now = Date.now()): string | null {
+  return readPending(loginStore()?.getItem(PENDING_LOGIN_KEY) ?? null, now)?.returnTo ?? null;
 }
 
 /** The authorization address for a login (exported for the tests). */
@@ -123,22 +170,40 @@ export async function authorizationUrl(pending: Pick<PendingLogin, 'verifier' | 
     redirect_uri: lichessRedirectUri(),
     code_challenge_method: 'S256',
     code_challenge: await codeChallenge(pending.verifier),
-    scope: LICHESS_SCOPES.join(' '),
+    scope: LICHESS_REQUESTED_SCOPES.join(' '),
     state: pending.state,
   }).toString();
   return url.href;
 }
 
-/** Starts a login: remembers the secrets for this tab and goes to lichess.org. */
+export interface BeginLoginOptions {
+  /**
+   * The page of the app to come back to once connected ("/play/online");
+   * Settings when absent. Anything but a path inside the app is ignored.
+   */
+  returnTo?: string | null;
+  /** Goes to lichess.org (the tests catch the address instead). */
+  navigate?: (url: string) => void;
+  now?: number;
+}
+
+/**
+ * Starts a login: remembers the secrets for this tab and goes to lichess.org.
+ * Takes the options, or (as before them) the navigation and the time.
+ */
 export async function beginLichessLogin(
-  navigate: (url: string) => void = (url) => location.assign(url),
+  navigateOrOptions: ((url: string) => void) | BeginLoginOptions = {},
   now = Date.now(),
 ): Promise<void> {
+  const options: BeginLoginOptions =
+    typeof navigateOrOptions === 'function' ? { navigate: navigateOrOptions } : navigateOrOptions;
+  const navigate = options.navigate ?? ((url: string) => location.assign(url));
   const pending: PendingLogin = {
     verifier: createCodeVerifier(),
     state: randomToken(24),
     profileId: ACTIVE_PROFILE_ID,
-    startedAt: now,
+    startedAt: options.now ?? now,
+    returnTo: appPath(options.returnTo),
   };
   savePending(pending);
   navigate(await authorizationUrl(pending));
@@ -186,6 +251,12 @@ export async function fetchAccount(
   return { id: account.id, username: account.username, ratings: ratingsFrom(account, now) };
 }
 
+/** A finished login: the account, and where in the app the learner was going. */
+export interface FinishedLogin extends ConnectedAccount {
+  /** The page to go back to (null: Settings). */
+  returnTo: string | null;
+}
+
 /**
  * Finishes a login on the page Lichess sent the learner back to: checks the
  * answer against what this tab started, trades the code for a token and asks
@@ -194,7 +265,7 @@ export async function fetchAccount(
 export async function finishLichessLogin(
   params: URLSearchParams,
   now = Date.now(),
-): Promise<ConnectedAccount> {
+): Promise<FinishedLogin> {
   const pending = takePendingLogin(now);
   const error = params.get('error');
   if (error) {
@@ -245,13 +316,17 @@ export async function finishLichessLogin(
     ...account,
     token,
     expiresAt: expiresIn !== null ? now + expiresIn * 1000 : null,
+    returnTo: pending.returnTo,
   };
 }
 
-/** Lichess's page for a personal token, the sync's permissions ticked. */
+/**
+ * Lichess's page for a personal token, the app's permissions ticked: the
+ * sync's, and live play's (which the learner may untick).
+ */
 export function personalTokenUrl(): string {
   const url = new URL('/account/oauth/token/create', LICHESS_ORIGIN);
-  for (const scope of LICHESS_SCOPES) url.searchParams.append('scopes[]', scope);
+  for (const scope of LICHESS_REQUESTED_SCOPES) url.searchParams.append('scopes[]', scope);
   url.searchParams.set('description', `Chess Trainer (${location.host})`);
   return url.href;
 }
@@ -275,7 +350,8 @@ export async function testToken(
 /**
  * Connects with a personal token pasted from Lichess (the way in for a
  * window that cannot finish the sign-in itself): checks that Lichess knows
- * it and that it allows everything the sync does.
+ * it and that it allows everything the sync does. Live play's permission is
+ * not required: without it, live games on Lichess ask to connect again.
  */
 export async function connectWithToken(raw: string, now = Date.now()): Promise<ConnectedAccount> {
   const token = raw.trim();

@@ -6,6 +6,46 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-10
+
+Play online: a waiting room for live games against people, refereed by the app's own relay, and
+on Lichess at the same time if you like.
+
+### Added
+
+- **Play online** (_Play → Play a person online_). Post a game with a tap on a time control (1+0 to
+  30+20, or your own) and a colour, or join one from the list. Posting a game someone is already
+  waiting for pairs you at once. There is no account: you play under a made-up name, such as
+  "Patient Bishop", and can show your puzzle rating beside it.
+- **Wait anywhere.** A posted game stays up while you use the rest of the app. A bar under the
+  header shows the wait, and when someone joins, a sound plays and the bar takes you to the board.
+  After three minutes with nobody, the waiting room suggests the human-like opponent meanwhile. A
+  game in progress keeps a bar that leads back to it, even after the app has been closed or
+  reloaded.
+- **Private games** that only people with the link can join (the share sheet, or a copied link).
+- **Live games refereed by the relay.** It takes only legal moves and keeps both clocks. Each first
+  move has 45 seconds. You can abort before both sides have moved, resign, offer a draw, ask to take
+  back a move, and claim the game when your opponent has been gone for 30 seconds. Mate,
+  stalemate, a dead position, repetition and the fifty-move rule end the game by themselves.
+  Rematches swap the colours. Players send set phrases instead of typing, and there is no engine
+  help. Finished games go to My games, from your side, ready for the review.
+- **Also look on Lichess** (when signed in). The same game is posted on Lichess too, rated or
+  casual, for rapid and slower time controls. Whoever accepts first plays you, and the other post
+  is withdrawn. A Lichess game is played on the board here with Lichess's clocks, and is kept in My
+  games with its Lichess address.
+- The relay runs live games as two Durable Objects on Cloudflare's free plan, or in memory on the
+  Node server, with chess.js as the referee.
+
+### Changed
+
+- New Lichess sign-ins ask for permission to play (`board:play`). An older sign-in gets _Allow live
+  games on Lichess_ in the waiting room, which signs in again and comes back there. The account
+  sync needs nothing new.
+- The page's security policy allows WebSockets to the relay.
+- My games marks games played online and keeps the side you played.
+- Deploying the relay installs its one dependency first: `npm run relay:deploy` runs
+  `npm ci --prefix relay` before Wrangler.
+
 ## [0.25.0] - 2026-10-10
 
 Lessons with a coach: every lesson now talks you through the position, says why each move works,

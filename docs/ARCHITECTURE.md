@@ -28,6 +28,8 @@ This document explains the moving parts and the reasoning behind them.
 │  │                      analysis library (LibraryDialog)             │
 │  ├─ features/games      my games: import · stats · deviations ───────┤   (UCI)          Stockfish
 │  │                      insights (phases · motifs · work-on list)    │
+│  ├─ features/live       waiting room · live games: relay rooms and   │
+│  │                      Lichess Board API (no engine) ── the relay   │
 │  ├─ features/arcade     eleven games: useHandAndBrain · useFortress ─┤
 │  │                      useSimul (one engine, a queue of boards)     │
 │  │                      odds · army · dailyOpening · engineSays      │
@@ -60,8 +62,11 @@ This document explains the moving parts and the reasoning behind them.
 │  index.html, 404.html, assets       │   │  Cloudflare Worker + D1, or  │
 │  engine/*.wasm, puzzles/*.json,     │   │  Node + SQLite: one sealed   │
 │  openings/openings.json,            │   │  vault per recovery phrase,  │
-│  boards/ (the board pictures)       │   │  versioned by ETag           │
-│  maia/ (the human-like opponent,    │   └──────────────────────────────┘
+│  boards/ (the board pictures)       │   │  versioned by ETag; live     │
+│  maia/ (the human-like opponent,    │   │  games: a waiting room and a │
+│                                     │   │  room per game (Durable      │
+│                                     │   │  Objects, or in memory)      │
+│                                     │   └──────────────────────────────┘
 │  downloaded on request)             │
 └─────────────────────────────────────┘
 ```
@@ -884,6 +889,64 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
   `e2e/release-0-21-sync.spec.ts` joins two and three browsers through the same relay code, and
   `e2e/release-0-24-sync.spec.ts` syncs the settings and switches a part off and on again.
 
+## Live games (`src/features/live/`, `relay/src/live/`)
+
+Two people play each other through the relay, which referees; a post can go to Lichess at the same
+time, through its Board API.
+
+- **The relay's rules are platform-free** (`relay/src/live/`). `shared.mjs` holds what the relay and
+  the app agree on — the time controls, the two word lists names are made from, the phrases, the
+  limits, the close codes — and the app imports it, so the two never disagree. `rules.mjs` wraps
+  chess.js: UCI moves, the endings that need no claim, and who could still mate when a flag falls
+  (lila's rule). `lobby.mjs` is the waiting room: one seek per socket, living as long as the
+  socket; a public seek that matches one already waiting (the same time control, colours that fit)
+  is paired with the oldest at once; any seek can be joined by its id. Pairing makes the room with
+  the hashes of two new seat tokens and sends each player their own. `room.mjs` is one game: seats
+  taken only with a token, legal moves only on the mover's turn, the clocks kept by the room (they
+  start with Black's first move; each side's first move has 45 seconds), offers that lapse with a
+  move, takebacks of one move or two (never past the first moves), claims against a player gone 30
+  seconds, rematches with the colours swapped. Times go out as durations, never the relay's clock.
+  Events run one at a time; every change is stored, and the room's next deadline (a flag, a first
+  move, a socket's hello, its own end) is its one timer.
+- **Two platforms.** On Cloudflare (`cloudflare.mjs`) the waiting room is one Durable Object and
+  each game another, SQLite-backed (the free plan's kind), with the WebSocket Hibernation API: a
+  socket's own data is its attachment, a game is the room's stored state, the deadline its alarm,
+  and the runtime answers `ping` without waking the object. The waiting room makes a room by
+  POSTing its spec to the room's object on an internal address the Worker never forwards to;
+  `worker.mjs` passes on only WebSocket upgrades of `/v1/lobby` and `/v1/games/:id`, from the
+  app's origins. On Node (`hub.mjs` over `websocket.mjs`, a dependency-free RFC 6455 server) the
+  same cores run in memory. chess.js is the relay's one dependency (`relay/package.json`).
+- **The app's side.** `socket.ts` is a WebSocket that reconnects (1, 2, 4, 8, 15 seconds, at once
+  when the device comes back online or into view) and pings every 25 seconds. `lobby.ts` keeps the
+  waiting room connected while the page shows, a game is posted or one is being joined, and lets
+  go two seconds after nothing needs it. A post keeps its id across reconnections, so a shared link
+  stays good. With _Also look on Lichess_ it runs a Lichess seek beside it: the first pairing wins,
+  the other post is withdrawn, and a game that slipped through on the other side is aborted.
+  `sessions.ts` keeps one connection per game, shared by the page and the bar; it outlives the page
+  while the game is on (the bar leads back) and closes a minute after a finished game is left.
+  `relayGame.ts` plays a move on the board at once and sends it; the room's echo confirms it, and a
+  refusal comes with the whole game, which puts the board right. Seat tokens are kept per profile
+  (`seats.ts`), a day at most. `record.ts` keeps a finished game in My games with the learner's
+  side (`StoredGame.side`), so the review needs no player name.
+- **Lichess** (`lichessStream.ts`, `lichessSeek.ts`, `lichessGame.ts`). Streams go straight to
+  lichess.org, outside the account sync's one-request-at-a-time queue, read as ndjson and given up
+  after 30 seconds of silence. The seek opens the event stream first (games already in progress
+  are noted, not taken), then posts the seek and keeps its answer open (closing it withdraws the
+  seek); a seek that ends without a game is posted again, within Lichess's limits. A game is its
+  stream (`gameFull`, then `gameState`, `opponentGone`); its endings map onto the app's, and a draw
+  Lichess does not explain is told apart from the final position. The `board:play` permission is
+  optional: new sign-ins ask for it, and a sign-in without it is offered a reconnection that comes
+  back to the waiting room (`PendingLogin.returnTo`).
+- **The shell** loads the bar (`LiveBar.tsx`) only once `app/liveBar.ts` says there is something to
+  show, so start-up code carries none of the feature.
+- **Tests.** `relay/live.test.ts` runs the cores on a clock the test moves; `relay/live-transport.test.ts`
+  runs the WebSocket server, the Node relay end to end and the Durable Object classes against
+  stand-ins. The app's unit tests use
+  the real cores behind a stand-in `WebSocket` (`src/test/fakeLiveHub.ts`) and a Board API stand-in
+  that streams or long-polls (`src/test/fakeLichessBoard.ts`). `e2e/release-0-26-live.spec.ts`
+  plays whole games between two browser contexts through Playwright's WebSocket routes over the
+  same cores, and a Lichess game through the stand-in.
+
 ## Accessibility
 
 - Every `Board` derives a plain-language description of the last move from consecutive positions
@@ -1025,4 +1088,5 @@ warning gives way to a confirmation.
 
 - Accounts. Sync between devices needs none, and its relay holds only sealed vaults it cannot read;
   backups and the Lichess account sync remain the other ways to move data.
-- Human vs human over the network — needs a relay; two people at one device can play on the Play page.
+- Rated games among the app's own players: without accounts a rating could be faked and a ban
+  dodged. Live games are casual; rated ones are played on Lichess, through the same waiting room.

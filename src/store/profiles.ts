@@ -26,6 +26,10 @@ export const PROFILE_SCOPED_KEYS = [
   'chess-trainer:lichess',
   'chess-trainer:device-sync',
   'chess-trainer:device-sync-base',
+  // Live games: the name played under and the switches, and the seats in games under way.
+  'chess-trainer:live',
+  'chess-trainer:live-seats',
+  'chess-trainer:live-lichess',
 ] as const;
 
 export interface StoredProfiles {

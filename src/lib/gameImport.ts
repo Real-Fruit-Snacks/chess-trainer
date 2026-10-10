@@ -30,6 +30,11 @@ export interface ImportedGame {
   startFen?: string;
   /** Start (or end) time in ms since the epoch, when known; used for paging. */
   timestamp: number | null;
+  /**
+   * The learner's side, for a game the app played itself (a live game): known
+   * for certain, where imported games are matched by the player's name.
+   */
+  side?: 'white' | 'black';
 }
 
 export type GameSpeed = 'bullet' | 'blitz' | 'rapid' | 'classical' | 'correspondence';

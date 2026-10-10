@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ImportedGame } from '@/lib/gameImport';
-import { gameKey, MAX_STORED_GAMES, sortedGames, useGames } from './games';
+import { gameKey, MAX_STORED_GAMES, repairGames, sortedGames, useGames } from './games';
 
 const make = (n: number, url: string | null = null): ImportedGame => ({
   id: `g${n}`,
@@ -74,6 +74,21 @@ describe('games store', () => {
     expect(useGames.getState().player).toBe('you');
     useGames.getState().clear();
     expect(useGames.getState()).toMatchObject({ games: {}, player: '' });
+  });
+
+  it('keeps a live game’s source and the learner’s side, through a reload too', () => {
+    const live: ImportedGame = { ...make(7), side: 'black' };
+    expect(useGames.getState().addGames([live], 'online')).toEqual({ added: 1, dropped: 0 });
+    const id = gameKey(live);
+    expect(useGames.getState().games[id]).toMatchObject({ source: 'online', side: 'black' });
+    // What a reload reads back: the stored blob is checked game by game.
+    const saved = JSON.parse(
+      JSON.stringify({ games: useGames.getState().games, player: '' }),
+    ) as unknown;
+    expect(repairGames(saved).games[id]).toMatchObject({ source: 'online', side: 'black' });
+    // A side that is not one makes the entry unusable, as any damaged field does.
+    (saved as { games: Record<string, { side: string }> }).games[id]!.side = 'green';
+    expect(repairGames(saved).games[id]).toBeUndefined();
   });
 
   it('stores reviews and the player name', () => {

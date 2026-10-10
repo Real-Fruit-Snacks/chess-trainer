@@ -135,7 +135,9 @@ test('connects through lichess.org, syncs at once, and disconnects', async ({ pa
   // lichess.org asks; the learner approves.
   await expect(page).toHaveURL(/^https:\/\/lichess\.org\/oauth\?/);
   const asked = new URL(page.url());
-  expect(asked.searchParams.get('scope')).toBe('puzzle:read puzzle:write study:read study:write');
+  expect(asked.searchParams.get('scope')).toBe(
+    'puzzle:read puzzle:write study:read study:write board:play',
+  );
   expect(asked.searchParams.get('code_challenge_method')).toBe('S256');
   await page.locator('#approve').click();
 

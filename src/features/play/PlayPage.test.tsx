@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as SoundModule from '@/lib/sound';
 import { useProgress } from '@/store/progress';
@@ -420,6 +420,46 @@ describe('PlayPage', () => {
     expect(screen.queryByTestId('human-failed')).toBeNull();
     // The model was fine: Retry asks it for the move again without loading it again.
     expect(maiaWorker.loads).toBe(1);
+  });
+
+  it('leads to the waiting room, from the title and from the new game’s dialog', () => {
+    renderPlay('/play');
+    expect(screen.getByRole('link', { name: 'Play a person online' })).toHaveAttribute(
+      'href',
+      '/play/online',
+    );
+    const setup = openDialog('New game')!;
+    expect(within(setup).getByRole('link', { name: 'the waiting room' })).toHaveAttribute(
+      'href',
+      '/play/online',
+    );
+    expect(within(setup).getByLabelText('Opponent')).toHaveAccessibleDescription(
+      'Or play a person online: post a game in the waiting room, or join one.',
+    );
+  });
+
+  it('offers the human-like opponent when the waiting room suggests it, and clears the link', () => {
+    function Where() {
+      const location = useLocation();
+      return <p data-testid="location">{`${location.pathname}${location.search}`}</p>;
+    }
+    render(
+      <MemoryRouter initialEntries={['/play?opponent=humanlike']}>
+        <Routes>
+          <Route
+            path="/play"
+            element={
+              <>
+                <PlayPage />
+                <Where />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(within(openDialog('New game')!).getByLabelText('Opponent')).toHaveValue('humanlike');
+    expect(screen.getByTestId('location').textContent).toBe('/play');
   });
 
   it('says the engine stopped responding when the worker died mid-game, with Retry', () => {

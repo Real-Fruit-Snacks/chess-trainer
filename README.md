@@ -73,6 +73,12 @@ that pauses on a mistake and explains it, a blunder check that asks "checks, cap
 before a move that hangs material, blindfold play, two players at one device, and a start from any
 position.
 
+**Play online** — a waiting room for live games against people, with no account: post a game at a
+tap and carry on with anything else in the app until someone joins, join one from the list, or send
+a friend a private link. The relay referees, keeping both clocks; you play under a made-up name, and
+messages are a few set phrases, so nothing a stranger types ever reaches you. Signed in to Lichess,
+the same post looks for an opponent there too, rated if you like, and the game is played here.
+
 **Analyze** — multi-line analysis by a multi-threaded Stockfish (with its full network as an optional
 99 MB download), a full variation tree, a position report, game review with an evaluation graph and
 key moments explained in words — or analyse the game yourself first and let the review score what
@@ -155,9 +161,10 @@ to **GitHub Actions**, and push to `main`. Once CI has passed, the deploy workfl
 with the right base path and deploys it; a version tag publishes a GitHub release. Custom domains
 and other static hosts are covered in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-Sync between devices goes through a tiny relay of your own: a Cloudflare Worker on the free plan, or
-a plain Node server. [relay/README.md](relay/README.md) shows how to deploy it and what it can and
-cannot see. Setting `syncRelay` to `''` in `src/site.config.ts` leaves sync out.
+Sync between devices and live games go through a tiny relay of your own: a Cloudflare Worker with
+D1 and Durable Objects on the free plan, or a plain Node server. [relay/README.md](relay/README.md)
+shows how to deploy it and what it can and cannot see. Setting `syncRelay` to `''` in
+`src/site.config.ts` leaves both out.
 
 ## Built with
 
@@ -168,7 +175,7 @@ cannot see. Setting `syncRelay` to `''` in `src/site.config.ts` leaves sync out.
 | Human-like play | [Maia-3](https://huggingface.co/UofTCSSLab/Maia3-5M) run by [ONNX Runtime Web](https://onnxruntime.ai) in a worker |
 | Board and chess | [Chessground](https://github.com/lichess-org/chessground), [chess.js](https://github.com/jhlywa/chess.js)          |
 | Data            | [Lichess](https://lichess.org) puzzle database and the chess-openings dataset (both CC0)                           |
-| Sync            | Web Crypto (HKDF, AES-GCM) on the device; a relay on Cloudflare Workers and D1, or Node and SQLite                 |
+| Sync and live   | Web Crypto (HKDF, AES-GCM) on the device; a relay on Cloudflare Workers, D1 and Durable Objects, or Node           |
 
 Any evergreen browser with WebAssembly and Web Workers works: Chrome and Edge 111+, Firefox 121+,
 Safari 16.4+ (iOS 16.4+); the test suite runs on Chromium, Firefox and WebKit. The interface is in

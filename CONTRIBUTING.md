@@ -87,8 +87,8 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
 | `npm run readme:screenshots` | Re-render the README's pictures in `docs/screenshots/` (the hero and six screens, WebP) from a running preview (`npm run build && npm run preview` first); seeded, so only a change in the app changes them (the game review's engine analysis aside).                   |
 | `npm run pieces:generate`    | Rebuild the piece-set stylesheets (`src/components/board/pieces/<set>.css`) from the sets' SVGs beside them (sources and licences in `pieces/README.md`).                                                                                                                |
 | `npm run boards:thumbs`      | Re-render the 128-pixel board previews in `public/boards/thumbs/` from the board pictures beside them (Lichess's, AGPL-3.0; see THIRD_PARTY_NOTICES.md), with Playwright's Chromium.                                                                                     |
-| `npm run relay:dev`          | Run the device-sync relay on <http://localhost:8787> with nothing kept (`relay/src/server.mjs --db :memory:`); point `syncRelay` in `src/site.config.ts` at it to try sync locally.                                                                                      |
-| `npm run relay:deploy`       | Deploy the relay to Cloudflare Workers with Wrangler 4 (`relay/wrangler.jsonc`; the first deploy makes its D1 database). See `relay/README.md`.                                                                                                                          |
+| `npm run relay:dev`          | Run the relay on <http://localhost:8787> with nothing kept (`relay/src/server.mjs --db :memory:`): device sync and live games; point `syncRelay` in `src/site.config.ts` at it to try them locally.                                                                      |
+| `npm run relay:deploy`       | Install the relay's one dependency (`npm ci --prefix relay`) and deploy it to Cloudflare Workers with Wrangler 4 (`relay/wrangler.jsonc`; the first deploy makes its D1 database, and the `live-v1` migration its Durable Objects). See `relay/README.md`.               |
 
 ## Project layout
 
@@ -99,17 +99,20 @@ src/
   engine/       UCI worker client, strength levels, engine build choice; maia/: the human-like opponent
   components/   board wrapper, chess widgets, generic UI primitives
   features/     one folder per area: home, placement, learn, puzzles, drills, patterns, studies,
-                openings, classics, play, analyze, games, arcade, progress, reference, settings, lab
+                openings, classics, play, live, analyze, games, arcade, progress, reference, settings,
+                lab
   store/        persisted settings, progress, repertoires, games, analyses and profiles (zustand)
   lib/          rating maths, scheduling, imports, backups, share links, sound, dates;
                 lichess/: the Lichess account sync; sync/: sync between devices (phrase, crypto, merge)
-  test/         test set-up, the stand-in lichess.org and the relay the syncs' tests talk to
+  test/         test set-up, the stand-ins (lichess.org with its Board API, the relay's vaults and
+                live games) the tests talk to
   sw/, sw.ts    the service worker and the helpers it shares with the page
 scripts/        engine and model downloads, content checks, puzzle and opening imports, build steps, CI helpers
 public/         static assets: engine and maia (downloaded), puzzles, openings and board pictures
                 (committed), icons
 e2e/            Playwright end-to-end tests and the accessibility sweep
-relay/          the device-sync relay: a Cloudflare Worker (or Node server) keeping sealed vaults
+relay/          the relay: a Cloudflare Worker (or Node server) keeping sealed vaults, and refereeing
+                live games (relay/src/live/, platform-free, with Durable Objects on Cloudflare)
 docs/           feature reference, architecture, content and deployment guides
 ```
 
@@ -154,6 +157,11 @@ precache outgrows its budget.
   Locks (`fakeCaches.ts`, `fakeLocks.ts`) and for another device (`syncDevices.ts`). A change to
   how the sync keeps or agrees its base needs a case in `src/lib/sync/integrity.test.ts` or
   `restart.test.ts`: nothing may be counted twice, or taken for deleted, at any step.
+- Live games are tested against the relay's own rules: `relay/live.test.ts` runs them on a clock
+  the test moves, the app's tests run them behind a stand-in `WebSocket` (`src/test/fakeLiveHub.ts`),
+  and the end-to-end tests behind Playwright's WebSocket routes (`e2e/live.ts`), two browser
+  contexts playing each other. A change to the protocol goes into `relay/src/live/shared.mjs` or
+  the cores first, with a test there, and `relay/README.md` lists the messages.
 - Accessibility matters: every interactive element is keyboard reachable, status changes are announced
   through `role="status"`, and the layout works from 320 px wide upwards.
 - Follow the existing style — Prettier and ESLint enforce most of it (`npm run lint:fix`, `npm run format`).

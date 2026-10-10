@@ -9,6 +9,8 @@ const LearnPage = lazy(() => import('@/features/learn/LearnPage'));
 const LessonPage = lazy(() => import('@/features/learn/LessonPage'));
 const PuzzlesPage = lazy(() => import('@/features/puzzles/PuzzlesPage'));
 const PlayPage = lazy(() => import('@/features/play/PlayPage'));
+const LivePage = lazy(() => import('@/features/live/LivePage'));
+const LiveGamePage = lazy(() => import('@/features/live/LiveGamePage'));
 const AnalyzePage = lazy(() => import('@/features/analyze/AnalyzePage'));
 const ProgressPage = lazy(() => import('@/features/progress/ProgressPage'));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
@@ -63,6 +65,9 @@ export const routes: RouteObject[] = [
       { path: 'puzzles', element: <PuzzlesPage /> },
       { path: 'puzzles/:mode', element: <PuzzlesPage /> },
       { path: 'play', element: <PlayPage /> },
+      { path: 'play/online', element: <LivePage /> },
+      { path: 'play/online/:gameId', element: <LiveGamePage source="relay" /> },
+      { path: 'play/online/lichess/:gameId', element: <LiveGamePage source="lichess" /> },
       { path: 'analyze', element: <AnalyzePage /> },
       { path: 'drills', element: <DrillsPage /> },
       { path: 'drills/coordinates', element: <CoordinatesDrill /> },
