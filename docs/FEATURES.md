@@ -552,6 +552,13 @@ notifications, window-controls overlay on desktop, a **badge with due reviews**
 on the app icon, **haptic feedback** on phones, and layouts for notches, small phones and phones held
 sideways.
 
+**An offline copy** comes with every release: `chess-trainer-<version>-offline.zip`, the whole app —
+every lesson and puzzle, the full engine and the human-like opponent — with a small launcher for
+Windows, macOS and Linux. Unzip it and double-click _Start Chess Trainer_: it serves the app on the
+computer itself, at `http://localhost:8064/`, and opens it in the browser, with no internet connection
+and nothing to install. The address never changes, so a later copy finds the same progress; sync
+and live games work from it whenever the computer is online.
+
 ## Privacy and network use
 
 There is no sign-up: everything you do is stored in your browser, on your device. The app talks to
@@ -563,7 +570,7 @@ A live game goes through the relay, which referees it: the relay sees the made-u
 ratings you choose to show and the moves, keeps a game until 10 minutes after it ends, and logs
 nothing. Optional
 downloads (the full engine, the human-like opponent, the whole puzzle set) come from the app's own
-site, and the human-like opponent runs on your device like the engine: no position leaves it. Backups are
+site (in the offline copy, from its own folder), and the human-like opponent runs on your device like the engine: no position leaves it. Backups are
 files you keep. The page's Content-Security-Policy holds the app to that: it can connect only to
 its own site, those four services (lichess.org, its explorer and tablebase, api.chess.com) and the
 sync relay (whose live games use WebSockets), runs only its own scripts, and refuses to be shown inside another site's frame.

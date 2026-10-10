@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-10
+
+An offline copy with every release: the whole app in one download, started with a double-click, with
+no internet connection and nothing to install.
+
+### Added
+
+- **The offline copy.** Every GitHub release has `chess-trainer-<version>-offline.zip` (about 190 MB),
+  with its checksum in `SHA256SUMS.txt`. It holds the whole app: every lesson and puzzle, the full
+  engine and the human-like opponent. Unzip it and start it with _Start Chess Trainer.exe_ on Windows,
+  _Start Chess Trainer.command_ on macOS (Apple silicon and Intel) or `start-chess-trainer.sh` on
+  Linux (x64 and Arm64). A small launcher then serves the app on the computer and opens it in the
+  browser at `http://localhost:8064/`. Nothing else can reach the launcher, and the app is isolated
+  from the first visit, so the multi-threaded engine runs at once. The README inside says what to
+  click the first time Windows or macOS asks about an app from the internet.
+- **Progress carries over between copies.** The address stays the same, so a newer copy finds the
+  same progress and settings, and an old one can be deleted. If another program holds the port, the
+  launcher takes the next free one and says so. Starting it a second time opens the copy that is
+  already running.
+- **Sync and live games work from the copy** whenever the computer is online. The relay now also
+  accepts `http://localhost:8064`.
+- **The Release workflow** builds the copy from the tag. It unzips the copy and tries it in Chromium
+  through its own launcher, and only then publishes the release with the zip attached. A failed
+  release can be published again from the Actions tab. CI tries the copy on every change too, after
+  the launcher's own Go checks on Linux, Windows and macOS. To build it by hand:
+  `npm run release:offline` (Go 1.24 or newer), then `npm run e2e:offline`.
+
+### Changed
+
+- The release notes say what the offline copy is and where to find it.
+
 ## [0.26.1] - 2026-10-10
 
 Lessons at your own pace: the coach's words stay up until you have read them.

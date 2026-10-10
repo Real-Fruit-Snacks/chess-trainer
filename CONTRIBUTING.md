@@ -40,7 +40,10 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
     browser projects (desktop and phone Chromium, Firefox, WebKit), the visual snapshots and the
     Lighthouse audit;
   - a second build under the production base path (`/chess-trainer/`), served the way GitHub Pages
-    serves it (`npm run preview:pages`), with a smoke test, a deep link and the 404 fallback.
+    serves it (`npm run preview:pages`), with a smoke test, a deep link and the 404 fallback;
+  - the offline copy: the launcher's `gofmt` check, `go vet` and tests on Linux, Windows and macOS,
+    then the copy packaged from the build (`npm run release:offline`), unzipped and tried in
+    Chromium with its own launcher (`npm run e2e:offline`).
 
   A pull request that changes only documentation (Markdown, `docs/`, the issue and PR templates)
   skips the builds, the browsers and the audits. Pull requests and pushes allow two retries per
@@ -52,6 +55,9 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
   request or push touches the lessons, studies, repertoires, endgame drills or the checks
   themselves, every Monday, and on demand.
 - **Deploy** runs only after CI has passed on `main`, and builds exactly the commit CI tested.
+- **Release** runs on a version tag: it builds the offline copy from the tag, tries it as CI does,
+  and publishes the GitHub release with the copy attached (see
+  [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#releases)).
 
 ### Scripts
 
@@ -66,6 +72,8 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
 | `npm run bundle:check`       | Fail when a gzipped chunk, the start-up code or the service-worker precache outgrows its budget (runs in `check` and CI).                                                                                                                                                |
 | `npm run lighthouse`         | Lighthouse audit of five pages against a running preview (`npm run preview` first); fails on regressions.                                                                                                                                                                |
 | `npm run e2e:visual`         | Pixel snapshots of the static pages; add `-- --update-snapshots` after a deliberate design change.                                                                                                                                                                       |
+| `npm run release:offline`    | Package the offline copy a release attaches from `dist/` (a build for the root of a site): the app, the launchers for Windows, macOS and Linux (built with Go 1.24 or newer), a README, as `release/chess-trainer-<version>-offline.zip` with `SHA256SUMS.txt`.          |
+| `npm run e2e:offline`        | Start the unpacked offline copy in `release/` with its own launcher and try it in Chromium (`OFFLINE_BUNDLE` names another unpacked copy).                                                                                                                               |
 | `npm run preview`            | Serve the production build locally.                                                                                                                                                                                                                                      |
 | `npm run preview:pages`      | Serve `dist/` as GitHub Pages does (404.html for unknown paths); `-- --base /chess-trainer/` for a build made with that `VITE_BASE_PATH`.                                                                                                                                |
 | `npm run engine:setup`       | (Re)download the pinned Stockfish builds into `public/engine/` and write its `version.json`; `-- --lite` for the two lite builds only.                                                                                                                                   |
@@ -113,6 +121,8 @@ public/         static assets: engine and maia (downloaded), puzzles, openings a
 e2e/            Playwright end-to-end tests and the accessibility sweep
 relay/          the relay: a Cloudflare Worker (or Node server) keeping sealed vaults, and refereeing
                 live games (relay/src/live/, platform-free, with Durable Objects on Cloudflare)
+launcher/       the offline copy's launcher (Go): serves the app on this computer and opens the
+                browser; bundle/: the start scripts, README and notice the copy carries
 docs/           feature reference, architecture, content and deployment guides
 ```
 

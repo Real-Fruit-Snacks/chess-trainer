@@ -1,6 +1,6 @@
 {
   "name": "chess-trainer",
-  "version": "0.26.1",
+  "version": "0.27.0",
   "private": true,
   "description": "Learn, practise and solve chess puzzles at any level — a fully static, installable web app built for GitHub Pages.",
   "license": "GPL-3.0-or-later",
@@ -51,8 +51,10 @@
     "bundle:check": "node scripts/check-bundle-size.mjs",
     "lighthouse": "node scripts/lighthouse.mjs",
     "e2e:visual": "node scripts/visual.mjs",
+    "e2e:offline": "playwright test --config playwright.offline.config.ts",
     "relay:dev": "node relay/src/server.mjs --db :memory: --port 8787",
-    "relay:deploy": "npm ci --prefix relay && npx --yes wrangler@4 deploy --config relay/wrangler.jsonc"
+    "relay:deploy": "npm ci --prefix relay && npx --yes wrangler@4 deploy --config relay/wrangler.jsonc",
+    "release:offline": "node scripts/package-offline.mjs"
   },
   "dependencies": {
     "@lichess-org/chessground": "^10.4.2",

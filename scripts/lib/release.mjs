@@ -40,7 +40,16 @@ export function siteUrlFrom(siteConfigSource) {
   return match[1];
 }
 
-/** The release notes: the changelog section, then a link to the live app. */
-export function releaseNotes(section, siteUrl) {
-  return `${section}\n\nLive app: ${siteUrl}\n`;
+/**
+ * The release notes: the changelog section, a link to the live app and, when
+ * the release has one, a word on its offline copy (the zip attached to it).
+ * @param {string} section
+ * @param {string} siteUrl
+ * @param {string | null} [offlineZip]
+ */
+export function releaseNotes(section, siteUrl, offlineZip = null) {
+  const offline = offlineZip
+    ? `\n\nOffline copy: download \`${offlineZip}\` below, unzip it and start Chess Trainer, with no internet connection and nothing to install (its README.txt says how, for Windows, macOS and Linux). SHA256SUMS.txt holds its checksum.`
+    : '';
+  return `${section}\n\nLive app: ${siteUrl}${offline}\n`;
 }

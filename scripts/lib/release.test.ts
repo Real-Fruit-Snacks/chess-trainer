@@ -50,6 +50,19 @@ describe('release checks', () => {
     expect(releaseNotes('- Something.', siteConfig.siteUrl)).toBe(
       `- Something.\n\nLive app: ${siteConfig.siteUrl}\n`,
     );
+    // A release with an offline copy says what it is, after the link.
+    const withCopy = releaseNotes(
+      '- Something.',
+      siteConfig.siteUrl,
+      'chess-trainer-1.0.0-offline.zip',
+    );
+    expect(withCopy).toMatch(
+      new RegExp(
+        `^- Something\\.\\n\\nLive app: ${siteConfig.siteUrl}\\n\\nOffline copy: download \`chess-trainer-1\\.0\\.0-offline\\.zip\` below`,
+      ),
+    );
+    expect(withCopy).toContain('SHA256SUMS.txt');
+    expect(withCopy.endsWith('.\n')).toBe(true);
     expect(() => siteUrlFrom('export const siteConfig = {};')).toThrow(/siteUrl/);
   });
 });

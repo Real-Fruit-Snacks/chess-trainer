@@ -9,6 +9,8 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      // The offline copy (npm run release:offline): a copy of dist/ and the launchers.
+      'release/**',
       'coverage/**',
       'playwright-report/**',
       'test-results/**',

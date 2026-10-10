@@ -155,6 +155,83 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # The offline copy's launcher (launcher/, Go), on each system it ships for: what it does with
+  # ports, paths and consoles differs between them.
+  launcher:
+    name: Launcher (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: launcher/go.mod
+          # The launcher has no dependencies to cache.
+          cache: false
+
+      - name: Format, vet and test
+        working-directory: launcher
+        shell: bash
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Not formatted (run gofmt -w launcher): $unformatted"
+            exit 1
+          fi
+          go vet ./...
+          go test ./...
+
+  # The offline copy a release attaches (scripts/package-offline.mjs): packaged from this build,
+  # unzipped and tried in a browser with its own launcher.
+  offline:
+    name: Offline copy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build, launcher]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: ./.github/actions/setup
+        with:
+          browser: chromium
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: launcher/go.mod
+          cache: false
+
+      - name: Download build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Package the offline copy
+        run: npm run release:offline
+
+      - name: Try the download
+        run: |
+          mkdir -p release/check
+          unzip -q release/chess-trainer-*-offline.zip -d release/check
+          OFFLINE_BUNDLE="$(ls -d release/check/chess-trainer-*)" npm run e2e:offline
+        env:
+          CI: 'true'
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-report-offline
+          path: playwright-report/
+          retention-days: 7
+
   production-path:
     name: Production base path (desktop Chromium)
     needs: changes

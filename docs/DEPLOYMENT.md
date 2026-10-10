@@ -59,8 +59,12 @@ the new version at the visitor's next in-app navigation.
 
 Bump `version` in `package.json` and add the version's `CHANGELOG.md` section, then push a matching
 tag (`git tag v0.12.0 && git push origin v0.12.0`). The **Release** workflow refuses a tag that does
-not match `package.json`, and otherwise publishes a GitHub release for the tag with that section as
-the notes and a link to the live app (the `siteUrl` in `src/site.config.ts`).
+not match `package.json`. Otherwise it builds the [offline copy](#the-offline-copy) from the tag,
+unzips it and tries it in a browser with its own launcher, then publishes a GitHub release for the
+tag: that section as the notes, a link to the live app (the `siteUrl` in `src/site.config.ts`), and
+`chess-trainer-<version>-offline.zip` with its `SHA256SUMS.txt` attached. A release that failed can
+be published again from the **Actions** tab (_Release → Run workflow_, with the tag), from the tag's
+own code.
 
 When a release changes how the app looks, refresh the README's pictures before tagging it: run
 `npm run build && npm run preview`, then `npm run readme:screenshots` in another terminal, and
@@ -124,6 +128,47 @@ Replace `scripts/icons/logo.svg` and run `npm run icons:generate` for new icons 
 `npm run screenshots` against a preview of the new build for the install dialog), then update the badge
 URLs at the top of `README.md` and the links in `.github/ISSUE_TEMPLATE/config.yml`.
 
+## The offline copy
+
+Each release carries the app for use without a connection: `chess-trainer-<version>-offline.zip`,
+which unpacks to
+
+```text
+chess-trainer-<version>/
+  README.txt                    how to start it, for Windows, macOS and Linux
+  Start Chess Trainer.exe       the launcher for Windows (x64)
+  Start Chess Trainer.command   macOS: starts the launcher for Apple silicon or Intel
+  start-chess-trainer.sh        Linux: starts the launcher for x64 or Arm64
+  app/                          the site, built for the root of a site, with every engine build
+  bin/                          the macOS and Linux launchers
+  licences/launcher.txt         the launchers' licence notice (they contain Go's standard library)
+```
+
+The launcher (`launcher/`, Go, no dependencies) serves `app/` at `http://localhost:8064/` the way
+GitHub Pages serves the live site (a path with no file gets `404.html` and a 404), on the loopback
+addresses only, with the cross-origin isolation headers on every response, and opens the browser.
+The browser keeps the app's data per address, so the port is fixed: a later copy finds the same
+progress. When another program holds 8064 the launcher takes the next free port up to 8073 and says
+so; `-port` picks one, `-no-browser` leaves the browser closed, `-app` serves another folder. A
+second start while a copy runs opens the running one, or asks for it to be closed if it is another
+version. The launcher answers `GET /__chess-trainer/launcher` with its name and version, which is how
+a second start recognises it.
+
+Sync between devices and live games work from the copy when the computer is online, as long as the
+relay lists `http://localhost:8064` in `ALLOWED_ORIGINS` (`relay/wrangler.jsonc` does).
+
+To make the copy yourself — Node, Go 1.24 or newer and `zip`:
+
+```bash
+npm run build              # for the root of a site, with the full engine and the human-like opponent
+npm run release:offline    # release/chess-trainer-<version>/, its zip and SHA256SUMS.txt
+npm run e2e:offline        # starts the unpacked copy with its launcher and tries it in Chromium
+```
+
+`release:offline` refuses a build for a sub-path or one without every engine build and the
+human-like opponent's files at their pinned checksums. The zip is reproducible: sorted entries, the
+commit's date (or `SOURCE_DATE_EPOCH`), and launchers built without paths or build IDs.
+
 ## Other static hosts
 
 Any static host works (Netlify, Cloudflare Pages, Vercel, S3 + CloudFront, nginx):
@@ -156,11 +201,12 @@ Optional headers:
 
 ## Environment variables
 
-| Variable            | Default         | Purpose                                                                        |
-| ------------------- | --------------- | ------------------------------------------------------------------------------ |
-| `VITE_BASE_PATH`    | `/`             | URL prefix the site is served from (the end-to-end tests follow it too).       |
-| `SOURCE_DATE_EPOCH` | the commit date | Build date in seconds since 1970, for reproducible builds outside git.         |
-| `ALL_BROWSERS`      | unset           | `1` runs the Firefox and WebKit projects in a local `npm run e2e`, as CI does. |
+| Variable            | Default                           | Purpose                                                                        |
+| ------------------- | --------------------------------- | ------------------------------------------------------------------------------ |
+| `VITE_BASE_PATH`    | `/`                               | URL prefix the site is served from (the end-to-end tests follow it too).       |
+| `SOURCE_DATE_EPOCH` | the commit date                   | Build date in seconds since 1970, for reproducible builds outside git.         |
+| `ALL_BROWSERS`      | unset                             | `1` runs the Firefox and WebKit projects in a local `npm run e2e`, as CI does. |
+| `OFFLINE_BUNDLE`    | `release/chess-trainer-<version>` | The unpacked offline copy `npm run e2e:offline` tries.                         |
 
 ## Checking a deployment
 

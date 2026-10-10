@@ -35,6 +35,8 @@ In scope:
 - Live games: anything that lets someone take a player's seat, move or act for a player, join a
   private game without its link, bend the rules or the clocks the relay keeps, or put anything a
   player typed in front of another player; and the referee (`relay/src/live/`)
+- The offline copy's launcher (`launcher/`): anything that lets another computer reach it, makes it
+  serve a file from outside the copy's app folder, or makes it do anything but serve that folder
 
 Out of scope:
 
@@ -112,6 +114,12 @@ study:write`, and `board:play` for live games on Lichess (optional: the sync wor
   - **Abuse.** Sockets come only from the app's origins; a message is at most 2 KB, a socket may send
     20 every 10 seconds, the waiting room holds at most 100 games and 2,000 sockets, and one phrase
     every 2 seconds is passed on per player.
+- **The offline copy's launcher.** It listens on the loopback addresses only (127.0.0.1 and ::1),
+  so no other computer can reach it; it answers only GET and HEAD, with files from inside the
+  copy's app folder (the path is cleaned first, and the folder refuses `..` and, on Windows,
+  backslashes and drive letters), and with its name and version at one fixed path. It serves every
+  response cross-origin isolated and its pages with `frame-ancestors 'none'`, like the live site's
+  service worker. It runs nothing and writes nothing; the copy's zip has its SHA-256 next to it.
 
 ## Supply chain
 
@@ -120,4 +128,6 @@ checksums recorded in `scripts/setup-engine.mjs`; a mismatch aborts the build. D
 with integrity hashes and updated through Dependabot with grouped pull requests, reviewed before
 merging. Every GitHub Action is pinned to a commit SHA (Dependabot moves the pins), CI and the deploy
 install dependencies with `npm ci --ignore-scripts`, and the site is deployed only after CI has passed
-on the exact commit being deployed.
+on the exact commit being deployed. A release's offline copy is built from the tag's own code, with
+the same checksum-verified engine and model, its launchers built by Go with no dependencies beyond
+its standard library, and it is tried in a browser before the release is published.

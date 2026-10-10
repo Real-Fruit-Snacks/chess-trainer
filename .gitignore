@@ -49,3 +49,6 @@ lighthouse.json
 .wrangler/
 .dev.vars*
 relay.db*
+
+# The offline copy and its zip, made by `npm run release:offline`
+release/

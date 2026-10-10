@@ -1,37 +1,98 @@
 name: Release
 
-# Publishes a GitHub release for every version tag, with that version's
-# CHANGELOG.md section as the notes and a link to the live app (its URL is
-# read from src/site.config.ts).
+# Publishes a GitHub release for every version tag: the version's CHANGELOG.md section as the
+# notes, a link to the live app (its URL is read from src/site.config.ts), and the offline
+# copy to download — the whole app with a launcher for Windows, macOS and Linux
+# (scripts/package-offline.mjs, launcher/). The copy is built, then unzipped and tried in a
+# browser as a learner gets it; only then is the release published, with the zip attached.
 on:
   push:
     tags: ['v*']
+  # Publishes a tag's release again by hand (an attempt that failed, say), from the tag's code.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The version tag to publish, such as v0.27.0
+        required: true
 
 permissions:
   contents: write
 
+# One run per tag at a time; a second waits rather than cancelling a half-published release.
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   release:
-    name: Publish GitHub release
+    name: Build the offline copy and publish the release
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 40
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version-file: .nvmrc
+          ref: ${{ inputs.tag || github.ref }}
+
+      # Dependencies, every engine build and the human-like opponent's files (the copy carries
+      # them all), and the browser the copy is tried in.
+      - uses: ./.github/actions/setup
+        with:
+          engine: 'true'
+          maia: 'true'
+          browser: chromium
 
       # Fails unless package.json carries the tag's version and the changelog has its section.
       - name: Check the version and write the notes
-        run: node scripts/release-notes.mjs --check "$GITHUB_REF_NAME" > release-notes.md
+        run: node scripts/release-notes.mjs --check "$TAG" > release-notes.md
 
-      - name: Create or update the release
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: launcher/go.mod
+          # The launcher has no dependencies to cache.
+          cache: false
+
+      - name: Test the launcher
+        working-directory: launcher
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Build the app for the root of a site
+        run: npm run build
+        env:
+          VITE_BASE_PATH: /
+
+      - name: Package the offline copy
+        run: npm run release:offline
+
+      # The zip as a learner downloads it, unzipped and started with its own launcher.
+      - name: Try the download
+        run: |
+          mkdir -p release/check
+          unzip -q release/chess-trainer-*-offline.zip -d release/check
+          OFFLINE_BUNDLE="$(ls -d release/check/chess-trainer-*)" npm run e2e:offline
+        env:
+          CI: 'true'
+
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+          zip=$(ls release/chess-trainer-*-offline.zip)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TAG" --notes-file release-notes.md
+            gh release upload "$TAG" "$zip" release/SHA256SUMS.txt --clobber
           else
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag
+            gh release create "$TAG" "$zip" release/SHA256SUMS.txt \
+              --title "$TAG" --notes-file release-notes.md --verify-tag
           fi
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-report-offline
+          path: playwright-report/
+          retention-days: 7

@@ -1,0 +1,9 @@
+The launchers ("Start Chess Trainer.exe", and those in the bin/ folder that
+"Start Chess Trainer.command" and start-chess-trainer.sh start) are part of
+Chess Trainer: free software under the GNU General Public License, version 3
+or later (app/licence.txt). Their source code is in the launcher/ folder of
+{{REPOSITORY_URL}}
+
+They are built with Go {{GO_VERSION}}, and contain its runtime and standard
+library, which come under this licence:
+

@@ -117,6 +117,19 @@ This document explains the moving parts and the reasoning behind them.
   `onnxruntime-web` is the pinned version; anything else in the folder (an earlier pin's files) is
   removed so it is never deployed. It writes `public/maia/version.json` for people, like the
   engine's. Vite copies the files into `dist/maia/`; they are left out of the precache.
+- **The offline copy.** A version tag's Release workflow packages `dist/` (built for `/`) with
+  `launcher/` — a Go program with no dependencies, cross-compiled for Windows, macOS (Apple silicon
+  and Intel) and Linux (x64 and Arm64) — and the scripts that start it, as
+  `chess-trainer-<version>-offline.zip` (`scripts/package-offline.mjs`; its tested parts are in
+  `scripts/lib/offline.mjs`). The packaging refuses a build for a sub-path, or one without every
+  engine build and the human-like opponent's files at their pinned checksums. The launcher serves
+  the folder as GitHub Pages serves the site, at the fixed address `http://localhost:8064/` (the
+  browser keeps the app's data per origin, so a fixed address keeps a learner's progress across
+  starts and releases), on the loopback addresses only, with the isolation headers on every response
+  so even the first visit runs the threaded engine, and opens the browser. The app inside is the
+  same build as the site's: its service worker installs as it does online, so the copy keeps working
+  once the launcher has stopped. `e2e/offline.spec.ts` (`playwright.offline.config.ts`) tries the
+  unzipped copy through its launcher, in CI and before every release is published.
 
 ## The engine layer (`src/engine/`)
 

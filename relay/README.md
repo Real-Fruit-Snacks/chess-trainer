@@ -170,7 +170,9 @@ Wrangler prints the Worker's address, `https://chess-trainer-sync.<your-subdomai
 Put it in `syncRelay` in `src/site.config.ts`, and put the app's origin in
 `ALLOWED_ORIGINS` in `wrangler.jsonc`. Pages on other origins then cannot read
 the relay's answers. The page's Content Security Policy takes the relay's origin
-from `syncRelay` at build time.
+from `syncRelay` at build time. The offline copy a release carries is served at
+`http://localhost:8064` by its launcher: list that origin too, and the copy
+syncs and plays live games whenever the computer is online.
 
 Settings in `wrangler.jsonc` (`vars`):
 

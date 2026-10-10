@@ -137,6 +137,15 @@ install button in the address bar (Chrome and Edge), _Share → Add to Home Scre
 or _Menu → Install app_ (Android). Everything the app needs downloads on the first visit, after
 which it works offline; _Download every puzzle_ in Settings keeps all 48,000 puzzles offline too.
 
+### Download it
+
+Every [release](https://github.com/Real-Fruit-Snacks/chess-trainer/releases/latest) has an offline
+copy, `chess-trainer-<version>-offline.zip` (about 190 MB): the whole app, with every lesson and
+puzzle, the full engine and the human-like opponent. Unzip it and double-click **Start Chess
+Trainer** (the `.exe` on Windows, the `.command` on macOS; `start-chess-trainer.sh` on Linux). It
+opens in your browser at `http://localhost:8064/`, with no internet connection and nothing to
+install; the README inside says what to click the first time Windows or macOS asks about it.
+
 ### Run it locally
 
 ```bash
@@ -158,7 +167,7 @@ with Stockfish — see [what CI runs](CONTRIBUTING.md#what-ci-runs). The other s
 
 Fork the repository, enable its workflows on the **Actions** tab, set **Settings → Pages → Source**
 to **GitHub Actions**, and push to `main`. Once CI has passed, the deploy workflow builds the site
-with the right base path and deploys it; a version tag publishes a GitHub release. Custom domains
+with the right base path and deploys it; a version tag publishes a GitHub release with the offline copy attached. Custom domains
 and other static hosts are covered in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 Sync between devices and live games go through a tiny relay of your own: a Cloudflare Worker with

@@ -22,5 +22,12 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "e2e", "scripts/**/*.ts", "relay/**/*.ts"]
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "playwright.offline.config.ts",
+    "e2e",
+    "scripts/**/*.ts",
+    "relay/**/*.ts"
+  ]
 }

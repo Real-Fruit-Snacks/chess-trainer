@@ -150,6 +150,14 @@ repository linked from the footer of every page.
 The five flat Lichess boards (Brown, Blue, IC, Green and Purple) are not pictures: the app draws
 them from their two colours. Ice, Walnut and High contrast are the app's own.
 
+## The offline copy's launchers
+
+Each release also offers an offline copy of the site (`scripts/package-offline.mjs`) with small
+launchers for Windows, macOS and Linux that serve it on the computer itself (`launcher/`, part of
+Chess Trainer, GPL-3.0-or-later). They are built with [Go](https://go.dev/) and contain its runtime
+and standard library (BSD-3-Clause, © The Go Authors); every copy carries that licence in
+`licences/launcher.txt`. Nothing else is added to the site in the copy.
+
 ## Attribution requirements
 
 - The built site carries the licences and these notices: `scripts/postbuild.mjs` copies `LICENSE` to
@@ -163,5 +171,7 @@ them from their two colours. Ice, Walnut and High contrast are the app's own.
 - Every piece set is credited here, under the piece picker in Settings, and in the footer of every
   page while it is the chosen set ("Pieces (Classic): Colin M.L. Burnett, CC BY-SA 3.0", the
   licence linked). The pieces are used unmodified.
+- The offline copy carries the site as built (its licences and these notices in `app/`) and the
+  launchers' Go licence in `licences/launcher.txt`; keep both when redistributing it.
 - Puzzles are CC0 and need no attribution; a link to the source game on Lichess is shown anyway.
   Some lesson tasks and the placement quiz use positions from the same database and say so.

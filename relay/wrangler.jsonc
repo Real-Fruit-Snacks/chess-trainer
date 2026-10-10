@@ -49,8 +49,9 @@
 		}
 	],
 	"vars": {
-		// The app's origin: pages elsewhere cannot read the relay's answers.
-		"ALLOWED_ORIGINS": "https://real-fruit-snacks.github.io",
+		// The app's origins — the live site, and the offline copy's launcher on this
+		// computer (launcher/) — so pages elsewhere cannot read the relay's answers.
+		"ALLOWED_ORIGINS": "https://real-fruit-snacks.github.io,http://localhost:8064",
 		"MAX_BYTES": "1400000",
 	},
 	// No request logs are kept.

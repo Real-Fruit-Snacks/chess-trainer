@@ -57,7 +57,8 @@ const ALL_BROWSERS = !!process.env.CI || process.env.ALL_BROWSERS === '1';
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: VISUAL ? [] : [/visual\.spec\.ts/],
+  // The offline copy's spec runs against its launcher (playwright.offline.config.ts).
+  testIgnore: [/offline\.spec\.ts/, ...(VISUAL ? [] : [/visual\.spec\.ts/])],
   timeout: 60_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,

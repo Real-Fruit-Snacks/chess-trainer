@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Prints the CHANGELOG.md section for one version, for the GitHub release of its tag,
- * with a link to the live app (read from src/site.config.ts).
+ * with a link to the live app (read from src/site.config.ts) and a word on the offline
+ * copy the release workflow attaches (scripts/package-offline.mjs).
  *
  * Usage:  node scripts/release-notes.mjs 0.7.0
  *         node scripts/release-notes.mjs --check v0.12.0
@@ -10,6 +11,7 @@
  * tag's version, so a tag can never publish a build that calls itself something else.
  */
 import { readFileSync } from 'node:fs';
+import { offlineZipName } from './lib/offline.mjs';
 import {
   changelogSection,
   releaseNotes,
@@ -42,4 +44,6 @@ if (section === null) {
   console.error(`No "## [${version}]" section in CHANGELOG.md`);
   process.exit(1);
 }
-process.stdout.write(releaseNotes(section, siteUrlFrom(read('src/site.config.ts'))));
+process.stdout.write(
+  releaseNotes(section, siteUrlFrom(read('src/site.config.ts')), offlineZipName(version)),
+);
