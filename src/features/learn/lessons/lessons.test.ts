@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { COURSES } from '../courses';
 import { normalizeSan } from '../taskCheck';
 import { lessons } from './index';
-import { parseShapes } from '../model';
+import { type LessonTask, parseShapes, taskLine } from '../model';
 import {
   PROSE_ALLOW_LIST,
   candidateStarts,
+  linePositions,
   quotedLines,
   replay,
   replayFromAny,
@@ -18,6 +19,25 @@ import {
  */
 const LONG_STEPS = new Set<string>([]);
 const MAX_STEP_WORDS = 130;
+
+/**
+ * Word limits for what the coach says around a task: short enough to read
+ * beside the board while the position is fresh.
+ */
+const MAX_WORDS: Record<
+  'prompt' | 'hint' | 'success' | 'why' | 'failure' | 'replyNote' | 'wrong',
+  number
+> = {
+  prompt: 20,
+  hint: 40,
+  success: 40,
+  why: 80,
+  failure: 45,
+  replyNote: 45,
+  wrong: 50,
+};
+
+const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
 describe('lesson content', () => {
   it('has unique ids', () => {
@@ -74,6 +94,48 @@ describe('lesson content', () => {
     expect(long).toEqual([]);
   });
 
+  it('keeps what the coach says around a task short', () => {
+    const long: string[] = [];
+    for (const lesson of lessons) {
+      lesson.steps.forEach((step, index) => {
+        for (const task of taskLine(step.task)) {
+          const fields: [keyof typeof MAX_WORDS, string | undefined][] = [
+            ['prompt', task.prompt],
+            ['hint', task.hint],
+            ['success', task.success],
+            ['why', task.why],
+            ['failure', task.failure],
+            ['replyNote', task.replyNote],
+            ...Object.values(task.wrong ?? {}).map(
+              (a) =>
+                ['wrong', typeof a === 'string' ? a : a.text] as [keyof typeof MAX_WORDS, string],
+            ),
+          ];
+          for (const [field, text] of fields) {
+            if (text && words(text) > MAX_WORDS[field]) {
+              long.push(`${lesson.id} step ${index + 1} ${field}: ${words(text)} words`);
+            }
+          }
+        }
+      });
+    }
+    expect(long).toEqual([]);
+  });
+
+  it('asks its questions without naming the side to move (the page shows it)', () => {
+    const named: string[] = [];
+    for (const lesson of lessons) {
+      lesson.steps.forEach((step, index) => {
+        for (const task of taskLine(step.task)) {
+          if (/^(white|black)\b[^.:]*\bto (move|play)\b/i.test(task.prompt)) {
+            named.push(`${lesson.id} step ${index + 1}: "${task.prompt}"`);
+          }
+        }
+      });
+    }
+    expect(named).toEqual([]);
+  });
+
   for (const lesson of lessons) {
     describe(`${lesson.level} › ${lesson.title}`, () => {
       it('has at least two steps and sensible metadata', () => {
@@ -127,68 +189,106 @@ describe('lesson content', () => {
           });
 
           if (step.task) {
-            const task = step.task;
-
-            it('accepts only legal moves', () => {
-              for (const san of task.moves) {
-                const chess = new Chess(step.fen);
-                expect(() => chess.move(san), `${san} should be legal`).not.toThrow();
-              }
-            });
-
             it('orientation matches the side to move', () => {
               const turn = step.fen.split(' ')[1] === 'b' ? 'black' : 'white';
               expect(step.orientation ?? 'white').toBe(turn);
             });
 
-            if (task.acceptAnyMate) {
-              it('every listed move is checkmate', () => {
-                for (const san of task.moves) {
-                  const chess = new Chess(step.fen);
-                  chess.move(san);
-                  expect(chess.isCheckmate(), `${san} should be mate`).toBe(true);
-                }
+            linePositions(step).forEach(({ task, fen }, at) => {
+              describe(at === 0 ? 'its task' : `move ${at + 1} of its line`, () => {
+                taskChecks(task, fen);
               });
-
-              it('all mates are listed', () => {
-                const chess = new Chess(step.fen);
-                const mates = chess
-                  .moves({ verbose: true })
-                  .filter((m) => {
-                    const probe = new Chess(step.fen);
-                    probe.move(m.san);
-                    return probe.isCheckmate();
-                  })
-                  .map((m) => normalizeSan(m.san));
-                expect(new Set(mates)).toEqual(new Set(task.moves.map(normalizeSan)));
-              });
-            }
-
-            it('moves ending in # really are mate, moves ending in + really are check', () => {
-              for (const san of task.moves) {
-                const chess = new Chess(step.fen);
-                const move = chess.move(san);
-                if (san.endsWith('#')) expect(chess.isCheckmate()).toBe(true);
-                else if (san.endsWith('+')) expect(chess.inCheck()).toBe(true);
-                expect(normalizeSan(move.san)).toBe(normalizeSan(san));
-              }
             });
 
-            if (task.reply) {
-              it('scripted reply is legal after every accepted move', () => {
-                for (const san of task.moves) {
-                  const chess = new Chess(step.fen);
-                  chess.move(san);
-                  expect(
-                    () => chess.move(task.reply as string),
-                    `${task.reply} after ${san}`,
-                  ).not.toThrow();
+            it('goes on only after a reply, and is played out in full', () => {
+              const line = taskLine(step.task);
+              for (const task of line) {
+                if (task.then) {
+                  expect(task.reply, `${task.prompt}: a line goes on after a reply`).toBeDefined();
                 }
-              });
-            }
+              }
+              expect(linePositions(step)).toHaveLength(line.length);
+            });
           }
         });
       });
     });
   }
 });
+
+/** The checks every task gets, at its position (`fen`). */
+function taskChecks(task: LessonTask, fen: string) {
+  it('accepts only legal moves', () => {
+    for (const san of task.moves) {
+      const chess = new Chess(fen);
+      expect(() => chess.move(san), `${san} should be legal`).not.toThrow();
+    }
+  });
+
+  if (task.acceptAnyMate) {
+    it('every listed move is checkmate', () => {
+      for (const san of task.moves) {
+        const chess = new Chess(fen);
+        chess.move(san);
+        expect(chess.isCheckmate(), `${san} should be mate`).toBe(true);
+      }
+    });
+
+    it('all mates are listed', () => {
+      const chess = new Chess(fen);
+      const mates = chess
+        .moves({ verbose: true })
+        .filter((m) => {
+          const probe = new Chess(fen);
+          probe.move(m.san);
+          return probe.isCheckmate();
+        })
+        .map((m) => normalizeSan(m.san));
+      expect(new Set(mates)).toEqual(new Set(task.moves.map(normalizeSan)));
+    });
+  }
+
+  it('moves ending in # really are mate, moves ending in + really are check', () => {
+    for (const san of task.moves) {
+      const chess = new Chess(fen);
+      const move = chess.move(san);
+      if (san.endsWith('#')) expect(chess.isCheckmate()).toBe(true);
+      else if (san.endsWith('+')) expect(chess.inCheck()).toBe(true);
+      expect(normalizeSan(move.san)).toBe(normalizeSan(san));
+    }
+  });
+
+  if (task.reply) {
+    it('scripted reply is legal after every accepted move', () => {
+      for (const san of task.moves) {
+        const chess = new Chess(fen);
+        chess.move(san);
+        expect(() => chess.move(task.reply as string), `${task.reply} after ${san}`).not.toThrow();
+      }
+    });
+  }
+
+  if (task.wrong) {
+    it('answers wrong moves that are legal, wrong, and refuted by a legal reply', () => {
+      const accepted = new Set(task.moves.map(normalizeSan));
+      for (const [san, answer] of Object.entries(task.wrong ?? {})) {
+        const chess = new Chess(fen);
+        let move;
+        try {
+          move = chess.move(san);
+        } catch {
+          move = null;
+        }
+        expect(move, `${san} should be legal`).not.toBe(null);
+        if (!move) continue;
+        expect(normalizeSan(move.san), `${san} is written as ${move.san}`).toBe(normalizeSan(san));
+        expect(accepted.has(normalizeSan(san)), `${san} is an accepted move`).toBe(false);
+        if (task.acceptAnyMate) expect(chess.isCheckmate(), `${san} is mate`).toBe(false);
+        const refute = typeof answer === 'string' ? undefined : answer.refute;
+        if (refute) {
+          expect(() => chess.move(refute), `${refute} after ${san}`).not.toThrow();
+        }
+      }
+    });
+  }
+}

@@ -55,9 +55,10 @@ entirely in your browser, installs as an app and keeps working on a plane.
 
 ## Highlights
 
-**Learn** — 75 interactive lessons in three courses, a placement quiz that picks your starting
-point, spaced recall of what you learned, lessons you already know marked done in a tap, and a
-gallery of the nineteen named mates.
+**Learn** — 75 interactive lessons in three courses, each a conversation with a coach who says why
+every move works, answers your mistakes with the reply that punishes them, and plays combinations
+out move by move; a placement quiz that picks your starting point, spaced recall of what you
+learned, lessons you already know marked done in a tap, and a gallery of the nineteen named mates.
 
 **Puzzles** — 48,000 engine-verified tactics across eight rating bands, a Glicko-2 rating with
 calibration, daily puzzle, Puzzle Rush, blind puzzles (the line in notation only, the board frozen
@@ -99,12 +100,12 @@ illegal move in a replayed classic) and Ghost Knight (hunt a knight you only see
 <table>
   <tr>
     <td width="33%"><img src="docs/screenshots/review.webp" alt="Game review of the Immortal Game: the evaluation graph, each side's accuracy and the key moments explained, beside the board and the engine's lines"></td>
-    <td width="33%"><img src="docs/screenshots/lesson.webp" alt="An interactive lesson on forks"></td>
+    <td width="33%"><img src="docs/screenshots/lesson.webp" alt="A lesson on forks: after the knight fork, the coach says what the move does and why it works, and Black replies"></td>
     <td width="33%"><img src="docs/screenshots/openings.webp" alt="Learning the Italian Game repertoire, the next move shown as an arrow"></td>
   </tr>
   <tr>
     <td align="center">Game review</td>
-    <td align="center">Interactive lessons</td>
+    <td align="center">Lessons with a coach</td>
     <td align="center">Opening repertoires</td>
   </tr>
   <tr>

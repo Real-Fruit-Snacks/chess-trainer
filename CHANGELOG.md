@@ -6,6 +6,54 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-10
+
+Lessons with a coach: every lesson now talks you through the position, says why each move works,
+answers the tempting mistakes on the board, and plays its combinations out move by move.
+
+### Added
+
+- **A coach in every lesson.** Each step is a conversation beside the board: the coach sets up the
+  position and asks a question; after your move it says what the move does, **why it works** and
+  what to take into your own games. All 75 lessons are rewritten in this voice.
+- **Answers to wrong moves.** The tempting mistakes have the coach's own answer, and the opponent's
+  punishing reply is played on the board, with a red arrow, until you take the move back. Any other
+  move that leaves a piece to be taken, allows a mate in one, stalemates or lets a pawn promote is
+  explained from the board itself, with the captures followed through to the end.
+- **Lines.** Combinations, mating nets, endgame techniques and opening plans are played out over two
+  to four moves: the opponent replies, the coach says what the reply changes, and the next question
+  follows. "Show answer" plays one move of the line at a time, with its explanation.
+- On phones the coach's latest words sit right under the board, with a Take back button. On wide
+  screens the conversation scrolls inside the panel beside the board (to your latest move), so the
+  board and the question stay in view.
+- For lesson authors: `npm run lessons:preview` shows what the coach says to every legal move of a
+  lesson (scored by Stockfish with `--engine`), `npm run engine:analyse` prints the engine's lines for
+  a position, and the content guide has a section on the coach's voice with word limits for
+  everything the coach says.
+
+### Changed
+
+- Lessons load a file at a time: opening a lesson downloads only its own file (10–35 KB gzipped),
+  and every list of lessons, the Learn page included, reads the small lesson index instead.
+- The lesson checks cover the new content: every move of every line, every refutation (the
+  opponent's best answer or close to it, leaving the learner clearly worse off) and the reply the
+  board's own answer plays to each of the other moves. The structural tests also hold the coach to
+  its word limits and keep the side to move out of the questions (the page shows it).
+- Lessons whose follow-up steps became lines have fewer steps. A completed lesson stays completed;
+  progress on single steps of a changed lesson, and recall cards for steps that moved, follow the
+  step now in that place (a card whose step has no task any more is dropped).
+- The lesson's summary gives way to the board on phones.
+
+### Fixed
+
+- Positions and claims the rewrite found wrong: the Greek gift position (White was two pieces up;
+  it is now a level French position, with the toughest defence, ...Kg6, as a line of its own), the
+  zugzwang example (it was not one), a prophylaxis position where the queen could simply be taken,
+  the breakthrough ending (now with a single winning move), wrong claims about the isolated pawn,
+  hanging pawns, the extra-pawn conversion, candidate moves and a rook against a minor piece, a
+  King's Indian move called a mistake that is as good as the answer, and a bishop-and-rook ending
+  step the tablebase contradicted.
+
 ## [0.24.0] - 2026-10-07
 
 Sync between devices carries the settings too, so any device is ready to play as you left it, and

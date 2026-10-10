@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
@@ -13,10 +13,10 @@ import { useSettings } from '@/store/settings';
 import { themeName } from '@/features/puzzles/themes';
 import { COURSE_PARAM, courseStatus, nextInCourse } from './courseProgress';
 import { type Course, getCourse } from './courses';
-import { getLesson, nextLesson } from './lessons';
-import { renderInline } from './inline';
+import { LESSON_META } from './lessonMeta';
+import { lessonPromise } from './lessons/load';
+import { CoachLatest, CoachLog } from './CoachLog';
 import { LessonDoneButton } from './LessonDone';
-import { LessonText } from './LessonText';
 import { type Lesson, LEVEL_LABELS } from './model';
 import { firstUnfinishedStep, lessonStepKeys, taskStepKeys } from './stepKeys';
 import { useLessonStep } from './useLessonStep';
@@ -24,7 +24,9 @@ import './learn.css';
 
 export default function LessonPage() {
   const { lessonId = '' } = useParams<{ lessonId: string }>();
-  const lesson = getLesson(lessonId);
+  // The lesson's file is loaded on demand: the page waits for it (in a transition when
+  // navigating, so the last page stays up meanwhile).
+  const lesson = use(lessonPromise(lessonId));
 
   useEffect(() => {
     if (!lesson) document.title = `Lesson not found · ${siteConfig.name}`;
@@ -132,15 +134,27 @@ function LessonView({ lesson }: { lesson: Lesson }) {
   const promptRef = useRef<HTMLDivElement>(null);
   const stepRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLHeadingElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
   const shown = useRef({ index: current, finished });
   useEffect(() => {
     if (shown.current.index === current && shown.current.finished === finished) return;
     shown.current = { index: current, finished };
-    if (finished) endRef.current?.focus();
-    else (promptRef.current ?? stepRef.current)?.focus();
+    if (finished) {
+      endRef.current?.focus();
+      return;
+    }
+    // The conversation box keeps its own scroll (it opens on the coach's first words).
+    (promptRef.current ?? stepRef.current)?.focus({ preventScroll: true });
+    // A new step starts from its diagram: bring the board back into view when the page
+    // was scrolled past it (phones, where the conversation runs on below the board). At
+    // once, not smoothly: a tap during a smooth scroll lands where the button was.
+    const board = boardRef.current;
+    if (board && board.getBoundingClientRect().top < 0) {
+      board.scrollIntoView?.({ block: 'start', behavior: 'instant' });
+    }
   }, [current, finished]);
 
-  const following = nextLesson(lesson.id);
+  const following = LESSON_META[LESSON_META.findIndex((l) => l.id === lesson.id) + 1];
   const orientation = step.orientation ?? 'white';
 
   if (finished) {
@@ -236,7 +250,7 @@ function LessonView({ lesson }: { lesson: Lesson }) {
       <LessonHeader lesson={lesson} course={course} done={progress?.completedAt != null} />
 
       <div className="trainer">
-        <div className="trainer__board" style={{ position: 'relative' }}>
+        <div className="trainer__board" style={{ position: 'relative' }} ref={boardRef}>
           <Board
             fen={state.fen}
             orientation={orientation}
@@ -256,8 +270,13 @@ function LessonView({ lesson }: { lesson: Lesson }) {
             <PromotionPicker color={state.turn} onSelect={state.resolvePromotion} />
           ) : null}
         </div>
+        <CoachLatest
+          messages={state.messages}
+          canTakeBack={state.canTakeBack}
+          onTakeBack={state.takeBack}
+        />
 
-        <aside className="trainer__panel stack">
+        <aside className="trainer__panel lesson__panel stack">
           <div className="lesson__nav">
             <span className="small muted">
               Step {current + 1} of {total}
@@ -287,49 +306,42 @@ function LessonView({ lesson }: { lesson: Lesson }) {
           <Card>
             <div ref={stepRef} tabIndex={-1} className="lesson__step">
               {step.title ? <h2 style={{ fontSize: '1.25rem' }}>{step.title}</h2> : null}
-              <LessonText text={step.text} />
+              <CoachLog
+                intro={step.text}
+                messages={state.messages}
+                activePrompt={state.activePrompt}
+                turn={state.turn}
+                promptRef={promptRef}
+              />
             </div>
-            {step.task ? (
-              <div
-                ref={promptRef}
-                tabIndex={-1}
-                className="lesson__task"
-                role="note"
-                data-testid="lesson-task"
-              >
-                <span className={`turn-dot turn-dot--${state.turn}`} aria-hidden="true" />
-                {state.turn === 'white' ? 'White' : 'Black'} to move —{' '}
-                {renderInline(step.task.prompt)}
-              </div>
-            ) : null}
-            <p
-              className={`lesson__feedback ${state.phase === 'wrong' ? 'puzzle-status--failed' : state.phase === 'correct' ? 'puzzle-status--solved' : 'muted'}`}
-              role="status"
-              style={{ marginTop: 12 }}
-            >
-              {state.feedback
-                ? renderInline(state.feedback)
-                : step.task && state.phase === 'awaiting'
-                  ? 'Make your move on the board.'
-                  : ''}
-            </p>
 
             <div className="lesson__actions">
               <Button onClick={() => goTo(current - 1)} disabled={current === 0}>
                 ← Back
               </Button>
               {step.task && !isDone ? (
-                <>
-                  <Button onClick={state.hint} disabled={state.phase !== 'awaiting'}>
-                    Hint <Kbd>H</Kbd>
+                state.canTakeBack ? (
+                  <Button
+                    variant="primary"
+                    onClick={state.takeBack}
+                    autoFocus
+                    data-testid="lesson-take-back"
+                  >
+                    Take back
                   </Button>
-                  <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
-                    Show answer
-                  </Button>
-                  <Button variant="ghost" onClick={advance}>
-                    Skip
-                  </Button>
-                </>
+                ) : (
+                  <>
+                    <Button onClick={state.hint} disabled={state.phase !== 'awaiting'}>
+                      Hint <Kbd>H</Kbd>
+                    </Button>
+                    <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
+                      Show answer
+                    </Button>
+                    <Button variant="ghost" onClick={advance}>
+                      Skip
+                    </Button>
+                  </>
+                )
               ) : (
                 <>
                   {step.task && state.phase !== 'awaiting' ? (
@@ -429,8 +441,9 @@ function LessonHeader({
   course: Course | null;
   done: boolean;
 }) {
+  // Lean on phones: the summary gives way to the board; the coach explains the lesson below it.
   return (
-    <div className="page-header">
+    <div className="page-header page-header--lean">
       <div className="lesson__crumbs">
         {/* The way back: to the course the lesson was opened from, or to all lessons. */}
         <p className="card__eyebrow">

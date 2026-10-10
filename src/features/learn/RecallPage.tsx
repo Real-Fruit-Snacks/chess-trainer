@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
@@ -11,9 +11,10 @@ import { useNow } from '@/lib/useNow';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
-import { renderInline } from './inline';
+import { CoachLatest, CoachLog } from './CoachLog';
 import type { LessonStep } from './model';
-import { gradeRecall, resolveRecallCard } from './recall';
+import { lessonsPromise, loadedLesson } from './lessons/load';
+import { gradeRecall, recallCardLesson, resolveRecallCard } from './recall';
 import { useLessonStep } from './useLessonStep';
 import './learn.css';
 
@@ -30,16 +31,24 @@ export default function RecallPage() {
     document.title = `Recall · ${siteConfig.name}`;
   }, []);
 
+  // The lessons of the due cards (and of the card on show) are loaded before they are read.
+  use(
+    lessonsPromise([
+      ...due.map((c) => recallCardLesson(c.id)),
+      ...(currentId ? [recallCardLesson(currentId)] : []),
+    ]),
+  );
+
   // Drop cards whose lesson step no longer exists (content changed).
   useEffect(() => {
-    for (const card of due) if (!resolveRecallCard(card.id)) dismiss(card.id);
+    for (const card of due) if (!resolveRecallCard(card.id, loadedLesson)) dismiss(card.id);
   }, [due, dismiss]);
 
   const card = useMemo(() => {
     if (currentId && recall[currentId]) return recall[currentId] ?? null;
-    return due.find((c) => resolveRecallCard(c.id)) ?? null;
+    return due.find((c) => resolveRecallCard(c.id, loadedLesson)) ?? null;
   }, [currentId, recall, due]);
-  const resolved = card ? resolveRecallCard(card.id) : null;
+  const resolved = card ? resolveRecallCard(card.id, loadedLesson) : null;
 
   useEffect(() => {
     if (card && card.id !== currentId) setCurrentId(card.id);
@@ -181,6 +190,11 @@ function RecallCard({
           <PromotionPicker color={state.turn} onSelect={state.resolvePromotion} />
         ) : null}
       </div>
+      <CoachLatest
+        messages={state.messages}
+        canTakeBack={state.canTakeBack}
+        onTakeBack={state.takeBack}
+      />
       <aside className="trainer__panel stack">
         <Card>
           <p className="card__eyebrow">
@@ -188,22 +202,12 @@ function RecallCard({
             {step.title ? ` · ${step.title}` : ''}
           </p>
           {task ? (
-            <div className="lesson__task" role="note">
-              <span className={`turn-dot turn-dot--${state.turn}`} aria-hidden="true" />
-              {state.turn === 'white' ? 'White' : 'Black'} to move — {renderInline(task.prompt)}
-            </div>
+            <CoachLog
+              messages={state.messages}
+              activePrompt={state.activePrompt}
+              turn={state.turn}
+            />
           ) : null}
-          <p
-            className={`lesson__feedback ${state.phase === 'wrong' ? 'puzzle-status--failed' : state.phase === 'correct' ? 'puzzle-status--solved' : 'muted'}`}
-            role="status"
-            style={{ marginTop: 12 }}
-          >
-            {state.feedback
-              ? renderInline(state.feedback)
-              : state.phase === 'awaiting'
-                ? 'Do you remember the move? Play it on the board.'
-                : ''}
-          </p>
           {graded ? (
             <p className="small muted" data-testid="recall-result">
               {graded.outcome === 'solved'
@@ -215,14 +219,20 @@ function RecallCard({
           ) : null}
           <div className="lesson__actions">
             {!graded ? (
-              <>
-                <Button onClick={state.hint} disabled={state.phase !== 'awaiting'}>
-                  Hint <Kbd>H</Kbd>
+              state.canTakeBack ? (
+                <Button variant="primary" onClick={state.takeBack} autoFocus>
+                  Take back
                 </Button>
-                <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
-                  Show answer
-                </Button>
-              </>
+              ) : (
+                <>
+                  <Button onClick={state.hint} disabled={state.phase !== 'awaiting'}>
+                    Hint <Kbd>H</Kbd>
+                  </Button>
+                  <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
+                    Show answer
+                  </Button>
+                </>
+              )
             ) : (
               <Button variant="primary" onClick={onNext} autoFocus>
                 Next <Kbd>N</Kbd>

@@ -41,6 +41,7 @@ const CROSS_BROWSER_SPECS = [
   /release-0-21-[a-z]+\.spec\.ts/,
   /release-0-23-[a-z]+\.spec\.ts/,
   /release-0-24-[a-z]+\.spec\.ts/,
+  /release-0-25-[a-z]+\.spec\.ts/,
 ];
 
 /** Pixel snapshots run only when asked (VISUAL=1, `npm run e2e:visual`); see e2e/visual.spec.ts. */

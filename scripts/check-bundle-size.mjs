@@ -3,7 +3,7 @@
  * Fails the build when the production bundle outgrows its budget.
  *
  * The limits are gzipped sizes, which is what a visitor downloads. Content
- * chunks (lessons, the arcade positions) are allowed more than code chunks,
+ * chunks (the arcade positions, the threat drill's) are allowed more than code chunks,
  * and the code that runs at start-up — the entry chunk plus whatever it
  * imports statically, React aside — is kept small so an update re-downloads
  * little. (How the bundler splits that start-up code between chunks changes
@@ -24,7 +24,9 @@ const KB = 1024;
 const BUDGETS = [
   { name: 'entry', match: /^index-/, limitBytes: 56 * KB },
   { name: 'react', match: /^react-/, limitBytes: 110 * KB },
-  { name: 'lessons', match: /^lessons-/, limitBytes: 110 * KB },
+  // One chunk per file of lessons (src/features/learn/lessons/<file>.ts), loaded when one of its
+  // lessons is opened.
+  { name: 'lesson content', match: /^(beginner|intermediate|advanced)\d*-/, limitBytes: 40 * KB },
   { name: 'arcade positions', match: /^positions-/, limitBytes: 40 * KB },
   { name: 'classic games', match: /^games-/, limitBytes: 40 * KB },
   // The threat drill's 1,200 positions, loaded with the drill only.
@@ -41,9 +43,11 @@ const STARTUP_LIMIT_BYTES = 45 * KB;
 /**
  * The service worker precaches this much at install: keep first loads honest. (0.20 raised it from
  * 6.5 MB for the eight piece sets from Lichess, about 0.27 MB of stylesheets, so every set works
- * offline from the first visit; the page itself loads only the chosen one.)
+ * offline from the first visit; the page itself loads only the chosen one. 0.25 raised it from
+ * 6.75 MB for the lessons rewritten as conversations with a coach, about 0.7 MB more on disk —
+ * some 0.2 MB gzipped — so every lesson still works offline; a lesson page loads only its file.)
  */
-const PRECACHE_LIMIT_BYTES = 6.75 * KB * KB;
+const PRECACHE_LIMIT_BYTES = 7.5 * KB * KB;
 
 function gzipSize(file) {
   return gzipSync(readFileSync(file), { level: 9 }).length;

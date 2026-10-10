@@ -7,19 +7,53 @@ export type LessonLevel = 'beginner' | 'intermediate' | 'advanced';
 export type LessonCategory =
   'Rules' | 'Basics' | 'Tactics' | 'Checkmates' | 'Endgames' | 'Strategy' | 'Openings' | 'Thinking';
 
+/**
+ * The coach's answer to a tempting wrong move: what it runs into, and the
+ * opponent's reply that shows it on the board.
+ */
+export interface WrongMove {
+  /** E.g. "Bxc6+ is only a trade: bxc6, and the pin is gone." */
+  text: string;
+  /** The opponent's reply (SAN) that punishes the move, played after it on the board. */
+  refute?: San;
+}
+
+/**
+ * A move the learner is asked to find. The coach asks (`prompt`), nudges
+ * (`hint`), reacts (`success`), explains (`why`), answers the tempting wrong
+ * moves (`wrong`) and the rest (`failure`); the opponent may answer (`reply`,
+ * with the coach's `replyNote`) and the line may go on (`then`).
+ */
 export interface LessonTask {
-  /** Instruction shown to the learner, e.g. "Fork the king and rook." */
+  /** The coach's question, e.g. "Which knight move hits both?" */
   prompt: string;
   /** Accepted answers in SAN (e.g. "Nf3", "O-O", "exd6", "e8=Q"). */
   moves: San[];
   /** Also accept any move that delivers checkmate. */
   acceptAnyMate?: boolean;
+  /** A nudge towards the idea that does not name the move. */
+  hint?: string;
+  /** The coach's first reaction to the right move: what it does. */
+  success?: string;
+  /** Why it works and what to take from it, shown once the move is found or shown. */
+  why?: string;
+  /** Tempting wrong moves (SAN) and the coach's answer to each (a string is the text alone). */
+  wrong?: Record<string, string | WrongMove>;
+  /** The coach's answer to any other wrong move: it must be true of every one of them. */
+  failure?: string;
   /** Scripted opponent reply (SAN) played automatically after a correct answer. */
   reply?: San;
-  hint?: string;
-  success?: string;
-  /** Shown after a legal but wrong move. */
-  failure?: string;
+  /** What the coach says about the reply. */
+  replyNote?: string;
+  /** The line goes on: the learner's next move, from the position after the reply. */
+  then?: LessonTask;
+}
+
+/** A task and the ones its line goes on with, in order. */
+export function taskLine(task: LessonTask | undefined): LessonTask[] {
+  const line: LessonTask[] = [];
+  for (let t = task; t; t = t.then) line.push(t);
+  return line;
 }
 
 export interface LessonStep {

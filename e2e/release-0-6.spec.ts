@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { completeOnboarding, continueLesson, expectBoard, playMove } from './helpers';
+import { completeOnboarding, expectBoard, playMove, showAnswersToTheEnd } from './helpers';
 
 const PROGRESS_KEY = 'chess-trainer:progress';
 
@@ -319,26 +319,7 @@ test.describe('new content', () => {
     await seedProgress(page, { onboarded: true, puzzleRating: 1200 });
     await page.goto('/learn/zwischenzug-and-quiet-moves');
     await expectBoard(page);
-    const anyAction = page.locator(
-      'button:has-text("Show answer"), button:has-text("Finish"), button:has-text("Continue")',
-    );
-    for (let i = 0; i < 20; i++) {
-      await anyAction.first().waitFor();
-      const show = page.getByRole('button', { name: 'Show answer' });
-      if (await show.isVisible()) {
-        await show.click();
-        await page
-          .locator('button:has-text("Finish"), button:has-text("Continue")')
-          .first()
-          .waitFor();
-      }
-      const finish = page.getByRole('button', { name: /Finish/ });
-      if (await finish.isVisible()) {
-        await finish.click();
-        break;
-      }
-      await continueLesson(page);
-    }
+    await showAnswersToTheEnd(page);
     await expect(page.getByText('Lesson complete')).toBeVisible();
     await page.goto('/learn');
     await expect(page.getByText('Plans in the Sicilian')).toBeVisible();

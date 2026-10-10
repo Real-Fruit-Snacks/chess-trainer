@@ -31,9 +31,17 @@ export function countStepsDone(
   lesson: Pick<Lesson, 'steps'>,
   stepsDone: readonly StepKey[] | undefined,
 ): number {
+  return countKeysDone(lessonStepKeys(lesson), stepsDone);
+}
+
+/** The same count from the step keys alone (the lesson index has them, the content need not load). */
+export function countKeysDone(
+  keys: readonly StepKey[],
+  stepsDone: readonly StepKey[] | undefined,
+): number {
   if (!stepsDone || stepsDone.length === 0) return 0;
   const done = new Set(stepsDone);
-  return lessonStepKeys(lesson).filter((key) => done.has(key)).length;
+  return keys.filter((key) => done.has(key)).length;
 }
 
 /** The index of the first step that is not done yet, or 0 when every step is. */

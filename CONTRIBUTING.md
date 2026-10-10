@@ -74,8 +74,10 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
 | `npm run puzzles:verify`     | Validate the bundled puzzles; add `--engine 40` for an engine spot-check.                                                                                                                                                                                                |
 | `npm run puzzles:reindex`    | Rebuild `public/puzzles/index.json` from the chunk files after editing them by hand.                                                                                                                                                                                     |
 | `npm run openings:import`    | Rebuild the ECO opening table and the opening lines from lichess-org/chess-openings at the pinned commit (`-- --ref <commit>` to move it).                                                                                                                               |
-| `npm run lessons:verify`     | Engine-verify every lesson task and scripted reply (slow; runs in the Content workflow).                                                                                                                                                                                 |
-| `npm run lessons:index`      | Regenerate the lightweight lesson index used outside the Learn pages (also runs before build).                                                                                                                                                                           |
+| `npm run lessons:verify`     | Engine-verify every lesson task, line, scripted reply and refutation (slow; `-- --shard 1/6` runs a sixth; the Content workflow runs six shards).                                                                                                                        |
+| `npm run lessons:index`      | Regenerate the lightweight lesson index every list of lessons reads (also runs before build).                                                                                                                                                                            |
+| `npm run lessons:preview`    | What the coach says to every legal move of a lesson (`-- forks --engine` scores each move with Stockfish and flags second solutions).                                                                                                                                    |
+| `npm run engine:analyse`     | Stockfish's best lines for a position, in SAN (`-- "<fen>" --moves "e4 e5" --depth 22 --multipv 4`).                                                                                                                                                                     |
 | `npm run drills:verify`      | Engine-verify the endgame drill positions.                                                                                                                                                                                                                               |
 | `npm run studies:verify`     | Engine-verify every endgame study (accepted moves keep the goal, alternatives that are not listed do not).                                                                                                                                                               |
 | `npm run repertoires:verify` | Engine-verify every move of the built-in repertoires (a learner move within 120 centipawns of the engine's best, an opponent move within 300).                                                                                                                           |
@@ -117,12 +119,14 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design of each part.
 
 ### Lessons and content
 
-The most valuable contributions. Lessons live in `src/features/learn/lessons/` as plain data; the
-[content guide](docs/CONTENT_GUIDE.md) explains the format, the positions rules and how to verify a
-position with the engine. Every lesson is validated by `lessons.test.ts` — run `npm test` and it will
-tell you if a FEN is illegal, a task move is impossible, or a "mate in one" is not actually mate. After
-adding a lesson run `npm run lessons:index` (the Home and Progress pages read a generated index) and
-`npm run lessons:verify` (Stockfish checks every task). Endgame studies (`src/features/studies/`),
+The most valuable contributions. Lessons live in `src/features/learn/lessons/` as plain data, each
+step a conversation with a coach; the [content guide](docs/CONTENT_GUIDE.md) explains the format, the
+coach's voice, the rules for positions and how to verify a position with the engine. Every lesson is
+validated by `lessons.test.ts` — run `npm test` and it will tell you if a FEN is illegal, a task move is
+impossible, a "mate in one" is not actually mate or the coach says too much. While writing, `npm run
+lessons:preview -- <lesson-id> --engine` shows what the coach says to every move. After adding a lesson
+run `npm run lessons:index` (every list of lessons reads a generated index) and `npm run lessons:verify`
+(Stockfish checks every task, line and refutation). Endgame studies (`src/features/studies/`),
 courses, drills, repertoires and classic games follow the same pattern; `npm run studies:verify`,
 `npm run repertoires:verify` and `npm run drills:verify` are their engine checks. The Content workflow
 runs all of them on your pull request when it touches the content.

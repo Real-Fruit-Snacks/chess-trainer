@@ -10,6 +10,14 @@ The complete reference of what Chess Trainer does, section by section. For how i
   against rook, Catalan/QGD and French plans, exchange sacrifices, calculation and "when there is
   nothing to do". Every position is legality-checked in CI, the lines quoted in the text are replayed
   (a "mate" must be mate), and every task and scripted reply is verified against Stockfish.
+- **A coach talks you through every lesson.** Each step is a conversation beside the board: the coach
+  sets up the position and asks a question; after your move it says what the move does and **why it
+  works**, and what to take into your own games. The tempting mistakes have their own answers, with the
+  opponent's punishing reply played on the board (and a red arrow) until you take the move back; any
+  other move that drops a piece, allows a mate or stalemates is explained from the board itself.
+  Combinations, mating nets and techniques are **lines** of two to four moves: the opponent replies,
+  the coach comments, and you play on. The conversation stays on screen to read back; on phones the
+  coach's latest words sit right under the board. "Show answer" plays the move with the explanation.
 - **Three courses** with unlockable units — a lesson opened from a course leads back to it and on to
   the next item — and a two-minute **placement quiz** that recommends a course (the one Home suggests
   until you start another) and seeds your starting puzzle rating.
@@ -575,7 +583,8 @@ suite on every run.
   deviation grows during long breaks.
 - **Content is data.** Lessons, courses, drills, studies, repertoires and classic games are plain
   TypeScript. Test suites check that every FEN is legal, every accepted move is legal, every "mate in
-  one" task lists exactly the mating moves and every line replays legally; `npm run lessons:verify`,
+  one" task lists exactly the mating moves and every line replays legally; `npm run lessons:preview`
+  shows what the coach says to every legal move of a lesson; `npm run lessons:verify`,
   `npm run drills:verify`, `npm run studies:verify` and `npm run repertoires:verify` confirm the
   chess against Stockfish, in CI whenever the content changes and every week.
 - **Shareable links** put the game in the URL fragment (`/analyze#z=…`, deflated with the

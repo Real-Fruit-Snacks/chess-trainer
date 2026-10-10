@@ -4,7 +4,7 @@
  * engine tests only; not shipped in the app bundle.
  */
 import { Chess } from 'chess.js';
-import type { LessonStep } from '../model';
+import { type LessonStep, type LessonTask, taskLine } from '../model';
 
 const SAN =
   /^(?:O-O(?:-O)?|[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|[a-h](?:x[a-h])?[1-8](?:=?[QRBN])?)[+#]?$/;
@@ -13,8 +13,8 @@ const START_FEN = new Chess().fen();
 const MATE_WORDS = new Set(['mate', 'checkmate', 'mate.', 'mate,', 'mate!', 'mate;', 'mate:']);
 
 export interface QuotedLine {
-  /** Field the line was found in. */
-  field: 'text' | 'success' | 'failure' | 'hint' | 'prompt';
+  /** Field the line was found in (`wrong` for the coach's answers to wrong moves). */
+  field: 'text' | 'success' | 'failure' | 'hint' | 'prompt' | 'why' | 'replyNote' | 'wrong';
   /** SAN tokens, annotations stripped. */
   moves: string[];
   /** Index of the move the prose calls mate (token with `#` or followed by "mate"), or -1. */
@@ -32,12 +32,26 @@ function sanOf(word: string): string | null {
   return SAN.test(w) ? w : null;
 }
 
+/** The prose of a step, field by field: its text, then every task of its line. */
+function proseOf(step: LessonStep): { field: QuotedLine['field']; source: string }[] {
+  const out: { field: QuotedLine['field']; source: string }[] = [
+    { field: 'text', source: step.text },
+  ];
+  for (const task of taskLine(step.task)) {
+    for (const field of ['success', 'failure', 'hint', 'prompt', 'why', 'replyNote'] as const) {
+      const source = task[field];
+      if (source) out.push({ field, source });
+    }
+    for (const answer of Object.values(task.wrong ?? {})) {
+      out.push({ field: 'wrong', source: typeof answer === 'string' ? answer : answer.text });
+    }
+  }
+  return out;
+}
+
 export function quotedLines(step: LessonStep): QuotedLine[] {
-  const fields: QuotedLine['field'][] = ['text', 'success', 'failure', 'hint', 'prompt'];
   const out: QuotedLine[] = [];
-  for (const field of fields) {
-    const source = field === 'text' ? step.text : step.task?.[field];
-    if (!source) continue;
+  for (const { field, source } of proseOf(step)) {
     const words = source.replace(/\*\*|__|`/g, '').split(/\s+/);
     let run: string[] = [];
     let raw: string[] = [];
@@ -84,40 +98,72 @@ function flipped(fen: string): string | null {
 }
 
 /**
+ * The position of each task of a step's line: the diagram for the first, then
+ * the position after the first accepted move and the reply for each next one.
+ */
+export function linePositions(step: LessonStep): { task: LessonTask; fen: string }[] {
+  const out: { task: LessonTask; fen: string }[] = [];
+  let fen = step.fen;
+  for (const task of taskLine(step.task)) {
+    out.push({ task, fen });
+    const chess = new Chess(fen);
+    try {
+      chess.move(task.moves[0] ?? '');
+      if (task.reply) chess.move(task.reply);
+    } catch {
+      break; // reported by the legality tests
+    }
+    fen = chess.fen();
+  }
+  return out;
+}
+
+/** The position after `moves` from `fen`, or null when one of them is illegal. */
+function after(fen: string, ...moves: string[]): string | null {
+  const chess = new Chess(fen);
+  try {
+    for (const san of moves) chess.move(san);
+  } catch {
+    return null;
+  }
+  return chess.fen();
+}
+
+/**
  * Positions a quoted line may start from: the diagram (either side to move), the
- * initial position, the previous step's diagram (prose often recaps it) and the
- * positions after each accepted move — also with the mover to move again, for
- * the threat it makes ("Qh5 threatens Qh7#") — and after the scripted reply.
+ * initial position, the previous step's diagram (prose often recaps it) and, for
+ * every task of the step's line, its position, the positions after each accepted
+ * move — also with the mover to move again, for the threat it makes ("Qh5
+ * threatens Qh7#") — and after the scripted reply, and after each wrong move the
+ * coach answers and the reply that refutes it.
  */
 export function candidateStarts(step: LessonStep, previous?: LessonStep): string[] {
   const starts = [step.fen];
-  const task = step.task;
-  if (task) {
+  for (const { task, fen } of linePositions(step)) {
+    starts.push(fen);
     for (const san of task.moves) {
-      const chess = new Chess(step.fen);
-      try {
-        chess.move(san);
-      } catch {
-        continue;
-      }
-      starts.push(chess.fen());
-      const threat = flipped(chess.fen());
+      const played = after(fen, san);
+      if (!played) continue;
+      starts.push(played);
+      const threat = flipped(played);
       if (threat) starts.push(threat);
-      if (task.reply) {
-        try {
-          chess.move(task.reply);
-          starts.push(chess.fen());
-        } catch {
-          /* reported by the legality test */
-        }
-      }
+      const replied = task.reply ? after(played, task.reply) : null;
+      if (replied) starts.push(replied);
+    }
+    for (const [san, answer] of Object.entries(task.wrong ?? {})) {
+      const played = after(fen, san);
+      if (!played) continue;
+      starts.push(played);
+      const refute = typeof answer === 'string' ? undefined : answer.refute;
+      const refuted = refute ? after(played, refute) : null;
+      if (refuted) starts.push(refuted);
     }
   }
   const other = flipped(step.fen);
   if (other) starts.push(other);
   if (previous) starts.push(...candidateStarts(previous));
   starts.push(START_FEN);
-  return [...new Set(starts)];
+  return [...new Set(starts.filter((s): s is string => s !== null))];
 }
 
 /** Replays `moves` from `fen`; returns the position after each move, or null when one is illegal. */
@@ -151,15 +197,4 @@ export function replayFromAny(
  * Not actually lines, or lines about a position the lesson does not show: keyed
  * "lessonId|run as written". Keep it short — fix the prose when you can.
  */
-export const PROSE_ALLOW_LIST = new Set<string>([
-  // Plans described as move pairs, not lines from the diagram.
-  'pawn-structures|bxc6 bxc6,',
-  'minority-attack|bxc6 bxc6',
-  'catalan-and-qgd-plans|bxc6 bxc6',
-  'minority-attack|(cxd5 exd5):',
-  'catalan-and-qgd-plans|cxd5 exd5',
-  'catalan-and-qgd-plans|(cxd5 exd5):',
-  // Two-move threats ("Ra7 and Ra8 mate", "Rd8 mate" once the rook is traded).
-  'rook-and-bishop-vs-rook|Ra8',
-  'removing-the-defender|Rd8',
-]);
+export const PROSE_ALLOW_LIST = new Set<string>([]);

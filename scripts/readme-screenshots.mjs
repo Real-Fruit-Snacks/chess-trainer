@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Renders the README's pictures (docs/screenshots/) from a production build: the hero — the
- * puzzle trainer on a laptop beside a game on a phone — and six tiles: game review, a lesson, an
+ * puzzle trainer on a laptop beside a game on a phone — and six tiles: game review, a lesson (the
+ * coach answering a move), an
  * opening repertoire, progress, the arcade, and the boards and pieces. They are WebP, so the
  * README stays light.
  *
@@ -321,6 +322,11 @@ const TILES = {
   },
   async lesson(page) {
     await page.goto(new URL('learn/forks', BASE).href);
+    await page.getByTestId('lesson-task').waitFor();
+    // The fork, then the coach: what the move does, why it works, Black's reply and the next question.
+    await clickSquare(page, 'e4');
+    await clickSquare(page, 'f6');
+    await page.getByTestId('coach-note').waitFor();
     await page.getByTestId('lesson-task').waitFor();
   },
   async openings(page) {

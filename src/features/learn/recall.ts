@@ -1,5 +1,4 @@
-import { getLesson } from './lessons';
-import type { LessonStep } from './model';
+import type { Lesson, LessonStep } from './model';
 import { type StepKey, stepKey } from './stepKeys';
 import type { StepResult } from './useLessonStep';
 
@@ -17,13 +16,21 @@ export function gradeRecall(result: StepResult): {
   };
 }
 
+/** The lesson a recall card id ("lessonId:stepKey") belongs to. */
+export function recallCardLesson(id: string): string {
+  const at = id.lastIndexOf(':');
+  return at < 0 ? '' : id.slice(0, at);
+}
+
 /**
- * Resolves a recall card id ("lessonId:stepKey") to its lesson step. The key is
- * the step's `id` when it has one, otherwise its position; cards made before a
- * step had an id keep resolving by position.
+ * Resolves a recall card id ("lessonId:stepKey") to its lesson step, with the
+ * lessons `getLesson` knows (the ones loaded). The key is the step's `id` when
+ * it has one, otherwise its position; cards made before a step had an id keep
+ * resolving by position.
  */
 export function resolveRecallCard(
   id: string,
+  getLesson: (lessonId: string) => Lesson | undefined,
 ): { lessonId: string; stepIndex: number; step: LessonStep; title: string } | null {
   const at = id.lastIndexOf(':');
   if (at < 0) return null;

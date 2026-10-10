@@ -1,4 +1,10 @@
-import type { Lesson, LessonLevel } from '../model';
+/**
+ * Every lesson at once, for the content tests and the build scripts. The app
+ * itself never imports this module: it loads one file of lessons at a time
+ * (load.ts) and lists them from the small index (lessonMeta.ts).
+ */
+import type { LessonFile } from '../lessonMetaFormat';
+import type { Lesson } from '../model';
 import { advancedLessons } from './advanced';
 import { advancedLessons2 } from './advanced2';
 import { advancedLessons3 } from './advanced3';
@@ -14,38 +20,27 @@ import { intermediateLessons4 } from './intermediate4';
 import { intermediateLessons5 } from './intermediate5';
 import { intermediateLessons6 } from './intermediate6';
 
-const beginner = [...beginnerLessons, ...beginnerLessons2];
-const intermediate = [
-  ...intermediateLessons,
-  ...intermediateLessons2,
-  ...intermediateLessons3,
-  ...intermediateLessons4,
-  ...intermediateLessons5,
-  ...intermediateLessons6,
-];
-const advanced = [
-  ...advancedLessons,
-  ...advancedLessons2,
-  ...advancedLessons3,
-  ...advancedLessons4,
-  ...advancedLessons5,
-  ...advancedLessons6,
-];
+/** The lessons of each file, in curriculum order (the order of LESSON_FILES). */
+export const lessonsByFile: Record<LessonFile, Lesson[]> = {
+  beginner: beginnerLessons,
+  beginner2: beginnerLessons2,
+  intermediate: intermediateLessons,
+  intermediate2: intermediateLessons2,
+  intermediate3: intermediateLessons3,
+  intermediate4: intermediateLessons4,
+  intermediate5: intermediateLessons5,
+  intermediate6: intermediateLessons6,
+  advanced: advancedLessons,
+  advanced2: advancedLessons2,
+  advanced3: advancedLessons3,
+  advanced4: advancedLessons4,
+  advanced5: advancedLessons5,
+  advanced6: advancedLessons6,
+};
 
 /** All lessons in curriculum order. */
-export const lessons: Lesson[] = [...beginner, ...intermediate, ...advanced];
-
-export const lessonsByLevel: Record<LessonLevel, Lesson[]> = {
-  beginner,
-  intermediate,
-  advanced,
-};
+export const lessons: Lesson[] = Object.values(lessonsByFile).flat();
 
 export function getLesson(id: string): Lesson | undefined {
   return lessons.find((l) => l.id === id);
-}
-
-export function nextLesson(id: string): Lesson | undefined {
-  const index = lessons.findIndex((l) => l.id === id);
-  return index >= 0 ? lessons[index + 1] : undefined;
 }

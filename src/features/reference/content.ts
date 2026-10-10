@@ -135,7 +135,7 @@ export const GLOSSARY: GlossaryEntry[] = [
     definition:
       'Placing a piece directly in front of an enemy passed pawn so it cannot advance. Knights are ideal blockaders.',
     lesson: 'passed-pawns-in-the-middlegame',
-    step: 5,
+    step: 4,
   },
   {
     term: 'Blunder',

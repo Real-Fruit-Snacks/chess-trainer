@@ -1,14 +1,16 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
 import { getLesson } from './lessons';
+import { lessonPromise } from './lessons/load';
 
 vi.mock('@/lib/sound', () => ({ playSound: vi.fn(), playMoveSound: vi.fn() }));
 
 const board = vi.hoisted(() => ({
   props: null as null | {
+    fen?: string;
     onMove?: (from: string, to: string) => void;
     shapes?: { orig: string; dest?: string; brush?: string }[];
   },
@@ -36,6 +38,11 @@ function renderLesson(url: string) {
 const lesson = getLesson('how-pieces-move')!;
 
 describe('LessonPage', () => {
+  // The page loads a lesson's file on demand; loaded once, it renders at once.
+  beforeAll(async () => {
+    await lessonPromise('how-pieces-move');
+  });
+
   beforeEach(() => {
     useProgress.getState().resetAll();
     vi.useFakeTimers();
@@ -66,12 +73,27 @@ describe('LessonPage', () => {
     renderLesson('/learn/how-pieces-move');
     const show = screen.getByRole('button', { name: 'Show answer' });
     expect(show).toBeEnabled();
-    act(() => board.props?.onMove?.('d4', 'd8'));
+    act(() => board.props?.onMove?.('d4', 'a4'));
     expect(show).toBeDisabled();
     act(() => {
-      vi.advanceTimersByTime(800);
+      vi.advanceTimersByTime(1000);
     });
     expect(show).toBeEnabled();
+  });
+
+  it('shows what punishes a wrong move, until it is taken back', () => {
+    renderLesson('/learn/how-pieces-move');
+    act(() => board.props?.onMove?.('d4', 'd8'));
+    act(() => {
+      vi.advanceTimersByTime(700);
+    });
+    expect(screen.getByTestId('coach-log')).toHaveTextContent('Black simply takes it with Kxd8');
+    expect(board.props?.fen).toBe('3k4/8/8/8/8/8/8/4K3 w - - 0 2');
+    const takeBack = screen.getByTestId('lesson-take-back');
+    expect(screen.queryByRole('button', { name: 'Show answer' })).toBeNull();
+    fireEvent.click(takeBack);
+    expect(board.props?.fen).toBe('4k3/8/8/8/3R4/8/8/4K3 w - - 0 1');
+    expect(screen.getByRole('button', { name: 'Show answer' })).toBeEnabled();
   });
 
   it('ignores letter and arrow shortcuts with a modifier or from the board, in any case', () => {
@@ -113,7 +135,7 @@ describe('LessonPage', () => {
     expect(title).toHaveFocus();
     expect(screen.getByText(/7 tasks still to solve/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Go to step 1' }));
-    expect(screen.getByTestId('lesson-task')).toHaveTextContent('Move the rook to h4.');
+    expect(screen.getByTestId('lesson-task')).toHaveTextContent('Slide the rook to h4');
   });
 
   it('says "Lesson complete" and links recall once every step is done', () => {

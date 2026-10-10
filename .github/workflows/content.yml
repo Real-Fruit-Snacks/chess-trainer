@@ -49,17 +49,22 @@ permissions:
 
 jobs:
   lessons:
-    name: Lessons (every task and scripted reply)
+    name: Lessons, shard ${{ matrix.shard }} of 6 (every task, line, reply and refutation)
     runs-on: ubuntu-latest
-    # About 21 minutes on one core for 372 tasks at depth 18.
-    timeout-minutes: 45
+    # Every sixth lesson per shard, the engine on one core at depth 18: the whole set, 2,005
+    # checks with the board's own answers to every other move, takes about three hours on one core.
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup
         with:
           engine: 'lite'
       - name: Verify the lessons with Stockfish
-        run: npm run lessons:verify
+        run: npm run lessons:verify -- --shard ${{ matrix.shard }}/6
 
   studies:
     name: Endgame studies (moves and duals)

@@ -1,9 +1,9 @@
 import { expect, type Page, test } from '@playwright/test';
 import {
   completeOnboarding,
-  continueLesson,
   expectBoard,
   playMove,
+  showAnswersToTheEnd,
   waitForBoardIdle,
 } from './helpers';
 
@@ -322,7 +322,7 @@ test.describe('lesson recall', () => {
     });
     await page.goto('/learn/recall');
     const board = await expectBoard(page);
-    await expect(page.locator('.lesson__task')).toContainText('Move the rook to h4');
+    await expect(page.getByTestId('lesson-task')).toContainText('Slide the rook to h4');
     await playMove(board, 'd4', 'h4');
     await expect(page.getByTestId('recall-result')).toContainText('Recalled!');
     await page.getByRole('button', { name: /Next/ }).click();
@@ -339,26 +339,7 @@ test.describe('lesson recall', () => {
     await page.goto('/learn/how-pieces-move');
     await expectBoard(page);
     // Use "Show answer" on every task and Continue through the lesson.
-    const anyAction = page.locator(
-      'button:has-text("Show answer"), button:has-text("Finish"), button:has-text("Continue")',
-    );
-    for (let i = 0; i < 12; i++) {
-      await anyAction.first().waitFor();
-      const show = page.getByRole('button', { name: 'Show answer' });
-      if (await show.isVisible()) {
-        await show.click();
-        await page
-          .locator('button:has-text("Finish"), button:has-text("Continue")')
-          .first()
-          .waitFor();
-      }
-      const finish = page.getByRole('button', { name: /Finish/ });
-      if (await finish.isVisible()) {
-        await finish.click();
-        break;
-      }
-      await continueLesson(page);
-    }
+    await showAnswersToTheEnd(page);
     await expect(page.getByText('Lesson complete')).toBeVisible();
     const scheduled = await page.evaluate((key) => {
       const raw = localStorage.getItem(key);

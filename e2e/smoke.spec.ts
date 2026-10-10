@@ -48,21 +48,24 @@ test.describe('shell', () => {
 });
 
 test.describe('learn', () => {
-  test('a lesson task accepts the right move and rejects a wrong one', async ({ page }) => {
+  test('a lesson task answers a wrong move, then accepts the right one and says why', async ({
+    page,
+  }) => {
     await page.goto('/learn/how-pieces-move');
     const board = await expectBoard(page);
+    const coach = page.getByTestId('coach-log');
 
-    const feedback = page.locator('.lesson__feedback');
-
-    // Step 1 asks for Rh4. Play a wrong move first.
+    // Step 1 asks for Rh4. A wrong move first: the king takes the rook, and the coach says so.
     await playMove(board, 'd4', 'd8');
-    await expect(feedback).toContainText(/straight lines/i);
+    await expect(coach).toContainText('Black simply takes it with Kxd8');
+    await page.getByTestId('lesson-take-back').click();
 
-    // The wrong move is taken back: once the task waits for a move again, play the right one.
+    // Taken back: once the task waits for a move again, play the right one.
     await expect(page.getByRole('button', { name: 'Show answer' })).toBeEnabled();
     await waitForBoardIdle(page);
     await playMove(board, 'd4', 'h4');
-    await expect(feedback).toContainText(/Correct/i);
+    await expect(page.getByTestId('coach-good')).toContainText('fourth rank');
+    await expect(page.getByTestId('coach-why')).toContainText('open lines');
     await expect(page.getByRole('button', { name: /Continue/ })).toBeVisible();
   });
 });

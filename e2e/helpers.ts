@@ -122,6 +122,40 @@ export async function continueLesson(page: Page) {
 }
 
 /**
+ * Works through a lesson from the current step to its end: "Show answer" for
+ * every move of every line (the opponent's reply and the next question come
+ * after each), "Continue" between steps, "Finish" at the end. `solve` plays a
+ * move by hand instead whenever its question is the one waiting.
+ */
+export async function showAnswersToTheEnd(
+  page: Page,
+  solve?: { prompt: string; play: () => Promise<void> },
+) {
+  const question = page.getByTestId('lesson-task');
+  const action = page.locator(
+    'button:has-text("Show answer"):enabled, button:has-text("Finish"), button:has-text("Continue")',
+  );
+  for (let i = 0; i < 80; i++) {
+    await action.first().waitFor();
+    const finish = page.getByRole('button', { name: /Finish/ });
+    if (await finish.isVisible()) {
+      await finish.click();
+      return;
+    }
+    if (await page.getByRole('button', { name: /Continue/ }).isVisible()) {
+      await continueLesson(page);
+      continue;
+    }
+    // The question waiting now; the next one only comes after the opponent's reply.
+    const asked = (await question.textContent()) ?? '';
+    if (solve && asked.includes(solve.prompt)) await solve.play();
+    else await page.getByRole('button', { name: 'Show answer' }).click();
+    await expect(question.filter({ hasText: asked })).toHaveCount(0);
+  }
+  throw new Error('The lesson did not come to an end');
+}
+
+/**
  * Waits until no piece on the board is moving or fading out: chessground marks
  * those with the `anim` and `fading` classes for the length of the animation.
  * Use it, after the app's own signal that a move was made or taken back, in

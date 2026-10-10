@@ -273,6 +273,52 @@
   margin: 0 0 var(--space-1);
 }
 
+/*
+ * Wide screens: the panel beside the board is no taller than the board (which is
+ * sized to fit the screen under the page title), and the coach's conversation
+ * scrolls inside it (CoachLog keeps the newest words in view) rather than
+ * lengthening the page, so the board and the question stay in view together.
+ * (Phones held sideways scroll the whole panel instead: there is no room for a
+ * box inside it.)
+ */
+@media (min-width: 900px) {
+  .lesson__panel {
+    display: flex;
+    flex-direction: column;
+    max-height: var(--trainer-board);
+  }
+
+  .lesson__panel > * {
+    flex: none;
+  }
+
+  .lesson__panel > .card,
+  .lesson__panel .lesson__step {
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .lesson__panel .lesson__step > * {
+    flex: none;
+  }
+
+  .lesson__panel .coach {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    position: relative;
+    /* Room for the focus ring of the question inside the box. */
+    padding: 4px 6px 4px 2px;
+  }
+
+  .lesson__panel .coach > * {
+    flex-shrink: 0;
+  }
+}
+
 .lesson__complete {
   text-align: center;
   padding: var(--space-5);

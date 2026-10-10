@@ -1,6 +1,31 @@
 import type { Lesson, LessonCategory, LessonLevel } from './model';
+import { lessonStepKeys, type StepKey } from './stepKeys';
 
-/** Everything about a lesson except its steps. */
+/**
+ * The files the lessons live in (src/features/learn/lessons/<file>.ts), in
+ * curriculum order. Each is its own chunk of the build, loaded when one of its
+ * lessons is opened (see lessons/load.ts).
+ */
+export const LESSON_FILES = [
+  'beginner',
+  'beginner2',
+  'intermediate',
+  'intermediate2',
+  'intermediate3',
+  'intermediate4',
+  'intermediate5',
+  'intermediate6',
+  'advanced',
+  'advanced2',
+  'advanced3',
+  'advanced4',
+  'advanced5',
+  'advanced6',
+] as const;
+
+export type LessonFile = (typeof LESSON_FILES)[number];
+
+/** Everything about a lesson except its steps' content. */
 export interface LessonMeta {
   id: string;
   title: string;
@@ -10,9 +35,13 @@ export interface LessonMeta {
   minutes: number;
   steps: number;
   tasks: number;
+  /** How each step's progress is keyed (its id, or its position): counts progress without the content. */
+  stepKeys: StepKey[];
+  /** The file that holds the lesson's content. */
+  file: LessonFile;
 }
 
-export function metaOf(lesson: Lesson): LessonMeta {
+export function metaOf(lesson: Lesson, file: LessonFile): LessonMeta {
   return {
     id: lesson.id,
     title: lesson.title,
@@ -22,6 +51,8 @@ export function metaOf(lesson: Lesson): LessonMeta {
     minutes: lesson.minutes,
     steps: lesson.steps.length,
     tasks: lesson.steps.filter((s) => s.task).length,
+    stepKeys: lessonStepKeys(lesson),
+    file,
   };
 }
 
@@ -39,6 +70,8 @@ export function renderLessonMeta(meta: LessonMeta[]): string {
           minutes: m.minutes,
           steps: m.steps,
           tasks: m.tasks,
+          stepKeys: m.stepKeys,
+          file: m.file,
         })},`,
     )
     .join('\n');

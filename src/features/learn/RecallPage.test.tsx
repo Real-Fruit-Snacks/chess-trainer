@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DrawShape } from '@/components/board/Board';
 import { useProgress } from '@/store/progress';
 
@@ -20,6 +20,7 @@ vi.mock('@/components/board/Board', () => ({
   },
 }));
 
+import { lessonsPromise } from './lessons/load';
 import RecallPage from './RecallPage';
 
 const CARD = 'how-pieces-move:0';
@@ -49,6 +50,11 @@ function renderPage() {
 }
 
 describe('RecallPage', () => {
+  // The page loads the due cards' lessons on demand; loaded once, it renders at once.
+  beforeAll(async () => {
+    await lessonsPromise(['how-pieces-move']);
+  });
+
   beforeEach(() => {
     useProgress.getState().resetAll();
     seedDueCard();
@@ -74,9 +80,9 @@ describe('RecallPage', () => {
     vi.useFakeTimers();
     try {
       renderPage();
-      act(() => board.props?.onMove?.('d4', 'd8'));
+      act(() => board.props?.onMove?.('d4', 'a4'));
       act(() => {
-        vi.advanceTimersByTime(800);
+        vi.advanceTimersByTime(1000);
       });
       act(() => board.props?.onMove?.('d4', 'h4'));
       expect(screen.getByTestId('recall-result')).toHaveTextContent('Missed');

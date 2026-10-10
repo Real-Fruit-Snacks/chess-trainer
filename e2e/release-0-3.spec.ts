@@ -387,11 +387,13 @@ test.describe('new training content', () => {
 
   test('a new lesson task accepts the engine-verified move', async ({ page }) => {
     await page.goto('/learn/visualisation');
-    await page.getByRole('button', { name: /Continue/ }).click();
     const board = await expectBoard(page);
-    // Step 2: the fork trick, Black to move — Nxe4.
+    // Step 1: the fork trick, Black to move — Nxe4, and the coach plays the line on.
     await playMove(board, 'f6', 'e4', 'black');
-    await expect(page.locator('.lesson__feedback')).toContainText(/Nxe4/);
+    await expect(page.getByTestId('coach-good')).toContainText('d5 forks the bishop');
+    await expect(page.getByTestId('lesson-task')).toContainText(
+      'Which pawn move wins a piece back',
+    );
   });
 
   test('a capture-goal drill is playable', async ({ page }) => {

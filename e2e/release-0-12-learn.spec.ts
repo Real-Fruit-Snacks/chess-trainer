@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { continueLesson, expectBoard } from './helpers';
+import { expectBoard, showAnswersToTheEnd } from './helpers';
 
 /**
  * 0.12: Learn, recall, courses, Home and the reference — the fixes from the
@@ -104,26 +104,7 @@ test.describe('courses', () => {
 
     // Work through the lesson with "Show answer", then look at the closing card.
     await expectBoard(page);
-    const next = page.locator('button:has-text("Finish"), button:has-text("Continue")').first();
-    for (let i = 0; i < 8; i++) {
-      await page
-        .locator(
-          'button:has-text("Show answer"), button:has-text("Finish"), button:has-text("Continue")',
-        )
-        .first()
-        .waitFor();
-      const show = page.getByRole('button', { name: 'Show answer' });
-      if (await show.isVisible()) {
-        await show.click();
-        await next.waitFor();
-      }
-      const finish = page.getByRole('button', { name: /Finish/ });
-      if (await finish.isVisible()) {
-        await finish.click();
-        break;
-      }
-      await continueLesson(page);
-    }
+    await showAnswersToTheEnd(page);
     await expect(page.getByTestId('lesson-end-title')).toHaveText('Lesson complete');
     const nextInCourse = page.getByTestId('next-in-course');
     await expect(nextInCourse).toHaveText(/^Next in course: How the pieces move/);

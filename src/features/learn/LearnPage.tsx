@@ -6,10 +6,11 @@ import { useNow } from '@/lib/useNow';
 import { siteConfig } from '@/site.config';
 import { type LessonProgress, useProgress } from '@/store/progress';
 import { CoursesSection } from './CoursesSection';
-import { lessons, lessonsByLevel } from './lessons';
-import { LEVEL_LABELS, type Lesson, type LessonLevel } from './model';
+import { LESSON_META } from './lessonMeta';
+import type { LessonMeta } from './lessonMetaFormat';
+import { LEVEL_LABELS, type LessonLevel } from './model';
 import { LessonCheck } from './LessonDone';
-import { countStepsDone } from './stepKeys';
+import { countKeysDone } from './stepKeys';
 import './learn.css';
 
 const LEVELS: LessonLevel[] = ['beginner', 'intermediate', 'advanced'];
@@ -21,8 +22,8 @@ export default function LearnPage() {
     document.title = `Learn · ${siteConfig.name}`;
   }, []);
 
-  const completed = lessons.filter((l) => progress[l.id]?.completedAt).length;
-  const continueLesson = pickContinueLesson(lessons, progress);
+  const completed = LESSON_META.filter((l) => progress[l.id]?.completedAt).length;
+  const continueLesson = pickContinueLesson(LESSON_META, progress);
 
   return (
     <div>
@@ -43,7 +44,7 @@ export default function LearnPage() {
         <div className="row row--between">
           <div>
             <strong>
-              {completed} of {lessons.length} lessons completed
+              {completed} of {LESSON_META.length} lessons completed
             </strong>
             <div className="small muted">
               {continueLesson
@@ -53,7 +54,7 @@ export default function LearnPage() {
           </div>
           {continueLesson ? (
             <LinkButton variant="primary" to={`/learn/${continueLesson.id}`}>
-              {countStepsDone(continueLesson, progress[continueLesson.id]?.stepsDone)
+              {countKeysDone(continueLesson.stepKeys, progress[continueLesson.id]?.stepsDone)
                 ? 'Continue'
                 : 'Start'}{' '}
               lesson
@@ -61,7 +62,7 @@ export default function LearnPage() {
           ) : null}
         </div>
         <div style={{ marginTop: 12 }}>
-          <ProgressBar value={completed} max={lessons.length} label="Curriculum progress" />
+          <ProgressBar value={completed} max={LESSON_META.length} label="Curriculum progress" />
         </div>
       </div>
 
@@ -71,7 +72,7 @@ export default function LearnPage() {
 
       {LEVELS.map((level) => {
         const meta = LEVEL_LABELS[level];
-        const list = lessonsByLevel[level];
+        const list = LESSON_META.filter((l) => l.level === level);
         return (
           <section key={level} className="learn__level" aria-labelledby={`level-${level}`}>
             <div className="learn__level-header">
@@ -82,8 +83,8 @@ export default function LearnPage() {
             <ol className="learn__grid" role="list">
               {list.map((lesson, index) => {
                 const state = progress[lesson.id];
-                const done = countStepsDone(lesson, state?.stepsDone);
-                const total = lesson.steps.length;
+                const done = countKeysDone(lesson.stepKeys, state?.stepsDone);
+                const total = lesson.steps;
                 const status = state?.completedAt ? 'done' : done > 0 ? 'started' : 'new';
                 return (
                   <li key={lesson.id} className="lesson-card__item">
@@ -130,11 +131,11 @@ export default function LearnPage() {
 }
 
 function pickContinueLesson(
-  all: Lesson[],
+  all: readonly LessonMeta[],
   progress: Record<string, LessonProgress>,
-): Lesson | null {
+): LessonMeta | null {
   const started = all.find(
-    (l) => !progress[l.id]?.completedAt && countStepsDone(l, progress[l.id]?.stepsDone) > 0,
+    (l) => !progress[l.id]?.completedAt && countKeysDone(l.stepKeys, progress[l.id]?.stepsDone) > 0,
   );
   if (started) return started;
   return all.find((l) => !progress[l.id]?.completedAt) ?? null;

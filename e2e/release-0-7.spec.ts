@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { continueLesson, expectBoard, playMove } from './helpers';
+import { expectBoard, playMove, showAnswersToTheEnd, waitForBoardIdle } from './helpers';
 
 const PROGRESS_KEY = 'chess-trainer:progress';
 
@@ -470,30 +470,15 @@ test.describe('new lessons', () => {
     await page.goto('/learn/pawn-endgames-3');
     await expectBoard(page);
     // Step through: solve the breakthrough ourselves, let the rest be shown.
-    for (let i = 0; i < 25; i++) {
-      const prompt = page.getByText('White to move: break through.');
-      if (await prompt.isVisible().catch(() => false)) {
-        // Wait until the step accepts moves before clicking the board.
-        await expect(page.getByText('Make your move on the board.')).toBeVisible();
+    await showAnswersToTheEnd(page, {
+      prompt: 'Which pawn move starts the breakthrough?',
+      play: async () => {
         const board = await expectBoard(page);
+        await waitForBoardIdle(page);
         await playMove(board, 'b5', 'b6');
-        await expect(page.getByText(/b6! axb6/)).toBeVisible();
-      }
-      const show = page.getByRole('button', { name: 'Show answer' });
-      if (await show.isVisible()) {
-        await show.click();
-        await page
-          .locator('button:has-text("Finish"), button:has-text("Continue")')
-          .first()
-          .waitFor();
-      }
-      const finish = page.getByRole('button', { name: /Finish/ });
-      if (await finish.isVisible()) {
-        await finish.click();
-        break;
-      }
-      await continueLesson(page);
-    }
+        await expect(page.getByTestId('coach-good')).toContainText('attacks both a7 and c7');
+      },
+    });
     await expect(page.getByText('Lesson complete')).toBeVisible();
     await page.goto('/learn');
     await expect(page.getByText('Attacking the fianchetto')).toBeVisible();

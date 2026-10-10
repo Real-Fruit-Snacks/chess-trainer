@@ -1,8 +1,8 @@
 # Content guide: lessons, courses, drills, studies, repertoires and classic games
 
 All chess content is plain data: lessons in `src/features/learn/lessons/*.ts` (one file per level and
-batch — `beginner.ts`, `beginner2.ts`, `intermediate.ts` … `advanced6.ts` — registered in
-`lessons/index.ts` in curriculum order), courses in `src/features/learn/courses.ts`, endgame drills in
+batch — `beginner.ts`, `beginner2.ts`, `intermediate.ts` … `advanced6.ts` — listed in curriculum order in
+`LESSON_FILES` (`lessonMetaFormat.ts`), `lessons/index.ts` and the loaders of `lessons/load.ts`), courses in `src/features/learn/courses.ts`, endgame drills in
 `src/features/drills/endgameDrills.ts`, mating patterns in `src/features/patterns/matingPatterns.ts`,
 endgame studies in `src/features/studies/studies.ts`, opening repertoires in
 `src/features/openings/repertoires.ts`, classic games in `src/features/classics/games.ts`
@@ -10,10 +10,12 @@ endgame studies in `src/features/studies/studies.ts`, opening repertoires in
 React knowledge is needed to add any of it — but every position must be _right_, so this guide is
 mostly about verification.
 
-After adding or renaming a lesson, run `npm run lessons:index`: it regenerates
-`src/features/learn/lessonMeta.ts`, the small index (id, title, level, category, length) that the Home,
-Progress and course pages use so they do not have to load the lesson text. The build runs it
-automatically and a unit test fails while the index is stale.
+After adding or renaming a lesson, or changing its steps, run `npm run lessons:index`: it regenerates
+`src/features/learn/lessonMeta.ts`, the small index (id, title, level, category, length, step keys and
+the file that holds the lesson) that every page lists lessons from. The lesson text itself is loaded a
+file at a time, when one of the file's lessons is opened, so keep each file to a handful of lessons (the
+bundle check allows 40 KB gzipped per file). The build runs the index script automatically and a unit
+test fails while the index is stale.
 
 ## Anatomy of a lesson
 
@@ -33,28 +35,45 @@ automatically and a unit test fails while the index is stale.
 }
 ```
 
-A lesson is a sequence of **steps**. Each step shows one position with some text; steps with a
-`task` ask the learner to play a move.
+A lesson is a sequence of **steps**. Each step shows one position with what the coach says about it;
+steps with a `task` ask the learner to play a move, and the step becomes a conversation: the coach asks,
+the learner moves, the coach answers, the opponent replies, and the line goes on.
 
 ```ts
 {
   id: 'two-targets',                // optional, stable key: see "Step ids" below
   title: 'One move, two targets',
-  text: 'A **fork** is a single move that attacks two pieces at once. …',
+  text: 'A **fork** is a single move that attacks two pieces at once. …',   // the coach's opening words
   fen: '4k3/p6p/8/3r4/4N3/8/P6P/4K3 w - - 0 1',
   orientation: 'white',             // optional; must match the side to move when there is a task
   shapes: ['e4f6', 'f6e8:red', 'd5'],   // arrows "e4f6" and circles "d5"; colour suffix optional
   task: {
-    prompt: 'Fork the king and the rook.',
+    prompt: 'Which knight move attacks the king and the rook?',   // the question
     moves: ['Nf6+'],                // accepted answers in SAN; "+"/"#" suffixes are ignored when comparing
     acceptAnyMate: false,           // true: any checkmating move is also accepted
+    hint: 'Which squares can the knight reach with check?',        // a nudge, never the move
+    success: 'Check, and the rook on d5 is attacked too.',         // what the move does
+    why: 'The king has to move first, so the rook cannot be saved. …',   // why it works, what to take from it
+    wrong: {                        // the tempting wrong moves, each with its own answer
+      'Nc5': { text: 'That attacks the rook, but it is not check: …', refute: 'Rxc5' },
+      'Nd6+': 'Check, but the rook is not attacked from d6. …',    // a string is the answer alone
+    },
+    failure: 'Look for a knight move that gives check and attacks d5.',   // any other wrong move
     reply: 'Ke7',                   // optional scripted opponent reply, played after a correct answer
-    hint: 'Which knight move gives check?',
-    success: 'Nf6+ — check and an attack on d5.',
-    failure: 'Not quite. You want a check that also attacks d5.',
+    replyNote: 'The king steps out of check, and the rook is left alone.',  // the coach on the reply
+    then: { prompt: 'Now collect.', moves: ['Nxd5+'], … },   // the line goes on: the next move
   },
 }
 ```
+
+How a step plays: the coach's `text` opens it and the `prompt` waits for a move. A right move is
+answered with `success` and then `why` (labelled "Why it works"); if there is a `reply`, the opponent
+plays it, the coach adds `replyNote`, and the `then` task asks for the next move. A wrong move listed in
+`wrong` gets its answer, and its `refute` is played on the board (with a red arrow) until the learner
+takes the move back. Any other wrong move gets the board's own answer when there is a plain one — a mate
+it allows, a stalemate it gives, a piece it leaves to be taken, followed through the captures that come
+after — with the punishing reply on the board, then `failure` as a hint; otherwise `failure` alone, and
+the move is taken back by itself. "Show answer" plays the first accepted move with `success` and `why`.
 
 ### Text formatting
 
@@ -86,25 +105,78 @@ current steps is done, so a shortened lesson is never completed by the keys of s
 
 1. **Exactly the moves you list are correct** — and every other legal move is wrong or clearly
    inferior. If two moves are equally good, list both. If the engine prefers a different move that is
-   _also_ good, either list it or reword the failure text to acknowledge it ("That also wins, but…").
+   _also_ good, either list it or answer it in `wrong` ("That also wins, but…").
 2. **Balanced material.** Puzzles that win a piece should start from roughly equal material, otherwise
    the engine evaluation confuses learners who open the position in the analysis board.
 3. **No loose ends.** If you claim "wins the rook", check that the rook is not defended, that no
    in-between move saves it, and that the winning piece is not immediately lost.
 4. **Mates:** use `acceptAnyMate: true` and list _all_ mating moves — the test suite computes them and
    fails if the lists differ.
-5. **Keep it short.** One idea per step, three to seven steps per lesson, at most ~120 words per step
-   (the tests fail above 130).
-6. **The failure text must be true of every wrong move.** It is shown for any move you did not list, so
-   never claim "that loses" in a drawn ending where other moves hold as well — list them, or say
-   "That also holds, but…".
+5. **Keep it short.** One idea per step, three to seven steps per lesson, at most ~120 words of `text`
+   per step (the tests fail above 130), and the word limits below for everything around a task.
+6. **The failure text must be true of every wrong move** you did not list. It is shown for any of them,
+   so never claim "that loses" in a drawn ending where other moves hold as well — list those in `wrong`
+   or say "That also holds, but…". It is also shown as the hint after the board's own answer ("The rook
+   is unprotected on d8: Black simply takes it with Kxd8."), so write it as a pointer toward the idea,
+   not as a verdict on the move.
 7. **A scripted reply is a fair defence.** It may not lose more than 3 pawns against the opponent's
    best answer (once the best defence is lost anyway, it only may not walk into a forced mate); when
    a lesson deliberately follows a weaker but natural reply (the classic line of a pattern), say so
-   in the success text and add the step to `REPLY_ALLOW_LIST` in `lessons.engine.test.ts` with the
+   in the `replyNote` and add the step to `REPLY_ALLOW_LIST` in `lessons.engine.test.ts` with the
    reason.
-8. **Count before you claim.** "A piece up", "two pawns down", "material is level": count the diagram
+8. **A refutation is the real punishment.** A `refute` must be the opponent's best answer to the wrong
+   move, or within 1.5 pawns of it, and leave the learner at least a pawn worse off than the task's own
+   move. Answer the tempting moves only: the one or two (at most three or four) mistakes a learner at
+   this level really plays — the greedy capture, the natural-looking check, the move that walks into
+   the pattern the lesson is about. Moves that just hang a piece are answered by the board already;
+   list them only when you have something better to say.
+9. **Count before you claim.** "A piece up", "two pawns down", "material is level": count the diagram
    (and the position after the quoted line) before writing it.
+10. **Lines.** When an idea takes more than one move (a combination, a mating net, a technique, an
+    opening plan), make it a line with `reply` and `then` rather than a chain of steps: each move of the
+    line gets its own `prompt`, `success` and `why`, and the opponent's replies their `replyNote`.
+    Keep lines to two to four learner moves. Every task of the line is checked like a step's first task
+    (legal moves, mates listed, engine score), at the position after the previous moves and replies.
+
+## The coach's voice
+
+Lessons are written as a strong player sitting next to the learner, talking them through the position.
+The test: read the step aloud. It should sound like a person explaining a position they care about, not
+like a rule book or a puzzle caption.
+
+- **Talk to the learner.** "You" and "your", and "I" or "let's" now and then ("I asked for e5", "Let's
+  climb"). Plain words, short sentences, active voice.
+- **Point at the board.** Name pieces and squares: "the knight on f3 attacks e5", not "the knight is
+  active". The learner should be able to check every sentence by looking at the diagram.
+- **Explain why, every time.** What the move does, what it stops, what would happen otherwise, and the
+  habit or principle to take away from it ("Before every capture, ask what can take back.").
+- **Share how a strong player thinks.** The question they ask themselves, the move they look at first,
+  the mistake most people make here. That is what makes a lesson feel personal.
+- **Be honest about alternatives.** When a wrong move is a real opening or a decent move, say so ("**c4**
+  is a good move too — the English Opening — but this step is about…"). Never call a good move bad.
+- **No cheerleading.** Praise by explaining, not by exclaiming: no "Great job!", no exclamation marks in
+  a row, no emojis. Encouraging, yes; gushing, no.
+- **One idea per step**, and the vocabulary of the learner's level: beginner lessons define every term on
+  first use; advanced lessons can assume the earlier ones.
+- **Moves in prose:** SAN in bold for a concrete move (**Nf6+**), "1. e4 e5 2. Nf3" for a line (the
+  tests replay every line they find), full piece names otherwise.
+
+What each field is for, and its word limit (the tests fail above it):
+
+| Field       | Words   | What the coach says                                                                                                                                                                         |
+| ----------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text`      | 130     | Opens the step: what has happened, what to look at, the idea. Do not end with the instruction the prompt repeats; end with the setup ("You can take first.").                               |
+| `prompt`    | 20      | The question, as a coach asks it: "Which capture wins more?", "Where does the other rook check?" Shown as "White to move — …".                                                              |
+| `hint`      | 40      | A thinking nudge that does not give the move away: a question or something to look at ("Is anything guarding d8?").                                                                         |
+| `success`   | 40      | What the move does, concretely. It is shown when the move is found _and_ when the answer is shown, so describe the move ("Check, and the rook on d5 is attacked too."), never congratulate. |
+| `why`       | 80      | The heart of the lesson: why it works, why the natural alternative fails, and what to take into your own games. Every task has one.                                                         |
+| `wrong`     | 50 each | The answer to one tempting wrong move: what it allows or misses, with the `refute` the opponent plays.                                                                                      |
+| `failure`   | 45      | The answer to every other wrong move: a pointer toward the idea, true of all of them.                                                                                                       |
+| `replyNote` | 45      | Why the opponent played the reply, and what it changes: "Black’s only move. The king steps to g8, and now…"                                                                                 |
+
+`src/features/learn/lessons/beginner.ts` is the model to follow: every task in it has a `why`, the
+tempting mistakes are answered in `wrong` (with refutations where the opponent can punish them), and the
+ladder mate, the queen mate and the Scandinavian step show lines.
 
 ## Verifying positions
 
@@ -115,12 +187,15 @@ npm test -- lessons
 ```
 
 This confirms every FEN is legal (including that the side _not_ to move is not in check), every
-accepted move and scripted reply is playable, mate lists are complete, and orientations match. It also
-finds the move sequences quoted in a step's text, prompt, hint, success and failure ("Nxf6+ gxf6
-Qxh7") and replays them: a run of two or more moves must be legal from the diagram (either side to
-move), from the position after an accepted move or the scripted reply (also with the same side to move
-again, for threats), from the previous step's diagram or from the initial position; and a move
-followed by "mate" (or written with `#`) must be checkmate. Move pairs that describe a plan rather than
+accepted move and scripted reply is playable at every move of a line, mate lists are complete,
+orientations match, a line goes on only after a reply, every `wrong` move is legal and not an accepted
+one (nor a mate in a mate task) and its `refute` is legal after it, and the coach's words keep to their
+word limits. It also finds the move sequences quoted in a step's text and in everything the coach says
+around its tasks ("Nxf6+ gxf6 Qxh7") and replays them: a run of two or more moves must be legal from the
+diagram (either side to move), from any position of the line (after an accepted move — also with the
+same side to move again, for threats — after the reply, after a wrong move and its refutation), from the
+previous step's diagram or from the initial position; and a move followed by "mate" (or written with
+`#`) must be checkmate. Move pairs that describe a plan rather than
 a line ("the minority attack ends in bxc6 bxc6") go in `PROSE_ALLOW_LIST` in
 `src/features/learn/lessons/quotedLines.ts` — keep it short and prefer fixing the prose. Every lesson
 must also sit in the course of its own level, and step ids must be unique kebab-case words.
@@ -128,31 +203,49 @@ must also sit in the course of its own level, and step ids must be unique kebab-
 Chess claims need an engine. The whole lesson set is checked against Stockfish with
 
 ```bash
-npm run lessons:verify          # add "-- --depth 22" for a deeper (slower) check
+npm run lessons:verify          # add "-- --depth 22" for a deeper (slower) check,
+                                # "-- --shard 1/6" for every sixth lesson
 ```
 
-For every task, the accepted moves must be checkmate (for mate tasks), keep a decisive advantage when
-the position is already won, or otherwise score within 80 centipawns of the engine's best move; and a
-scripted reply may not lose more than 300 centipawns against the best defence, or walk into a forced
-mate when the best defence is lost anyway (see rule 7). Run it
-after adding or changing a lesson. CI runs the structural checks on every pull request, and the
+For every task — every move of a line — the accepted moves must be checkmate (for mate tasks), keep a
+decisive advantage when the position is already won, or otherwise score within 80 centipawns of the
+engine's best move; a scripted reply may not lose more than 300 centipawns against the best defence, or
+walk into a forced mate when the best defence is lost anyway (see rule 7); a `refute` must be within 150
+centipawns of the opponent's best answer and leave the learner at least 100 centipawns worse than the
+task's move (rule 8); and the board's own answers to the moves you did not list must hold up: the reply
+it plays must be near the opponent's best, or at least clearly better for the opponent than the task's
+move. When one does not, answer that move in `wrong`. Run it after adding or changing a lesson; while
+writing one, check just that lesson:
+
+```bash
+VERIFY_ENGINE=1 npx vitest run src/features/learn/lessons/lessons.engine.test.ts -t "forks step"
+```
+
+To see the conversation a lesson makes — for every task, what the coach says to the right move and to
+**every** other legal move, with the reply played on the board — run the preview:
+
+```bash
+npm run lessons:preview -- forks                 # one or more lesson ids
+npm run lessons:preview -- forks --engine        # also scores every move with Stockfish
+```
+
+With `--engine` the report flags each move that is not accepted but scores as well as the answer (a
+second solution, or a `failure` text that is not true of it) and each punishing reply that is not the
+opponent's best. Read it before you call a lesson done: it is the quickest way to find a failure text
+that does not fit a move, or a tempting move that deserves its own answer. CI runs the structural checks on every pull request, and the
 **Content** workflow (`.github/workflows/content.yml`) runs this check — with the study, repertoire and
 drill checks below — on every pull request that touches the content, and weekly.
 
-With the engine installed (`npm run engine:setup`) you can also analyse any position from Node:
+With the engine installed (`npm run engine:setup`) you can analyse any position from the command line —
+the quickest way to check a claim before you write it:
 
-```js
-// scripts/analyse.mjs (example)
-import { NodeEngine } from './lib/node-engine.mjs';
-const engine = new NodeEngine();
-await engine.init();
-const { lines } = await engine.analyse('4k3/p6p/8/3r4/4N3/8/P6P/4K3 w - - 0 1', {
-  depth: 22,
-  multipv: 4,
-});
-for (const [i, line] of lines) console.log(i, line.score, line.pv.slice(0, 6).join(' '));
-engine.quit();
+```bash
+npm run engine:analyse -- "4k3/p6p/8/3r4/4N3/8/P6P/4K3 w - - 0 1" --depth 22 --multipv 4
+npm run engine:analyse -- start --moves "1. e4 e5 2. Nf3 Nc6" --multipv 3
 ```
+
+It prints the engine's best lines in SAN, scores from the side to move's point of view (`M3` is a mate
+in three). For anything more, `scripts/lib/node-engine.mjs` drives the same engine from a script.
 
 Compare the top lines with the moves you accept. For endgames use depth 28–30; for tactics 20–24 is
 plenty. The analysis board in the app (`/analyze?fen=…`) works too.
@@ -322,12 +415,3 @@ The Daily Opening and Engine Says games read `public/openings/lines.json`, which
   puzzle's follow-up moves make natural two-step tasks (the first move with a scripted reply, then the
   finish).
 - Do not copy annotated positions from books or databases with restrictive licences.
-
-## Style
-
-- Explain _why_, not just _what_. A learner should be able to predict the move before playing it.
-- Use full piece names in prose ("the knight") and SAN in bold for concrete moves (**Nf6+**).
-- Beginner lessons avoid jargon or define it on first use. Advanced lessons can assume the vocabulary
-  of the earlier ones.
-- Prefer "you" and active voice. Keep the tone encouraging in `failure` texts: say what to look for,
-  not just that the move was wrong.

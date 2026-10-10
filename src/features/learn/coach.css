@@ -1,0 +1,197 @@
+/* ---------- The coach: a lesson step as a conversation ---------- */
+.coach {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* The coach's opening words, with its mark. */
+.coach__intro {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.coach__avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.coach__bubble {
+  flex: 1;
+  min-width: 0;
+}
+
+.coach__bubble .lesson__text > :first-child {
+  margin-top: 0;
+}
+
+.coach__bubble .lesson__text > :last-child {
+  margin-bottom: 0;
+}
+
+.coach__log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.coach__log:empty {
+  display: none;
+}
+
+/* What the coach says as the step goes, its tone in the bar on the left. */
+.coach__msg {
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--border);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--surface-2);
+  line-height: 1.5;
+}
+
+.coach__msg--good {
+  border-left-color: var(--success);
+  background: var(--success-soft);
+}
+
+.coach__msg--why,
+.coach__msg--answer {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.coach__msg--wrong {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.coach__msg--hint {
+  border-left-color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.coach__msg--note {
+  background: transparent;
+}
+
+/* A question already answered: the one waiting stands out instead. */
+.coach__msg--prompt {
+  background: transparent;
+  font-weight: 600;
+}
+
+.coach__label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.coach__question:focus {
+  outline-offset: 4px;
+}
+
+/* The moves played: the learner's on the right, the opponent's on the left. */
+.coach__move {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 2px var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.875rem;
+}
+
+.coach__move--you {
+  align-self: flex-end;
+}
+
+.coach__move--you .icon {
+  color: var(--success);
+}
+
+.coach__move--wrong {
+  border-color: var(--danger);
+}
+
+.coach__move--wrong .icon {
+  color: var(--danger);
+}
+
+.coach__san {
+  font-weight: 700;
+}
+
+/* The end of the conversation, watched to tell when it runs on below a box of its own. */
+.coach__end {
+  height: 1px;
+  margin-top: calc(-1 * var(--space-3));
+}
+
+/* Pinned to the bottom of the box while the newest words are out of sight below it. */
+.coach__more {
+  position: sticky;
+  bottom: 4px;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.coach__more:hover {
+  background: var(--accent-soft);
+}
+
+/* Phones: the coach's latest words right under the board. Wide screens show the panel beside it. */
+.coach__latest {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: calc(-1 * var(--space-2));
+  font-size: 0.9375rem;
+}
+
+.coach__latest .coach__msg {
+  align-self: stretch;
+}
+
+.coach__latest .coach__msg--prompt {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Wide screens, and phones held sideways, have the panel beside the board instead. */
+@media (min-width: 900px), (orientation: landscape) and (max-height: 520px) {
+  .coach__latest {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .coach__msg,
+  .coach__move,
+  .coach__more {
+    border-color: CanvasText;
+  }
+}
