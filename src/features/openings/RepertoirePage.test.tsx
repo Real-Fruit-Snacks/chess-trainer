@@ -169,6 +169,29 @@ describe('RepertoirePage', () => {
     expect(screen.queryByText('Session complete')).not.toBeInTheDocument();
   });
 
+  it('a note waits for Continue, which has the focus; Enter goes on', () => {
+    vi.useFakeTimers();
+    seedCustom('1. e4 {Take the centre.} e5 2. Nf3 *');
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Start learning' }));
+    act(() => board.props?.onMove?.('e2', 'e4'));
+    const status = () => document.querySelector('.puzzle-status')?.textContent ?? '';
+    expect(status()).toContain('is in your repertoire');
+    expect(screen.getByText('Take the centre.')).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(screen.getByText('Take the centre.')).toBeInTheDocument();
+    const playOn = screen.getByTestId('repertoire-play-on');
+    expect(playOn).toHaveFocus();
+
+    // Enter from the page (not the button itself, which Enter clicks anyway).
+    act(() => playOn.blur());
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(status()).toBe('New move — play the arrow to learn it.');
+    expect(screen.queryByText('Take the centre.')).not.toBeInTheDocument();
+  });
+
   it('a forgotten move is recalled from memory, not shown again as a new move', () => {
     seedCustom('1. e4 *');
     useRepertoire.setState({

@@ -14,6 +14,12 @@ export type TrainerPhase =
   | 'idle'
   | 'opponent' // opponent's move is being played
   | 'learner' // waiting for the learner
+  /**
+   * The learner's move is in and has a note: the opponent's reply waits until
+   * the learner goes on (`playOn`), so the note stays up as long as it takes to read.
+   */
+  | 'explained'
+  /** The line is over; the next one waits for `nextLine`. */
   | 'lineDone'
   | 'sessionDone';
 
@@ -48,6 +54,8 @@ export interface UseRepertoireTrainer {
   dueOnly: boolean;
   setDueOnly: (v: boolean) => void;
   start: () => void;
+  /** After a note on the learner's move (`explained`): the opponent's reply, and on. */
+  playOn: () => void;
   nextLine: () => void;
   playMove: (from: Square, to: Square, promotion?: PromotionPiece) => void;
   showMove: () => void;
@@ -57,7 +65,6 @@ export interface UseRepertoireTrainer {
 }
 
 const OPPONENT_DELAY = 450;
-const LINE_DONE_DELAY = 1400;
 const MAX_LINES_PER_SESSION = 12;
 
 function boardState(chess: Chess, lastMove: [Square, Square] | null): BoardState {
@@ -75,6 +82,9 @@ function boardState(chess: Chess, lastMove: [Square, Square] | null): BoardState
  * Trains one repertoire line at a time: opponent moves are played from the
  * tree automatically, the learner must recall their own. New moves are shown
  * with an arrow first; every learner move is graded into the SRS store.
+ *
+ * Nothing the learner reads goes away on a timer: after a move with a note the
+ * opponent's reply waits for `playOn`, and a finished line waits for `nextLine`.
  */
 export function useRepertoireTrainer(
   repertoireId: string,
@@ -136,6 +146,23 @@ export function useRepertoireTrainer(
 
   /** Advances through opponent moves until it is the learner's turn (or the line ends). */
   const advanceRef = useRef<() => void>(() => undefined);
+  /** Plays the opponent's move `node` from the tree, with its note, and goes on. */
+  const playOpponent = useCallback(
+    (node: TreeNode) => {
+      const move = tryMove(chessRef.current, parseUci(node.uci));
+      if (!move) {
+        finishLine();
+        return;
+      }
+      playMoveSound(move, chessRef.current);
+      indexRef.current += 1;
+      setIndex(indexRef.current);
+      setBoard(boardState(chessRef.current, [move.from, move.to]));
+      setTip(node.comment ?? null);
+      advanceRef.current();
+    },
+    [finishLine],
+  );
   const advance = useCallback(() => {
     const node = expectedNode();
     if (!node) {
@@ -150,21 +177,21 @@ export function useRepertoireTrainer(
       return;
     }
     setPhase('opponent');
-    later(() => {
-      const move = tryMove(chessRef.current, parseUci(node.uci));
-      if (!move) {
-        finishLine();
-        return;
-      }
-      playMoveSound(move, chessRef.current);
-      indexRef.current += 1;
-      setIndex(indexRef.current);
-      setBoard(boardState(chessRef.current, [move.from, move.to]));
-      setTip(node.comment ?? null);
-      advanceRef.current();
-    }, OPPONENT_DELAY);
-  }, [color, finishLine]);
+    later(() => playOpponent(node), OPPONENT_DELAY);
+  }, [color, finishLine, playOpponent]);
   advanceRef.current = advance;
+
+  const playOn = useCallback(() => {
+    if (phase !== 'explained') return;
+    const node = expectedNode();
+    if (!node) {
+      finishLine();
+      return;
+    }
+    // The learner asked for it: the reply comes at once.
+    if (isLearnerMove(node, color)) advance();
+    else playOpponent(node);
+  }, [phase, color, advance, finishLine, playOpponent]);
 
   const beginLine = useCallback(
     (chosen: TreeNode[]) => {
@@ -240,13 +267,6 @@ export function useRepertoireTrainer(
     [review, repertoireId, tree],
   );
 
-  // Auto-advance after a finished line.
-  useEffect(() => {
-    if (phase !== 'lineDone') return;
-    const id = window.setTimeout(nextLine, LINE_DONE_DELAY);
-    return () => window.clearTimeout(id);
-  }, [phase, nextLine]);
-
   const attempt = useCallback(
     (from: Square, to: Square, promotion?: PromotionPiece) => {
       if (phase !== 'learner') return;
@@ -294,6 +314,11 @@ export function useRepertoireTrainer(
       setShowing(false);
       setBoard(boardState(chess, [move.from, move.to]));
       setTip(chosen.comment ?? null);
+      // A note to read, with more of the line to come: the reply waits for the learner.
+      if (chosen.comment && expectedNode()) {
+        setPhase('explained');
+        return;
+      }
       advance();
     },
     [phase, grade, advance],
@@ -357,6 +382,7 @@ export function useRepertoireTrainer(
     dueOnly,
     setDueOnly,
     start,
+    playOn,
     nextLine,
     playMove,
     showMove,

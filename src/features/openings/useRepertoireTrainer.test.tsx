@@ -80,6 +80,46 @@ describe('useRepertoireTrainer', () => {
     expect(cards[SIDE_NC3]?.lapses).toBe(1);
   });
 
+  it('a note on the learner’s move stays up: the reply waits for playOn', async () => {
+    const tree = GameTree.fromPgn('1. e4 {Take the centre.} e5 {Black does the same.} 2. Nf3 *');
+    const { result } = renderHook(() => useRepertoireTrainer('rep', tree, 'white'));
+    act(() => result.current.start());
+    act(() => result.current.playMove('e2', 'e4'));
+    expect(result.current.phase).toBe('explained');
+    expect(result.current.tip).toBe('Take the centre.');
+    // However long it takes to read.
+    await wait(10_000);
+    expect(result.current.phase).toBe('explained');
+    expect(result.current.tip).toBe('Take the centre.');
+    expect(result.current.index).toBe(1);
+
+    // Going on plays the reply at once, with its own note.
+    act(() => result.current.playOn());
+    expect(result.current.index).toBe(2);
+    expect(result.current.board.lastMove).toEqual(['e7', 'e5']);
+    expect(result.current.tip).toBe('Black does the same.');
+    expect(result.current.phase).toBe('learner');
+    // A second press finds nothing waiting.
+    act(() => result.current.playOn());
+    expect(result.current.index).toBe(2);
+  });
+
+  it('a move without a note gets its reply on its own, and a finished line waits', async () => {
+    const tree = GameTree.fromPgn('1. e4 e5 2. Nf3 {Develop with a threat.} *');
+    const { result } = renderHook(() => useRepertoireTrainer('rep', tree, 'white'));
+    act(() => result.current.start());
+    act(() => result.current.playMove('e2', 'e4'));
+    expect(result.current.phase).toBe('opponent');
+    await wait();
+    expect(result.current.phase).toBe('learner');
+    // The last move's note: nothing comes after it, so the line ends with it in view.
+    act(() => result.current.playMove('g1', 'f3'));
+    expect(result.current.phase).toBe('lineDone');
+    await wait(10_000);
+    expect(result.current.phase).toBe('lineDone');
+    expect(result.current.tip).toBe('Develop with a threat.');
+  });
+
   it('a twin already recalled today through its own line is not advanced twice', async () => {
     const earlier = Date.now() - 60_000;
     const recalled = {

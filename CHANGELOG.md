@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.27.2] - 2026-10-11
+
+Openings at your own pace: a note on your move stays up until you have read it.
+
+### Fixed
+
+- **Learning a repertoire (Openings), the note on your move no longer vanishes.** The opponent's
+  reply came 0.45 seconds after your move and replaced its note. Now, after a move with a note,
+  the trainer waits: **Continue** (or Enter, or →) plays the reply. A move without a note gets its
+  reply on its own, as before.
+- A finished line no longer moves on to the next after 1.4 seconds, which took the last note and
+  the line's result with it. **Next line** (or N, Enter or →) starts it. _Continue_ and _Next line_
+  take the keyboard focus without scrolling the page.
+
 ## [0.27.1] - 2026-10-11
 
 A polish pass over every page, on a computer, a tablet and a phone, in the light and dark themes.

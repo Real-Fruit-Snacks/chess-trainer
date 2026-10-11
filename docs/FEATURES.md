@@ -92,7 +92,8 @@ The complete reference of what Chess Trainer does, section by section. For how i
   Indian, Najdorf — trained move by move with spaced repetition (SM-2), every learner move
   engine-checked. A missed move comes back ten minutes later as a move to recall (not as a new move
   shown with an arrow), then at growing intervals. A move reached by another move order (a
-  transposition) is learned once: recalling or missing it counts in both lines.
+  transposition) is learned once: recalling or missing it counts in both lines. A move's note stays
+  up until the learner goes on (Continue, Enter or →), and a finished line waits for _Next line_.
 - Import your own PGN repertoires, **edit them on the board** with notes, **add lines straight from
   the analysis board**, **share a repertoire as a link** (through the share sheet where the device
   has one), and **practise it against the engine**, which follows the book while the game stays in

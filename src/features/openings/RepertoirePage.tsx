@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { Chess, type Square } from 'chess.js';
 import { Board } from '@/components/board/Board';
@@ -23,6 +23,7 @@ import type { MoveInput, PromotionPiece, San, Uci } from '@/chess/types';
 import { shareUrl } from '@/lib/shareCodes';
 import { pageShortcutKey } from '@/lib/shortcutKey';
 import { describeDue, isNew } from '@/lib/srs';
+import { useFocusWhile } from '@/lib/useFocusWhile';
 import { useNow } from '@/lib/useNow';
 import { siteConfig } from '@/site.config';
 import { cardsFor, useRepertoire } from '@/store/repertoire';
@@ -295,21 +296,29 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
     [explore, isCustom, exploreNode],
   );
 
-  // Keyboard: Space shows the move, N = next line. The shared rule: either case, never with a
-  // modifier, never from a field, a dialog or the board (role="application"), which types squares.
+  // Keyboard: Space shows the move; Enter or → goes on after a note, and to the next line
+  // (as does N). The shared rule: either case, never with a modifier, never from a field, a
+  // dialog or the board (role="application"), which types squares.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // N is a single-key shortcut (off with the setting); Space keeps working.
+      // N is a single-key shortcut (off with the setting); Space, Enter and → keep working.
       const key = pageShortcutKey(e);
-      if (key === ' ' && trainer.phase === 'learner') {
-        e.preventDefault();
-        trainer.showMove();
-      }
-      if (key === 'n' && trainer.phase === 'lineDone') trainer.nextLine();
+      const goOn = key === 'Enter' || key === 'ArrowRight';
+      if (key === ' ' && trainer.phase === 'learner') trainer.showMove();
+      else if (goOn && trainer.phase === 'explained') trainer.playOn();
+      else if ((goOn || key === 'n') && trainer.phase === 'lineDone') trainer.nextLine();
+      else return;
+      e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [trainer]);
+
+  // The way on has the focus, so Enter takes it — without scrolling the page to it.
+  const playOnRef = useRef<HTMLButtonElement>(null);
+  const nextLineRef = useRef<HTMLButtonElement>(null);
+  useFocusWhile(playOnRef, trainer.phase === 'explained');
+  useFocusWhile(nextLineRef, trainer.phase === 'lineDone');
 
   const { board, phase } = trainer;
   const learnerTurn = phase === 'learner';
@@ -349,6 +358,10 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
             ? 'New move — play the arrow to learn it.'
             : 'Play the move shown.'
           : 'Your move. What does the repertoire say?';
+      case 'explained': {
+        const played = trainer.line[trainer.index - 1];
+        return played ? `Right: ${played.san} is in your repertoire.` : 'Right.';
+      }
       case 'lineDone':
         return `Line complete: ${trainer.lineResult.correct}/${trainer.lineResult.total} recalled.`;
       case 'sessionDone':
@@ -537,8 +550,23 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
                       Show move <Kbd>Space</Kbd>
                     </Button>
                   ) : null}
+                  {phase === 'explained' ? (
+                    <Button
+                      ref={playOnRef}
+                      variant="primary"
+                      onClick={trainer.playOn}
+                      data-testid="repertoire-play-on"
+                    >
+                      Continue <Kbd>Enter</Kbd>
+                    </Button>
+                  ) : null}
                   {phase === 'lineDone' ? (
-                    <Button variant="primary" onClick={trainer.nextLine}>
+                    <Button
+                      ref={nextLineRef}
+                      variant="primary"
+                      onClick={trainer.nextLine}
+                      data-testid="repertoire-next-line"
+                    >
                       Next line <Kbd>N</Kbd>
                     </Button>
                   ) : null}
