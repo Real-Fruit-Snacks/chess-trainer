@@ -190,6 +190,12 @@
   margin: 0;
 }
 
+/* "Mark as not done" is a plain-text button: its words line up with the page's edge, under
+   the crumbs on a phone where it takes a line of its own, at the right on a wide screen. */
+.lesson__crumbs > .btn--ghost {
+  margin-inline: calc(-1 * var(--space-3));
+}
+
 .lesson__nav {
   display: flex;
   flex-wrap: wrap;
@@ -250,6 +256,14 @@
   color: var(--accent-contrast);
 }
 
+/* The step on screen, done before: still filled, its number still readable, ringed as current. */
+.lesson__stepdot--done[aria-current='step'] {
+  color: var(--accent-contrast);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--accent);
+}
+
 .lesson__task {
   border-left: 3px solid var(--accent);
   padding: var(--space-2) var(--space-3);
@@ -267,6 +281,19 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-3);
+}
+
+/* Phones: the buttons share the width two by two instead of wrapping raggedly, and a last
+   one left on its own (the way on) takes the whole row. */
+@media (max-width: 599px) {
+  .lesson__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lesson__actions > .btn:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
 }
 
 .lesson__foot p {

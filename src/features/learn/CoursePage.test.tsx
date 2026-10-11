@@ -35,7 +35,7 @@ describe('CoursePage', () => {
     expect(link).toHaveAttribute('href', '/learn/the-board?course=first-steps');
     expect(
       screen.getByRole('link', {
-        name: 'Checkpoint: solve 5 Hanging piece puzzles, 0 of 5 solved',
+        name: 'Checkpoint: Solve 5 Hanging piece puzzles, 0 of 5 solved',
       }),
     ).toBeInTheDocument();
   });

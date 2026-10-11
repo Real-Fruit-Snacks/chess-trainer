@@ -21,6 +21,10 @@
   font-weight: 600;
 }
 
+.lab__nav a {
+  padding-block: 2px;
+}
+
 .lab__table {
   width: 100%;
   border-collapse: collapse;

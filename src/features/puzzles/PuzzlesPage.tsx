@@ -319,8 +319,8 @@ function Onboarding() {
               checked={choice === 'calibrate'}
               onChange={() => setChoice('calibrate')}
             />
-            <span>Find my level with {CALIBRATION_PUZZLES} puzzles (recommended)</span>
-            <span className="badge badge--accent">calibrate</span>
+            <span>Find my level (recommended)</span>
+            <span className="badge badge--accent">{CALIBRATION_PUZZLES} puzzles</span>
           </label>
           {STARTING_RATINGS.map((option) => (
             <label
@@ -1005,6 +1005,7 @@ function PuzzleAbout({
         <Button
           size="sm"
           variant={bookmarked ? 'primary' : 'ghost'}
+          className="puzzle-bookmark"
           aria-pressed={bookmarked}
           title={
             bookmarked

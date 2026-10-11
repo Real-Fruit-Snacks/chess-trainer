@@ -539,8 +539,8 @@ descriptions of view-only diagrams, keyboard shortcuts (press `?`; the single-le
 switched off in Settings for speech input and switch devices, while Enter, Space and the arrows keep
 working), focus management, a
 colour-blind-safe high-contrast board theme, high-contrast piece sets (**MPChess** and **California**), a soft sound
-theme, reduced-motion support, a visible focus ring on every surface (and Windows High Contrast
-styles) and WCAG-AA text contrast — checked by an automated axe-core sweep of every page, one of each
+theme, reduced-motion support, a visible focus ring on every surface for keyboard use (none after a
+click or a tap moved the focus; Windows High Contrast styles too) and WCAG-AA text contrast — checked by an automated axe-core sweep of every page, one of each
 parameterised route included, in all three colour schemes.
 
 ## App and offline

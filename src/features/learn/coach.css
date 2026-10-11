@@ -139,6 +139,18 @@
   margin-top: calc(-1 * var(--space-3));
 }
 
+/* Its start, watched to tell when earlier words are scrolled away above. */
+.coach__start {
+  height: 1px;
+  margin-bottom: calc(-1 * var(--space-3));
+}
+
+/* Scrolled down in its box: the line cut by the top edge fades out instead of being sliced
+   (CoachLog leaves the newest answer below the fade). */
+.coach--more-above {
+  mask-image: linear-gradient(to bottom, transparent, #000 16px);
+}
+
 /* Pinned to the bottom of the box while the newest words are out of sight below it. */
 .coach__more {
   position: sticky;

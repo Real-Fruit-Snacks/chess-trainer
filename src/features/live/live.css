@@ -61,15 +61,16 @@
   gap: var(--space-2) var(--space-3);
 }
 
+/* No margin of their own below: in a stack, the stack's spacing above them stays. */
 .live__label {
-  margin: 0;
+  margin-bottom: 0;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-muted);
 }
 
 .live__aside {
-  margin: 0;
+  margin-bottom: 0;
 }
 
 .live__connection {

@@ -110,6 +110,17 @@
   font-size: 0.9rem;
 }
 
+/* Each theme is a link to practise it: a target at least 24px high, more on a touch screen. */
+.themes-report__list a {
+  padding-block: 2px;
+}
+
+@media (pointer: coarse) {
+  .themes-report__list a {
+    padding-block: 6px;
+  }
+}
+
 .themes-report__bar {
   height: 8px;
   border-radius: var(--radius-pill);

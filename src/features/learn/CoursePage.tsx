@@ -94,11 +94,7 @@ export default function CoursePage() {
                 >
                   {item.item.type === 'lesson' ? (
                     // A lesson can be marked done (or not done) from here.
-                    <LessonCheck
-                      lessonId={item.item.id}
-                      title={item.title.replace(/^Lesson: /, '')}
-                      done={item.done}
-                    />
+                    <LessonCheck lessonId={item.item.id} title={item.title} done={item.done} />
                   ) : (
                     <span
                       className={`course__status${item.done ? ' is-done' : ''}`}
@@ -110,12 +106,14 @@ export default function CoursePage() {
                   <Link
                     to={item.to}
                     className="course__item"
-                    // The name carries what the row shows: the title, whether it is
-                    // done, and the detail ("3 of 5 solved", "5 min · Rules").
-                    aria-label={`${item.title}${item.done ? ' (done)' : ''}, ${item.detail}`}
+                    // The name carries what the row shows: the kind and title, whether it
+                    // is done, and the detail ("3 of 5 solved", "5 min · Rules").
+                    aria-label={`${item.kind}: ${item.title}${item.done ? ' (done)' : ''}, ${item.detail}`}
                   >
                     <span className="course__item-title">{item.title}</span>
-                    <span className="small muted">{item.detail}</span>
+                    <span className="small muted">
+                      {item.kind} · {item.detail}
+                    </span>
                     {item.progress && !item.done ? (
                       <ProgressBar
                         value={item.progress.value}

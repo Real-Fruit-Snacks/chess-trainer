@@ -76,7 +76,7 @@ test.describe('marking lessons done', () => {
     await expect(page.getByText(/^0 of 20 steps done$/)).toBeVisible();
     await page.getByRole('checkbox', { name: 'Mark as done: The board and the notation' }).click();
     await expect(page.getByText(/^1 of 20 steps done$/)).toBeVisible();
-    await expect(page.getByText('Up next: Lesson: How the pieces move (The rules)')).toBeVisible();
+    await expect(page.getByText('Up next: How the pieces move (The rules)')).toBeVisible();
   });
 
   test('from the lesson page, and not done again: it starts over at the first step', async ({

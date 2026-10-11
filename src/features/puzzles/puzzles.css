@@ -41,14 +41,16 @@
   border-color: var(--border-strong);
 }
 
-/* The eight puzzle modes wrap onto a second row wherever one row is too narrow for them,
-   so no mode is ever pushed out of sight. */
-.puzzle-modes {
-  max-width: 100%;
+/* "Bookmark" is a plain-text button until pressed: its words line up with the theme pills when
+   it wraps under them, and with the card's edge beside them. */
+.puzzle-bookmark.btn--ghost {
+  margin-inline: calc(-1 * var(--space-3));
 }
 
-.puzzle-modes .segmented {
-  flex-wrap: wrap;
+/* The puzzle modes wrap onto a second row wherever one row is too narrow for them (as every
+   segmented control does), so no mode is ever pushed out of sight. */
+.puzzle-modes {
+  max-width: 100%;
 }
 
 /* Phones: the nine modes in three even rows of three (wrapping left one alone on a row). */

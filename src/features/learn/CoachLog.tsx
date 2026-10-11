@@ -17,6 +17,9 @@ const LABELS: Partial<Record<CoachTone, string>> = {
 
 const SIDE: Record<LongColor, string> = { white: 'White', black: 'Black' };
 
+/** How far the words fade in under the top of a scrolled box, in pixels (`.coach--more-above`). */
+const FADE = 16;
+
 /**
  * The first message of the newest turn (see `LessonMessage`): where what the
  * coach has said in answer to the learner's latest doing begins. None while
@@ -83,9 +86,10 @@ export function CoachLog({
     if (!box) return;
     const toAnchor = () => {
       const el = region.querySelector<HTMLElement>('[data-anchor]');
-      // At the start of a step (no move yet), the box opens at the top.
+      // At the start of a step (no move yet), the box opens at the top. Otherwise the answer
+      // starts below the fade at the top of the box (coach.css), clear of it.
       const top = el
-        ? el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 8
+        ? el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - FADE
         : 0;
       box.scrollTop = Math.max(0, top);
     };
@@ -104,17 +108,27 @@ export function CoachLog({
     seen.current.top = box.scrollTop;
   }, [messages, anchor]);
 
-  // When the newest words run on below the box, a button says so and scrolls down to them.
+  // When the newest words run on below the box, a button says so and scrolls down to them;
+  // when earlier ones are scrolled away above, the words cut by the top edge fade out.
+  const startRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const [moreAbove, setMoreAbove] = useState(false);
   const [moreBelow, setMoreBelow] = useState(false);
   useEffect(() => {
     const region = regionRef.current;
+    const start = startRef.current;
     const end = endRef.current;
-    if (!region || !end || typeof IntersectionObserver === 'undefined') return;
+    if (!region || !start || !end || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(
-      ([entry]) => setMoreBelow(entry ? !entry.isIntersecting : false),
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.target === start) setMoreAbove(!entry.isIntersecting);
+          else setMoreBelow(!entry.isIntersecting);
+        }
+      },
       { root: region },
     );
+    observer.observe(start);
     observer.observe(end);
     return () => observer.disconnect();
   }, []);
@@ -126,7 +140,8 @@ export function CoachLog({
   };
 
   return (
-    <div className="coach" ref={regionRef}>
+    <div className={`coach${moreAbove ? ' coach--more-above' : ''}`} ref={regionRef}>
+      <div ref={startRef} className="coach__start" aria-hidden="true" />
       {intro ? (
         <div className="coach__intro">
           <CoachAvatar />

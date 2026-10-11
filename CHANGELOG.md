@@ -6,6 +6,39 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-10-11
+
+A polish pass over every page, on a computer, a tablet and a phone, in the light and dark themes.
+
+### Changed
+
+- **Course steps without a doubled label.** "Continue: Check, checkmate and stalemate" instead of
+  "Continue: Lesson: Check, checkmate and stalemate", on Home, on Learn, on the course page and after
+  a lesson. The course page names each step's kind beside its details ("Lesson · 8 min · Rules").
+- **No focus ring after a click or a tap.** When the page moves the focus by itself (to _Continue_
+  in a lesson, into a dialog, back to the board), the ring now shows only for keyboard use, and the
+  first key press brings it back. Text fields keep theirs.
+- **Phones:** a lesson's buttons share the width two by two, and a last one left on its own takes
+  the whole row. The cards over a board (a repertoire, a drill, the arcade games) have buttons the
+  width of the card, and the board behind them is faded further.
+- A lesson's conversation, scrolled in its box, fades out at the top instead of showing a line cut
+  in half.
+- _Mark as not done_ on a lesson and _Bookmark_ on a puzzle line up with the text around them.
+- The choices of a segmented control wrap inside it wherever one row is too narrow: the test lab's
+  piece sets ran off the page on a tablet.
+- The first answer to "Where should your puzzle rating start?" reads _Find my level (recommended)_,
+  with a _12 puzzles_ pill like the levels below it; a pill on the chosen answer keeps its outline.
+- Army Draft's "The engine's army" fits a phone: _Random draft, same budget_.
+- The footer's _Keyboard shortcuts_, the disclosures ("Engine diagnostics"…), the test lab's
+  section links and the Progress page's theme links are at least 24px high.
+
+### Fixed
+
+- In a lesson, the dot of the step on screen lost its number when that step was done before (accent
+  on accent). It now keeps it, ringed as the current step.
+- Text that sat right against what was above it: the note under the import button on My games, and
+  on Play online the time-control prompt under the colour choice and the notes under the switches.
+
 ## [0.27.0] - 2026-10-10
 
 An offline copy with every release: the whole app in one download, started with a double-click, with

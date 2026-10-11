@@ -259,7 +259,7 @@ export default function ArmyDraftPage() {
                       value={engineArmyMode}
                       onChange={(e) => setEngineArmyMode(e.target.value as EngineArmy)}
                     >
-                      <option value="random">Random draft with the same budget</option>
+                      <option value="random">Random draft, same budget</option>
                       <option value="mirror">Same army as yours</option>
                     </Select>
                   )}

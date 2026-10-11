@@ -332,6 +332,13 @@ a.btn:focus {
   flex: 1;
 }
 
+/* A pill on a chosen option keeps its own background: an accent pill on the accent wash
+   would otherwise lose its outline and read as loose text. */
+.choice.is-selected .badge--accent {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
 /* ---------- Dialog ---------- */
 .dialog {
   border: 1px solid var(--border);
@@ -532,9 +539,11 @@ a.btn:focus {
   cursor: not-allowed;
 }
 
-/* Segmented control: a radio group with one tab stop and arrow keys between the options. */
+/* Segmented control: a radio group with one tab stop and arrow keys between the options.
+   Options that do not fit on one line wrap inside it rather than running off the page. */
 .segmented {
   display: inline-flex;
+  flex-wrap: wrap;
   padding: 3px;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -558,13 +567,8 @@ a.btn:focus {
   box-shadow: var(--shadow-sm);
 }
 
-/* Phones: the options wrap onto a second row instead of scrolling out of sight
-   (eight puzzle modes never fit on one line). */
+/* Phones: wrapped options share the width (eight puzzle modes never fit on one line). */
 @media (max-width: 599px) {
-  .segmented {
-    flex-wrap: wrap;
-  }
-
   .segmented__option {
     flex: 1 1 auto;
     text-align: center;

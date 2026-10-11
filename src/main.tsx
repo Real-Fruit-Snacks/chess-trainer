@@ -8,6 +8,7 @@ import '@/components/board/pieces/classic.css';
 import '@/styles/global.css';
 import { setupInstallListeners } from '@/app/pwa';
 import { warmUpAudioLater } from '@/lib/audioWarmUp';
+import { watchInputModality } from '@/lib/inputModality';
 import { createAppRouter } from '@/app/routes';
 import { applyColorScheme, applyPieceSet } from '@/app/theme';
 import { useSettings } from '@/store/settings';
@@ -16,6 +17,8 @@ import { useSettings } from '@/store/settings';
 setupInstallListeners();
 // The sound engine loads on the first tap or key press, not at start-up.
 warmUpAudioLater(() => useSettings.getState().sounds);
+// Focus rings follow the keyboard, not a script's focus after a click (global.css).
+watchInputModality();
 // Avoid a flash of the wrong theme.
 applyColorScheme(useSettings.getState().colorScheme);
 // Start fetching the chosen piece set's stylesheet before the first board renders.

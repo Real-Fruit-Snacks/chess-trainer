@@ -7,6 +7,9 @@ import { getLessonMeta } from './lessonMeta';
 
 export interface ItemStatus {
   item: CourseItem;
+  /** What kind of step it is: "Lesson", "Drill", "Checkpoint"… shown beside the title. */
+  kind: string;
+  /** The step itself, without its kind: "How the pieces move", "Solve 5 Fork puzzles". */
   title: string;
   detail: string;
   to: string;
@@ -69,7 +72,8 @@ function itemStatus(
       const done = progress.lessons[item.id]?.completedAt != null;
       return {
         item,
-        title: lesson ? `Lesson: ${lesson.title}` : `Lesson: ${item.id}`,
+        kind: 'Lesson',
+        title: lesson?.title ?? item.id,
         detail: lesson ? `${lesson.minutes} min · ${lesson.category}` : 'Missing lesson',
         to: lessonInCourse(item.id, courseId),
         done,
@@ -78,7 +82,8 @@ function itemStatus(
     case 'drill':
       return {
         item,
-        title: `Drill: ${item.title}`,
+        kind: 'Drill',
+        title: item.title,
         detail:
           (progress.drills[item.id]?.best ?? 0) > 0 ? 'Completed' : (item.goal ?? 'Win it once'),
         to: item.to,
@@ -89,7 +94,8 @@ function itemStatus(
       const value = Math.min(solved, item.target);
       return {
         item,
-        title: `Checkpoint: solve ${item.target} ${themeName(item.theme)} puzzles`,
+        kind: 'Checkpoint',
+        title: `Solve ${item.target} ${themeName(item.theme)} puzzles`,
         detail: `${value} of ${item.target} solved`,
         to: `/puzzles/themes?theme=${encodeURIComponent(item.theme)}`,
         done: solved >= item.target,
@@ -101,7 +107,8 @@ function itemStatus(
       const value = Math.min(learned, item.target);
       return {
         item,
-        title: `Repertoire: ${item.title}`,
+        kind: 'Repertoire',
+        title: item.title,
         detail: `${value} of ${item.target} moves learned`,
         to: `/openings/${item.id}`,
         done: learned >= item.target,
@@ -117,6 +124,7 @@ function itemStatus(
       );
       return {
         item,
+        kind: 'Game',
         title: `Play a game against level ${item.level}`,
         detail: done ? 'Played' : 'Any result counts — finish the game',
         to: `/play?level=${item.level}`,
@@ -127,7 +135,8 @@ function itemStatus(
       const done = item.id in progress.guessGames;
       return {
         item,
-        title: `Classic game: ${item.title}`,
+        kind: 'Classic game',
+        title: item.title,
         detail: done ? 'Played through' : 'Guess the moves',
         to: `/classics/${item.id}`,
         done,

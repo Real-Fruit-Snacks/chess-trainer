@@ -320,7 +320,7 @@ function ImportCard() {
                 </Button>
               ) : null}
             </div>
-            <p className="small muted" style={{ margin: 0 }}>
+            <p className="small muted" style={{ marginBottom: 0 }}>
               Public games only, fetched straight from{' '}
               {source === 'lichess' ? 'lichess.org' : 'chess.com'}; nothing is uploaded anywhere.
             </p>

@@ -84,7 +84,8 @@ describe('courseStatus', () => {
     expect(status.doneItems).toBe(0);
     expect(status.units[0]?.unlocked).toBe(true);
     expect(status.units[1]?.unlocked).toBe(false);
-    expect(status.next?.title).toContain('Lesson:');
+    expect(status.next?.kind).toBe('Lesson');
+    expect(status.next?.title).not.toContain(':');
     expect(status.next?.unit.id).toBe(first.units[0]?.id);
   });
 
@@ -125,7 +126,8 @@ describe('courseStatus', () => {
         .units.flatMap((u) => u.items)
         .find((i) => i.item.type === 'drill' && i.item.id === 'threats');
     expect(thinking({})).toMatchObject({
-      title: 'Drill: What’s the threat?',
+      kind: 'Drill',
+      title: 'What’s the threat?',
       detail: 'Name a threat',
       to: '/drills/threats',
       done: false,
@@ -183,7 +185,7 @@ describe('courseStatus', () => {
       );
     // The first two lessons are done: after the second comes the third.
     const status = courseStatus(first, { ...empty, lessons: done(lessonIds.slice(0, 2)) });
-    expect(nextInCourse(status, lessonIds[1]!)?.title).toContain('Lesson:');
+    expect(nextInCourse(status, lessonIds[1]!)?.kind).toBe('Lesson');
     expect(nextInCourse(status, lessonIds[1]!)?.to).toBe(
       `/learn/${lessonIds[2]}?course=first-steps`,
     );

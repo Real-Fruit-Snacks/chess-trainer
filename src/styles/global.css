@@ -114,6 +114,17 @@ kbd {
   border-radius: var(--radius-sm);
 }
 
+/*
+ * After a click or a tap, the focus a page moves by itself (to "Continue", into a
+ * dialog, back to the board) draws no ring: the ring is for finding the focus with
+ * the keyboard, and the first key press brings it back (src/lib/inputModality.ts).
+ * Text fields keep theirs: they are typed into.
+ */
+:root[data-input='pointer'] :focus-visible:not(input, textarea, select) {
+  outline: none;
+  box-shadow: none;
+}
+
 ::selection {
   background: var(--accent-soft);
 }
@@ -430,6 +441,19 @@ kbd {
   width: 100%;
 }
 
+@media (max-width: 599px) {
+  /* A card covers nearly all of the board on a phone: what shows of the board round it is
+     faded further, so a sliver of cut-off pieces reads as background, not as a glitch. */
+  .trainer__overlay:has(> .card) {
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+  }
+
+  /* The card's buttons fill its width, a row at a time, rather than a ragged centred stack. */
+  .trainer__overlay > .card .row > .btn {
+    flex: 1 1 auto;
+  }
+}
+
 .puzzle-status {
   font-weight: 600;
   margin: var(--space-2) 0;
@@ -465,15 +489,22 @@ kbd {
   max-width: 42rem;
 }
 
-/* A button that reads as a link (for actions inside running text). */
+/* A button that reads as a link (for actions inside running text). Its target reaches 24px
+   in height without making its line any taller. */
 .linklike {
   background: none;
   border: 0;
-  padding: 0;
+  padding: 3px 0;
+  margin-block: -3px;
   font: inherit;
   color: var(--accent);
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* A disclosure's row is at least 24px high, a comfortable target for a pointer. */
+summary {
+  min-height: 24px;
 }
 
 /* Hints that only make sense with a keyboard (see also .kbd in ui.css). */

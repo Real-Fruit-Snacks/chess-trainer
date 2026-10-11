@@ -453,7 +453,7 @@ function NextInCourse({
       to={next.to}
       data-testid="next-in-course"
     >
-      Next in course: {next.title.replace(/^Lesson: /, '')}
+      Next in course: {next.title}
     </LinkButton>
   );
 }
