@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { createMemoryRouter, Link, RouterProvider, useLocation } from 'react-router';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as SoundModule from '@/lib/sound';
 import { useProgress } from '@/store/progress';
@@ -168,15 +168,31 @@ const nextTask = () =>
     await new Promise((resolve) => setTimeout(resolve, 5));
   });
 
-function renderPlay(path = `/play?fen=${encodeURIComponent(MATE_IN_ONE)}&color=white`) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/play" element={<PlayPage />} />
-        <Route path="/analyze" element={<p>Analysis board</p>} />
-      </Routes>
-    </MemoryRouter>,
+function Where() {
+  const location = useLocation();
+  return <p data-testid="location">{`${location.pathname}${location.search}`}</p>;
+}
+
+/** The page in a data router (it asks before a game in progress is left), with a way out. */
+function renderPlay(path = `/play/computer?fen=${encodeURIComponent(MATE_IN_ONE)}&color=white`) {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/play/computer',
+        element: (
+          <>
+            <PlayPage />
+            <Where />
+            <Link to="/puzzles">Leave for the puzzles</Link>
+          </>
+        ),
+      },
+      { path: '/analyze', element: <p>Analysis board</p> },
+      { path: '/puzzles', element: <p>The puzzles</p> },
+    ],
+    { initialEntries: [path] },
   );
+  return render(<RouterProvider router={router} />);
 }
 
 describe('PlayPage', () => {
@@ -246,7 +262,7 @@ describe('PlayPage', () => {
 
   it('lifts the blindfold at the end, and hands the game to analysis from the learner’s side', async () => {
     useSettings.getState().update({ playBlindfold: true });
-    renderPlay(`/play?fen=${encodeURIComponent(BLACK_MATES_IN_ONE)}`);
+    renderPlay(`/play/computer?fen=${encodeURIComponent(BLACK_MATES_IN_ONE)}`);
     fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
     await nextTask();
     expect(board.props?.className).toBe('board--blindfold');
@@ -379,7 +395,7 @@ describe('PlayPage', () => {
     expect(within(setup).getByRole('button', { name: 'Start' })).toBeEnabled();
     unmount();
 
-    renderPlay('/play?level=5');
+    renderPlay('/play/computer?level=5');
     expect(within(openDialog('New game')!).getByLabelText('Opponent')).toHaveValue('engine');
   });
 
@@ -422,44 +438,54 @@ describe('PlayPage', () => {
     expect(maiaWorker.loads).toBe(1);
   });
 
-  it('leads to the waiting room, from the title and from the new game’s dialog', () => {
-    renderPlay('/play');
-    expect(screen.getByRole('link', { name: 'Play a person online' })).toHaveAttribute(
-      'href',
-      '/play/online',
-    );
+  it('leads back to Play, from the page’s path and from the new game’s dialog', () => {
+    renderPlay('/play/computer');
+    expect(screen.getByRole('link', { name: 'Play' })).toHaveAttribute('href', '/play');
     const setup = openDialog('New game')!;
-    expect(within(setup).getByRole('link', { name: 'the waiting room' })).toHaveAttribute(
+    expect(within(setup).getByRole('link', { name: 'post a game, or join one' })).toHaveAttribute(
       'href',
-      '/play/online',
+      '/play',
     );
     expect(within(setup).getByLabelText('Opponent')).toHaveAccessibleDescription(
-      'Or play a person online: post a game in the waiting room, or join one.',
+      'Or play a person online: post a game, or join one.',
     );
   });
 
   it('offers the human-like opponent when the waiting room suggests it, and clears the link', () => {
-    function Where() {
-      const location = useLocation();
-      return <p data-testid="location">{`${location.pathname}${location.search}`}</p>;
-    }
-    render(
-      <MemoryRouter initialEntries={['/play?opponent=humanlike']}>
-        <Routes>
-          <Route
-            path="/play"
-            element={
-              <>
-                <PlayPage />
-                <Where />
-              </>
-            }
-          />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderPlay('/play/computer?opponent=humanlike');
     expect(within(openDialog('New game')!).getByLabelText('Opponent')).toHaveValue('humanlike');
-    expect(screen.getByTestId('location').textContent).toBe('/play');
+    expect(screen.getByTestId('location').textContent).toBe('/play/computer');
+  });
+
+  it('asks before leaving a game in progress, and leaves when told to', async () => {
+    renderPlay('/play/computer');
+    fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+    await nextTask();
+    // Nothing played yet: nothing to lose.
+    fireEvent.click(screen.getByRole('link', { name: 'Leave for the puzzles' }));
+    await nextTask();
+    expect(screen.getByText('The puzzles')).toBeInTheDocument();
+  });
+
+  it('keeps a game in progress when the player stays', async () => {
+    renderPlay();
+    fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+    await nextTask();
+    // Not the mate: 1.Qa2, and the game goes on.
+    act(() => board.props?.onMove?.('a1', 'a2'));
+    await nextTask();
+    fireEvent.click(screen.getByRole('link', { name: 'Leave for the puzzles' }));
+    await nextTask();
+    const ask = openDialog('Leave this game?')!;
+    expect(ask).toHaveTextContent('The game in progress ends when you leave this page.');
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep playing' }));
+    await nextTask();
+    expect(screen.getByTestId('location').textContent).toMatch(/^\/play\/computer/);
+    fireEvent.click(screen.getByRole('link', { name: 'Leave for the puzzles' }));
+    await nextTask();
+    fireEvent.click(within(openDialog('Leave this game?')!).getByRole('button', { name: 'Leave' }));
+    await nextTask();
+    expect(screen.getByText('The puzzles')).toBeInTheDocument();
   });
 
   it('says the engine stopped responding when the worker died mid-game, with Retry', () => {

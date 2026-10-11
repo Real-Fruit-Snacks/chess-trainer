@@ -33,6 +33,70 @@ export function isRating(rating: unknown): rating is number | null;
 
 export const COLOR_CHOICES: readonly ColorChoice[];
 
+export type GameKind = 'chess' | 'blindfold' | 'army' | 'race' | 'arbiter' | 'judge';
+export type DuelKind = 'race' | 'arbiter' | 'judge';
+export type RaceFormat = 'best3' | 'window' | 'timed';
+export type ArbiterPace = 'normal' | 'slow';
+export type ArbiterKind =
+  | 'knight-shape'
+  | 'bishop-straight'
+  | 'rook-diagonal'
+  | 'pawn-backwards'
+  | 'pawn-straight-capture'
+  | 'pawn-diagonal-step'
+  | 'king-two-squares'
+  | 'own-capture'
+  | 'jumps-over'
+  | 'pawn-late-double'
+  | 'pawn-blocked-double'
+  | 'no-promotion'
+  | 'pinned-piece'
+  | 'king-into-check'
+  | 'ignores-check'
+  | 'castle-through-check'
+  | 'late-en-passant'
+  | 'moves-twice';
+
+/** A game's options: Army Draft's budget, a race's format and level, Arbiter's pace. */
+export interface GameOptions {
+  budget?: number;
+  format?: RaceFormat;
+  level?: number;
+  pace?: ArbiterPace;
+}
+
+export const GAMES: readonly GameKind[];
+export const DUELS: readonly DuelKind[];
+export function isGame(game: unknown): game is GameKind;
+export function isDuel(game: unknown): game is DuelKind;
+export const ARMY_BUDGETS: readonly number[];
+export const BLINDFOLD_PEEKS: number;
+export const RACE_FORMATS: readonly RaceFormat[];
+export const RACE_LEVELS: readonly number[];
+export const ARBITER_PACES: readonly ArbiterPace[];
+export const ARBITER_KINDS: readonly ArbiterKind[];
+export function gameOptions(game: unknown, opts: unknown): GameOptions | null;
+export function sameOptions(a: object, b: object): boolean;
+
+export const DUEL_RULES: Readonly<{
+  countdownMs: number;
+  revealMs: number;
+  setupMs: number;
+  race: Readonly<{
+    target: number;
+    rounds: number;
+    roundMs: number;
+    graceMs: number;
+    windowMs: number;
+    timedMs: number;
+    strikes: number;
+    timedMin: number;
+    timedMax: number;
+  }>;
+  arbiter: Readonly<{ target: number; rounds: number; roundMs: number; graceMs: number }>;
+  judge: Readonly<{ rounds: number; roundMs: number }>;
+}>;
+
 export const LIMITS: Readonly<{
   messageBytes: number;
   rateMessages: number;
@@ -48,6 +112,8 @@ export const LIMITS: Readonly<{
   helloMs: number;
   phraseMs: number;
   phrasesKept: number;
+  contentBytes: number;
+  draftMs: number;
 }>;
 
 export const CLOSE: Readonly<{

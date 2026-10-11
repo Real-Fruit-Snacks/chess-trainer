@@ -369,7 +369,7 @@ test.describe('engine ladder', () => {
         },
       ],
     });
-    await page.goto('/play');
+    await page.goto('/play/computer');
     await page.getByRole('button', { name: 'Cancel' }).click();
     const ladder = page.getByTestId('engine-ladder');
     await expect(ladder.locator('.engine-ladder__rung--climbed')).toHaveCount(2);

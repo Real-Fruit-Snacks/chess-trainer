@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router';
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Dialog,
@@ -21,27 +22,28 @@ import { useLichess } from '@/store/lichess';
 import { useProgress } from '@/store/progress';
 import {
   ID_PATTERN,
+  isGame,
   MAX_INCREMENT_SECONDS,
   MAX_MINUTES,
   parseTimeControl,
   QUICK_TIME_CONTROLS,
 } from '../../../relay/src/live/shared.mjs';
+import { GameDialog } from './GameDialog';
 import { lichessSeekAllowed, reconnectLichessForLive } from './lichessLive';
 import {
   describeTimeControl,
   formatElapsed,
   joinLink,
   lichessStatus,
-  myColorText,
   othersHere,
   type PlaceStatus,
-  posterColorText,
   relayStatus,
   speedName,
 } from './liveView';
 import { useLobby } from './lobby';
+import { describeSeek, gameNoun, ONLINE_GAMES, onlineGame } from './onlineGames';
 import { useLivePrefs } from './prefs';
-import type { ColorChoice, LobbyConnection, MySeek } from './types';
+import type { ColorChoice, GameKind, LobbyConnection, MySeek } from './types';
 import './live.css';
 
 /** After this long with nobody, the waiting room suggests a game against the computer meanwhile. */
@@ -53,37 +55,60 @@ const COLOR_OPTIONS: { value: ColorChoice; label: string }[] = [
   { value: 'black', label: 'Black' },
 ];
 
+/** The links into a game against the computer that once went to /play: they go on to it. */
+const COMPUTER_PARAMS = ['fen', 'color', 'level', 'book', 'opponent'];
+
 /**
- * The waiting room: post a game at a tap, or join one of the games others
- * posted. A posted game stays up while the player uses the rest of the app; the
- * bar under the header says so, and leads to the board once someone joins.
+ * Play: everything that starts a game, in one place. A person online — a game
+ * of chess at a tap, an invitation for a friend, the open games to join, and
+ * the games made for two (puzzle races, Arbiter, Who Stands Better?, Army
+ * Draft, blindfold) — or the computer. A posted game stays up while the player
+ * uses the rest of the app; the bar under the header says so, and leads to the
+ * board once someone joins.
  */
-export default function LivePage() {
+export default function PlayHubPage() {
+  const { search } = useLocation();
+  const [searchParams] = useSearchParams();
+  // An old link to a game against the computer (/play?fen=…) still leads there.
+  if (COMPUTER_PARAMS.some((name) => searchParams.has(name))) {
+    return <Navigate to={`/play/computer${search}`} replace />;
+  }
+  return <PlayHub />;
+}
+
+function PlayHub() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const connection = useLobby((s) => s.connection);
   const mine = useLobby((s) => s.mine);
   const pairing = useLobby((s) => s.pairing);
   const notice = useLobby((s) => s.notice);
+  /** The game dialog: a game's own Play, or an invitation (null: closed). */
+  const [dialog, setDialog] = useState<{ kind: GameKind; invite: boolean } | null>(null);
 
   useEffect(() => {
-    document.title = `Play online · ${siteConfig.name}`;
+    document.title = `Play · ${siteConfig.name}`;
   }, []);
 
   // The waiting room stays connected while this page shows (and while a game is posted).
   useEffect(() => useLobby.getState().watch(), []);
 
-  // A shared link (?join=<id>): join its game once, and leave the address bar clean so a reload
-  // does not join again.
-  const joinedRef = useRef(false);
+  // A shared link (?join=<id>) joins its game once; a link from the arcade (?play=<game>) opens
+  // that game's dialog. Either way the address bar is left clean, so a reload does neither again.
+  const arrivedRef = useRef(false);
   useEffect(() => {
-    if (!searchParams.has('join')) return;
-    const id = searchParams.get('join') ?? '';
+    if (!searchParams.has('join') && !searchParams.has('play')) return;
+    const join = searchParams.get('join');
+    const play = searchParams.get('play');
     setSearchParams({}, { replace: true });
-    if (joinedRef.current) return;
-    joinedRef.current = true;
-    if (ID_PATTERN.test(id)) useLobby.getState().join(id);
-    else toast('That link does not lead to a game.', { tone: 'warning' });
+    if (arrivedRef.current) return;
+    arrivedRef.current = true;
+    if (join !== null) {
+      if (ID_PATTERN.test(join)) useLobby.getState().join(join);
+      else toast('That link does not lead to a game.', { tone: 'warning' });
+      return;
+    }
+    if (isGame(play)) setDialog({ kind: play, invite: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
   }, []);
 
@@ -94,14 +119,16 @@ export default function LivePage() {
     useLobby.getState().clearPairing();
   }, [pairing, navigate]);
 
+  const openGame = (kind: GameKind) => setDialog({ kind, invite: false });
+  const invite = () => setDialog({ kind: 'chess', invite: true });
+
   return (
     <div>
       <div className="page-header page-header--lean">
-        <h1>Play online</h1>
+        <h1>Play</h1>
         <p>
-          Play a person in real time. Post a game and carry on with anything else in the app — you
-          will hear when someone joins — or join one of the games below. Casual games, and no engine
-          help.
+          A person online — chess at a tap, a friend by link, or one of the games made for two — or
+          the computer, at any strength.
         </p>
       </div>
 
@@ -118,14 +145,27 @@ export default function LivePage() {
           </Alert>
         ) : null}
 
-        <div className="live__layout">
-          <div className="live__post">
-            {mine ? <WaitingCard mine={mine} /> : <PostCard connection={connection} />}
+        <div className="hub">
+          <div className="hub__person">
+            {mine ? (
+              <WaitingCard mine={mine} />
+            ) : (
+              <QuickPlayCard connection={connection} onInvite={invite} />
+            )}
           </div>
+          <ComputerCard />
           <OpenGamesCard connection={connection} posted={!!mine} />
+          <GamesForTwo onPlay={openGame} disabled={connection === 'unavailable'} />
           <NameCard posted={!!mine} />
         </div>
       </div>
+
+      <GameDialog
+        open={dialog !== null}
+        kind={dialog?.kind ?? 'chess'}
+        invite={dialog?.invite ?? false}
+        onClose={() => setDialog(null)}
+      />
     </div>
   );
 }
@@ -153,24 +193,28 @@ function ConnectionStatus({ connection }: { connection: LobbyConnection }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Posting                                                            */
+/* A person: a game at a tap, or a friend by link                     */
 /* ------------------------------------------------------------------ */
 
-function PostCard({ connection }: { connection: LobbyConnection }) {
+function QuickPlayCard({
+  connection,
+  onInvite,
+}: {
+  connection: LobbyConnection;
+  onInvite: () => void;
+}) {
   const prefs = useLivePrefs();
   const account = useLichess((s) => s.account);
-  const [privateGame, setPrivateGame] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
-  // A game only people with the link may join is never posted on Lichess, where anyone could
-  // accept it.
-  const lichessOn = !!account && prefs.lichess && !privateGame;
+  const lichessOn = !!account && prefs.lichess;
 
   const post = (tc: string) => {
     prefs.update({ tc });
     useLobby.getState().post({
+      game: 'chess',
       tc,
       color: prefs.color,
-      private: privateGame,
+      private: false,
       lichess: lichessOn ? { rated: prefs.lichessRated } : null,
     });
   };
@@ -184,9 +228,14 @@ function PostCard({ connection }: { connection: LobbyConnection }) {
 
   return (
     <Card as="section" aria-labelledby="live-post-title" data-testid="live-post">
-      <h2 id="live-post-title" className="live__title">
-        Post a game
-      </h2>
+      <div className="hub__head">
+        <span className="hub__icon">
+          <Icon name="people" size={22} />
+        </span>
+        <h2 id="live-post-title" className="live__title">
+          Play a person
+        </h2>
+      </div>
       <div className="stack-sm">
         <div className="live__row">
           <span className="live__label">Your colour</span>
@@ -198,7 +247,8 @@ function PostCard({ connection }: { connection: LobbyConnection }) {
           />
         </div>
         <p className="live__label" id="live-tc-label">
-          Tap a time control to post your game
+          Tap a time control: someone waiting for the same plays you at once, or your game waits for
+          an opponent
         </p>
         <div className="live__tcs" role="group" aria-labelledby="live-tc-label">
           {QUICK_TIME_CONTROLS.map((tc) => (
@@ -222,24 +272,24 @@ function PostCard({ connection }: { connection: LobbyConnection }) {
             <span className="live__tc-speed">Set your own</span>
           </button>
         </div>
-        <Switch
-          checked={privateGame}
-          onChange={setPrivateGame}
-          label="Only people with the link"
-          description="Your game stays out of the list. Share its link once it is posted."
-        />
+        <div className="hub__invite">
+          <Button
+            onClick={onInvite}
+            disabled={connection === 'unavailable'}
+            data-testid="hub-invite"
+          >
+            <Icon name="link" size={18} />
+            <span>Invite a friend</span>
+          </Button>
+          <span className="small muted">A game only your link opens.</span>
+        </div>
         {account ? (
           <>
             <Switch
-              checked={prefs.lichess && !privateGame}
+              checked={prefs.lichess}
               onChange={(lichess) => prefs.update({ lichess })}
-              disabled={privateGame}
               label="Also look on Lichess"
-              description={
-                privateGame
-                  ? 'Not for a game only people with the link may join.'
-                  : 'Your game is posted on Lichess too; whoever accepts first plays you. Rapid and slower games only.'
-              }
+              description="Your game is posted on Lichess too; whoever accepts first plays you. Rapid and slower games only."
             />
             {lichessOn ? (
               <Switch
@@ -366,7 +416,7 @@ async function shareGame(mine: MySeek): Promise<void> {
   const url = joinLink(mine.id);
   if (typeof navigator.share === 'function') {
     try {
-      await navigator.share({ title: `A ${mine.tc} game of chess`, url });
+      await navigator.share({ title: `Play me: ${describeSeek(mine)}`, url });
       return;
     } catch (err) {
       // Closing the share sheet is a choice, not a failure; anything else falls back to copying.
@@ -402,9 +452,10 @@ function WaitingCard({ mine }: { mine: MySeek }) {
   const now = useTicker(true);
   const waited = Math.max(0, now - mine.postedAt);
   const lichess = lichessStatus(mine.lichess);
+  const game = onlineGame(mine.game);
 
   const allowLichess = () => {
-    reconnectLichessForLive('/play/online').catch(() => {
+    reconnectLichessForLive('/play').catch(() => {
       toast('Could not reach Lichess. Try again in a moment.', { tone: 'warning' });
     });
   };
@@ -413,15 +464,18 @@ function WaitingCard({ mine }: { mine: MySeek }) {
     <Card as="section" aria-labelledby="live-wait-title" data-testid="live-waiting">
       <div className="row row--between">
         <h2 id="live-wait-title" className="live__title">
-          Waiting for an opponent
+          {mine.private ? 'Waiting for your friend' : 'Waiting for an opponent'}
         </h2>
         <span className="live__elapsed" role="timer" data-testid="live-elapsed">
           {formatElapsed(waited)}
         </span>
       </div>
       <p className="live__summary">
-        {describeTimeControl(mine.tc)} · {myColorText(mine.color)}
-        {mine.private ? ' · Only people with the link' : ''}
+        {game ? <Icon name={game.icon} size={18} className="live__summary-icon" /> : null}
+        <span>
+          {describeSeek(mine)}
+          {mine.private ? ' · Only people with the link' : ''}
+        </span>
       </p>
       <ul className="live__places" role="list" aria-live="polite">
         <PlaceLine place={relayStatus(mine.relay)} />
@@ -432,10 +486,16 @@ function WaitingCard({ mine }: { mine: MySeek }) {
           Allow live games on Lichess
         </Button>
       ) : null}
+      {mine.private ? (
+        <p className="small live__share-hint">
+          Send your friend the link: it opens this game for them, in the app.
+        </p>
+      ) : null}
       <div className="row live__actions">
         <Button onClick={() => useLobby.getState().cancel()}>Cancel</Button>
         <Button variant="primary" onClick={() => void shareGame(mine)}>
-          Share link
+          <Icon name="link" size={18} />
+          <span>Share link</span>
         </Button>
       </div>
       <p className="small muted live__aside">
@@ -448,7 +508,7 @@ function WaitingCard({ mine }: { mine: MySeek }) {
               <span>
                 Nobody yet. Play the human-like computer while you wait? Your game stays posted.
               </span>
-              <LinkButton size="sm" to="/play?opponent=humanlike">
+              <LinkButton size="sm" to="/play/computer?opponent=humanlike">
                 Play the human-like computer
               </LinkButton>
             </div>
@@ -460,7 +520,39 @@ function WaitingCard({ mine }: { mine: MySeek }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* The open games and the player's name                               */
+/* The computer                                                       */
+/* ------------------------------------------------------------------ */
+
+function ComputerCard() {
+  return (
+    <Card as="section" aria-labelledby="hub-computer-title" className="hub__computer">
+      <div className="hub__head">
+        <span className="hub__icon">
+          <Icon name="chip" size={22} />
+        </span>
+        <h2 id="hub-computer-title" className="live__title">
+          Play the computer
+        </h2>
+      </div>
+      <p className="small muted hub__lead">
+        Stockfish at eight levels, from “just learned the rules” to master, or Maia, which plays the
+        moves people of a rating play. Take moves back, ask for a hint, or let the coach step in.
+      </p>
+      <div className="row hub__actions">
+        <LinkButton variant="primary" to="/play/computer" data-testid="hub-computer-new">
+          New game
+        </LinkButton>
+        <LinkButton to="/play/computer?opponent=human" data-testid="hub-pass-and-play">
+          <Icon name="device" size={18} />
+          <span>Pass and play</span>
+        </LinkButton>
+      </div>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* The open games, the games for two and the player's name            */
 /* ------------------------------------------------------------------ */
 
 function OpenGamesCard({ connection, posted }: { connection: LobbyConnection; posted: boolean }) {
@@ -469,7 +561,7 @@ function OpenGamesCard({ connection, posted }: { connection: LobbyConnection; po
   const open = connection === 'open';
 
   return (
-    <Card as="section" aria-labelledby="live-open-title" className="live__open">
+    <Card as="section" aria-labelledby="live-open-title" className="hub__open">
       <div className="live__head">
         <h2 id="live-open-title" className="live__title">
           Open games
@@ -486,33 +578,37 @@ function OpenGamesCard({ connection, posted }: { connection: LobbyConnection; po
             <p className="small muted live__aside">Joining a game withdraws your own.</p>
           ) : null}
           <ul className="live__seeks" role="list">
-            {seeks.map((seek) => (
-              <li key={seek.id} className="live__seek">
-                <span className="live__seek-who">
-                  <span className="live__seek-name">{seek.name}</span>
-                  {seek.rating !== null ? (
-                    <>
-                      {' '}
-                      <span className="live__seek-rating">{seek.rating}</span>
-                    </>
-                  ) : null}
-                </span>
-                <span className="live__seek-what small muted">
-                  {describeTimeControl(seek.tc)} · {posterColorText(seek.color)}
-                </span>
-                <Button
-                  size="sm"
-                  variant="primary"
-                  className="live__seek-join"
-                  disabled={!open}
-                  title={posted ? 'Joining withdraws your own posted game.' : undefined}
-                  aria-label={`Join ${seek.name}’s ${seek.tc} game`}
-                  onClick={() => useLobby.getState().join(seek.id)}
-                >
-                  Join
-                </Button>
-              </li>
-            ))}
+            {seeks.map((seek) => {
+              const game = onlineGame(seek.game);
+              return (
+                <li key={seek.id} className="live__seek">
+                  <span className="live__seek-who">
+                    <span className="live__seek-name">{seek.name}</span>
+                    {seek.rating !== null ? (
+                      <>
+                        {' '}
+                        <span className="live__seek-rating">{seek.rating}</span>
+                      </>
+                    ) : null}
+                  </span>
+                  <span className="live__seek-what small muted">
+                    {game ? <Icon name={game.icon} size={16} className="live__seek-icon" /> : null}
+                    <span>{describeSeek(seek)}</span>
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    className="live__seek-join"
+                    disabled={!open}
+                    title={posted ? 'Joining withdraws your own posted game.' : undefined}
+                    aria-label={`Join ${seek.name}’s ${gameNoun(seek.game, seek.tc)}`}
+                    onClick={() => useLobby.getState().join(seek.id)}
+                  >
+                    Join
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         </>
       ) : open ? (
@@ -533,17 +629,64 @@ function OpenGamesCard({ connection, posted }: { connection: LobbyConnection; po
   );
 }
 
+function GamesForTwo({
+  onPlay,
+  disabled,
+}: {
+  onPlay: (kind: GameKind) => void;
+  disabled: boolean;
+}) {
+  return (
+    <section aria-labelledby="hub-games-title" className="hub__games" data-testid="hub-games">
+      <div className="hub__section-head">
+        <h2 id="hub-games-title">Games for two</h2>
+        <p className="muted">
+          The arcade, against a person: the same puzzles at the same moment, the same replays, the
+          same positions to judge — or a game of chess with a twist.
+        </p>
+      </div>
+      <div className="hub__game-grid">
+        {ONLINE_GAMES.map((game) => (
+          <div key={game.kind} className="card hub-game" data-testid={`hub-game-${game.kind}`}>
+            <span className="hub-game__icon">
+              <Icon name={game.icon} size={24} />
+            </span>
+            <h3 className="hub-game__name">{game.name}</h3>
+            <Badge className="hub-game__time">{game.minutes} min</Badge>
+            <p className="hub-game__tagline">{game.tagline}</p>
+            {game.arcade ? (
+              <Link to={game.arcade} className="small hub-game__practise">
+                Practise alone
+              </Link>
+            ) : null}
+            <Button
+              variant="primary"
+              size="sm"
+              className="hub-game__play"
+              disabled={disabled}
+              onClick={() => onPlay(game.kind)}
+              aria-label={`Play ${game.name}`}
+            >
+              Play
+            </Button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function NameCard({ posted }: { posted: boolean }) {
   const name = useLivePrefs((s) => s.name);
   const showRating = useLivePrefs((s) => s.showRating);
   const rating = useProgress((s) => Math.round(s.puzzleRating));
 
   return (
-    <Card as="section" aria-labelledby="live-name-title" className="live__name">
+    <Card as="section" aria-labelledby="live-name-title" className="hub__name">
       <h2 id="live-name-title" className="live__title">
-        Your name
+        Your name online
       </h2>
-      <div className="stack-sm">
+      <div className="stack-sm hub__name-body">
         <div className="live__row">
           <p className="live__playas" data-testid="live-name">
             You play as <b>{name}</b>

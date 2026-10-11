@@ -22,12 +22,21 @@ export interface LivePosition {
 }
 
 /**
- * Replays a game's moves (UCI, from the initial position). A move that does
- * not fit stops the replay there: the source decides what is legal, and the
- * board shows the last position that makes sense rather than none.
+ * Replays a game's moves (UCI, from `startFen` or the initial position). A
+ * move that does not fit stops the replay there: the source decides what is
+ * legal, and the board shows the last position that makes sense rather than
+ * none.
  */
-export function replayMoves(moves: readonly string[]): LivePosition {
-  const chess = new Chess();
+export function replayMoves(
+  moves: readonly string[],
+  startFen: string | null = null,
+): LivePosition {
+  let chess: Chess;
+  try {
+    chess = startFen ? new Chess(startFen) : new Chess();
+  } catch {
+    chess = new Chess();
+  }
   const history: Move[] = [];
   for (const uci of moves) {
     const move = tryMove(chess, parseUci(uci));

@@ -69,6 +69,10 @@ export function RushTrainer() {
                 Solve as many puzzles as you can. Each one is a little harder than the last, a wrong
                 move is a strike, and three strikes end the run. No hints, no rating changes.
               </p>
+              <p className="small muted">
+                Or <Link to="/play?play=race">race a person online</Link>: the same puzzles at the
+                same moment.
+              </p>
               <div className="row">
                 <Button variant="primary" size="lg" onClick={() => rush.start('timed')}>
                   3 minutes <Kbd>Enter</Kbd>

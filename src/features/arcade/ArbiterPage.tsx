@@ -24,6 +24,7 @@ import { useArbiter } from './useArbiter';
 import { useStackedLayout } from '@/lib/useStackedLayout';
 import '@/features/play/play.css';
 import './arcade.css';
+import { PlayOnlineLink } from './arcadeControls';
 
 /** Three marks for the strikes: filled when used. */
 function Strikes({ used }: { used: number }) {
@@ -198,7 +199,10 @@ export default function ArbiterPage() {
         <p className="card__eyebrow arcade__eyebrow">
           <Link to="/arcade">Arcade</Link> / Arbiter
         </p>
-        <h1>Arbiter</h1>
+        <div className="row row--between">
+          <h1>Arbiter</h1>
+          <PlayOnlineLink kind="arbiter" />
+        </div>
         <p>
           Classic games replay at speed, and in every round one move breaks the rules. Call it
           before the next move comes.

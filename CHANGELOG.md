@@ -6,6 +6,72 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-11
+
+Play, rebuilt: one page for every game — a person online, a friend by link, the computer — and five
+of the arcade's games to play against a person, among them a puzzle race on the same puzzle at the
+same moment.
+
+### Added
+
+- **Games for two.** Five of the arcade's games against a person online, each posted from its own
+  tile on Play with the options the poster chooses:
+  - **Puzzle race.** The same puzzle on both boards at the same moment, near a puzzle rating the
+    poster picks (600 to 2400). A wrong move is out of the round; the first clean solve takes it, and
+    the first to two rounds wins (_Best of three_). With _Best of three, 15-second window_, a clean
+    solve within 15 seconds of the first shares the round. With _Three-minute race_, both get the
+    same run of puzzles, getting harder, each at their own pace: the most solved in three minutes
+    wins, fewer wrong answers breaks a tie, and three wrong answers end a player's race. When a round
+    ends, the solution plays out for whoever did not find it.
+  - **Arbiter duel.** The same stretch of a classic game replays on both boards, then a move that
+    breaks the rules. The first to call it (the button, or Space) takes the round; a call on a legal
+    move is out of it. First to three rounds, at a normal or a slow pace, faster each round. After
+    each round the board shows the rule that was broken.
+  - **Who Stands Better? duel.** Five quiet positions from the classic games, judged on the arcade's
+    scale against a 30-second clock. A judgement is locked in for good, and the other player sees
+    only that it is in; then the engine's verdict and both scores show. Up to 100 points a position,
+    as in the arcade; the higher total wins.
+  - **Army Draft.** Both players buy an army from the same budget (20, 30 or 39 points) within two
+    minutes, neither seeing the other's; an army is drafted for whoever has none when the time is
+    up. The game then starts from the two armies, with a clock as in any game.
+  - **Blindfold.** A real game with the pieces hidden for both: moves typed or played on the hidden
+    board, the last move in words, and three two-second peeks each. Each player sees how many the
+    other has used.
+- **Duels** (the race, Arbiter and Who Stands Better?) need no clock. The poster's device deals the
+  rounds, the relay checks them and sends the same to both, and each round starts on both boards at
+  once after a three-second countdown. Times are measured on each device, from the moment the round
+  appears there. The score stays in view (over the board on a phone); each round's result stays up
+  for a few seconds, with what each player did, and the rounds played are listed beside the board. Resign, rematch, the set
+  phrases and focus mode work as in a game of chess. A duel that has not started within a minute is
+  called off, and so is one whose rounds the host's device cannot prepare (the puzzles out of reach
+  offline, say), with the reason.
+- **Invite a friend** to any of the games, not only chess: the link opens the game for them.
+- _Play a person_ on the arcade's Army Draft, Blindfold, Arbiter and Who Stands Better? pages, and a
+  link to the puzzle race from Puzzle Rush. Each game's setup on Play links back to practising alone.
+- Army Draft and blindfold games played online go to My games like any other, named for their game
+  ("Army Draft · 30 points · 5+3"); an Army Draft game keeps its drafted start, so the review
+  replays it from there.
+- Leaving a game against the computer half-played — a link, the navigation, closing the tab — asks
+  first.
+
+### Changed
+
+- **Play is one page** (`/play`). _Play a person_: your colour and a time control at a tap, or
+  _Invite a friend_. _Play the computer_: a new game, or _Pass and play_ at one device. Then the open
+  games — chess and the games for two, each with its icon and options — the games for two, and your
+  name online. Posting, waiting and joining all happen there; the separate waiting room is gone.
+- The game against the computer is at `/play/computer`. Old links (`/play?fen=…`, `/play/online`,
+  join links) still lead where they did.
+- Army Draft's budget, prices and placement, and Who Stands Better?'s scale and scoring, are the
+  relay's own rules now (`relay/src/live/army.mjs`, `duelRules.mjs`), so a game scores the same
+  alone and against a person. The army shop is one component in the arcade and online.
+- **The relay** knows the new games: a posted game carries its kind and options, a game room runs
+  the draft, the peeks or the duel, and the rounds a host sends are checked before they go on.
+  Deploy it before the app (`npm run relay:deploy`): an older relay takes only games of chess.
+- The start-up code budget rises from 45 to 46 KB: Play's new routes (the hub, the duels and the
+  redirects from the old addresses) and their icons bring it to 45.3 KB.
+- CI runs the 0.27 and 0.28 end-to-end tests in Firefox and WebKit too.
+
 ## [0.27.2] - 2026-10-11
 
 Openings at your own pace: a note on your move stays up until you have read it.

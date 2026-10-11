@@ -39,7 +39,7 @@ vi.mock('./lichessLive', () => ({
   reconnectLichessForLive: (returnTo: string) => lichessLive.reconnect(returnTo),
 }));
 
-import LivePage from './LivePage';
+import PlayHubPage from './PlayHubPage';
 import { useLobby } from './lobby';
 import { useLivePrefs } from './prefs';
 
@@ -111,6 +111,8 @@ function connectLichess() {
 function seek(patch: Partial<MySeek> = {}): MySeek {
   return {
     id: 'AAAAAAAAAAAAAAAAAAAAAA',
+    game: 'chess',
+    opts: {},
     tc: '5+3',
     color: 'random',
     private: false,
@@ -126,22 +128,24 @@ function Where() {
   return <p data-testid="location">{`${location.pathname}${location.search}`}</p>;
 }
 
-function renderPage(path = '/play/online') {
+function renderPage(path = '/play') {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
-          path="/play/online"
+          path="/play"
           element={
             <>
-              <LivePage />
+              <PlayHubPage />
               <Where />
             </>
           }
         />
         <Route path="/play/online/:gameId" element={<p>The board</p>} />
-        <Route path="/play" element={<Where />} />
+        <Route path="/play/duel/:gameId" element={<p>The duel</p>} />
+        <Route path="/play/computer" element={<Where />} />
         <Route path="/settings" element={<p>Settings</p>} />
+        <Route path="/arcade/*" element={<Where />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -160,7 +164,7 @@ const nextTask = () =>
     await new Promise((resolve) => setTimeout(resolve, 5));
   });
 
-describe('LivePage', () => {
+describe('PlayHubPage', () => {
   beforeEach(() => {
     for (const fn of Object.values(actions)) fn.mockClear();
     rollName.mockClear();
@@ -179,8 +183,8 @@ describe('LivePage', () => {
 
   it('keeps the waiting room connected while it shows', () => {
     const { unmount } = renderPage();
-    expect(document.title).toBe(`Play online · ${siteConfig.name}`);
-    expect(screen.getByRole('heading', { level: 1, name: 'Play online' })).toBeInTheDocument();
+    expect(document.title).toBe(`Play · ${siteConfig.name}`);
+    expect(screen.getByRole('heading', { level: 1, name: 'Play' })).toBeInTheDocument();
     expect(actions.watch).toHaveBeenCalledTimes(1);
     expect(actions.unwatch).not.toHaveBeenCalled();
     unmount();
@@ -210,21 +214,13 @@ describe('LivePage', () => {
     expect(useLivePrefs.getState().color).toBe('white');
     fireEvent.click(within(post).getByRole('button', { name: '10+5 Rapid' }));
     expect(actions.post).toHaveBeenCalledWith({
+      game: 'chess',
       tc: '10+5',
       color: 'white',
       private: false,
       lichess: null,
     });
     expect(useLivePrefs.getState().tc).toBe('10+5');
-
-    fireEvent.click(within(post).getByRole('switch', { name: 'Only people with the link' }));
-    fireEvent.click(within(post).getByRole('button', { name: '1+0 Bullet' }));
-    expect(actions.post).toHaveBeenLastCalledWith({
-      tc: '1+0',
-      color: 'white',
-      private: true,
-      lichess: null,
-    });
   });
 
   it('posts a custom time control within the limits', async () => {
@@ -250,6 +246,7 @@ describe('LivePage', () => {
     fireEvent.click(postButton);
     await nextTask();
     expect(actions.post).toHaveBeenCalledWith({
+      game: 'chess',
       tc: '4+2',
       color: 'random',
       private: false,
@@ -258,7 +255,7 @@ describe('LivePage', () => {
     expect(openDialog('Custom time control')).toBeNull();
   });
 
-  it('looks on Lichess too when signed in, rated if asked, and never for a private game', () => {
+  it('looks on Lichess too when signed in, rated if asked, and never for a friend’s game', async () => {
     connectLichess();
     renderPage();
     const post = screen.getByTestId('live-post');
@@ -281,12 +278,12 @@ describe('LivePage', () => {
       expect.objectContaining({ tc: '15+10', lichess: { rated: true } }),
     );
 
-    fireEvent.click(within(post).getByRole('switch', { name: 'Only people with the link' }));
-    expect(within(post).getByRole('switch', { name: 'Also look on Lichess' })).toBeDisabled();
-    expect(within(post).queryByRole('switch', { name: 'Rated on Lichess' })).toBeNull();
-    fireEvent.click(within(post).getByRole('button', { name: '15+10 Rapid' }));
+    fireEvent.click(within(post).getByRole('button', { name: 'Invite a friend' }));
+    const invite = openDialog('Invite a friend')!;
+    fireEvent.click(within(invite).getByRole('button', { name: 'Create the link' }));
+    await nextTask();
     expect(actions.post).toHaveBeenLastCalledWith(
-      expect.objectContaining({ private: true, lichess: null }),
+      expect.objectContaining({ game: 'chess', private: true, lichess: null }),
     );
   });
 
@@ -311,7 +308,7 @@ describe('LivePage', () => {
     renderPage();
     expect(screen.queryByTestId('live-post')).toBeNull();
     const waiting = screen.getByTestId('live-waiting');
-    expect(within(waiting).getByRole('heading', { name: 'Waiting for an opponent' })).toBeVisible();
+    expect(within(waiting).getByRole('heading', { name: 'Waiting for your friend' })).toBeVisible();
     expect(waiting).toHaveTextContent('5+3 · Blitz · Random colour · Only people with the link');
     expect(within(waiting).getByTestId('live-elapsed')).toHaveTextContent('0:00');
     const places = within(waiting)
@@ -342,7 +339,7 @@ describe('LivePage', () => {
     const waiting = screen.getByTestId('live-waiting');
     expect(waiting).toHaveTextContent('On Lichess: Your sign-in may not play games yet.');
     fireEvent.click(within(waiting).getByRole('button', { name: 'Allow live games on Lichess' }));
-    expect(lichessLive.reconnect).toHaveBeenCalledWith('/play/online');
+    expect(lichessLive.reconnect).toHaveBeenCalledWith('/play');
   });
 
   it('shows a failed Lichess post with its reason', () => {
@@ -370,7 +367,7 @@ describe('LivePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Share link' }));
     await nextTask();
     expect(writeText).toHaveBeenCalledWith(
-      `${window.location.origin}/play/online?join=abcdefghijklmnopqrstuv`,
+      `${window.location.origin}/play?join=abcdefghijklmnopqrstuv`,
     );
     expect(useToasts.getState().toasts.map((t) => t.message)).toContain('Link copied.');
   });
@@ -384,7 +381,7 @@ describe('LivePage', () => {
     await nextTask();
     expect(share).toHaveBeenCalledWith(
       expect.objectContaining({
-        url: `${window.location.origin}/play/online?join=abcdefghijklmnopqrstuv`,
+        url: `${window.location.origin}/play?join=abcdefghijklmnopqrstuv`,
       }),
     );
     expect(useToasts.getState().toasts).toHaveLength(0);
@@ -398,7 +395,7 @@ describe('LivePage', () => {
       'Nobody yet. Play the human-like computer while you wait? Your game stays posted.',
     );
     fireEvent.click(within(nudge).getByRole('link', { name: 'Play the human-like computer' }));
-    expect(screen.getByTestId('location')).toHaveTextContent('/play?opponent=humanlike');
+    expect(screen.getByTestId('location')).toHaveTextContent('/play/computer?opponent=humanlike');
   });
 
   it('lists the open games, and joins one', () => {
@@ -407,6 +404,8 @@ describe('LivePage', () => {
       seeks: [
         {
           id: 'BBBBBBBBBBBBBBBBBBBBBB',
+          game: 'chess',
+          opts: {},
           tc: '3+2',
           color: 'white',
           name: 'Swift Knight',
@@ -414,9 +413,20 @@ describe('LivePage', () => {
         },
         {
           id: 'CCCCCCCCCCCCCCCCCCCCCC',
+          game: 'chess',
+          opts: {},
           tc: '15+10',
           color: 'random',
           name: 'Calm Rook',
+          rating: null,
+        },
+        {
+          id: 'FFFFFFFFFFFFFFFFFFFFFF',
+          game: 'race',
+          opts: { format: 'best3', level: 1500 },
+          tc: null,
+          color: 'random',
+          name: 'Quiet Rook',
           rating: null,
         },
       ],
@@ -429,6 +439,10 @@ describe('LivePage', () => {
     expect(items[0]).toHaveTextContent('3+2 · Blitz · Plays white');
     expect(items[1]).toHaveTextContent('15+10 · Rapid · Random colour');
     expect(items[1]).not.toHaveTextContent('null');
+    expect(items[2]).toHaveTextContent('Puzzle race · Best of three · 1500');
+    expect(
+      within(items[2]!).getByRole('button', { name: 'Join Quiet Rook’s puzzle race' }),
+    ).toBeEnabled();
 
     const join = within(items[1]!).getByRole('button', { name: 'Join Calm Rook’s 15+10 game' });
     expect(join).not.toHaveAttribute('title');
@@ -442,6 +456,8 @@ describe('LivePage', () => {
       seeks: [
         {
           id: 'BBBBBBBBBBBBBBBBBBBBBB',
+          game: 'chess',
+          opts: {},
           tc: '3+2',
           color: 'black',
           name: 'Swift Knight',
@@ -469,16 +485,16 @@ describe('LivePage', () => {
   });
 
   it('joins the game of a shared link once, and leaves the address bar clean', () => {
-    renderPage('/play/online?join=DDDDDDDDDDDDDDDDDDDDDD');
+    renderPage('/play?join=DDDDDDDDDDDDDDDDDDDDDD');
     expect(actions.join).toHaveBeenCalledTimes(1);
     expect(actions.join).toHaveBeenCalledWith('DDDDDDDDDDDDDDDDDDDDDD');
-    expect(screen.getByTestId('location').textContent).toBe('/play/online');
+    expect(screen.getByTestId('location').textContent).toBe('/play');
   });
 
   it('ignores a link that is not a game', () => {
-    renderPage('/play/online?join=not-a-game');
+    renderPage('/play?join=not-a-game');
     expect(actions.join).not.toHaveBeenCalled();
-    expect(screen.getByTestId('location').textContent).toBe('/play/online');
+    expect(screen.getByTestId('location').textContent).toBe('/play');
     expect(useToasts.getState().toasts.map((t) => t.message)).toContain(
       'That link does not lead to a game.',
     );
@@ -542,6 +558,8 @@ describe('LivePage', () => {
         pairing: {
           source: 'relay',
           game: 'EEEEEEEEEEEEEEEEEEEEEE',
+          kind: 'chess',
+          opts: {},
           color: 'white',
           tc: '5+3',
           opponent: { name: 'Swift Knight', rating: null },
@@ -564,7 +582,7 @@ describe('LivePage', () => {
     expect(useLivePrefs.getState().showRating).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'New name' }));
     expect(rollName).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('region', { name: 'Your name' })).toHaveTextContent(
+    expect(screen.getByRole('region', { name: 'Your name online' })).toHaveTextContent(
       'Nothing anyone types reaches anyone else',
     );
     unmount();
@@ -574,5 +592,139 @@ describe('LivePage', () => {
     expect(screen.getByRole('button', { name: 'New name' })).toBeDisabled();
     expect(screen.getByRole('switch', { name: 'Show my puzzle rating' })).toBeDisabled();
     expect(screen.getByText('Cancel your posted game to change these.')).toBeVisible();
+  });
+
+  it('sends an old link to a game against the computer on to it', () => {
+    renderPage(`/play?fen=${encodeURIComponent('4k3/8/8/8/8/8/8/3QK3 w - - 0 1')}&color=white`);
+    expect(screen.getByTestId('location').textContent).toBe(
+      `/play/computer?fen=${encodeURIComponent('4k3/8/8/8/8/8/8/3QK3 w - - 0 1')}&color=white`,
+    );
+  });
+
+  it('starts a game against the computer, or between two players at this device', () => {
+    renderPage();
+    const computer = screen.getByRole('region', { name: 'Play the computer' });
+    expect(within(computer).getByRole('link', { name: 'New game' })).toHaveAttribute(
+      'href',
+      '/play/computer',
+    );
+    fireEvent.click(within(computer).getByRole('link', { name: 'Pass and play' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/play/computer?opponent=human');
+  });
+
+  it('lists the games for two, each with a way to practise alone', () => {
+    renderPage();
+    const games = screen.getByTestId('hub-games');
+    expect(
+      within(games)
+        .getAllByRole('heading', { level: 3 })
+        .map((h) => h.textContent),
+    ).toEqual([
+      'Puzzle race',
+      'Arbiter duel',
+      'Who Stands Better? duel',
+      'Army Draft',
+      'Blindfold',
+    ]);
+    expect(
+      within(screen.getByTestId('hub-game-arbiter')).getByRole('link', { name: 'Practise alone' }),
+    ).toHaveAttribute('href', '/arcade/arbiter');
+  });
+
+  it('posts a game for two with the options chosen', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Play Puzzle race' }));
+    const dialog = openDialog('Puzzle race')!;
+    expect(dialog).toHaveTextContent('Both players get the same puzzles at the same moment.');
+    // No clock and no colour for a duel.
+    expect(within(dialog).queryByLabelText('Time control')).toBeNull();
+    expect(within(dialog).queryByRole('radiogroup', { name: 'Your colour' })).toBeNull();
+    // The level starts near the player's puzzle rating.
+    expect(within(dialog).getByLabelText('Puzzle rating')).toHaveValue('1500');
+    fireEvent.change(within(dialog).getByLabelText('Format'), { target: { value: 'timed' } });
+    expect(within(dialog).getByLabelText('Format')).toHaveAccessibleDescription(
+      /the most solved in three minutes wins/,
+    );
+    fireEvent.change(within(dialog).getByLabelText('Puzzle rating'), { target: { value: '1800' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Post' }));
+    await nextTask();
+    expect(actions.post).toHaveBeenCalledWith({
+      game: 'race',
+      opts: { format: 'timed', level: 1800 },
+      tc: null,
+      color: 'random',
+      private: false,
+      lichess: null,
+    });
+    expect(openDialog('Puzzle race')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play Army Draft' }));
+    const army = openDialog('Army Draft')!;
+    fireEvent.click(within(army).getByRole('radio', { name: '20 points' }));
+    fireEvent.change(within(army).getByLabelText('Time control'), { target: { value: '3+2' } });
+    fireEvent.click(within(army).getByRole('radio', { name: 'Black' }));
+    fireEvent.click(within(army).getByRole('switch', { name: 'Only people with the link' }));
+    fireEvent.click(within(army).getByRole('button', { name: 'Create the link' }));
+    await nextTask();
+    expect(actions.post).toHaveBeenLastCalledWith({
+      game: 'army',
+      opts: { budget: 20 },
+      tc: '3+2',
+      color: 'black',
+      private: true,
+      lichess: null,
+    });
+  });
+
+  it('invites a friend to any of the games', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Invite a friend' }));
+    const dialog = openDialog('Invite a friend')!;
+    expect(within(dialog).queryByRole('switch', { name: 'Only people with the link' })).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText('Game'), { target: { value: 'arbiter' } });
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Slow pace' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create the link' }));
+    await nextTask();
+    expect(actions.post).toHaveBeenCalledWith({
+      game: 'arbiter',
+      opts: { pace: 'slow' },
+      tc: null,
+      color: 'random',
+      private: true,
+      lichess: null,
+    });
+  });
+
+  it('opens the game an arcade page links to, and leaves the address bar clean', () => {
+    renderPage('/play?play=judge');
+    expect(openDialog('Who Stands Better? duel')).not.toBeNull();
+    expect(screen.getByTestId('location').textContent).toBe('/play');
+  });
+
+  it('shows a posted duel with its game, and goes to the duel when paired', () => {
+    resetLobby({
+      mine: seek({ game: 'arbiter', opts: { pace: 'normal' }, tc: null, private: false }),
+    });
+    renderPage();
+    const waiting = screen.getByTestId('live-waiting');
+    expect(within(waiting).getByRole('heading', { name: 'Waiting for an opponent' })).toBeVisible();
+    expect(waiting).toHaveTextContent('Arbiter duel · Normal pace');
+    act(() =>
+      useLobby.setState({
+        mine: null,
+        pairing: {
+          source: 'relay',
+          game: 'GGGGGGGGGGGGGGGGGGGGGG',
+          kind: 'arbiter',
+          opts: { pace: 'normal' },
+          color: 'white',
+          tc: null,
+          opponent: { name: 'Swift Knight', rating: null },
+          at: Date.now(),
+          path: '/play/duel/GGGGGGGGGGGGGGGGGGGGGG',
+        },
+      }),
+    );
+    expect(screen.getByText('The duel')).toBeInTheDocument();
   });
 });

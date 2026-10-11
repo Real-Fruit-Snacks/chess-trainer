@@ -37,9 +37,10 @@ const BUDGETS = [
  * The code that runs before the first page: the entry and its static imports, React aside. (0.20
  * reached 42 KB, the earlier limit, as the settings came to check 28 board themes and nine piece
  * sets at start-up; 0.24 reached 44 KB as they came to be kept per profile, apart from the
- * device's, which the bundler now puts in a chunk of their own.)
+ * device's, which the bundler now puts in a chunk of their own; 0.28 reached 45.3 KB with Play's
+ * new routes — the hub, the duels, the redirects from the old addresses — and their icons.)
  */
-const STARTUP_LIMIT_BYTES = 45 * KB;
+const STARTUP_LIMIT_BYTES = 46 * KB;
 /**
  * The service worker precaches this much at install: keep first loads honest. (0.20 raised it from
  * 6.5 MB for the eight piece sets from Lichess, about 0.27 MB of stylesheets, so every set works

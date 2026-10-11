@@ -47,7 +47,7 @@ const FEATURES = [
     to: '/play',
     icon: 'play' as IconName,
     title: 'Play',
-    text: 'Eight engine levels from “just learned the rules” to master, or a human-like opponent that plays like a person of the rating you pick. Take back moves, ask for hints, review afterwards.',
+    text: 'People online — chess, puzzle races and more games for two — or the computer: eight engine levels from “just learned the rules” to master, or a human-like opponent at the rating you pick.',
     cta: 'Choose an opponent',
   },
   {
@@ -275,8 +275,8 @@ export default function HomePage() {
               takes a few minutes; every lesson ends with a move to find on the board.
             </li>
             <li>
-              <strong>Play a game.</strong> <Link to="/play">Level 1</Link> makes real mistakes, and
-              you can take back moves and ask for hints while you learn.
+              <strong>Play a game.</strong> <Link to="/play/computer?level=1">Level 1</Link> makes
+              real mistakes, and you can take back moves and ask for hints while you learn.
             </li>
           </ol>
           <p className="small muted" style={{ margin: 0 }}>

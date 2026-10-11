@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, ConfirmDialog, Field, Select } from '@/components/ui';
+import { Button, ConfirmDialog, Field, Icon, LinkButton, Select } from '@/components/ui';
 import type { LongColor } from '@/chess/types';
 import { ENGINE_LEVELS, getLevel } from '@/engine/levels';
 import { handOffToAnalysis } from '@/lib/handoff';
@@ -138,5 +138,23 @@ export function ResignDialog({
     >
       <p className="muted">{children}</p>
     </ConfirmDialog>
+  );
+}
+
+/**
+ * The way to the same game against a person online: Play, with the game's
+ * dialog open. Beside the page's title, where a phone's board keeps its room.
+ */
+export function PlayOnlineLink({ kind }: { kind: 'army' | 'blindfold' | 'arbiter' | 'judge' }) {
+  return (
+    <LinkButton
+      size="sm"
+      to={`/play?play=${kind}`}
+      title="Play this game against a person online"
+      data-testid="play-online"
+    >
+      <Icon name="people" size={18} />
+      <span>Play a person</span>
+    </LinkButton>
   );
 }

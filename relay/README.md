@@ -71,11 +71,27 @@ Notes:
 ## Live games
 
 Two people can play each other through the relay. One posts a game in the
-waiting room, with a time control and a colour. Another joins it from the list,
-or posts the same time control and is paired at once. A private game stays out
-of the list: only someone with its link can join. Once paired, each player gets
-a seat in a game room. The room is the referee: it takes only legal moves, keeps
-both clocks itself, and ends the game by the rules.
+waiting room: chess, a variant of it, or a duel, with its options. Another joins
+it from the list, or posts the same game and is paired at once. A private game
+stays out of the list: only someone with its link can join. Once paired, each
+player gets a seat in a game room. The room is the referee: it takes only legal
+moves, keeps both clocks itself, and ends the game by the rules.
+
+| Game        | What it is                                                           |
+| ----------- | -------------------------------------------------------------------- |
+| `chess`     | a game of chess, with a time control and a colour                    |
+| `blindfold` | chess with the pieces hidden; the room counts each player's peeks    |
+| `army`      | Army Draft: each buys an army in secret, then they play from them    |
+| `race`      | a puzzle race: best of three, the 15-second window, or three minutes |
+| `arbiter`   | Arbiter: call the illegal move in a replay before the other does     |
+| `judge`     | Who Stands Better?: judge five positions closer to the engine        |
+
+A duel (`race`, `arbiter`, `judge`) is played in rounds. The poster's device is
+its host: it sends every round's content once (puzzles, replays, positions,
+checked by `src/live/duelRules.mjs`: chess only, never text). The room then runs
+the rounds by its own clock (a countdown, the round, its result), takes each
+player's result as their device measured it, and decides each round and the
+duel.
 
 ### What the relay sees and keeps
 
@@ -84,8 +100,9 @@ both clocks itself, and ends the game by the rules.
 - Players can send only set phrases, such as "Good luck" and "Well played".
   Nothing a player types reaches anyone.
 - A game room keeps the two names and ratings, the moves, the clocks and the
-  phrases sent. A seat opens with a random token that only its player holds;
-  the room keeps only the token's hash.
+  phrases sent; in Army Draft the two armies, in a duel its rounds and each
+  player's results. A seat opens with a random token that only its player
+  holds; the room keeps only the token's hash.
 - A room is deleted 10 minutes after its game ends, and 6 hours after it was
   made at most. The waiting room forgets a posted game when its socket goes.
 - Nothing is logged. The waiting room uses each socket's IP address to allow at
@@ -99,25 +116,35 @@ both clocks itself, and ends the game by the rules.
 | `GET /v1/games/:id` | a game room (a WebSocket; ids are 22 characters) |
 
 Both take sockets only from the app's origins (`ALLOWED_ORIGINS`, or `--origin`
-on the Node server); others get `403`. A message is JSON text of at most 2 KB,
-and a socket may send 20 every 10 seconds. The text `ping` is answered with
-`pong`.
+on the Node server); others get `403`. A message is JSON text of at most 2 KB
+(16 KB for a duel's host sending its rounds), and a socket may send 20 every 10
+seconds. The text `ping` is answered with `pong`.
 
-The waiting room takes `seek` (post a game, or be paired with one waiting; a
-seek may bring its own `id`, which the relay keeps unless another socket holds
+The waiting room takes `seek` (post a game, or be paired with one waiting: the
+`game`, its `opts`, and for chess and its variants the time control and colour;
+a seek may bring its own `id`, which the relay keeps unless another socket holds
 it, so a game posted again after a reconnection keeps the link shared before),
 `cancel` and `join` (a game by its id). It sends `lobby` (the public games and
-how many people are there), `posted`, `cancelled`, `paired` (the game, the
-player's seat token and colour, and the opponent), `gone` (the game to join is
-no longer there) and `error`.
+how many people are there), `posted`, `cancelled`, `paired` (the game and its
+kind, the player's seat token and colour, and the opponent), `gone` (the game to
+join is no longer there) and `error`.
 
 A game room takes `hello` (the seat token, within 10 seconds), `move` (in UCI),
 `resign`, `abort`, `draw`, `takeback` and `rematch` (each an offer, an
 acceptance or a refusal), `claim` (a win or a draw, once the opponent has been
-gone 30 seconds) and `say` (a phrase). It sends `game` (the whole game, after
-`hello`), `move`, `undo`, `offers`, `end`, `present`, `say`, `rematch` and
-`error`. Clock times are what is left when the message is sent, never the
-relay's clock.
+gone 30 seconds) and `say` (a phrase); in Army Draft `army` (the army bought, in
+the first two minutes), in a blindfold game `peek`. It sends `game` (the whole
+game, after `hello`), `move`, `undo`, `offers`, `end`, `present`, `say`,
+`rematch`, `draft` (an army is in), `peeks` and `error`. Clock times are what is
+left when the message is sent, never the relay's clock.
+
+A duel's room takes `hello`, `content` (the host's rounds), `result` (a round's
+result, or one puzzle of a timed race), `abort` (before it starts), `resign`,
+`rematch` and `say`. It sends `game`, `content`, `round` (a countdown or a
+round starting, and how long it lasts), `reported` (a player's result: a
+judgement only once the round is over), `round-end` (both results, the winner
+and the score), `progress` (a timed race), `end`, `present`, `say`, `offers`,
+`rematch` and `error`. A rematch swaps the colours, or the host.
 
 A socket closed by the relay gets a code: `1003` a message that is not text,
 `1008` too many messages, `1009` a message too big, `4004` no such game or seat,
@@ -136,9 +163,9 @@ or an alarm. The runtime answers `ping` itself, without waking the object.
 A socket that connects is a request to the Worker and one to its object. After
 that, every 20 messages a socket sends count as one more request; messages to
 the players are free. A room's alarms (a first move that never came, a fallen
-flag, the room's end) are requests too. Each move writes two rows: the game and
-its next alarm. On the free plan, Durable Objects get 100,000 requests and
-100,000 written rows a day of their own.
+flag, a draft's or a duel round's end, the room's end) are requests too. Each
+move writes two rows: the game and its next alarm. On the free plan, Durable
+Objects get 100,000 requests and 100,000 written rows a day of their own.
 
 ## Deploy on Cloudflare
 
@@ -261,25 +288,30 @@ and the page's Content Security Policy names no relay.
 
 ## Code
 
-| File                      | What it is                                                                                    |
-| ------------------------- | --------------------------------------------------------------------------------------------- |
-| `src/handler.mjs`         | the HTTP API as a Fetch API handler, over any vault store                                     |
-| `src/worker.mjs`          | the Cloudflare Worker: the handler over D1, the daily cron, and live games' sockets passed on |
-| `src/d1Store.mjs`         | vaults in D1 (base64 text, so a vault fits D1's 2 MB row)                                     |
-| `src/server.mjs`          | the Node server, live games included                                                          |
-| `src/sqliteStore.mjs`     | vaults in a SQLite file                                                                       |
-| `src/memoryStore.mjs`     | vaults in memory (tests and `relay:dev`)                                                      |
-| `src/live/shared.mjs`     | what the relay and the app agree on: time controls, names, phrases, limits                    |
-| `src/live/rules.mjs`      | the rules of a game, on chess.js                                                              |
-| `src/live/lobby.mjs`      | the waiting room, on any platform                                                             |
-| `src/live/room.mjs`       | a game room, on any platform: the referee and the clocks                                      |
-| `src/live/hub.mjs`        | the waiting room and every game room in one process (the Node server)                         |
-| `src/live/websocket.mjs`  | a small WebSocket server for Node                                                             |
-| `src/live/cloudflare.mjs` | the waiting room and the game rooms as Durable Objects                                        |
-| `src/**/*.d.mts`          | types for TypeScript callers (the tests, and the app for `shared.mjs`)                        |
-| `package.json`            | the relay's one package, chess.js (`npm ci` installs it)                                      |
-| `relay.test.ts`           | the vault API's tests                                                                         |
-| `live.test.ts`            | live games' tests: the rules, the waiting room and the rooms                                  |
-| `live-transport.test.ts`  | live games' tests: the WebSocket server, the Node server and the Durable Objects              |
+| File                      | What it is                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `src/handler.mjs`         | the HTTP API as a Fetch API handler, over any vault store                                               |
+| `src/worker.mjs`          | the Cloudflare Worker: the handler over D1, the daily cron, and live games' sockets passed on           |
+| `src/d1Store.mjs`         | vaults in D1 (base64 text, so a vault fits D1's 2 MB row)                                               |
+| `src/server.mjs`          | the Node server, live games included                                                                    |
+| `src/sqliteStore.mjs`     | vaults in a SQLite file                                                                                 |
+| `src/memoryStore.mjs`     | vaults in memory (tests and `relay:dev`)                                                                |
+| `src/live/shared.mjs`     | what the relay and the app agree on: the games and their options, time controls, names, phrases, limits |
+| `src/live/rules.mjs`      | the rules of a game, on chess.js                                                                        |
+| `src/live/army.mjs`       | Army Draft's rules: what an army may be, and the position it makes (the app's too)                      |
+| `src/live/duelRules.mjs`  | the duels' rules: what a round may hold, what a player may report, who wins (the app's too)             |
+| `src/live/lobby.mjs`      | the waiting room, on any platform                                                                       |
+| `src/live/room.mjs`       | a game room, on any platform: the referee and the clocks                                                |
+| `src/live/duel.mjs`       | a duel's rounds, run by its game room                                                                   |
+| `src/live/hub.mjs`        | the waiting room and every game room in one process (the Node server)                                   |
+| `src/live/websocket.mjs`  | a small WebSocket server for Node                                                                       |
+| `src/live/cloudflare.mjs` | the waiting room and the game rooms as Durable Objects                                                  |
+| `src/**/*.d.mts`          | types for TypeScript callers (the tests, and the app for `shared.mjs`, `army.mjs` and `duelRules.mjs`)  |
+| `package.json`            | the relay's one package, chess.js (`npm ci` installs it)                                                |
+| `relay.test.ts`           | the vault API's tests                                                                                   |
+| `live.test.ts`            | live games' tests: the rules, the waiting room and the rooms                                            |
+| `live-games.test.ts`      | the variants' and the duels' tests                                                                      |
+| `testWorld.ts`            | the live tests' world: a hub on a clock the tests move                                                  |
+| `live-transport.test.ts`  | live games' tests: the WebSocket server, the Node server and the Durable Objects                        |
 
 `npx vitest run relay` runs all the tests.

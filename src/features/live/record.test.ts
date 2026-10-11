@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { siteConfig } from '@/site.config';
 import { sortedGames, useGames } from '@/store/games';
 import { randomId } from '../../../relay/src/live/shared.mjs';
+import { draftFen } from '../../../relay/src/live/army.mjs';
 import { recordLiveGame } from './record';
 import { rememberSeat } from './seats';
 import type { LiveGameView } from './types';
@@ -33,6 +34,11 @@ function finished(over: Partial<LiveGameView> = {}): LiveGameView {
     next: null,
     error: null,
     url: null,
+    game: 'chess',
+    opts: {},
+    startFen: null,
+    draft: null,
+    peeks: null,
     capabilities: { phrases: true, rematch: true, takeback: true },
     ...over,
   };
@@ -46,7 +52,7 @@ describe('recording a live game', () => {
   it('keeps a relay game in My games, with the learner’s side and a full PGN', () => {
     const view = finished();
     const startedAt = new Date(2026, 9, 10, 18, 30).getTime();
-    rememberSeat(view.id, randomId(32), 'black', startedAt);
+    rememberSeat(view.id, randomId(32), 'black', 'chess', startedAt);
     recordLiveGame(view);
     expect(games()).toHaveLength(1);
     const game = games()[0]!;
@@ -80,6 +86,36 @@ describe('recording a live game', () => {
     );
     // The relay's ratings are puzzle ratings: no Elo tags.
     expect(game.pgn).not.toMatch(/Elo/);
+  });
+
+  it('keeps an Army Draft game from its drafted position, and names a blindfold game', () => {
+    const startFen = draftFen({ q: 1, r: 2, b: 0, n: 0, p: 8 }, { q: 0, r: 2, b: 2, n: 2, p: 2 });
+    recordLiveGame(
+      finished({
+        game: 'army',
+        opts: { budget: 30 },
+        startFen,
+        draft: {
+          budget: 30,
+          deadline: null,
+          ready: { white: true, black: true },
+          armies: { white: null, black: null },
+        },
+        // 1.e4 Rh3 2.gxh3, then Black resigns.
+        moves: ['e2e4', 'h8h3', 'g2h3'],
+        result: '1-0',
+        reason: 'resign',
+      }),
+    );
+    const army = games()[0]!;
+    expect(army).toMatchObject({ event: 'Army Draft · 30 points · 5+3', startFen });
+    expect(army.pgn).toContain('[Variant "From Position"]');
+    expect(army.pgn).toContain('[SetUp "1"]');
+    expect(army.pgn).toContain(`[FEN "${startFen}"]`);
+    expect(army.pgn).toMatch(/1\. e4 Rh3 2\. gxh3 1-0$/);
+
+    recordLiveGame(finished({ game: 'blindfold' }));
+    expect(games().map((g) => g.event)).toContain('Blindfold game · 5+3');
   });
 
   it('keeps each game once, even when it is told again or removed meanwhile', () => {

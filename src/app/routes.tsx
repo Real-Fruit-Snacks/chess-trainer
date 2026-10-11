@@ -1,5 +1,5 @@
 import { lazy } from 'react';
-import { createBrowserRouter, type RouteObject } from 'react-router';
+import { createBrowserRouter, Navigate, type RouteObject, useLocation } from 'react-router';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Shell } from './Shell';
 
@@ -8,9 +8,10 @@ const HomePage = lazy(() => import('@/features/home/HomePage'));
 const LearnPage = lazy(() => import('@/features/learn/LearnPage'));
 const LessonPage = lazy(() => import('@/features/learn/LessonPage'));
 const PuzzlesPage = lazy(() => import('@/features/puzzles/PuzzlesPage'));
+const PlayHubPage = lazy(() => import('@/features/live/PlayHubPage'));
 const PlayPage = lazy(() => import('@/features/play/PlayPage'));
-const LivePage = lazy(() => import('@/features/live/LivePage'));
 const LiveGamePage = lazy(() => import('@/features/live/LiveGamePage'));
+const DuelPage = lazy(() => import('@/features/live/DuelPage'));
 const AnalyzePage = lazy(() => import('@/features/analyze/AnalyzePage'));
 const ProgressPage = lazy(() => import('@/features/progress/ProgressPage'));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
@@ -47,6 +48,12 @@ const ArbiterPage = lazy(() => import('@/features/arcade/ArbiterPage'));
 const GhostKnightPage = lazy(() => import('@/features/arcade/GhostKnightPage'));
 const NotFoundPage = lazy(() => import('@/features/home/NotFoundPage'));
 
+/** The old waiting room (/play/online), its join links included: now part of Play. */
+function ToPlay() {
+  const { search } = useLocation();
+  return <Navigate to={`/play${search}`} replace />;
+}
+
 export const routes: RouteObject[] = [
   {
     path: '/',
@@ -64,10 +71,12 @@ export const routes: RouteObject[] = [
       { path: 'learn/:lessonId', element: <LessonPage /> },
       { path: 'puzzles', element: <PuzzlesPage /> },
       { path: 'puzzles/:mode', element: <PuzzlesPage /> },
-      { path: 'play', element: <PlayPage /> },
-      { path: 'play/online', element: <LivePage /> },
+      { path: 'play', element: <PlayHubPage /> },
+      { path: 'play/computer', element: <PlayPage /> },
+      { path: 'play/online', element: <ToPlay /> },
       { path: 'play/online/:gameId', element: <LiveGamePage source="relay" /> },
       { path: 'play/online/lichess/:gameId', element: <LiveGamePage source="lichess" /> },
+      { path: 'play/duel/:gameId', element: <DuelPage /> },
       { path: 'analyze', element: <AnalyzePage /> },
       { path: 'drills', element: <DrillsPage /> },
       { path: 'drills/coordinates', element: <CoordinatesDrill /> },

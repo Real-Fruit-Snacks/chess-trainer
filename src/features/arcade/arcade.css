@@ -430,6 +430,20 @@
   font-weight: 700;
 }
 
+.arcade__shop--spaced {
+  margin-top: var(--space-3);
+}
+
+.arcade__presets {
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+
+.arcade__problem {
+  margin: var(--space-3) 0 0;
+  color: var(--danger);
+}
+
 /* Sequence display (Engine Says) */
 .arcade__sequence {
   list-style: none;

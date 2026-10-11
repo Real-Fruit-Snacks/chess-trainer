@@ -97,8 +97,8 @@ describe('whether the Lichess sign-in may play', () => {
 
 describe('the live-game exports', () => {
   it('connects again asking for the permission to play, and comes back to the waiting room', async () => {
-    await reconnectLichessForLive('/play/online');
-    expect(beginLichessLogin).toHaveBeenCalledWith({ returnTo: '/play/online' });
+    await reconnectLichessForLive('/play');
+    expect(beginLichessLogin).toHaveBeenCalledWith({ returnTo: '/play' });
   });
 
   it('offers the seek, the game and the abort from one place', () => {

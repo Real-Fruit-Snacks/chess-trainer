@@ -16,6 +16,7 @@ vi.mock('@/lib/sound', async (importOriginal) => {
 interface BoardProps {
   fen: string;
   orientation?: string;
+  className?: string;
   movableColor?: string;
   dests?: Map<string, string[]>;
   lastMove?: readonly [string, string] | null;
@@ -86,6 +87,11 @@ function makeView(patch: Partial<LiveGameView> = {}): LiveGameView {
     next: null,
     error: null,
     url: null,
+    game: 'chess',
+    opts: {},
+    startFen: null,
+    draft: null,
+    peeks: null,
     capabilities: { phrases: true, rematch: true, takeback: true },
     ...patch,
   };
@@ -116,6 +122,8 @@ function makeSession(initial: LiveGameView) {
     rematch: vi.fn(),
     claim: vi.fn(),
     say: vi.fn(),
+    army: vi.fn(),
+    peek: vi.fn(),
     close: vi.fn(),
   };
 }
@@ -132,7 +140,7 @@ function renderGame(path = '/play/online/GAME') {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/play/online" element={<p>Waiting room</p>} />
+        <Route path="/play" element={<p>Play</p>} />
         <Route path="/play/online/:gameId" element={<LiveGamePage source="relay" />} />
         <Route path="/play/online/lichess/:gameId" element={<LiveGamePage source="lichess" />} />
         <Route path="/games" element={<p>My games</p>} />
@@ -195,8 +203,8 @@ describe('LiveGamePage', () => {
     expect(screen.getByTestId('live-absent')).toHaveTextContent(
       'This device has no seat in this game. A game belongs to the two players the waiting room paired.',
     );
-    fireEvent.click(screen.getByRole('link', { name: 'Go to the waiting room' }));
-    expect(screen.getByText('Waiting room')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', { name: 'Back to Play' }));
+    expect(screen.getByText('Play')).toBeInTheDocument();
     expect(document.title).toBe(`Live game · ${siteConfig.name}`);
   });
 
@@ -519,7 +527,7 @@ describe('LiveGamePage', () => {
     );
     expect(within(dialog).getByRole('link', { name: 'New opponent' })).toHaveAttribute(
       'href',
-      '/play/online',
+      '/play',
     );
     fireEvent.click(within(dialog).getByRole('button', { name: 'Show the board' }));
     await nextTask();
@@ -590,6 +598,11 @@ describe('LiveGamePage', () => {
         you: 'black',
         moves: ['e2e4'],
         url: 'https://lichess.org/abcd1234',
+        game: 'chess',
+        opts: {},
+        startFen: null,
+        draft: null,
+        peeks: null,
         capabilities: { phrases: false, rematch: false, takeback: true },
       }),
     );
@@ -624,6 +637,8 @@ describe('LiveGamePage', () => {
       pairing: {
         source: 'relay',
         game: 'GAME',
+        kind: 'chess',
+        opts: {},
         color: 'white',
         tc: '5+3',
         opponent: { name: 'Swift Knight', rating: null },
@@ -634,5 +649,96 @@ describe('LiveGamePage', () => {
     hold('relay', 'GAME', makeView());
     renderGame();
     expect(clearPairing).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets each player buy an army while the draft is on, and starts the board once both are in', () => {
+    const draft = {
+      budget: 30,
+      deadline: performance.now() + 90_000,
+      ready: { white: false, black: false },
+      armies: { white: null, black: null },
+    };
+    const session = hold(
+      'relay',
+      'GAME',
+      makeView({ game: 'army', opts: { budget: 30 }, status: 'draft', draft }),
+    );
+    renderGame();
+    expect(screen.getByRole('heading', { level: 1, name: 'Army Draft' })).toBeVisible();
+    expect(screen.getByText(/^30 points · Kings are free/)).toBeVisible();
+    expect(screen.getByTestId('draft-time')).toHaveTextContent('1:30');
+    expect(screen.getByTestId('draft-theirs')).toHaveTextContent('Swift Knight is choosing…');
+    // The balanced army to start from: a queen, two rooks, a bishop, a knight and five pawns.
+    expect(screen.getByTestId('army-budget')).toHaveTextContent('30 / 30');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove a queen' }));
+    expect(screen.getByTestId('army-budget')).toHaveTextContent('21 / 30');
+    fireEvent.click(screen.getByTestId('draft-ready'));
+    expect(session.army).toHaveBeenCalledWith({ q: 0, r: 2, b: 1, n: 1, p: 5 });
+    session.update({
+      draft: {
+        ...draft,
+        ready: { white: true, black: true },
+        armies: { ...draft.armies, white: { q: 0, r: 2, b: 1, n: 1, p: 5 } },
+      },
+    });
+    expect(screen.getByTestId('draft-mine')).toHaveTextContent('Your army is in.');
+    expect(screen.getByTestId('draft-theirs')).toHaveTextContent('Swift Knight’s army is in.');
+    expect(screen.queryByTestId('draft-ready')).toBeNull();
+    // The game starts from both armies.
+    const startFen = '1nb1kbnr/3pp3/8/8/8/8/1PPPPPP1/R1B1KN1R w - - 0 1';
+    session.update({
+      status: 'playing',
+      startFen,
+      draft: {
+        ...draft,
+        deadline: null,
+        ready: { white: true, black: true },
+        armies: {
+          white: { q: 0, r: 2, b: 1, n: 1, p: 5 },
+          black: { q: 0, r: 0, b: 2, n: 2, p: 2 },
+        },
+      },
+    });
+    expect(board.props?.fen).toBe(startFen);
+    expect(screen.getByTestId('live-armies')).toHaveTextContent(
+      'You: 2 rooks, 1 bishop, 1 knight, 5 pawns. Swift Knight: 2 bishops, 2 knights, 2 pawns.',
+    );
+  });
+
+  it('hides the pieces in a blindfold game but for a peek, and takes moves typed in', () => {
+    vi.useFakeTimers();
+    try {
+      const session = hold(
+        'relay',
+        'GAME',
+        makeView({ game: 'blindfold', peeks: { white: 1, black: 0 }, moves: ['e2e4', 'e7e5'] }),
+      );
+      renderGame();
+      expect(screen.getByRole('heading', { level: 1, name: 'Blindfold game' })).toBeVisible();
+      expect(board.props?.className).toBe('board--blindfold');
+      expect(screen.getByTestId('blindfold-bar')).toHaveTextContent('Last move: 1… e5');
+      expect(screen.getByTestId('blindfold-peeks')).toHaveTextContent(
+        'You have 2 peeks left; Swift Knight has used 0.',
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Peek' }));
+      expect(session.peek).toHaveBeenCalledTimes(1);
+      expect(board.props?.className).toBeUndefined();
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(board.props?.className).toBe('board--blindfold');
+      const input = screen.getByPlaceholderText('Type a move, e.g. Nf3 or e2e4');
+      fireEvent.change(input, { target: { value: 'Nf3' } });
+      fireEvent.submit(input.closest('form')!);
+      expect(session.move).toHaveBeenCalledWith('g1f3');
+      // No peeks left: the button says so by being off.
+      session.update({ peeks: { white: 3, black: 0 } });
+      expect(screen.getByRole('button', { name: 'Peek' })).toBeDisabled();
+      // Over: the pieces show again.
+      session.update({ status: 'over', result: '1-0', reason: 'resign' });
+      expect(board.props?.className).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -28,8 +28,8 @@ This document explains the moving parts and the reasoning behind them.
 │  │                      analysis library (LibraryDialog)             │
 │  ├─ features/games      my games: import · stats · deviations ───────┤   (UCI)          Stockfish
 │  │                      insights (phases · motifs · work-on list)    │
-│  ├─ features/live       waiting room · live games: relay rooms and   │
-│  │                      Lichess Board API (no engine) ── the relay   │
+│  ├─ features/live       Play hub · live games and duels: relay rooms │
+│  │                      and Lichess Board API (no engine) ── relay   │
 │  ├─ features/arcade     eleven games: useHandAndBrain · useFortress ─┤
 │  │                      useSimul (one engine, a queue of boards)     │
 │  │                      odds · army · dailyOpening · engineSays      │
@@ -920,7 +920,24 @@ time, through its Board API.
   move, takebacks of one move or two (never past the first moves), claims against a player gone 30
   seconds, rematches with the colours swapped. Times go out as durations, never the relay's clock.
   Events run one at a time; every change is stored, and the room's next deadline (a flag, a first
-  move, a socket's hello, its own end) is its one timer.
+  move, a socket's hello, a draft's or a round's end, its own end) is its one timer.
+- **Games beyond chess.** A seek carries its `game` — `chess`, `blindfold`, `army`, `race`,
+  `arbiter` or `judge` — and its `opts`, checked by `gameOptions` (`shared.mjs`); only the same game
+  with the same options pairs. A blindfold room counts each side's `peek` (three) and tells both. An
+  Army Draft room opens with the draft: each seat sends its `army` within two minutes, one is drafted
+  for a seat without, and the game starts from `draftFen` of the two (`army.mjs`: the prices, the
+  budget check and the placement, which the arcade imports too). The duels (`duel.mjs`) have no
+  clock. The white seat is the host, whose device sends the rounds once (`content`), and
+  `duelRules.mjs` checks them before they go on: puzzle ids with lines chess.js replays, Arbiter
+  replays whose moves are legal and whose illegal move is a known kind, positions with an
+  evaluation, all bounded in number and size, and never text. The room runs each round on its timer
+  — a countdown, the round, its result — takes each player's result as their device measured it
+  (`result`, once), and decides the round (`raceRound`, `arbiterRound`, `judgeRound`) and the duel
+  (`duelResult`). After the first clean solve or call it waits a few seconds for a quicker result
+  still in flight (fifteen more in the race's window format). A judgement stays hidden from the
+  other player until its round is over. A three-minute race is one long round with each player's
+  progress (`timedResult`). `duelRules.mjs` is also Who Stands Better?'s scoring, and the app imports
+  it, so the arcade and the duel score alike.
 - **Two platforms.** On Cloudflare (`cloudflare.mjs`) the waiting room is one Durable Object and
   each game another, SQLite-backed (the free plan's kind), with the WebSocket Hibernation API: a
   socket's own data is its attachment, a game is the room's stored state, the deadline its alarm,
@@ -940,7 +957,18 @@ time, through its Board API.
   `relayGame.ts` plays a move on the board at once and sends it; the room's echo confirms it, and a
   refusal comes with the whole game, which puts the board right. Seat tokens are kept per profile
   (`seats.ts`), a day at most. `record.ts` keeps a finished game in My games with the learner's
-  side (`StoredGame.side`), so the review needs no player name.
+  side (`StoredGame.side`), so the review needs no player name, and a drafted game with its start
+  (`FEN`, `SetUp`).
+- **Play and the duels.** `PlayHubPage.tsx` is Play (`/play`): it posts, waits and joins, and
+  `GameDialog.tsx` sets up any game, described in `onlineGames.ts`; the game against the computer
+  is at `/play/computer`, and the old links redirect. `relayDuel.ts` is a duel's session, kept by
+  `sessions.ts` beside the games: on the host's device it makes the rounds with `duelRounds.ts`
+  (puzzles near the level from the puzzle service, Arbiter rounds built as in the arcade from the
+  classic games, quiet positions for Who Stands Better?), and both devices read them back from what
+  the relay passed on. A round's time runs from the moment it shows on the device, and a result the
+  room may have missed is sent again after a reconnection. `DuelPage.tsx` (`/play/duel/:id`) shows
+  each round with the arcade's own parts: the puzzle trainer (`RaceRound`, `TimedRace`), Arbiter's
+  replay (`ArbiterDuelRound`) and the judging slider (`JudgeDuelRound`).
 - **Lichess** (`lichessStream.ts`, `lichessSeek.ts`, `lichessGame.ts`). Streams go straight to
   lichess.org, outside the account sync's one-request-at-a-time queue, read as ndjson and given up
   after 30 seconds of silence. The seek opens the event stream first (games already in progress
@@ -956,9 +984,11 @@ time, through its Board API.
   runs the WebSocket server, the Node relay end to end and the Durable Object classes against
   stand-ins. The app's unit tests use
   the real cores behind a stand-in `WebSocket` (`src/test/fakeLiveHub.ts`) and a Board API stand-in
-  that streams or long-polls (`src/test/fakeLichessBoard.ts`). `e2e/release-0-26-live.spec.ts`
-  plays whole games between two browser contexts through Playwright's WebSocket routes over the
-  same cores, and a Lichess game through the stand-in.
+  that streams or long-polls (`src/test/fakeLichessBoard.ts`). `relay/live-games.test.ts` plays the
+  games beyond chess — drafts, peeks, every duel to its end — on the same test clock
+  (`relay/testWorld.ts`). `e2e/release-0-26-live.spec.ts` plays whole games between two browser
+  contexts through Playwright's WebSocket routes over the same cores, and a Lichess game through the
+  stand-in; `e2e/release-0-28-play.spec.ts` plays each game for two the same way.
 
 ## Accessibility
 
@@ -1102,4 +1132,4 @@ warning gives way to a confirmation.
 - Accounts. Sync between devices needs none, and its relay holds only sealed vaults it cannot read;
   backups and the Lichess account sync remain the other ways to move data.
 - Rated games among the app's own players: without accounts a rating could be faked and a ban
-  dodged. Live games are casual; rated ones are played on Lichess, through the same waiting room.
+  dodged. Live games are casual; rated ones are played on Lichess, posted from the same Play page.

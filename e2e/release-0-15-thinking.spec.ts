@@ -178,7 +178,7 @@ test.describe('the blunder check', () => {
     await seed(page, {}, { playBlunderCheck: true });
     // 1.e4 e5 2.Nf3 Nc6: 3.Ba6?? loses the bishop.
     const fen = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3';
-    await page.goto(`/play?fen=${encodeURIComponent(fen)}&color=white`);
+    await page.goto(`/play/computer?fen=${encodeURIComponent(fen)}&color=white`);
     const setup = page.getByRole('dialog', { name: 'New game' });
     await expect(setup.getByRole('switch', { name: 'Blunder check' })).toBeChecked();
     await setup.getByRole('button', { name: 'Start', exact: true }).click();

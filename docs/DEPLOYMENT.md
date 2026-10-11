@@ -84,7 +84,7 @@ devices already connected keep their tokens. The Content-Security-Policy already
 ### The sync relay
 
 Sync between devices and live games need a small relay of your own; the site works without it, and
-Settings offers sync (and the waiting room live games) only when `syncRelay` in
+Settings offers sync (and Play live games) only when `syncRelay` in
 [`src/site.config.ts`](../src/site.config.ts) names one. The relay in
 [`relay/`](../relay/README.md) runs on Cloudflare Workers with a D1 database for the vaults and two
 Durable Objects for live games, all of which the free plan covers:
@@ -99,8 +99,10 @@ npx wrangler@latest deploy
 `npm run relay:deploy` does the same from the repository's root. The relay's one dependency is
 chess.js, which referees live games. The first deploy creates the D1 database (Wrangler 4.45 or
 later) and writes its id into `relay/wrangler.jsonc`: commit that change. A deploy that brings the
-`live-v1` migration (0.26 and later) creates the Durable Objects; until it has run, the waiting room
-says live games are not set up on the relay. Wrangler prints the Worker's address,
+`live-v1` migration (0.26 and later) creates the Durable Objects; until it has run, Play says live
+games are not set up on the relay. A relay older than the app may not know its newest games (one
+from before 0.28 takes only games of chess), so when a release changes the relay, as 0.28 does,
+deploy the relay first. Wrangler prints the Worker's address,
 `https://chess-trainer-sync.<your-subdomain>.workers.dev`. Put it in `syncRelay`, and the site's
 origin in `ALLOWED_ORIGINS` in `relay/wrangler.jsonc`. The page's Content-Security-Policy picks the
 relay's origin up from `syncRelay` at build time. To check it, run
@@ -220,12 +222,12 @@ Optional headers:
 - _Settings → Sync between devices → Turn on sync_ shows a recovery phrase and "Synced just now." (a
   failure names the relay's answer; a CORS error in the console means the site's origin is missing
   from `ALLOWED_ORIGINS`).
-- _Play → New game → Opponent: A human-like opponent → Download_ fetches about 25 MB and the game
-  starts; after that, it plays offline too.
+- _Play → Play the computer → New game → Opponent: A human-like opponent → Download_ fetches about
+  25 MB and the game starts; after that, it plays offline too.
 - `curl https://chess-trainer-sync.<your-subdomain>.workers.dev/v1/health` answers with
-  `"live":true`, and _Play → Play a person online_ shows the waiting room connected ("Nobody else is
-  here right now"). In a second browser, a game posted in one appears in the other's list, and
-  joining it opens the board in both.
+  `"live":true`, and _Play_ shows the open games connected ("Nobody else is here right now"). In a
+  second browser, a game posted in one appears in the other's list, and joining it opens the board
+  in both; a puzzle race posted from its tile opens the same puzzle on both boards.
 - _Settings → Lichess account → Connect_ goes to lichess.org, asks for the puzzle and study
   permissions and comes back to Settings connected; the card then reads "Synced just now", and a
   private study named _Chess Trainer · Repertoires_ appears on Lichess once there is a custom

@@ -127,7 +127,7 @@ function itemStatus(
         kind: 'Game',
         title: `Play a game against level ${item.level}`,
         detail: done ? 'Played' : 'Any result counts — finish the game',
-        to: `/play?level=${item.level}`,
+        to: `/play/computer?level=${item.level}`,
         done,
       };
     }

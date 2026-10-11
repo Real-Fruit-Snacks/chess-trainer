@@ -82,9 +82,9 @@ export function clockRemaining(clock: LiveClock, side: Side, now: number): numbe
   return Math.max(0, value - Math.max(0, now - clock.at));
 }
 
-/** The link that joins this device's posted game: the waiting room with `?join=`. */
+/** The link that joins this device's posted game: Play with `?join=`. */
 export function joinLink(seekId: string): string {
-  return `${window.location.origin}${import.meta.env.BASE_URL}play/online?join=${encodeURIComponent(seekId)}`;
+  return `${window.location.origin}${import.meta.env.BASE_URL}play?join=${encodeURIComponent(seekId)}`;
 }
 
 /* ------------------------------------------------------------------ */

@@ -9,14 +9,20 @@ export interface SeatSpec {
 
 export interface GameSpec {
   id: string;
-  tc: string;
+  /** The game: 'chess' when there is none (a room made before the others existed). */
+  game?: string;
+  opts?: Record<string, string | number>;
+  /** The time control of a game of chess; null for a duel. */
+  tc: string | null;
   white: SeatSpec;
   black: SeatSpec;
 }
 
 export interface Seek {
   id: string;
-  tc: string;
+  game: string;
+  opts: Record<string, string | number>;
+  tc: string | null;
   color: 'random' | 'white' | 'black';
   name: string;
   rating: number | null;

@@ -151,25 +151,31 @@ the engine rates yours as good. Filter by era, difficulty and what you have play
 
 ## Play online
 
-_Play → Play a person online_ (`/play/online`) is a waiting room for live games against people, with
-no account:
+_Play_ (`/play`) is one page for every game, with no account: _Play a person_ (a game of chess at a
+tap, or _Invite a friend_), _Play the computer_ (a new game against the engine or the human-like
+opponent, or _Pass and play_ at one device, at `/play/computer`), the open games, the
+[games made for two](#games-for-two) and your name online. Old links still work: `/play?fen=…` (and
+the other links into a game against the computer) go on to `/play/computer`, and `/play/online`,
+the old waiting room, to Play.
 
 - **Post a game** with a tap on a time control — 1+0, 2+1, 3+0, 3+2, 5+0, 5+3, 10+0, 10+5, 15+10,
   30+0 or 30+20, or a custom one (1 to 180 minutes, 0 to 180 seconds a move) — and a colour (random,
   white or black). If someone is already waiting for the same game, the two are paired at once.
-  Otherwise it is listed for everyone in the waiting room, with your name and, if you choose, your
-  puzzle rating, and anyone can join it.
-- **Join** a game from the list. The list shows how many other players are in the waiting room.
-- **Private games.** _Only people with the link_ keeps the game out of the list; _Share link_
-  opens the phone's share sheet or copies the link. Whoever opens it joins the game. The link keeps
-  working if your connection drops and comes back.
+  Otherwise it is listed for everyone on Play, with your name and, if you choose, your puzzle
+  rating, and anyone can join it. A game for two is posted from its own tile, with its options.
+- **Join** a game from the list: chess or a game for two, each with its icon and options. The list
+  shows how many other players are on Play.
+- **Invite a friend.** _Invite a friend_ sets up any of the games (chess or a game for two) for
+  whoever has the link, and keeps it out of the list; so does _Only people with the link_ in a
+  game's setup. _Share link_ opens the phone's share sheet or copies the link. Whoever opens it
+  joins the game. The link keeps working if your connection drops and comes back.
 - **Wait anywhere.** A posted game stays up while you use the rest of the app. A slim bar under the
-  header shows the waiting time, with _Cancel_ and a way back to the waiting room. When someone
-  joins, a sound plays and the bar offers _Go to the board_. In the waiting room itself, the board
-  opens at once. A game in progress elsewhere in the app gets a _Back to the board_ bar, even after
-  the app has been closed or reloaded (the phone closing it in the background, say). Closing the
-  app withdraws a post that is still waiting. After three minutes with nobody, the waiting room suggests the human-like
-  opponent meanwhile, and the post stays up.
+  header shows the waiting time, with _Cancel_ and a way back to Play. When someone joins, a sound
+  plays and the bar offers _Go to the board_ (or _Go to the duel_). On Play itself, the board opens
+  at once. A game in progress elsewhere in the app gets a _Back to the board_ bar, even after the
+  app has been closed or reloaded (the phone closing it in the background, say). Closing the app
+  withdraws a post that is still waiting. After three minutes with nobody, Play suggests the
+  human-like opponent meanwhile, and the post stays up.
 - **Names, not accounts.** You play under a name the app makes up from two word lists, such as
   "Patient Bishop" (_New name_ picks another). Messages are a few set phrases (_Good luck_, _Well
   played_, _Good game_…), so nothing anyone types ever reaches anyone else.
@@ -180,8 +186,9 @@ no account:
   moves). Mate, stalemate, a dead position, threefold repetition and the fifty-move rule end the
   game by themselves. A flag that falls when the other side could never mate is a draw. If your
   opponent's connection has been gone for 30 seconds, you can claim the win or a draw. Rematches
-  swap the colours. Focus mode and the move sounds work as in Play. If the connection drops, the
-  board stays playable and catches up when it is back; a move made meanwhile is sent then.
+  swap the colours. Focus mode and the move sounds work as against the computer. If the connection
+  drops, the board stays playable and catches up when it is back; a move made meanwhile is sent
+  then.
 - **No engine help.** The live board has no hints, evaluation or threats.
 - **Afterwards**, the game is in My games (_played online_), from your side, ready for the engine
   review. Aborted games and games of fewer than two moves are not kept.
@@ -194,8 +201,52 @@ no account:
   A Lichess game is played on the board here with Lichess's clocks: moves, resign, abort, draws,
   takebacks and claims, but no chat. It stays in your Lichess history, opens there from a link, and
   joins My games with its Lichess address. The account needs Lichess's permission to play. Sign-ins
-  made before 0.26 lack it, and the waiting room offers _Allow live games on Lichess_, which signs
-  in again and comes back.
+  made before 0.26 lack it, and Play offers _Allow live games on Lichess_, which signs in again and
+  comes back.
+
+## Games for two
+
+Five of the arcade's games against a person online, each posted from its tile on Play with the
+options the poster chooses (and its link to practise alone first):
+
+- **Puzzle race** — the same puzzle on both boards at the same moment, near a puzzle rating the
+  poster picks (600 to 2400; it starts at the one nearest your own). The first move is the
+  opponent's, as in every puzzle; a wrong move is out of the round, and the first clean solve takes
+  it. _Best of three_: the first to two rounds wins, over five puzzles at most (a round nobody solves
+  scores nothing). _Best of three, 15-second window_: as best of three, but a clean solve within 15
+  seconds of the first shares the round, half a point each. _Three-minute race_: both get the same
+  run of puzzles, starting below the rating and getting harder, each at their own pace; the most
+  solved in three minutes wins, fewer wrong answers breaks a tie, and three wrong answers end a
+  player's race early. A round lasts 90 seconds at most, and when it ends, the solution plays out for
+  whoever did not find it.
+- **Arbiter duel** — the same stretch of a classic game replays on both boards, then a move that
+  breaks the rules, as in the arcade (the same eighteen kinds, subtler round by round). The first to
+  call it (the button, or Space) takes the round; a call on a legal move is out of it. First to three
+  rounds, at a normal or a slow pace, faster each round. After each round the board shows the rule
+  that was broken.
+- **Who Stands Better? duel** — five quiet positions from the classic games, judged on the arcade's
+  slider, 30 seconds each. A judgement is locked in for good, and the other player sees only that it
+  is in; then the engine's verdict and both judgements show, scored as in the arcade (up to 100
+  points; none for calling the wrong side better). The higher total wins.
+- **Army Draft** — both players buy an army from the same budget (20, 30 or 39 points) within two
+  minutes, each seeing only their own; an army is drafted for whoever has none when the time is up.
+  The game then starts from the two armies — kings are free, and nobody castles — with a time control
+  and colours as in any game.
+- **Blindfold** — a real game with the pieces hidden for both, with a time control and colours as in
+  any game: moves are typed (or played on the hidden board), the last move shows in words, and each
+  player may peek three times, for two seconds. Each sees how many peeks the other has used. The
+  pieces come back when the game ends.
+
+The race, Arbiter and Who Stands Better? are **duels**, with no clock. The poster's device deals the
+rounds; the relay checks them (only puzzle ids, positions and moves, so nothing either device sends
+reaches the other as text) and sends the same to both. Each round starts on both boards at once,
+after a three-second countdown, and times are measured on each device from the moment the round
+appears there. The score stays in view (over the board on a phone); a round's result stays up for a
+few seconds, with what each player did, and the rounds played are listed beside the board. Resign, rematch, the set
+phrases and focus mode work as in a game of chess. A duel that has not started within a minute (the
+rounds not dealt, a player not arrived) is called off, and one the host's device cannot prepare (the
+puzzles out of reach offline, say) says why. Duels are not kept in My games; Army Draft and
+blindfold games are, named for their game, an Army Draft game from its drafted start.
 
 ## Arcade
 
@@ -566,7 +617,7 @@ There is no sign-up: everything you do is stored in your browser, on your device
 the network only when you ask it to — importing your games from Lichess or chess.com, the opening
 explorer and tablebase lookups, which are off by default, the Lichess account sync once you connect
 an account, which talks to lichess.org alone, sync between devices once you turn it on, which
-sends the relay only data encrypted on the device, and live games once you open the waiting room.
+sends the relay only data encrypted on the device, and live games once you open Play.
 A live game goes through the relay, which referees it: the relay sees the made-up names, the
 ratings you choose to show and the moves, keeps a game until 10 minutes after it ends, and logs
 nothing. Optional

@@ -1,42 +1,206 @@
 /* Live games: the waiting room (LivePage.tsx), the game (LiveGamePage.tsx) and the bar under the
    header (LiveBar.tsx). */
 
-/* ---------- The waiting room ---------- */
-/* Phones: posting first, then the open games, then the name. From 900px: posting and the name on
-   the left, the open games beside them. */
-.live__layout {
+/* ---------- Play: the hub (PlayHubPage.tsx) ---------- */
+/* Phones: the computer first (one tap away), then a person, the open games, the games for two and
+   the player's name. From 900px: a person on the left, the computer and the open games beside it,
+   then the games for two and the name across the page. */
+.hub {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: 'post' 'open' 'name';
+  grid-template-areas: 'computer' 'person' 'open' 'games' 'name';
   gap: var(--space-4);
   align-items: start;
 }
 
-.live__post {
-  grid-area: post;
+.hub__person {
+  grid-area: person;
   min-width: 0;
 }
 
-.live__open {
+.hub__computer {
+  grid-area: computer;
+  min-width: 0;
+}
+
+.hub__open {
   grid-area: open;
   min-width: 0;
 }
 
-.live__name {
+.hub__games {
+  grid-area: games;
+  min-width: 0;
+}
+
+.hub__name {
   grid-area: name;
   min-width: 0;
 }
 
 @media (min-width: 900px) {
-  .live__layout {
+  .hub {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    /* The second row takes what the open games add below the posting card: the name card stays
-       right under it rather than drifting down. */
-    grid-template-rows: auto 1fr;
-    grid-template-areas: 'post open' 'name open';
+    /* The second row takes what a person's card adds beyond the computer's: the open games stay
+       right under the computer rather than drifting down. */
+    grid-template-rows: auto 1fr auto auto;
+    grid-template-areas:
+      'person computer'
+      'person open'
+      'games games'
+      'name name';
   }
 }
 
+/* A card's icon beside its title. */
+.hub__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.hub__head > .live__title {
+  margin: 0;
+}
+
+.hub__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.hub__lead {
+  margin: 0 0 var(--space-3);
+}
+
+.hub__actions {
+  flex-wrap: wrap;
+}
+
+.hub__invite {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.hub__section-head > h2 {
+  font-size: 1.25rem;
+  margin: 0 0 var(--space-1);
+}
+
+.hub__section-head > p {
+  margin: 0 0 var(--space-3);
+  max-width: 70ch;
+}
+
+/* The games for two: one per row on a phone, all five abreast on a wide screen. */
+.hub__game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+
+/* A game for two. On a phone: the icon beside the name and the tagline, the links under them.
+   In the grid of a wider screen: a card of its own, the Play button at its bottom right. */
+.hub-game {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'icon name time'
+    'icon tagline tagline'
+    'practise practise play';
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.hub-game__icon {
+  grid-area: icon;
+  align-self: start;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.hub-game__name {
+  grid-area: name;
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.hub-game__time {
+  grid-area: time;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.hub-game__tagline {
+  grid-area: tagline;
+  margin: 0;
+  font-size: 0.925rem;
+  color: var(--text-muted);
+}
+
+.hub-game__practise {
+  grid-area: practise;
+  justify-self: start;
+}
+
+.hub-game__play {
+  grid-area: play;
+  justify-self: end;
+}
+
+@media (min-width: 600px) {
+  .hub-game {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr auto;
+    grid-template-areas:
+      'icon time'
+      'name name'
+      'tagline tagline'
+      'practise play';
+    align-items: start;
+    gap: var(--space-2);
+  }
+
+  .hub-game__practise,
+  .hub-game__play {
+    align-self: end;
+  }
+}
+
+/* The name card across the page: the name and the rating side by side, the notes under them. */
+@media (min-width: 900px) {
+  .hub__name .hub__name-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-2) var(--space-6);
+    align-items: center;
+  }
+
+  /* The grid spaces them now, not the stack. */
+  .hub__name .hub__name-body > * {
+    margin-top: 0;
+  }
+
+  .hub__name .hub__name-body > .live__aside {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------- The waiting room's pieces ---------- */
 .live__title {
   font-size: 1.15rem;
   margin: 0 0 var(--space-3);
@@ -161,8 +325,21 @@
 }
 
 .live__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
   color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.live__summary-icon {
+  flex: none;
+  color: var(--accent);
+}
+
+.live__share-hint {
+  margin: 0 0 var(--space-3);
 }
 
 .live__places {
@@ -256,7 +433,15 @@
 
 .live__seek-what {
   grid-area: what;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
+}
+
+.live__seek-icon {
+  flex: none;
+  color: var(--accent);
 }
 
 .live__seek-join {
@@ -271,6 +456,25 @@
 .live__playas {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+/* The game dialog: what the game is, with its icon. */
+.live__dialog-lead {
+  margin: 0;
+}
+
+.live__dialog-about {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 0.925rem;
+}
+
+.live__dialog-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
 }
 
 /* ---------- The game ---------- */
@@ -333,6 +537,44 @@
 
 .live-game__player .badge {
   align-self: center;
+}
+
+/* Blindfold: the last move and the peeks, with the Peek button beside them. */
+.live-game__blind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.live-game__blind-text {
+  flex: 1 1 16em;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.live-game__subtitle-line {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+}
+
+.live-game__armies {
+  margin: var(--space-1) 0 0;
+}
+
+/* Army Draft's draft (LiveDraft.tsx). */
+.live-draft__lead {
+  margin: var(--space-2) 0 var(--space-3);
+}
+
+.live-draft__ready {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+  font-weight: 600;
 }
 
 .live-game__first {

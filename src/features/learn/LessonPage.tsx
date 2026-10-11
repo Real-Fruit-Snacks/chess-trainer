@@ -415,7 +415,7 @@ function LessonView({ lesson }: { lesson: Lesson }) {
               {'\u00a0· '}
               <Link to={`/analyze?fen=${encodeURIComponent(state.fen)}`}>Analyze position</Link>
               {'\u00a0· '}
-              <Link to={`/play?fen=${encodeURIComponent(state.fen)}`}>Play it out</Link>
+              <Link to={`/play/computer?fen=${encodeURIComponent(state.fen)}`}>Play it out</Link>
             </p>
           </div>
         </aside>

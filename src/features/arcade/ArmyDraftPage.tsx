@@ -6,26 +6,22 @@ import { usePlayVsEngine } from '@/features/play/usePlayVsEngine';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
-import { AnalyzeGameButton, EngineLevelField } from './arcadeControls';
+import { AnalyzeGameButton, EngineLevelField, PlayOnlineLink } from './arcadeControls';
 import { useArcadeFocus } from './arcadeGame';
 import {
-  ARMY_PIECES,
   ARMY_PRESETS,
   type Army,
-  type ArmyPiece,
   armyCost,
   armyProblem,
   BUDGETS,
-  canAdd,
   DEFAULT_BUDGET,
   describeArmy,
   describeBudget,
   draftFen,
   EMPTY_ARMY,
-  PIECE_COST,
-  PIECE_NAME,
   randomArmy,
 } from './army';
+import { ArmyShop } from './ArmyShop';
 import { EngineGameBoard, GameMoves } from './EngineGameBoard';
 import '@/features/play/play.css';
 import './arcade.css';
@@ -69,19 +65,6 @@ export default function ArmyDraftPage() {
         ? `Budget ${next} points: your army no longer fit and was cleared.`
         : `Budget ${next} points. ${describeBudget(army, next)}`,
     );
-  };
-
-  const add = (piece: ArmyPiece, delta: 1 | -1) => {
-    if (delta > 0 && !canAdd(army, piece, budget)) return;
-    const next = { ...army, [piece]: Math.max(0, army[piece] + delta) };
-    if (next[piece] === army[piece]) return;
-    setArmy(next);
-    setBudgetNews(`${PIECE_NAME[piece]}s: ${next[piece]}. ${describeBudget(next, budget)}`);
-  };
-
-  const choose = (name: string, next: Army) => {
-    setArmy(next);
-    setBudgetNews(`${name}: ${describeArmy(next)}. ${describeBudget(next, budget)}`);
   };
 
   /** The same armies and level again; a random engine army is drawn afresh, as before every game. */
@@ -148,91 +131,15 @@ export default function ArmyDraftPage() {
           </div>
           <aside className="trainer__panel stack">
             <Card>
-              <div className="row row--between">
-                <strong id="army-heading">Your army</strong>
-                <span className="arcade__budget" data-testid="army-budget" aria-hidden="true">
-                  {armyCost(army)} / {budget}
-                </span>
-              </div>
-              <p className="sr-only" role="status" data-testid="army-budget-news">
-                {budgetNews}
-              </p>
-              <div
-                className="arcade__shop"
-                style={{ marginTop: 12 }}
-                data-testid="army-shop"
-                role="group"
-                aria-labelledby="army-heading"
-                aria-describedby="army-budget-total"
-              >
-                <span id="army-budget-total" className="sr-only">
-                  {describeBudget(army, budget)}
-                </span>
-                {ARMY_PIECES.map((piece) => (
-                  <div key={piece} className="arcade__shop-item">
-                    <span>
-                      <strong>{PIECE_NAME[piece]}</strong>
-                      <span className="small muted"> · {PIECE_COST[piece]}</span>
-                    </span>
-                    <span className="arcade__shop-stepper">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon
-                        aria-label={`Remove a ${PIECE_NAME[piece].toLowerCase()}`}
-                        onClick={() => add(piece, -1)}
-                        disabled={army[piece] === 0}
-                      >
-                        −
-                      </Button>
-                      <span
-                        className="arcade__shop-count"
-                        data-testid={`army-count-${piece}`}
-                        aria-label={`${PIECE_NAME[piece]}s: ${army[piece]}`}
-                        role="img"
-                      >
-                        {army[piece]}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon
-                        aria-label={`Add a ${PIECE_NAME[piece].toLowerCase()}`}
-                        onClick={() => add(piece, 1)}
-                        disabled={!canAdd(army, piece, budget)}
-                      >
-                        +
-                      </Button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="row" style={{ marginTop: 12, flexWrap: 'wrap' }}>
-                {ARMY_PRESETS.filter((p) => p.budget <= budget).map((preset) => (
-                  <Button
-                    key={preset.id}
-                    size="sm"
-                    onClick={() => choose(preset.name, preset.army)}
-                  >
-                    {preset.name}
-                  </Button>
-                ))}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setArmy(EMPTY_ARMY);
-                    setBudgetNews(`Army cleared. ${describeBudget(EMPTY_ARMY, budget)}`);
-                  }}
-                >
-                  Clear
-                </Button>
-              </div>
-              {problem ? (
-                <p className="small" style={{ color: 'var(--danger)', margin: '12px 0 0' }}>
-                  {problem}
-                </p>
-              ) : null}
+              <ArmyShop
+                army={army}
+                budget={budget}
+                news={budgetNews}
+                onChange={(next, news) => {
+                  setArmy(next);
+                  setBudgetNews(news);
+                }}
+              />
             </Card>
             <Card>
               <div className="stack">
@@ -364,7 +271,10 @@ function Header() {
       <p className="card__eyebrow arcade__eyebrow">
         <Link to="/arcade">Arcade</Link> / Army Draft
       </p>
-      <h1>Army Draft</h1>
+      <div className="row row--between">
+        <h1>Army Draft</h1>
+        <PlayOnlineLink kind="army" />
+      </div>
       <p>
         Buy your pieces from a points budget — a queen costs 9, a rook 5, a bishop or knight 3, a
         pawn 1 — and fight the engine’s own draft. Kings are free; nobody castles.

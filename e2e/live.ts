@@ -24,6 +24,8 @@ export interface LiveRelay {
   own(context: BrowserContext): void;
   /** Moves the relay's clock on, firing whatever falls due. */
   advance(ms: number): void;
+  /** Every message of type `t` the relay has sent any page so far, oldest first. */
+  sent(t: string): Record<string, unknown>[];
   /**
    * Stops the relay and closes the contexts it owns: a page left open would
    * go on reconnecting, its timers running, through every later test.
@@ -56,6 +58,7 @@ export function startLiveRelay(): LiveRelay {
   const ticker = setInterval(fire, 50);
   const hub = createLiveHub({ now, timers });
   const contexts: BrowserContext[] = [];
+  const log: Record<string, unknown>[] = [];
 
   return {
     hub,
@@ -65,7 +68,10 @@ export function startLiveRelay(): LiveRelay {
         const game = /^\/v1\/games\/(.+)$/.exec(path)?.[1];
         let closed = false;
         const events = (game ? hub.openRoom.bind(hub, game) : hub.openLobby.bind(hub))({
-          send: (text: string) => ws.send(text),
+          send: (text: string) => {
+            if (text !== 'pong') log.push(JSON.parse(text) as Record<string, unknown>);
+            ws.send(text);
+          },
           close: (code: number, reason: string) => {
             void ws.close({ code, reason });
             // A close the relay makes is not reported back by the route: tell the hub here.
@@ -91,6 +97,9 @@ export function startLiveRelay(): LiveRelay {
     advance(ms) {
       offset += ms;
       fire();
+    },
+    sent(t) {
+      return log.filter((message) => message.t === t);
     },
     async stop() {
       clearInterval(ticker);

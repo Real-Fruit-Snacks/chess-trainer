@@ -45,7 +45,7 @@ function renderAt(path: string) {
     [
       { path: '/settings/lichess', element: <LichessCallbackPage /> },
       { path: '/settings', element: <p>Settings page</p> },
-      { path: '/play/online', element: <p>Waiting room</p> },
+      { path: '/play', element: <p>Play page</p> },
     ],
     { initialEntries: [path] },
   );
@@ -82,24 +82,24 @@ describe('coming back from lichess.org', () => {
   });
 
   it('goes back to the page the sign-in started from', async () => {
-    const path = await cameBackFrom('approve', '/play/online');
+    const path = await cameBackFrom('approve', '/play');
     const router = renderAt(path);
-    await waitFor(() => expect(router.state.location.pathname).toBe('/play/online'));
-    expect(await screen.findByText('Waiting room')).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/play'));
+    expect(await screen.findByText('Play page')).toBeInTheDocument();
     expect(useLichess.getState().account?.username).toBe('Learner');
     expect(syncNow).toHaveBeenCalledWith({ force: true });
   });
 
   it('keeps that page when the sign-in fails: back to it, or try again for it', async () => {
-    const path = await cameBackFrom('deny', '/play/online');
+    const path = await cameBackFrom('deny', '/play');
     renderAt(path);
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'The connection was cancelled on Lichess.',
     );
-    expect(screen.getByRole('link', { name: 'Go back' })).toHaveAttribute('href', '/play/online');
+    expect(screen.getByRole('link', { name: 'Go back' })).toHaveAttribute('href', '/play');
     vi.mocked(beginLichessLogin).mockImplementationOnce(() => Promise.resolve());
     screen.getByRole('button', { name: 'Try again' }).click();
-    expect(beginLichessLogin).toHaveBeenLastCalledWith({ returnTo: '/play/online' });
+    expect(beginLichessLogin).toHaveBeenLastCalledWith({ returnTo: '/play' });
   });
 
   it('says so when the learner cancelled, and offers to try again', async () => {

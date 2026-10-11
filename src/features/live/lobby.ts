@@ -5,7 +5,10 @@ import { useLichess } from '@/store/lichess';
 import { useProgress } from '@/store/progress';
 import {
   COLOR_CHOICES,
+  gameOptions,
   ID_PATTERN,
+  isDuel,
+  isGame,
   isRating,
   MAX_RATING,
   MIN_RATING,
@@ -30,6 +33,7 @@ import { liveGamePath, rememberSeat } from './seats';
 import { LiveSocket } from './socket';
 import type {
   ColorChoice,
+  GameKind,
   LichessSeekStatus,
   LivePlayer,
   LobbyState,
@@ -100,17 +104,25 @@ function playerOf(value: unknown): LivePlayer {
   };
 }
 
-/** A game the relay lists, checked; null when it is not one. */
+/** A game the relay lists, checked; null when it is not one (or one this app does not know). */
 function openGameOf(value: unknown): OpenGame | null {
   if (typeof value !== 'object' || value === null) return null;
   const { id, tc, color, name, rating } = value as Record<string, unknown>;
-  if (typeof id !== 'string' || !ID_PATTERN.test(id) || parseTimeControl(tc) === null) return null;
+  // A listing without a game is a game of chess (a relay older than the other games).
+  const game: unknown = (value as Record<string, unknown>).game ?? 'chess';
+  if (!isGame(game)) return null;
+  const opts = gameOptions(game, (value as Record<string, unknown>).opts);
+  if (typeof id !== 'string' || !ID_PATTERN.test(id) || !opts) return null;
+  const duel = isDuel(game);
+  if (!duel && parseTimeControl(tc) === null) return null;
   if (!(COLOR_CHOICES as readonly unknown[]).includes(color) || typeof name !== 'string') {
     return null;
   }
   return {
     id,
-    tc: tc as string,
+    game,
+    opts,
+    tc: duel ? null : (tc as string),
     color: color as ColorChoice,
     name,
     rating: isRating(rating) ? rating : null,
@@ -238,8 +250,13 @@ export function createLobbyStore(): LobbyStore {
 
     post: (options) => {
       if (disposed) return;
-      const spec = parseTimeControl(options.tc);
-      if (!spec || !(COLOR_CHOICES as readonly string[]).includes(options.color)) {
+      const game: GameKind = options.game ?? 'chess';
+      const duel = isDuel(game);
+      const opts = gameOptions(game, options.opts ?? {});
+      const spec = duel ? null : parseTimeControl(options.tc);
+      // A duel has no colours: the poster hosts it.
+      const color: ColorChoice = duel ? 'random' : options.color;
+      if (!opts || (!duel && !spec) || !(COLOR_CHOICES as readonly string[]).includes(color)) {
         set({ notice: 'That game cannot be posted.' });
         return;
       }
@@ -250,11 +267,13 @@ export function createLobbyStore(): LobbyStore {
       sentBefore = false;
       reposting = false;
       repostTries = 0;
-      useLivePrefs.getState().update({ tc: spec.id, color: options.color });
+      if (game === 'chess' && spec) useLivePrefs.getState().update({ tc: spec.id, color });
       const mine: MySeek = {
         id: randomId(16),
-        tc: spec.id,
-        color: options.color,
+        game,
+        opts,
+        tc: spec?.id ?? null,
+        color,
         private: options.private,
         postedAt: Date.now(),
         relay: relayConfigured() ? 'posting' : 'failed',
@@ -263,9 +282,10 @@ export function createLobbyStore(): LobbyStore {
       setMine(mine);
       ensure();
       if (socket.state === 'open') sendSeek();
-      // A game for people with the link stays off Lichess, where anyone could take it.
-      if (options.lichess && !options.private) {
-        startLichess(mine.id, spec, options.color, options.lichess.rated);
+      // A game for people with the link stays off Lichess, where anyone could take it; Lichess
+      // plays chess only.
+      if (options.lichess && !options.private && game === 'chess' && spec) {
+        startLichess(mine.id, spec, color, options.lichess.rated);
       }
     },
 
@@ -431,6 +451,8 @@ export function createLobbyStore(): LobbyStore {
     const sent = socket.send({
       t: 'seek',
       id: mine.id,
+      game: mine.game,
+      opts: mine.opts,
       tc: mine.tc,
       color: mine.color,
       name: useLivePrefs.getState().name,
@@ -532,9 +554,12 @@ export function createLobbyStore(): LobbyStore {
 
   function onPaired(message: Record<string, unknown>): void {
     const { game, seat, color, tc } = message;
-    if (typeof game !== 'string' || !ID_PATTERN.test(game)) return;
+    // A pairing without a kind is a game of chess (a relay older than the other games).
+    const kind: unknown = message.kind ?? 'chess';
+    if (typeof game !== 'string' || !ID_PATTERN.test(game) || !isGame(kind)) return;
     if (typeof seat !== 'string' || !SEAT_PATTERN.test(seat) || !isSide(color)) return;
-    if (typeof tc !== 'string' || parseTimeControl(tc) === null) return;
+    const duel = isDuel(kind);
+    if (!duel && (typeof tc !== 'string' || parseTimeControl(tc) === null)) return;
     joining = null;
     if (wonByLichess || lichess?.state === 'won') {
       // Lichess paired this post first: the relay game is called off before anyone moves.
@@ -542,17 +567,19 @@ export function createLobbyStore(): LobbyStore {
       ensure();
       return;
     }
-    rememberSeat(game, seat, color);
+    rememberSeat(game, seat, color, kind);
     stopLichess();
     clearRepost();
     paired({
       source: 'relay',
       game,
+      kind,
+      opts: gameOptions(kind, message.opts) ?? {},
       color,
-      tc,
+      tc: duel ? null : (tc as string),
       opponent: playerOf(message.opponent),
       at: Date.now(),
-      path: liveGamePath('relay', game),
+      path: liveGamePath('relay', game, kind),
     });
   }
 
@@ -663,6 +690,8 @@ export function createLobbyStore(): LobbyStore {
     paired({
       source: 'lichess',
       game: start.gameId,
+      kind: 'chess',
+      opts: {},
       color: start.color,
       tc: start.tc,
       opponent: start.opponent,

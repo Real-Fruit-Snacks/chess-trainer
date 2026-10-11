@@ -21,6 +21,7 @@ import {
   checkOnLiveGames,
   closeLiveGames,
   FINISHED_LINGER_MS,
+  getDuel,
   getLiveGame,
   liveGamePath,
   rememberSeat,
@@ -96,6 +97,11 @@ function fakeLichessSession(id: string) {
     next: null,
     error: null,
     url: `https://lichess.org/${id}`,
+    game: 'chess',
+    opts: {},
+    startFen: null,
+    draft: null,
+    peeks: null,
     capabilities: { phrases: false, rematch: false, takeback: true },
   };
   const listeners = new Set<() => void>();
@@ -118,6 +124,8 @@ function fakeLichessSession(id: string) {
     rematch: vi.fn(),
     claim: vi.fn(),
     say: vi.fn(),
+    army: vi.fn(),
+    peek: vi.fn(),
     close() {
       session.closed = true;
     },
@@ -148,16 +156,16 @@ describe('game pages and seats', () => {
   it('keeps seats for a day, per game', () => {
     const game = randomId(16);
     const seat = randomId(32);
-    rememberSeat(game, seat, 'black', 1_000_000);
-    expect(seatOf(game, 1_000_000)).toEqual({ seat, color: 'black', at: 1_000_000 });
-    expect(storedSeats()[game]).toEqual({ seat, color: 'black', at: 1_000_000 });
+    rememberSeat(game, seat, 'black', 'chess', 1_000_000);
+    expect(seatOf(game, 1_000_000)).toEqual({ seat, color: 'black', kind: 'chess', at: 1_000_000 });
+    expect(storedSeats()[game]).toEqual({ seat, color: 'black', kind: 'chess', at: 1_000_000 });
     // Told again (a rematch's seat in every snapshot): it keeps when it was first given.
-    rememberSeat(game, seat, 'black', 2_000_000);
+    rememberSeat(game, seat, 'black', 'chess', 2_000_000);
     expect(seatOf(game, 2_000_000)?.at).toBe(1_000_000);
     // A day on, it is gone, and the next seat kept leaves it out of storage.
     expect(seatOf(game, 1_000_000 + SEAT_KEEP_MS)).toBeNull();
     const later = randomId(16);
-    rememberSeat(later, randomId(32), 'white', 1_000_000 + SEAT_KEEP_MS);
+    rememberSeat(later, randomId(32), 'white', 'chess', 1_000_000 + SEAT_KEEP_MS);
     expect(Object.keys(storedSeats())).toEqual([later]);
     // Not ids, not seats: nothing kept.
     rememberSeat('nope', randomId(32), 'white');
@@ -174,30 +182,30 @@ describe('games to check on after a restart', () => {
     const now = 10_000_000_000;
     const relayGame = randomId(16);
     const finished = randomId(16);
-    rememberSeat(relayGame, randomId(32), 'white', now - 1000);
-    rememberSeat(finished, randomId(32), 'black', now - 1000);
+    rememberSeat(relayGame, randomId(32), 'white', 'chess', now - 1000);
+    rememberSeat(finished, randomId(32), 'black', 'chess', now - 1000);
     markGameOver('relay', finished, now);
     rememberLichessGame('AbCd1234', now - 2000);
     rememberLichessGame('Old12345', now - 7 * 60 * 60 * 1000);
     rememberLichessGame('not a game id', now);
     expect(gamesToCheck(now)).toEqual([
-      { source: 'relay', id: relayGame },
-      { source: 'lichess', id: 'AbCd1234' },
+      { source: 'relay', id: relayGame, kind: 'chess' },
+      { source: 'lichess', id: 'AbCd1234', kind: 'chess' },
     ]);
     // Over is kept with the seat, which still opens the finished game's page.
     expect(seatOf(finished, now)).toMatchObject({ over: true, color: 'black' });
     markGameOver('lichess', 'AbCd1234', now);
-    expect(gamesToCheck(now)).toEqual([{ source: 'relay', id: relayGame }]);
+    expect(gamesToCheck(now)).toEqual([{ source: 'relay', id: relayGame, kind: 'chess' }]);
     // Noted once: a second note of the same Lichess game keeps when it began.
     rememberLichessGame('AbCd1234', now);
-    expect(gamesToCheck(now)).toEqual([{ source: 'relay', id: relayGame }]);
+    expect(gamesToCheck(now)).toEqual([{ source: 'relay', id: relayGame, kind: 'chess' }]);
   });
 
   it('notes a game that ends, so the next start does not check on it', async () => {
     const { game, opponent } = await seated();
     const session = getLiveGame('relay', game)!;
     await relay.settle();
-    expect(gamesToCheck()).toEqual([{ source: 'relay', id: game }]);
+    expect(gamesToCheck()).toEqual([{ source: 'relay', id: game, kind: 'chess' }]);
     await opponent.send({ t: 'abort' });
     await relay.settle();
     expect(session.getView().status).toBe('over');
@@ -225,7 +233,7 @@ describe('games to check on after a restart', () => {
     useLichess.setState({ account });
     vi.mocked(createLichessGame).mockReturnValue(fakeLichessSession('Qq7wE3rT'));
     getLiveGame('lichess', 'Qq7wE3rT');
-    expect(gamesToCheck()).toEqual([{ source: 'lichess', id: 'Qq7wE3rT' }]);
+    expect(gamesToCheck()).toEqual([{ source: 'lichess', id: 'Qq7wE3rT', kind: 'chess' }]);
   });
 });
 
@@ -272,6 +280,7 @@ describe('game connections', () => {
         path: `/play/online/${game}`,
         you: 'white',
         opponent: 'Swift Knight',
+        kind: 'chess',
       },
     ]);
     expect(useLiveBar.getState().active).toBe(true);
@@ -353,5 +362,61 @@ describe('game connections', () => {
     const fresh = fakeLichessSession('Zz9yX8wV');
     vi.mocked(createLichessGame).mockReturnValue(fresh);
     expect(getLiveGame('lichess', 'Zz9yX8wV')).not.toBe(session);
+  });
+});
+
+/** A duel made through the waiting room, this device the guest (Black), its seat remembered. */
+async function seatedInDuel(game = 'judge') {
+  const host = relay.lobbyClient();
+  const mine = relay.lobbyClient();
+  const seek = { t: 'seek', game, opts: {}, rating: null, private: false };
+  await host.send({ ...seek, name: 'Swift Knight' });
+  await mine.send({ ...seek, name: 'Patient Bishop' });
+  const paired = mine.last('paired')!;
+  const id = paired.game as string;
+  rememberSeat(id, paired.seat as string, 'black', 'judge');
+  const opponent: RelayClient = relay.roomClient(id);
+  await opponent.send({ t: 'hello', seat: host.last('paired')!.seat });
+  return { id, opponent };
+}
+
+describe('duel connections', () => {
+  it('opens a duel as a duel, one connection, and the bar leads back to it', async () => {
+    const { id, opponent } = await seatedInDuel();
+    // Not a game of chess: its page is the duel's.
+    expect(getLiveGame('relay', id)).toBeNull();
+    expect(getDuel(randomId(16))).toBeNull();
+    const duel = getDuel(id)!;
+    expect(getDuel(id)).toBe(duel);
+    await relay.settle();
+    expect(duel.getView()).toMatchObject({ game: 'judge', you: 'black', status: 'setup' });
+    expect(useActiveGames.getState().games).toEqual([
+      {
+        source: 'relay',
+        id,
+        path: `/play/duel/${id}`,
+        you: 'black',
+        opponent: 'Swift Knight',
+        kind: 'judge',
+      },
+    ]);
+    expect(gamesToCheck()).toEqual([{ source: 'relay', id, kind: 'judge' }]);
+    await opponent.send({ t: 'abort' });
+    await relay.settle();
+    expect(duel.getView().status).toBe('over');
+    expect(useActiveGames.getState().games).toEqual([]);
+    // A duel over is not one to come back to, nor kept in My games.
+    expect(gamesToCheck()).toEqual([]);
+    expect(sortedGames(useGames.getState().games)).toEqual([]);
+  });
+
+  it('checks on a duel that may still be on after a restart', async () => {
+    const { id } = await seatedInDuel();
+    checkOnLiveGames();
+    await relay.settle();
+    expect(useActiveGames.getState().games).toEqual([
+      expect.objectContaining({ id, kind: 'judge', path: `/play/duel/${id}` }),
+    ]);
+    expect(relay.openSockets(`/v1/games/${id}`)).toHaveLength(1);
   });
 });

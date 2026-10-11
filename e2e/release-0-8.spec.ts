@@ -349,7 +349,7 @@ test.describe('playing on from a position on a phone', () => {
     });
     // A puzzle's final position, handed off the way "Play it out" does.
     const fen = 'r1bqk2r/1pppbppp/p1n2n2/4p3/B3P3/5N2/PPPP1PPP/RNBQ1RK1 w kq - 2 6';
-    await page.goto(`/play?fen=${encodeURIComponent(fen)}&color=white`);
+    await page.goto(`/play/computer?fen=${encodeURIComponent(fen)}&color=white`);
     await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
@@ -378,12 +378,13 @@ test.describe('small phones', () => {
     page,
   }) => {
     await seedProgress(page, { onboarded: true });
-    await page.goto('/play');
+    await page.goto('/play/computer');
     await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expectBoard(page);
-    // The description is dropped and the title shrinks …
-    await expect(page.locator('.page-header p')).toBeHidden();
+    // The description is dropped (the way back to Play stays) and the title shrinks …
+    await expect(page.locator('.page-header p:not(.card__eyebrow)')).toBeHidden();
+    await expect(page.locator('.page-header .card__eyebrow')).toBeVisible();
     const titleSize = await page
       .locator('.page-header h1')
       .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));

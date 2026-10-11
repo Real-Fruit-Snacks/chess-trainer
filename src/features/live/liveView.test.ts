@@ -54,7 +54,7 @@ describe('words for the waiting room', () => {
 
   it('makes the link that joins a posted game', () => {
     expect(joinLink('abcdefghijklmnopqrstuv')).toBe(
-      `${window.location.origin}/play/online?join=abcdefghijklmnopqrstuv`,
+      `${window.location.origin}/play?join=abcdefghijklmnopqrstuv`,
     );
   });
 
@@ -132,6 +132,11 @@ function view(patch: Partial<LiveGameView>): LiveGameView {
     next: null,
     error: null,
     url: null,
+    game: 'chess',
+    opts: {},
+    startFen: null,
+    draft: null,
+    peeks: null,
     capabilities: { phrases: true, rematch: true, takeback: true },
     ...patch,
   };

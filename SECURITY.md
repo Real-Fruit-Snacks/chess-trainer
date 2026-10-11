@@ -66,7 +66,7 @@ study:write`, and `board:play` for live games on Lichess (optional: the sync wor
   is kept in the profile's local storage on this device, sent only to lichess.org, never written
   into a backup, an export or a link, and revoked on Lichess by Disconnect and by Reset everything.
   A personal token pasted instead is checked with Lichess (it must allow those four permissions)
-  and kept the same way. The token plays only games the learner started from the waiting room, and
+  and kept the same way. The token plays only games the learner started from Play, and
   the live board has no engine, as Lichess's rules require. Studies the sync creates are private, with chat and cloning
   off, and only their owner may share or export them.
 

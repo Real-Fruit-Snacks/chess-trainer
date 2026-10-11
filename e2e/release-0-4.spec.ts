@@ -377,7 +377,7 @@ test.describe('endgame studies', () => {
     await expect(page.getByText('Why it works')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Play it out' })).toHaveAttribute(
       'href',
-      /\/play\?fen=/,
+      /\/play\/computer\?fen=/,
     );
 
     await page.goto('/studies');
@@ -400,7 +400,7 @@ test.describe('endgame studies', () => {
 
 test.describe('two players and blindfold', () => {
   test('a hot-seat game turns the board and ends by resignation', async ({ page }) => {
-    await page.goto('/play');
+    await page.goto('/play/computer');
     await page.getByLabel('Opponent').selectOption('human');
     await page.getByText('Blindfold', { exact: true }).click();
     await page.getByRole('button', { name: 'Start', exact: true }).click();
@@ -502,7 +502,7 @@ test.describe('keyboard board control', () => {
   test('moves a piece with the arrow keys and Enter, and describes the position', async ({
     page,
   }) => {
-    await page.goto('/play');
+    await page.goto('/play/computer');
     await page.getByLabel('Opponent').selectOption('human');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expectBoard(page);

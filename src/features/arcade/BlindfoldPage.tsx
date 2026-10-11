@@ -7,7 +7,7 @@ import { usePlayVsEngine } from '@/features/play/usePlayVsEngine';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
-import { AnalyzeGameButton, EngineLevelField } from './arcadeControls';
+import { AnalyzeGameButton, EngineLevelField, PlayOnlineLink } from './arcadeControls';
 import { useArcadeFocus } from './arcadeGame';
 import { EngineGameBoard, GameMoves } from './EngineGameBoard';
 import {
@@ -157,7 +157,10 @@ export default function BlindfoldPage() {
         <p className="card__eyebrow arcade__eyebrow">
           <Link to="/arcade">Arcade</Link> / Blindfold
         </p>
-        <h1>Blindfold</h1>
+        <div className="row row--between">
+          <h1>Blindfold</h1>
+          <PlayOnlineLink kind="blindfold" />
+        </div>
         <p>
           A full game against the engine with the pieces hidden. Three peeks; a win with peeks to
           spare is the top score.

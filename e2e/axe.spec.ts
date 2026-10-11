@@ -32,8 +32,9 @@ const PAGES = [
   '/openings',
   '/openings/italian',
   '/play',
-  '/play/online',
+  '/play/computer',
   '/play/online/AAAAAAAAAAAAAAAAAAAAAA',
+  '/play/duel/AAAAAAAAAAAAAAAAAAAAAA',
   '/analyze',
   '/games',
   '/studies',
@@ -118,6 +119,18 @@ test.beforeAll(async () => {
       color: 'random',
       name: 'Patient Bishop',
       rating: 1500,
+      private: false,
+    }),
+  );
+  // And a duel, which the list shows with its own icon and words.
+  const duel = relay.hub.openLobby({ send: () => undefined, close: () => undefined });
+  await duel.message(
+    JSON.stringify({
+      t: 'seek',
+      game: 'race',
+      opts: { format: 'best3', level: 1500 },
+      name: 'Swift Knight',
+      rating: null,
       private: false,
     }),
   );

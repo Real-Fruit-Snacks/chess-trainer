@@ -448,3 +448,113 @@ describe('a game on the relay', () => {
     expect(session.getView().moves).toEqual([]);
   });
 });
+
+/** A variant of chess made through the waiting room: this device plays White. */
+async function newVariant(game: 'army' | 'blindfold', opts: Record<string, number> = {}) {
+  const mine = relay.lobbyClient();
+  const theirs = relay.lobbyClient();
+  const seek = { t: 'seek', game, opts, tc: '5+3', rating: null, private: false };
+  await mine.send({ ...seek, color: 'white', name: ME });
+  await theirs.send({ ...seek, color: 'random', name: THEM });
+  const paired = mine.last('paired')!;
+  const id = paired.game as string;
+  const opponent = relay.roomClient(id);
+  await opponent.send({ t: 'hello', seat: theirs.last('paired')!.seat });
+  return { game: id, seat: paired.seat as string, opponent };
+}
+
+describe('the variants on the relay', () => {
+  it('drafts an army out of the other’s sight, then plays from the two armies', async () => {
+    const { game, seat, opponent } = await newVariant('army', { budget: 30 });
+    const { session } = open(game, seat);
+    await relay.settle();
+    expect(session.getView()).toMatchObject({
+      game: 'army',
+      opts: { budget: 30 },
+      status: 'draft',
+      startFen: null,
+      draft: {
+        budget: 30,
+        ready: { white: false, black: false },
+        armies: { white: null, black: null },
+      },
+      firstMove: null,
+    });
+    expect(session.getView().draft!.deadline! - performance.now()).toBeGreaterThan(
+      LIMITS.draftMs - 1000,
+    );
+    // No moves while the armies are chosen: refused here, nothing sent.
+    session.move('e2e4');
+    expect(session.getView().error).toBe('The armies are still being chosen.');
+
+    const army = { q: 1, r: 2, b: 0, n: 0, p: 8 };
+    session.army(army);
+    await relay.settle();
+    expect(lastSent(`/v1/games/${game}`)).toEqual({ t: 'army', army });
+    expect(session.getView().draft!.ready).toEqual({ white: true, black: false });
+    expect(opponent.last('draft')).toEqual({ t: 'draft', ready: { white: true, black: false } });
+
+    await opponent.send({ t: 'army', army: { q: 0, r: 2, b: 2, n: 2, p: 2 } });
+    await relay.settle();
+    const view = session.getView();
+    expect(view.status).toBe('playing');
+    expect(view.startFen).toMatch(/^r/);
+    expect(view.draft!.armies).toEqual({ white: army, black: { q: 0, r: 2, b: 2, n: 2, p: 2 } });
+    // The moves are the drafted position's: the d-pawn guards the queen, no knight to move.
+    session.move('g1f3');
+    expect(session.getView().error).toBe('That move is not legal.');
+    session.move('e2e4');
+    await relay.settle();
+    // Black's rook has no pawn in front of it in this position.
+    await opponentMoves(opponent, 'h8h3', 1);
+    expect(session.getView().moves).toEqual(['e2e4', 'h8h3']);
+    session.move('d2d4');
+    await relay.settle();
+    await opponentMoves(opponent, 'h3h2', 3);
+    // A takeback replays from the drafted position too, with no need to ask for the game again.
+    const hellos = () =>
+      relay.sockets
+        .flatMap((socket) => socket.sentMessages())
+        .filter((message) => message.t === 'hello').length;
+    const before = hellos();
+    session.takeback('offer');
+    await relay.settle();
+    await opponent.send({ t: 'takeback', op: 'accept' });
+    await relay.settle();
+    expect(session.getView().moves).toEqual(['e2e4', 'h8h3']);
+    expect(hellos()).toBe(before);
+  });
+
+  it('counts a blindfold game’s peeks for both players', async () => {
+    const { game, seat, opponent } = await newVariant('blindfold');
+    const { session } = open(game, seat);
+    await relay.settle();
+    expect(session.getView()).toMatchObject({
+      game: 'blindfold',
+      status: 'playing',
+      peeks: { white: 0, black: 0 },
+      draft: null,
+    });
+    session.peek();
+    await relay.settle();
+    expect(lastSent(`/v1/games/${game}`)).toEqual({ t: 'peek' });
+    expect(session.getView().peeks).toEqual({ white: 1, black: 0 });
+    await opponent.send({ t: 'peek' });
+    await relay.settle();
+    expect(session.getView().peeks).toEqual({ white: 1, black: 1 });
+  });
+
+  it('keeps a rematch’s seat as the same variant', async () => {
+    const { game, seat, opponent } = await newVariant('blindfold');
+    const { session } = open(game, seat);
+    await relay.settle();
+    session.abort();
+    await relay.settle();
+    await opponent.send({ t: 'rematch', op: 'offer' });
+    session.rematch('accept');
+    await relay.settle();
+    const next = session.getView().next!;
+    expect(next.path).toMatch(/^\/play\/online\//);
+    expect(seatOf(next.path.split('/').at(-1)!)).toMatchObject({ kind: 'blindfold' });
+  });
+});

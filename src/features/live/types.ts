@@ -4,9 +4,42 @@
  * Lichess (its Board API); either way the page sees one `LiveGameView` and
  * acts through one `LiveGameSession`.
  */
-import type { ColorChoice, PhraseId, TimeControlSpec } from '../../../relay/src/live/shared.mjs';
+import type { Army } from '../../../relay/src/live/army.mjs';
+import type {
+  ArbiterItem,
+  DuelResult,
+  JudgeItem,
+  RacePuzzle,
+} from '../../../relay/src/live/duelRules.mjs';
+import type {
+  ArbiterPace,
+  ColorChoice,
+  DuelKind,
+  GameKind,
+  GameOptions,
+  PhraseId,
+  RaceFormat,
+  TimeControlSpec,
+} from '../../../relay/src/live/shared.mjs';
 
-export type { ColorChoice, PhraseId, TimeControlSpec };
+export type {
+  ArbiterItem,
+  ArbiterPace,
+  Army,
+  ColorChoice,
+  DuelKind,
+  DuelResult,
+  GameKind,
+  GameOptions,
+  JudgeItem,
+  PhraseId,
+  RaceFormat,
+  RacePuzzle,
+  TimeControlSpec,
+};
+
+/** The games played by the rules of chess: chess itself, blindfold, and Army Draft. */
+export type ChessKind = Exclude<GameKind, DuelKind>;
 
 export type Side = 'white' | 'black';
 
@@ -55,9 +88,30 @@ export type LiveEndReason =
 export type OfferKind = 'draw' | 'takeback' | 'rematch';
 export type OfferOp = 'offer' | 'accept' | 'decline';
 
+/** Army Draft's draft, as this device sees it. */
+export interface LiveDraft {
+  /** Points each side may spend. */
+  budget: number;
+  /** When the draft ends (`performance.now()`), while it is on: a random army for whoever has none. */
+  deadline: number | null;
+  /** Whose army is in. */
+  ready: Record<Side, boolean>;
+  /** The armies: only this device's own until both are in. */
+  armies: Record<Side, Army | null>;
+}
+
 export interface LiveGameView {
   source: LiveSource;
   id: string;
+  /** Chess, or a variant of it (always chess on Lichess). */
+  game: ChessKind;
+  opts: GameOptions;
+  /** The position the moves start from: Army Draft's armies; null for the initial position. */
+  startFen: string | null;
+  /** Army Draft's draft (before the game and after it), or null. */
+  draft: LiveDraft | null;
+  /** A blindfold game's peeks so far, by side; null in a game that shows its pieces. */
+  peeks: Record<Side, number> | null;
   /** The connection to the game: the board stays usable while it reconnects. */
   connection: 'connecting' | 'open' | 'reconnecting' | 'closed';
   /** No such game, or this device holds no seat in it: the page says so. */
@@ -69,12 +123,13 @@ export interface LiveGameView {
   /** The time control's id, "5+3". */
   tc: string;
   rated: boolean;
-  /** The moves so far, in UCI ("e2e4", "e7e8q"), from the initial position. */
+  /** The moves so far, in UCI ("e2e4", "e7e8q"), from `startFen` (or the initial position). */
   moves: string[];
   clock: LiveClock | null;
   /** Before both sides have moved: who must make a first move, and by when (performance.now()). */
   firstMove: { color: Side; deadline: number } | null;
-  status: 'playing' | 'over';
+  /** Army Draft's armies are being chosen; then the game is on, then over. */
+  status: 'draft' | 'playing' | 'over';
   result: '1-0' | '0-1' | '1/2-1/2' | '*' | null;
   reason: LiveEndReason | null;
   /** The standing offer of each kind, by side. */
@@ -112,7 +167,99 @@ export interface LiveGameSession {
   rematch(op: OfferOp): void;
   claim(op: 'win' | 'draw'): void;
   say(phrase: PhraseId): void;
+  /** Army Draft: sends the army bought. */
+  army(army: Army): void;
+  /** Blindfold: counts a peek (the page shows the pieces for a moment). */
+  peek(): void;
   /** Ends the connection (the game itself goes on without this device). */
+  close(): void;
+}
+
+/* ------------------------------------------------------------------ */
+/* Duels                                                              */
+/* ------------------------------------------------------------------ */
+
+/** A timed race's progress of one player. */
+export interface DuelProgress {
+  /** The puzzle on now (the number done so far). */
+  index: number;
+  solved: number;
+  strikes: number;
+  done: boolean;
+}
+
+/** A round played: both results, who took it and the points. */
+export interface DuelRound {
+  round: number;
+  results: Record<Side, DuelResult | null>;
+  winner: Side | 'shared' | null;
+  points: Record<Side, number>;
+}
+
+/** What a duel's rounds hold, by duel. */
+export type DuelItems = RacePuzzle[] | ArbiterItem[] | JudgeItem[];
+
+/**
+ * A duel on the relay (relay/src/live/duel.mjs) from this device's seat: the
+ * host (the poster, in the white seat) sends the rounds, the room runs them.
+ */
+export interface DuelView {
+  id: string;
+  connection: LiveGameView['connection'];
+  missing: boolean;
+  you: Side;
+  /** This device sends the rounds. */
+  host: boolean;
+  white: LivePlayer;
+  black: LivePlayer;
+  game: DuelKind;
+  opts: GameOptions;
+  /** Waiting for the rounds and both players; then on; then over. */
+  status: 'setup' | 'playing' | 'over';
+  /** When the setup gives up (`performance.now()`), during it. */
+  setupDeadline: number | null;
+  items: DuelItems | null;
+  /** The round on (in a timed race, the race itself: 0). */
+  round: number;
+  phase: 'countdown' | 'live' | 'reveal' | null;
+  /** When the phase ends (`performance.now()`): the countdown's end, the round's, the result's. */
+  phaseEnds: number | null;
+  /** When the round went live (`performance.now()`), while it is. */
+  liveSince: number | null;
+  /** This device's result in the round on. */
+  mine: DuelResult | null;
+  /** The opponent's: a judgement shows only that it is in, until the round ends. */
+  theirs: DuelResult | { locked: true } | null;
+  rounds: DuelRound[];
+  score: Record<Side, number>;
+  /** A timed race's progress. */
+  progress: Record<Side, DuelProgress> | null;
+  result: LiveGameView['result'];
+  reason: string | null;
+  offers: { rematch: Side | null };
+  opponentPresent: boolean;
+  chat: LiveGameView['chat'];
+  next: LiveGameView['next'];
+  error: string | null;
+  /** The host's device is getting the rounds ready. */
+  preparing: boolean;
+}
+
+/** A report of this device's result: a round's, or one puzzle of a timed race. */
+export type DuelReport =
+  | { round: number; ok: boolean; ms: number }
+  | { round: number; call: 'caught' | 'false' | 'missed'; ms: number }
+  | { round: number; guess: number }
+  | { index: number; ok: boolean; ms: number };
+
+export interface DuelSession {
+  getView(): DuelView;
+  subscribe(listener: () => void): () => void;
+  report(result: DuelReport): void;
+  abort(): void;
+  resign(): void;
+  rematch(op: OfferOp): void;
+  say(phrase: PhraseId): void;
   close(): void;
 }
 
@@ -133,7 +280,10 @@ export type LobbyConnection =
 /** A game someone posted, as the waiting room lists it. */
 export interface OpenGame {
   id: string;
-  tc: string;
+  game: GameKind;
+  opts: GameOptions;
+  /** The time control of a game of chess (or a variant); null for a duel. */
+  tc: string | null;
   color: ColorChoice;
   name: string;
   rating: number | null;
@@ -158,7 +308,10 @@ export type LichessSeekStatus =
 export interface MySeek {
   /** Stays the same across reconnections: the relay's seek and the share link use it. */
   id: string;
-  tc: string;
+  game: GameKind;
+  opts: GameOptions;
+  /** Null for a duel. */
+  tc: string | null;
   color: ColorChoice;
   private: boolean;
   /** When it was posted (Date.now()). */
@@ -173,8 +326,12 @@ export interface MySeek {
 export interface Pairing {
   source: LiveSource;
   game: string;
+  /** What is played: chess, a variant, or a duel. */
+  kind: GameKind;
+  opts: GameOptions;
   color: Side;
-  tc: string;
+  /** Null for a duel. */
+  tc: string | null;
   opponent: LivePlayer;
   /** Date.now() when it was paired. */
   at: number;
@@ -183,7 +340,11 @@ export interface Pairing {
 }
 
 export interface PostOptions {
-  tc: string;
+  /** Chess when not given. */
+  game?: GameKind;
+  opts?: GameOptions;
+  /** The time control of a game of chess (or a variant); a duel has none. */
+  tc: string | null;
   color: ColorChoice;
   private: boolean;
   /** Post it on Lichess too (when signed in and the time control allows it). */

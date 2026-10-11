@@ -4,6 +4,7 @@ import { Button, Icon, LinkButton } from '@/components/ui';
 import { useTicker } from '@/lib/useTicker';
 import { formatElapsed } from './liveView';
 import { useLobby } from './lobby';
+import { gameName, gameNoun, isDuelKind } from './onlineGames';
 import { checkOnLiveGames, useActiveGames } from './sessions';
 import './live.css';
 
@@ -12,7 +13,8 @@ import './live.css';
  * attention elsewhere in the app: a game just paired, a game in progress, a
  * game posted and waiting (in that order). Loaded only once the live-games code
  * turns `useLiveBar` on (see src/app/liveBar.ts). It never points at the page
- * it is on: it hides on the waiting room, and on the game it would lead to.
+ * it is on: Play shows what is posted and goes to a paired game by itself, and
+ * a game's own page needs no way back to it.
  */
 export default function LiveBar() {
   const { pathname } = useLocation();
@@ -21,21 +23,19 @@ export default function LiveBar() {
   const mine = useLobby((s) => s.mine);
   const games = useActiveGames((s) => s.games);
   const here = pathname.replace(/\/+$/, '') || '/';
-  const inWaitingRoom = here === '/play/online';
+  const onPlay = here === '/play';
   const game = games.find((g) => g.path !== here);
-  const waiting = !inWaitingRoom && !pairing && games.length === 0 && mine !== null;
+  const waiting = !onPlay && !pairing && games.length === 0 && mine !== null;
   const now = useTicker(waiting);
 
   // Loaded at start-up only when a game may still be on since before it: find out (once).
   useEffect(() => checkOnLiveGames(), []);
 
-  if (inWaitingRoom) return null;
-
-  if (pairing && pairing.path !== here) {
+  if (pairing && pairing.path !== here && !onPlay) {
     return (
       <Bar tone="paired">
         <p className="live-bar__text" role="status">
-          {pairing.opponent.name} joined your {pairing.tc} game.
+          {pairing.opponent.name} joined your {gameNoun(pairing.kind, pairing.tc)}.
         </p>
         <div className="live-bar__actions">
           <Button
@@ -46,38 +46,39 @@ export default function LiveBar() {
               useLobby.getState().clearPairing();
             }}
           >
-            Go to the board
+            {isDuelKind(pairing.kind) ? 'Go to the duel' : 'Go to the board'}
           </Button>
         </div>
       </Bar>
     );
   }
 
-  // A pairing whose board is this page (the game page clears it).
+  // A pairing whose board is this page (the game page clears it), or Play, which goes there.
   if (pairing) return null;
 
   if (game) {
+    const duel = isDuelKind(game.kind);
     return (
       <Bar tone="game">
         <p className="live-bar__text" role="status">
-          Your game against {game.opponent} is on.
+          Your {duel ? gameName(game.kind) : 'game'} against {game.opponent} is on.
         </p>
         <div className="live-bar__actions">
           <LinkButton size="sm" variant="primary" to={game.path}>
-            Back to the board
+            {duel ? 'Back to the duel' : 'Back to the board'}
           </LinkButton>
         </div>
       </Bar>
     );
   }
 
-  // Every game in progress is on this page, or nothing is posted.
-  if (!mine || games.length > 0) return null;
+  // Every game in progress is on this page, nothing is posted, or Play shows what is.
+  if (!mine || games.length > 0 || onPlay) return null;
 
   return (
     <Bar tone="waiting">
       <p className="live-bar__text" role="status">
-        Waiting for an opponent · {mine.tc}
+        Waiting for an opponent · {mine.game === 'chess' ? mine.tc : gameName(mine.game)}
       </p>
       {/* Outside the status: a time read out every second would drown everything else. */}
       <span className="live-bar__time" role="timer">
@@ -87,8 +88,8 @@ export default function LiveBar() {
         <Button size="sm" onClick={() => useLobby.getState().cancel()}>
           Cancel
         </Button>
-        <LinkButton size="sm" variant="ghost" to="/play/online">
-          Waiting room
+        <LinkButton size="sm" variant="ghost" to="/play">
+          Play
         </LinkButton>
       </div>
     </Bar>

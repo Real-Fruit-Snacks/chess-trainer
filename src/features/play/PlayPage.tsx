@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Link, useBlocker, useNavigate, useSearchParams } from 'react-router';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { ClockDisplay } from '@/components/chess/ClockDisplay';
@@ -13,8 +13,6 @@ import {
   ConfirmDialog,
   Dialog,
   Field,
-  Icon,
-  LinkButton,
   Select,
   Spinner,
   Switch,
@@ -132,8 +130,28 @@ export default function PlayPage() {
   const blindfold = settings.playBlindfold && play.started && !play.gameOver;
 
   useEffect(() => {
-    document.title = `Play · ${siteConfig.name}`;
+    document.title = `Play the computer · ${siteConfig.name}`;
   }, []);
+
+  // Leaving a game in progress ends it: the app asks first (a reload asks through the browser).
+  const inProgress = play.started && !play.gameOver && play.game.position.history.length > 0;
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      inProgress && currentLocation.pathname !== nextLocation.pathname,
+  );
+  useEffect(() => {
+    if (blocker.state === 'blocked' && !inProgress) blocker.proceed();
+  }, [blocker, inProgress]);
+  useEffect(() => {
+    if (!inProgress) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Older browsers need a value to show their prompt.
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [inProgress]);
 
   // Clear the hand-off from the URL so a reload starts a normal game.
   useEffect(() => {
@@ -346,20 +364,10 @@ export default function PlayPage() {
   return (
     <div>
       <div className="page-header page-header--lean">
-        {/* The way to a person: beside the title, so a phone's board keeps its room (the new
-            game's dialog says the rest). */}
-        <div className="row row--between">
-          <h1>Play</h1>
-          <LinkButton
-            to="/play/online"
-            size="sm"
-            title="Post a game in the waiting room, or join one."
-            data-testid="play-online"
-          >
-            <Icon name="people" size={18} />
-            <span>Play a person online</span>
-          </LinkButton>
-        </div>
+        <p className="card__eyebrow">
+          <Link to="/play">Play</Link> / Computer
+        </p>
+        <h1>Play the computer</h1>
         <p>
           Eight engine levels, from “just learned the rules” to master; a human-like opponent at any
           rating from 600 to 2600; or two players at one device. With or without a clock — take back
@@ -640,8 +648,7 @@ export default function PlayPage() {
             label="Opponent"
             hint={
               <>
-                Or play a person online: post a game in{' '}
-                <Link to="/play/online">the waiting room</Link>, or join one.
+                Or play a person online: <Link to="/play">post a game, or join one</Link>.
               </>
             }
           >
@@ -807,6 +814,23 @@ export default function PlayPage() {
           />
         </div>
       </Dialog>
+
+      {/* Leaving mid-game */}
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        title="Leave this game?"
+        cancelLabel="Keep playing"
+        confirmLabel="Leave"
+        danger
+        onConfirm={() => {
+          if (blocker.state === 'blocked') blocker.proceed();
+        }}
+        onClose={() => {
+          if (blocker.state === 'blocked') blocker.reset();
+        }}
+      >
+        <p className="muted">The game in progress ends when you leave this page.</p>
+      </ConfirmDialog>
 
       {/* Resign confirmation */}
       <ConfirmDialog

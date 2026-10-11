@@ -1,25 +1,32 @@
 /**
  * The waiting room of live games, free of any platform (the Worker's Durable
  * Object and the Node server run it the same way). Each socket may hold one
- * open game, a "seek": a time control, a colour, the poster's name and rating.
- * A seek lives as long as its socket. Posting a public seek that matches one
- * already waiting pairs the two at once; any seek can also be joined by its id
- * (a private one only that way, from the link its poster shared).
+ * open game, a "seek": the game (chess, a variant of it, or a duel) with its
+ * options, a time control and a colour for the games of chess, the poster's
+ * name and rating. A seek lives as long as its socket. Posting a public seek
+ * that matches one already waiting pairs the two at once; any seek can also be
+ * joined by its id (a private one only that way, from the link its poster
+ * shared).
  *
  * Pairing makes a game room (`platform.createGame`) with the hashes of two new
  * seat tokens, and sends each player their own token: only the two of them
- * can take a seat in the room.
+ * can take a seat in the room. In a duel the poster (whose device sends the
+ * rounds) takes the white seat.
  */
 import { hashToken } from '../handler.mjs';
 import {
   CLOSE,
   COLOR_CHOICES,
+  gameOptions,
   ID_PATTERN,
+  isDuel,
+  isGame,
   isPlayerName,
   isRating,
   LIMITS,
   parseTimeControl,
   randomId,
+  sameOptions,
 } from './shared.mjs';
 
 /**
@@ -27,7 +34,9 @@ import {
  *
  * @typedef {{
  *   id: string,
- *   tc: string,
+ *   game: string,
+ *   opts: Record<string, string | number>,
+ *   tc: string | null,
  *   color: ColorChoice,
  *   name: string,
  *   rating: number | null,
@@ -51,7 +60,14 @@ import {
  * }} LobbyConn
  *
  * @typedef {{ name: string, rating: number | null, seatHash: string }} SeatSpec
- * @typedef {{ id: string, tc: string, white: SeatSpec, black: SeatSpec }} GameSpec
+ * @typedef {{
+ *   id: string,
+ *   game?: string,
+ *   opts?: Record<string, string | number>,
+ *   tc: string | null,
+ *   white: SeatSpec,
+ *   black: SeatSpec,
+ * }} GameSpec
  *
  * @typedef {{
  *   connections(): LobbyConn[],
@@ -111,11 +127,27 @@ function whiteOf(owner, joiner) {
 /** @param {Seek} seek */
 const listed = (seek) => ({
   id: seek.id,
+  game: seek.game,
+  opts: seek.opts,
   tc: seek.tc,
   color: seek.color,
   name: seek.name,
   rating: seek.rating,
 });
+
+/**
+ * Whether a seek posted now (`game`, `opts`, `tc`, `color`) matches one waiting:
+ * the same game with the same options, and for chess the same time control and
+ * colours that can meet.
+ * @param {Seek} waiting
+ * @param {{ game: string, opts: Record<string, string | number>, tc: string | null, color: ColorChoice }} wants
+ */
+function matches(waiting, wants) {
+  if (waiting.private || waiting.game !== wants.game) return false;
+  if (!sameOptions(waiting.opts, wants.opts)) return false;
+  if (isDuel(wants.game)) return true;
+  return waiting.tc === wants.tc && compatible(waiting.color, wants.color);
+}
 
 /**
  * @param {LobbyPlatform} platform
@@ -183,7 +215,8 @@ export function createLobby(platform) {
 
     const id = randomId(16);
     const seats = { owner: randomId(32), joiner: randomId(32) };
-    const ownerIsWhite = whiteOf(seek.color, wants.color) === 'owner';
+    // In a duel the poster's device sends the rounds: it is the host, in the white seat.
+    const ownerIsWhite = isDuel(seek.game) || whiteOf(seek.color, wants.color) === 'owner';
     const ownerSide = {
       name: seek.name,
       rating: seek.rating,
@@ -197,6 +230,8 @@ export function createLobby(platform) {
     try {
       await platform.createGame({
         id,
+        game: seek.game,
+        opts: seek.opts,
         tc: seek.tc,
         white: ownerIsWhite ? ownerSide : joinerSide,
         black: ownerIsWhite ? joinerSide : ownerSide,
@@ -210,6 +245,8 @@ export function createLobby(platform) {
     send(owner, {
       t: 'paired',
       game: id,
+      kind: seek.game,
+      opts: seek.opts,
       seat: seats.owner,
       color: ownerIsWhite ? 'white' : 'black',
       tc: seek.tc,
@@ -218,6 +255,8 @@ export function createLobby(platform) {
     send(joiner, {
       t: 'paired',
       game: id,
+      kind: seek.game,
+      opts: seek.opts,
       seat: seats.joiner,
       color: ownerIsWhite ? 'black' : 'white',
       tc: seek.tc,
@@ -278,12 +317,22 @@ export function createLobby(platform) {
       }
 
       if (msg.t === 'seek') {
-        const tc = parseTimeControl(msg.tc);
-        const color = /** @type {ColorChoice} */ (msg.color);
-        if (!tc || !COLOR_CHOICES.includes(color) || typeof msg.private !== 'boolean') {
+        // A seek without a game is a game of chess (as the app posted them before the others).
+        const game = msg.game ?? 'chess';
+        const duel = isDuel(game);
+        const opts = isGame(game) ? gameOptions(game, msg.opts) : null;
+        const tc = duel ? null : parseTimeControl(msg.tc);
+        const color = /** @type {ColorChoice} */ (duel ? 'random' : msg.color);
+        if (
+          !opts ||
+          (!duel && !tc) ||
+          !COLOR_CHOICES.includes(color) ||
+          typeof msg.private !== 'boolean'
+        ) {
           send(conn, { t: 'error', code: 'bad-request', message: 'That game cannot be posted.' });
           return;
         }
+        const wants = { game: /** @type {string} */ (game), opts, tc: tc?.id ?? null, color };
         const player = who(conn, msg);
         if (!player) return;
         // A seek may bring its own id: the app posts its game again under the same
@@ -301,11 +350,7 @@ export function createLobby(platform) {
         }
         if (!msg.private) {
           const match = seeks().find(
-            ({ conn: other, seek }) =>
-              other.data.id !== conn.data.id &&
-              !seek.private &&
-              seek.tc === tc.id &&
-              compatible(seek.color, color),
+            ({ conn: other, seek }) => other.data.id !== conn.data.id && matches(seek, wants),
           );
           if (match) {
             await pair(conn, { ...player, color }, match.conn);
@@ -319,8 +364,7 @@ export function createLobby(platform) {
         /** @type {Seek} */
         const seek = {
           id: own ?? randomId(16),
-          tc: tc.id,
-          color,
+          ...wants,
           ...player,
           private: msg.private,
           at: platform.now(),

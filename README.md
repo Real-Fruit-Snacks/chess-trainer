@@ -73,11 +73,13 @@ that pauses on a mistake and explains it, a blunder check that asks "checks, cap
 before a move that hangs material, blindfold play, two players at one device, and a start from any
 position.
 
-**Play online** — a waiting room for live games against people, with no account: post a game at a
-tap and carry on with anything else in the app until someone joins, join one from the list, or send
-a friend a private link. The relay referees, keeping both clocks; you play under a made-up name, and
-messages are a few set phrases, so nothing a stranger types ever reaches you. Signed in to Lichess,
-the same post looks for an opponent there too, rated if you like, and the game is played here.
+**Play online** — live games against people, with no account: post a game at a tap and carry on
+with anything else in the app until someone joins, join one from the list, or send a friend a
+private link. Or one of the games made for two: a puzzle race on the same puzzle at the same moment,
+Arbiter and Who Stands Better? duels, Army Draft and blindfold chess. The relay referees, keeping
+both clocks; you play under a made-up name, and messages are a few set phrases, so nothing a
+stranger types ever reaches you. Signed in to Lichess, the same post looks for an opponent there
+too, rated if you like, and the game is played here.
 
 **Analyze** — multi-line analysis by a multi-threaded Stockfish (with its full network as an optional
 99 MB download), a full variation tree, a position report, game review with an evaluation graph and
@@ -102,6 +104,7 @@ games to guess move by move.
 board with its own clocks, Hand & Brain with Stockfish as your partner, a daily opening Wordle, Who
 Stands Better?, the Odds Ladder, Army Draft, Fortress, Engine Says, Blindfold, Arbiter (catch the
 illegal move in a replayed classic) and Ghost Knight (hunt a knight you only see every third move).
+Army Draft, Blindfold, Arbiter and Who Stands Better? can also be played against a person online.
 
 <table>
   <tr>

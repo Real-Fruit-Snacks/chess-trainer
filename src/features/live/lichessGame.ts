@@ -318,6 +318,12 @@ export function createLichessGame(gameId: string): LiveGameSession {
     const base = {
       source: 'lichess' as const,
       id: gameId,
+      // Lichess games here are standard chess.
+      game: 'chess' as const,
+      opts: {},
+      startFen: null,
+      draft: null,
+      peeks: null,
       connection,
       missing,
       chat: [],
@@ -693,9 +699,11 @@ export function createLichessGame(gameId: string): LiveGameSession {
     claim: (op) => {
       if (!closed && playing()) send(op === 'win' ? 'claim-victory' : 'claim-draw');
     },
-    // Rematches and phrases are the relay's only.
+    // Rematches, phrases and the variants are the relay's only.
     rematch: () => undefined,
     say: () => undefined,
+    army: () => undefined,
+    peek: () => undefined,
     close: () => {
       if (closed) return;
       closed = true;

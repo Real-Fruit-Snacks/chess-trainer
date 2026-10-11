@@ -60,12 +60,12 @@ test.describe('game review', () => {
 test.describe('play from any position', () => {
   test('starts a game from a FEN with the side to move preselected', async ({ page }) => {
     const fen = '8/8/4k3/8/4K3/4P3/8/8 b - - 0 1';
-    await page.goto(`/play?fen=${encodeURIComponent(fen)}&level=2`);
+    await page.goto(`/play/computer?fen=${encodeURIComponent(fen)}&level=2`);
     await expect(page.locator('.dialog .alert')).toContainText(/custom position/i);
     await expect(page.getByLabel('Your colour')).toHaveValue('black');
     await expect(page.getByLabel('Engine level')).toHaveValue('2');
     // The query string is consumed so a reload does not restart the setup.
-    await expect(page).toHaveURL(/\/play$/);
+    await expect(page).toHaveURL(/\/play\/computer$/);
 
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
@@ -78,7 +78,7 @@ test.describe('play from any position', () => {
     await page.goto('/learn/how-pieces-move');
     await expect(page.getByRole('link', { name: 'Play it out' })).toHaveAttribute(
       'href',
-      /\/play\?fen=/,
+      /\/play\/computer\?fen=/,
     );
   });
 });

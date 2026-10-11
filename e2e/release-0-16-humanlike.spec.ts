@@ -76,7 +76,7 @@ test.describe('the human-like opponent', () => {
   test('is downloaded on request and answers like a player of the rating', async ({ page }) => {
     test.setTimeout(180_000);
     await seed(page);
-    await page.goto('/play');
+    await page.goto('/play/computer');
     await downloadFromSetup(page, '1500');
     expect(await axe(page)).toEqual([]);
     await setupDialog(page).getByRole('button', { name: 'Start', exact: true }).click();
@@ -123,7 +123,7 @@ test.describe('the human-like opponent with the service worker', () => {
   }) => {
     test.setTimeout(180_000);
     await seed(page);
-    await page.goto('/play');
+    await page.goto('/play/computer');
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
     await downloadFromSetup(page, '1100');
 
@@ -158,7 +158,7 @@ test.describe('the human-like opponent with the service worker', () => {
   test('starts and plays once the service worker isolates the page', async ({ page }) => {
     test.setTimeout(180_000);
     await seed(page, { playOpponent: 'humanlike', playHumanRating: 1900 });
-    await page.goto('/play');
+    await page.goto('/play/computer');
     // The second load is cross-origin isolated (the threaded engine): the model must run there too.
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
     await page.reload();

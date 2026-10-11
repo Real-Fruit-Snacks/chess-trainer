@@ -35,6 +35,8 @@ import { checkOnLiveGames, useActiveGames } from './sessions';
 const PAIRING: Pairing = {
   source: 'relay',
   game: 'PAIRED',
+  kind: 'chess',
+  opts: {},
   color: 'black',
   tc: '5+3',
   opponent: { name: 'Swift Knight', rating: 1640 },
@@ -48,11 +50,14 @@ const GAME: ActiveGame = {
   path: '/play/online/ONGOING',
   you: 'white',
   opponent: 'Calm Rook',
+  kind: 'chess',
 };
 
 function posted(patch: Partial<MySeek> = {}): MySeek {
   return {
     id: 'AAAAAAAAAAAAAAAAAAAAAA',
+    game: 'chess',
+    opts: {},
     tc: '10+5',
     color: 'random',
     private: false,
@@ -124,10 +129,42 @@ describe('LiveBar', () => {
     expect(within(bar).getByRole('timer')).toHaveTextContent('2:13');
     fireEvent.click(within(bar).getByRole('button', { name: 'Cancel' }));
     expect(actions.cancel).toHaveBeenCalledTimes(1);
-    fireEvent.click(within(bar).getByRole('link', { name: 'Waiting room' }));
-    expect(screen.getByTestId('location')).toHaveTextContent('/play/online');
-    // The waiting room says all this itself.
+    fireEvent.click(within(bar).getByRole('link', { name: 'Play' }));
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/play$/);
+    // Play says all this itself.
     expect(screen.queryByTestId('live-bar')).toBeNull();
+  });
+
+  it('names the game posted when it is not chess', () => {
+    useLobby.setState({
+      mine: posted({ game: 'race', opts: { format: 'best3', level: 1500 }, tc: null }),
+    });
+    renderBar();
+    expect(screen.getByRole('status')).toHaveTextContent('Waiting for an opponent · Puzzle race');
+  });
+
+  it('leads to a duel just paired, and back to a duel in progress', () => {
+    useLobby.setState({
+      pairing: {
+        ...PAIRING,
+        kind: 'arbiter',
+        opts: { pace: 'normal' },
+        tc: null,
+        path: '/play/duel/PAIRED',
+      },
+    });
+    renderBar();
+    expect(screen.getByRole('status')).toHaveTextContent('Swift Knight joined your Arbiter duel.');
+    fireEvent.click(screen.getByRole('button', { name: 'Go to the duel' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/play/duel/PAIRED');
+
+    act(() =>
+      useActiveGames.setState({
+        games: [{ ...GAME, kind: 'race', path: '/play/duel/ONGOING' }],
+      }),
+    );
+    fireEvent.click(screen.getByRole('link', { name: 'Back to the duel' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/play/duel/ONGOING');
   });
 
   it('leads to the board of a game just paired', () => {
@@ -202,9 +239,9 @@ describe('LiveBar', () => {
     }
   });
 
-  it('hides in the waiting room and on the board it would lead to', () => {
+  it('hides on Play, which shows the posted game and goes to a paired one, and on that board', () => {
     useLobby.setState({ mine: posted() });
-    const { unmount } = renderBar('/play/online');
+    const { unmount } = renderBar('/play');
     expect(screen.queryByTestId('live-bar')).toBeNull();
     unmount();
 
@@ -213,7 +250,14 @@ describe('LiveBar', () => {
     expect(screen.queryByTestId('live-bar')).toBeNull();
     paired.unmount();
 
-    renderBar('/play/online/');
+    const onPlay = renderBar('/play/');
     expect(screen.queryByTestId('live-bar')).toBeNull();
+    onPlay.unmount();
+  });
+
+  it('still leads from Play to a game in progress', () => {
+    useActiveGames.setState({ games: [GAME] });
+    renderBar('/play');
+    expect(screen.getByRole('status')).toHaveTextContent('Your game against Calm Rook is on.');
   });
 });

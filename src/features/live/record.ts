@@ -33,15 +33,26 @@ function termination(reason: LiveEndReason | null): string {
   return 'Normal';
 }
 
-/** "Casual game · 5+3", "Rated game on Lichess · 10+0". */
+/** "Casual game · 5+3", "Army Draft · 30 points · 5+3", "Rated game on Lichess · 10+0". */
 function eventOf(view: LiveGameView): string {
-  if (view.source === 'relay') return `Casual game · ${view.tc}`;
-  return `${view.rated ? 'Rated' : 'Casual'} game on Lichess · ${view.tc}`;
+  if (view.source === 'lichess') {
+    return `${view.rated ? 'Rated' : 'Casual'} game on Lichess · ${view.tc}`;
+  }
+  if (view.game === 'army') {
+    return `Army Draft${view.draft ? ` · ${view.draft.budget} points` : ''} · ${view.tc}`;
+  }
+  if (view.game === 'blindfold') return `Blindfold game · ${view.tc}`;
+  return `Casual game · ${view.tc}`;
 }
 
-/** The SAN of each move, or null when one of them is not legal. */
-function sanMoves(moves: readonly string[]): string[] | null {
-  const chess = new Chess();
+/** The SAN of each move (from `startFen`, or the initial position), or null when one is not legal. */
+function sanMoves(moves: readonly string[], startFen: string | null): string[] | null {
+  let chess: Chess;
+  try {
+    chess = startFen ? new Chess(startFen) : new Chess();
+  } catch {
+    return null;
+  }
   const sans: string[] = [];
   for (const uci of moves) {
     const move = playUci(chess, uci);
@@ -51,7 +62,7 @@ function sanMoves(moves: readonly string[]): string[] | null {
   return sans;
 }
 
-/** Numbered moves and the result, in lines of 80 characters at most. */
+/** Numbered moves and the result, in lines of 80 characters at most (every game here starts with White to move). */
 function movetext(sans: readonly string[], result: string): string {
   const tokens: string[] = [];
   sans.forEach((san, index) => {
@@ -85,7 +96,7 @@ export function recordLiveGame(view: LiveGameView): void {
   if (view.moves.length < 2) return;
   const key = `${view.source}:${view.id}`;
   if (recorded.has(key)) return;
-  const sans = sanMoves(view.moves);
+  const sans = sanMoves(view.moves, view.startFen);
   if (!sans) return;
   recorded.add(key);
 
@@ -111,6 +122,12 @@ export function recordLiveGame(view: LiveGameView): void {
   if (lichess && view.black.rating !== null) headers.BlackElo = String(view.black.rating);
   if (timeControl) headers.TimeControl = timeControl;
   headers.Termination = termination(view.reason);
+  // A drafted position: readers start from it (Lichess's tags for a game from a position).
+  if (view.startFen) {
+    headers.Variant = 'From Position';
+    headers.SetUp = '1';
+    headers.FEN = view.startFen;
+  }
 
   const pgn = `${Object.entries(headers)
     .map(([name, value]) => `[${name} "${quoted(value)}"]`)
@@ -130,6 +147,7 @@ export function recordLiveGame(view: LiveGameView): void {
     rated: lichess ? view.rated : false,
     timestamp: startedAt,
     headers,
+    ...(view.startFen ? { startFen: view.startFen } : {}),
     side: view.you,
   };
   useGames.getState().addGames([game], lichess ? 'lichess' : 'online');

@@ -25,9 +25,9 @@ test.afterEach(async () => {
   relay = null;
 });
 
-/** Opens the waiting room and waits for it to be connected. */
+/** Opens Play and waits for the waiting room to be connected. */
 async function waitingRoom(page: Page) {
-  await page.goto('/play/online');
+  await page.goto('/play');
   await expect(page.getByTestId('live-post')).toBeVisible();
   await expect(page.getByTestId('live-players')).toBeVisible();
 }
@@ -261,12 +261,15 @@ test.describe('live games', () => {
     });
 
     await waitingRoom(host);
-    await host.getByRole('switch', { name: 'Only people with the link' }).click();
-    await post(host, '15+10');
+    await host.getByRole('button', { name: 'Invite a friend' }).click();
+    const invite = host.getByRole('dialog', { name: 'Invite a friend' });
+    await invite.getByLabel('Time control').selectOption('15+10');
+    await invite.getByRole('button', { name: 'Create the link' }).click();
     await expect(host.getByTestId('live-waiting')).toContainText('Only people with the link');
+    await expect(host.getByTestId('live-waiting')).toContainText('Waiting for your friend');
     await host.getByRole('button', { name: 'Share link' }).click();
     const link = await host.evaluate(() => (window as unknown as { copied: string }).copied);
-    expect(link).toMatch(/\/play\/online\?join=[A-Za-z0-9_-]{22}$/);
+    expect(link).toMatch(/\/play\?join=[A-Za-z0-9_-]{22}$/);
 
     await waitingRoom(friend);
     await expect(friend.getByTestId('live-players')).toContainText('1 other player here');

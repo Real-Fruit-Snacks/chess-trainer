@@ -26,12 +26,19 @@ export function playUci(chess, uci) {
 }
 
 /**
- * The game after `moves` from the initial position; null when one of them is
- * not legal (a stored game is never like that, but nothing is taken on trust).
+ * The game after `moves` from the initial position, or from `startFen` (Army
+ * Draft's armies); null when one of them is not legal, or the position is not
+ * one (a stored game is never like that, but nothing is taken on trust).
  * @param {readonly string[]} moves
+ * @param {string | null} [startFen]
  */
-export function replay(moves) {
-  const chess = new Chess();
+export function replay(moves, startFen = null) {
+  let chess;
+  try {
+    chess = startFen ? new Chess(startFen) : new Chess();
+  } catch {
+    return null;
+  }
   for (const uci of moves) {
     if (!playUci(chess, uci)) return null;
   }

@@ -806,7 +806,7 @@ function Trainer({
             {trainer.phase === 'solved' ? (
               <LinkButton
                 variant="ghost"
-                to={`/play?fen=${encodeURIComponent(trainer.position.fen)}&color=${trainer.solverColor}`}
+                to={`/play/computer?fen=${encodeURIComponent(trainer.position.fen)}&color=${trainer.solverColor}`}
                 title="Continue the game from here against the engine"
               >
                 Play it out

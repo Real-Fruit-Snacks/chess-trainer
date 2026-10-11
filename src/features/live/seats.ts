@@ -1,7 +1,13 @@
 import { safeLocalStorage } from '@/lib/persistStorage';
 import { storageKeyFor } from '@/store/profiles';
-import { ID_PATTERN, LIMITS, SEAT_PATTERN } from '../../../relay/src/live/shared.mjs';
-import type { LiveSource, Side } from './types';
+import {
+  ID_PATTERN,
+  isDuel,
+  isGame,
+  LIMITS,
+  SEAT_PATTERN,
+} from '../../../relay/src/live/shared.mjs';
+import type { GameKind, LiveSource, Side } from './types';
 
 /**
  * Where a live game's page is, and the seats this device holds in games on
@@ -22,6 +28,8 @@ export const SEAT_KEEP_MS = 24 * 60 * 60 * 1000;
 export interface SeatEntry {
   seat: string;
   color: Side;
+  /** What is played: chess, a variant of it, or a duel (its page differs). */
+  kind: GameKind;
   /** When this device was given the seat (Date.now()): about when the game began. */
   at: number;
   /** The game is known to be over: nothing to go back to after a restart. */
@@ -31,10 +39,14 @@ export interface SeatEntry {
 /** Lichess game ids: eight letters and digits (twelve with the player's part). */
 export const LICHESS_GAME_ID = /^[A-Za-z0-9]{8,12}$/;
 
-/** The page of a game: /play/online/<id>, or /play/online/lichess/<id>. */
-export function liveGamePath(source: LiveSource, id: string): string {
+/**
+ * The page of a game: /play/online/<id> (chess and its variants), /play/duel/<id>
+ * (a duel), or /play/online/lichess/<id>.
+ */
+export function liveGamePath(source: LiveSource, id: string, kind: GameKind = 'chess'): string {
   const safe = encodeURIComponent(id);
-  return source === 'lichess' ? `/play/online/lichess/${safe}` : `/play/online/${safe}`;
+  if (source === 'lichess') return `/play/online/lichess/${safe}`;
+  return isDuel(kind) ? `/play/duel/${safe}` : `/play/online/${safe}`;
 }
 
 const seatsKey = () => storageKeyFor(SEATS_STORAGE_KEY);
@@ -68,9 +80,12 @@ function readSeats(now: number): Record<string, SeatEntry> {
   const seats: Record<string, SeatEntry> = {};
   for (const [id, entry] of Object.entries(parsed as Record<string, unknown>)) {
     if (ID_PATTERN.test(id) && isEntry(entry, now)) {
+      // A seat kept before the other games existed is one of chess.
+      const kind = (entry as { kind?: unknown }).kind;
       seats[id] = {
         seat: entry.seat,
         color: entry.color,
+        kind: isGame(kind) ? kind : 'chess',
         at: entry.at,
         ...(entry.over === true ? { over: true as const } : {}),
       };
@@ -80,13 +95,19 @@ function readSeats(now: number): Record<string, SeatEntry> {
 }
 
 /** Keeps this device's seat in a game (and lets seats older than a day go). */
-export function rememberSeat(id: string, seat: string, color: Side, now = Date.now()): void {
+export function rememberSeat(
+  id: string,
+  seat: string,
+  color: Side,
+  kind: GameKind = 'chess',
+  now = Date.now(),
+): void {
   if (!ID_PATTERN.test(id) || !SEAT_PATTERN.test(seat)) return;
   const seats = readSeats(now);
   // The same seat told again (a rematch offered in every snapshot) keeps when it was first given.
   const known = seats[id];
-  if (known?.seat === seat && known.color === color) return;
-  seats[id] = { seat, color, at: now };
+  if (known?.seat === seat && known.color === color && known.kind === kind) return;
+  seats[id] = { seat, color, kind, at: now };
   safeLocalStorage.setItem(seatsKey(), JSON.stringify(seats));
 }
 
@@ -151,14 +172,16 @@ export function markGameOver(source: LiveSource, id: string, now = Date.now()): 
  * younger than a game room can be. After a restart the app connects to each to
  * find out, so the bar can lead back to one that is still on.
  */
-export function gamesToCheck(now = Date.now()): { source: LiveSource; id: string }[] {
+export function gamesToCheck(
+  now = Date.now(),
+): { source: LiveSource; id: string; kind: GameKind }[] {
   const young = (at: number) => now - at < LIMITS.roomAgeMs;
   return [
     ...Object.entries(readSeats(now))
       .filter(([, seat]) => !seat.over && young(seat.at))
-      .map(([id]) => ({ source: 'relay' as const, id })),
+      .map(([id, seat]) => ({ source: 'relay' as const, id, kind: seat.kind })),
     ...Object.entries(readLichessGames(now))
       .filter(([, game]) => !game.over && young(game.at))
-      .map(([id]) => ({ source: 'lichess' as const, id })),
+      .map(([id]) => ({ source: 'lichess' as const, id, kind: 'chess' as const })),
   ];
 }

@@ -446,7 +446,10 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
                   <Button size="lg" onClick={() => setExplore(true)}>
                     {isCustom ? 'Edit lines' : 'Explore lines'}
                   </Button>
-                  <LinkButton size="lg" to={`/play?book=${encodeURIComponent(repertoire.id)}`}>
+                  <LinkButton
+                    size="lg"
+                    to={`/play/computer?book=${encodeURIComponent(repertoire.id)}`}
+                  >
                     Practise in a game
                   </LinkButton>
                   <Button size="lg" variant="ghost" onClick={() => void shareRepertoire()}>

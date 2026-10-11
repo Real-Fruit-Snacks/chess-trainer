@@ -1,4 +1,4 @@
-import type { Square } from 'chess.js';
+import { Chess, type Square } from 'chess.js';
 import {
   type ReactNode,
   useCallback,
@@ -13,17 +13,21 @@ import { useFocus } from '@/app/focus';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { ClockDisplay } from '@/components/chess/ClockDisplay';
+import { MoveInput } from '@/components/chess/MoveInput';
 import { MoveList } from '@/components/chess/MoveList';
 import { PlayerBar } from '@/components/chess/PlayerBar';
 import { Alert, Badge, Button, Card, ConfirmDialog, Dialog, LinkButton } from '@/components/ui';
-import { isPromotionMove, opposite } from '@/chess/helpers';
+import { isPromotionMove, opposite, toUci, tryNotation } from '@/chess/helpers';
+import { San } from '@/chess/San';
+import { describeArmy } from '@/features/arcade/army';
 import type { PromotionPiece } from '@/chess/types';
 import { gameEndSound, playMoveSound, playSound } from '@/lib/sound';
 import { useStackedLayout } from '@/lib/useStackedLayout';
 import { useTicker } from '@/lib/useTicker';
 import { siteConfig } from '@/site.config';
 import { useSettings } from '@/store/settings';
-import { PHRASES } from '../../../relay/src/live/shared.mjs';
+import { BLINDFOLD_PEEKS } from '../../../relay/src/live/shared.mjs';
+import { LiveDraftPanel } from './LiveDraft';
 import {
   canAskTakeback,
   clockRemaining,
@@ -38,6 +42,8 @@ import {
 } from './liveView';
 import { replayMoves } from './liveViewBoard';
 import { useLobby } from './lobby';
+import { describeOptions, gameName } from './onlineGames';
+import { PhraseCard } from './PhraseCard';
 import { getLiveGame } from './sessions';
 import type {
   LiveClock,
@@ -45,7 +51,6 @@ import type {
   LiveGameView,
   LivePlayer,
   LiveSource,
-  PhraseId,
   Side,
 } from './types';
 import '@/features/play/play.css';
@@ -53,11 +58,10 @@ import './live.css';
 
 /** Under this much time on your clock, a warning sounds (once a game). */
 const LOW_TIME_MS = 10_000;
-/** The phrases shown in the chat: the latest few. */
-const CHAT_LINES = 6;
-const PHRASE_IDS = Object.keys(PHRASES) as PhraseId[];
 /** No moves for the board while it is not your turn (one Map, so the memoised board stays put). */
 const NO_DESTS = new Map<Square, Square[]>();
+/** How long a blindfold peek shows the pieces. */
+const PEEK_MS = 2000;
 
 /**
  * A live game against a person, through the relay or on Lichess. The page only
@@ -105,8 +109,8 @@ function GameAbsent({
         <h1 className="live-game__absent-title">{title}</h1>
         <p>{children}</p>
         <div className="row">
-          <LinkButton variant="primary" to="/play/online">
-            Go to the waiting room
+          <LinkButton variant="primary" to="/play">
+            Back to Play
           </LinkButton>
           {lichess ? <LinkButton to="/settings#lichess">Lichess in Settings</LinkButton> : null}
         </div>
@@ -127,14 +131,54 @@ function LiveSession({ session }: { session: LiveGameSession }) {
       </GameAbsent>
     );
   }
+  if (view.status === 'draft' && view.draft) {
+    return (
+      <div>
+        <GameHeader view={view} />
+        <LiveDraftPanel session={session} view={view} draft={view.draft} />
+      </div>
+    );
+  }
   return <LiveBoard session={session} view={view} />;
+}
+
+/** "Live game", "Army Draft", "Blindfold game": the page's title, under Play. */
+function gameTitle(view: LiveGameView): string {
+  if (view.game === 'chess') return 'Live game';
+  if (view.game === 'blindfold') return 'Blindfold game';
+  return gameName(view.game);
+}
+
+function GameHeader({ view }: { view: LiveGameView }) {
+  const options = describeOptions(view.game, view.opts);
+  return (
+    <div className="page-header page-header--lean">
+      <p className="card__eyebrow">
+        <Link to="/play">Play</Link> / {view.game === 'chess' ? 'Live game' : gameName(view.game)}
+      </p>
+      <h1>{gameTitle(view)}</h1>
+      {view.game === 'army' ? (
+        <p className="live-game__subtitle-line">
+          {options ? `${options} · ` : ''}
+          Kings are free, and nobody castles.
+        </p>
+      ) : view.game === 'blindfold' ? (
+        <p className="live-game__subtitle-line">
+          The pieces stay hidden: follow the moves, and play by the squares or by typing them.
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGameView }) {
   const { pathname } = useLocation();
   const stacked = useStackedLayout();
   const movesKey = view.moves.join(' ');
-  const position = useMemo(() => replayMoves(movesKey ? movesKey.split(' ') : []), [movesKey]);
+  const position = useMemo(
+    () => replayMoves(movesKey ? movesKey.split(' ') : [], view.startFen),
+    [movesKey, view.startFen],
+  );
   const opponent = opponentOf(view);
   const opponentSide = opposite(view.you);
   const playing = view.status === 'playing';
@@ -150,12 +194,35 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
   const [confirmResign, setConfirmResign] = useState(false);
   const [resultDismissed, setResultDismissed] = useState(false);
   const resultOpen = view.status === 'over' && !resultDismissed;
+  // Blindfold: the pieces stay hidden while the game is on, but for a peek.
+  const blind = view.game === 'blindfold' && view.status !== 'over';
+  const [peeking, setPeeking] = useState(false);
+  const peekTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (peekTimer.current !== null) window.clearTimeout(peekTimer.current);
+    },
+    [],
+  );
+  const peeksLeft = view.peeks ? Math.max(0, BLINDFOLD_PEEKS - view.peeks[view.you]) : 0;
+  const peek = () => {
+    if (!blind || peeking || peeksLeft === 0) return;
+    session.peek();
+    setPeeking(true);
+    peekTimer.current = window.setTimeout(() => {
+      peekTimer.current = null;
+      setPeeking(false);
+    }, PEEK_MS);
+  };
+  // A drafted position has no captured material to count from the usual set.
+  const showMaterial = view.startFen === null;
+  const lastMove = position.history[position.history.length - 1];
 
   useEffect(() => {
     document.title = yourTurn
-      ? `Your move · Live game · ${siteConfig.name}`
-      : `Live game · ${siteConfig.name}`;
-  }, [yourTurn]);
+      ? `Your move · ${gameTitle(view)} · ${siteConfig.name}`
+      : `${gameTitle(view)} · ${siteConfig.name}`;
+  }, [yourTurn, view]);
 
   // Focus mode, as in Play: no header and navigation while the game is on.
   const playFocus = useSettings((s) => s.playFocus);
@@ -219,6 +286,15 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
     if (piece && pending) session.move(`${pending.from}${pending.to}${piece}`);
   };
 
+  /** A move typed in (SAN or coordinates), played if it is legal here. */
+  const onNotation = (notation: string): boolean => {
+    if (!canMove) return false;
+    const move = tryNotation(new Chess(position.fen), notation);
+    if (!move) return false;
+    session.move(toUci(move));
+    return true;
+  };
+
   const playerBar = (side: Side) => {
     const player = side === 'white' ? view.white : view.black;
     const you = side === view.you;
@@ -229,6 +305,7 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
         }
         color={side}
         fen={position.fen}
+        showMaterial={showMaterial}
         extra={
           view.clock ? (
             <LiveClockDisplay
@@ -298,12 +375,7 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
 
   return (
     <div>
-      <div className="page-header page-header--lean">
-        <p className="card__eyebrow">
-          <Link to="/play/online">Play online</Link> / Live game
-        </p>
-        <h1>Live game</h1>
-      </div>
+      <GameHeader view={view} />
 
       <div className="trainer">
         <div className="play__boardcol">
@@ -319,10 +391,38 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
               check={position.check}
               onMove={onMove}
               ariaLabel={`Live game board, ${position.turn} to move`}
+              className={blind && !peeking ? 'board--blindfold' : undefined}
             />
             {choosingPromotion ? <PromotionPicker color={view.you} onSelect={onPromotion} /> : null}
           </div>
           {playerBar(orientation)}
+          {view.game === 'blindfold' ? (
+            <div className="live-game__blind" data-testid="blindfold-bar">
+              <p className="small live-game__blind-text">
+                {lastMove ? (
+                  <>
+                    Last move: {Math.ceil(position.history.length / 2)}
+                    {lastMove.color === 'w' ? '.' : '…'} <San san={lastMove.san} />
+                  </>
+                ) : (
+                  'No moves yet.'
+                )}{' '}
+                <span className="muted" data-testid="blindfold-peeks">
+                  {view.peeks
+                    ? `You have ${peeksLeft} peek${peeksLeft === 1 ? '' : 's'} left; ${opponent.name} has used ${view.peeks[opponentSide]}.`
+                    : ''}
+                </span>
+              </p>
+              {blind ? (
+                <Button size="sm" onClick={peek} disabled={peeking || peeksLeft === 0 || closed}>
+                  {peeking ? 'Peeking…' : 'Peek'}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {view.game === 'blindfold' && playing ? (
+            <MoveInput onMove={onNotation} disabled={!canMove} keepFocus />
+          ) : null}
           {playing && view.firstMove ? <FirstMoveNotice firstMove={view.firstMove} /> : null}
           {stacked && alerts.length > 0 ? (
             <div className="stack live-game__alerts">{alerts}</div>
@@ -339,6 +439,19 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
                 {view.rated ? 'Rated on Lichess' : 'Casual'}
               </Badge>
             </div>
+            {view.game === 'army' && view.draft ? (
+              <p className="small muted live-game__armies" data-testid="live-armies">
+                {[view.you, opponentSide]
+                  .map((side) => {
+                    const army = view.draft?.armies[side];
+                    const who = side === view.you ? 'You' : opponent.name;
+                    return army ? `${who}: ${describeArmy(army)}` : null;
+                  })
+                  .filter(Boolean)
+                  .join('. ')}
+                .
+              </p>
+            ) : null}
             <p
               className={`live-game__status${yourTurn && !closed ? ' live-game__status--you' : ''}`}
               role="status"
@@ -409,7 +522,13 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
           {stacked ? null : alerts}
 
           {view.capabilities.phrases ? (
-            <Phrases session={session} view={view} opponentName={opponent.name} />
+            <PhraseCard
+              chat={view.chat}
+              you={view.you}
+              opponentName={opponent.name}
+              onSay={(phrase) => session.say(phrase)}
+              disabled={view.connection === 'closed'}
+            />
           ) : null}
 
           <Card>
@@ -572,52 +691,6 @@ function LeftAlert({
   );
 }
 
-function Phrases({
-  session,
-  view,
-  opponentName,
-}: {
-  session: LiveGameSession;
-  view: LiveGameView;
-  opponentName: string;
-}) {
-  const start = Math.max(0, view.chat.length - CHAT_LINES);
-  const lines = view.chat.slice(start);
-  return (
-    <Card as="section" aria-labelledby="live-chat-title">
-      <h2 id="live-chat-title" className="live-game__subtitle">
-        Messages
-      </h2>
-      <div className="live-game__phrases" role="group" aria-label="Send a phrase">
-        {PHRASE_IDS.map((id) => (
-          <Button
-            key={id}
-            size="sm"
-            onClick={() => session.say(id)}
-            disabled={view.connection === 'closed'}
-          >
-            {PHRASES[id]}
-          </Button>
-        ))}
-      </div>
-      {/* Polite: a phrase is read out after whatever is being read, never over it. */}
-      <ol className="live-game__chat" aria-live="polite" aria-label="Messages so far">
-        {lines.map((line, i) => (
-          <li key={start + i}>
-            <span className="live-game__chat-by">
-              {line.by === view.you ? 'You' : opponentName}:
-            </span>{' '}
-            {line.text}
-          </li>
-        ))}
-      </ol>
-      {view.chat.length === 0 ? (
-        <p className="small muted live-game__note">Only these set phrases can be sent.</p>
-      ) : null}
-    </Card>
-  );
-}
-
 /** What to do once the game is over: in the result dialog, and in the panel after it. */
 function EndActions({
   view,
@@ -659,7 +732,7 @@ function EndActions({
   return (
     <>
       {recorded ? <LinkButton to="/games">Review in My games</LinkButton> : null}
-      <LinkButton to="/play/online">New opponent</LinkButton>
+      <LinkButton to="/play">New opponent</LinkButton>
       {view.source === 'lichess' && view.url ? (
         <a className="btn btn--primary" href={view.url} target="_blank" rel="noreferrer">
           Open on Lichess

@@ -42,7 +42,7 @@ test.describe('play', () => {
     page,
   }) => {
     await seedProgress(page, { onboarded: true, puzzleRating: 1200 });
-    await page.goto(`/play?fen=${encodeURIComponent(MATE_IN_ONE)}&color=white`);
+    await page.goto(`/play/computer?fen=${encodeURIComponent(MATE_IN_ONE)}&color=white`);
     const setup = page.getByRole('dialog', { name: 'New game' });
     const level = setup.getByLabel('Engine level');
     await expect(level).toBeVisible();
@@ -89,7 +89,7 @@ test.describe('play', () => {
   test('"Analyze game" opens the analysis board from the learner’s side', async ({ page }) => {
     await seedProgress(page, { onboarded: true, puzzleRating: 1200 });
     // Black to move: the learner plays Black.
-    await page.goto(`/play?fen=${encodeURIComponent(BLACK_MATES_IN_ONE)}`);
+    await page.goto(`/play/computer?fen=${encodeURIComponent(BLACK_MATES_IN_ONE)}`);
     const setup = page.getByRole('dialog', { name: 'New game' });
     await setup.getByLabel('Engine level').selectOption('1');
     await setup.getByRole('button', { name: 'Start', exact: true }).click();
@@ -104,7 +104,7 @@ test.describe('play', () => {
 
   test('keyboard move entry keeps its focus while the engine replies', async ({ page }) => {
     await seedProgress(page, { onboarded: true, puzzleRating: 1200 });
-    await page.goto('/play');
+    await page.goto('/play/computer');
     await page.getByLabel('Engine level').selectOption('1');
     await page.getByText('Keyboard move entry', { exact: true }).click();
     await page.getByRole('button', { name: 'Start', exact: true }).click();
@@ -127,13 +127,13 @@ test.describe('play', () => {
   test('refuses a hand-off position the engine cannot play', async ({ page }) => {
     await seedProgress(page, { onboarded: true, puzzleRating: 1200 });
     // Black is in check although it is White's move.
-    await page.goto(`/play?fen=${encodeURIComponent('4k3/4Q3/8/8/8/8/8/4K3 w - - 0 1')}`);
+    await page.goto(`/play/computer?fen=${encodeURIComponent('4k3/4Q3/8/8/8/8/8/4K3 w - - 0 1')}`);
     await expect(page.getByTestId('toasts')).toContainText('Cannot play from that position');
     await expect(page.getByRole('dialog', { name: 'New game' })).not.toContainText(
       'Starting from a custom position',
     );
     // A game that is already over (bare kings) is refused too.
-    await page.goto(`/play?fen=${encodeURIComponent('4k3/8/8/8/8/8/8/4K3 w - - 0 1')}`);
+    await page.goto(`/play/computer?fen=${encodeURIComponent('4k3/8/8/8/8/8/8/4K3 w - - 0 1')}`);
     await expect(page.getByTestId('toasts')).toContainText(/already over/);
   });
 
@@ -144,7 +144,7 @@ test.describe('play', () => {
       ladderHeight: 2,
       games: [],
     });
-    await page.goto('/play');
+    await page.goto('/play/computer');
     await page.getByRole('button', { name: 'Cancel' }).click();
     const ladder = page.getByTestId('engine-ladder');
     const rungs = ladder.getByRole('listitem');
@@ -163,7 +163,7 @@ test.describe('opening practice', () => {
     page,
   }) => {
     await seedProgress(page, { onboarded: true, puzzleRating: 1200 });
-    await page.goto('/play?book=caro-kann');
+    await page.goto('/play/computer?book=caro-kann');
     await expect(page.getByTestId('book-select')).toHaveValue('caro-kann');
     await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();

@@ -1,7 +1,6 @@
 // @vitest-environment node
 import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
-import { createLiveHub, type Socket, type SocketEvents } from './src/live/hub.mjs';
 import { createRoom, type GameState } from './src/live/room.mjs';
 import { cannotMate, endOf, playUci, replay } from './src/live/rules.mjs';
 import {
@@ -13,125 +12,7 @@ import {
   speedOf,
 } from './src/live/shared.mjs';
 import { hashToken } from './src/handler.mjs';
-
-/* ------------------------------------------------------------------ */
-/* A world with a clock the test moves                                */
-/* ------------------------------------------------------------------ */
-
-const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
-
-function world() {
-  let time = 1_000_000;
-  let queue: { at: number; run: () => void }[] = [];
-  const hub = createLiveHub({
-    now: () => time,
-    timers: {
-      set: (at, run) => {
-        const handle = { at, run };
-        queue.push(handle);
-        return handle;
-      },
-      clear: (handle) => {
-        queue = queue.filter((h) => h !== handle);
-      },
-    },
-  });
-  /** Moves the clock on, firing whatever falls due (in order). */
-  async function advance(ms: number) {
-    const until = time + ms;
-    for (;;) {
-      await flush();
-      const due = queue.filter((h) => h.at <= until).sort((a, b) => a.at - b.at)[0];
-      if (!due) break;
-      queue = queue.filter((h) => h !== due);
-      time = Math.max(time, due.at);
-      due.run();
-      await flush();
-    }
-    time = until;
-    await flush();
-  }
-  /** Moves the clock on without firing anything (a timer that is late). */
-  function jump(ms: number) {
-    time += ms;
-  }
-  return { hub, advance, jump, now: () => time };
-}
-
-type Message = Record<string, unknown> & { t?: string };
-
-class Client {
-  messages: (Message | 'pong')[] = [];
-  closed: { code: number; reason: string } | null = null;
-  private events: SocketEvents;
-  constructor(open: (socket: Socket) => SocketEvents) {
-    const socket: Socket = {
-      send: (text) => this.messages.push(text === 'pong' ? 'pong' : (JSON.parse(text) as Message)),
-      close: (code, reason) => {
-        this.closed = { code, reason };
-        // A transport reports the close a moment later, as a browser does.
-        queueMicrotask(() => void this.events.close());
-      },
-    };
-    this.events = open(socket);
-  }
-  async send(message: Message | string) {
-    await this.events.message(typeof message === 'string' ? message : JSON.stringify(message));
-    await flush();
-  }
-  async leave() {
-    this.closed = { code: 1000, reason: 'left' };
-    await this.events.close();
-    await flush();
-  }
-  all(t: string): Message[] {
-    return this.messages.filter((m): m is Message => m !== 'pong' && m.t === t);
-  }
-  last(t: string): Message | undefined {
-    return this.all(t).at(-1);
-  }
-  clear() {
-    this.messages = [];
-  }
-}
-
-const NAME_A = 'Patient Bishop';
-const NAME_B = 'Swift Knight';
-
-function seek(over: Partial<Message> = {}): Message {
-  return {
-    t: 'seek',
-    tc: '5+3',
-    color: 'random',
-    name: NAME_A,
-    rating: 1500,
-    private: false,
-    ...over,
-  };
-}
-
-/** Two players paired through the waiting room, each seated in the game. */
-async function paired(w: ReturnType<typeof world>, tc = '5+3') {
-  const a = new Client((s) => w.hub.openLobby(s));
-  const b = new Client((s) => w.hub.openLobby(s));
-  await a.send(seek({ tc, color: 'white' }));
-  await b.send(seek({ tc, name: NAME_B, rating: null }));
-  const pa = a.last('paired')!;
-  const pb = b.last('paired')!;
-  const game = pa.game as string;
-  const white = new Client((s) => w.hub.openRoom(game, s));
-  const black = new Client((s) => w.hub.openRoom(game, s));
-  await white.send({ t: 'hello', seat: pa.seat });
-  await black.send({ t: 'hello', seat: pb.seat });
-  return { game, white, black, seats: { white: pa.seat as string, black: pb.seat as string } };
-}
-
-async function play(players: { white: Client; black: Client }, moves: string[], from = 0) {
-  for (const [i, uci] of moves.entries()) {
-    const ply = from + i;
-    await (ply % 2 === 0 ? players.white : players.black).send({ t: 'move', uci, ply });
-  }
-}
+import { Client, type Message, NAME_A, NAME_B, paired, play, seek, world } from './testWorld';
 
 /* ------------------------------------------------------------------ */
 /* Shared rules                                                       */

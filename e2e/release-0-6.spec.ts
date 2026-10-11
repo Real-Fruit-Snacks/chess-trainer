@@ -55,7 +55,9 @@ test.describe('puzzle library', () => {
 test.describe('coach and commentary', () => {
   test('the coach pauses after a blunder, explains it and takes it back', async ({ page }) => {
     // White to move with a queen against a lone king: Qd8+?? hangs the queen to Kxd8.
-    await page.goto('/play?fen=4k3%2F8%2F8%2F8%2F8%2F8%2F8%2F3QK3%20w%20-%20-%200%201&color=white');
+    await page.goto(
+      '/play/computer?fen=4k3%2F8%2F8%2F8%2F8%2F8%2F8%2F3QK3%20w%20-%20-%200%201&color=white',
+    );
     await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
@@ -543,7 +545,9 @@ test.describe('platform', () => {
         },
       });
     });
-    await page.goto('/play?fen=4k3%2F8%2F8%2F8%2F8%2F8%2F8%2F3QK3%20w%20-%20-%200%201&color=white');
+    await page.goto(
+      '/play/computer?fen=4k3%2F8%2F8%2F8%2F8%2F8%2F8%2F3QK3%20w%20-%20-%200%201&color=white',
+    );
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
     await playMove(board, 'e1', 'e2');
@@ -558,7 +562,9 @@ test.describe('platform', () => {
     await page.evaluate(() => {
       (window as unknown as { __vibrations: unknown[] }).__vibrations = [];
     });
-    await page.goto('/play?fen=4k3%2F8%2F8%2F8%2F8%2F8%2F8%2F3QK3%20w%20-%20-%200%201&color=white');
+    await page.goto(
+      '/play/computer?fen=4k3%2F8%2F8%2F8%2F8%2F8%2F8%2F3QK3%20w%20-%20-%200%201&color=white',
+    );
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board2 = await expectBoard(page);
     await playMove(board2, 'e1', 'e2');

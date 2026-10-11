@@ -67,7 +67,9 @@ export type IconName =
   | 'chip'
   | 'sync'
   | 'device'
-  | 'people';
+  | 'people'
+  | 'stopwatch'
+  | 'link';
 
 /** Path data per icon; `fill` marks icons drawn as filled shapes. */
 const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
@@ -203,6 +205,14 @@ const ICONS: Record<IconName, { d: string; fill?: boolean }> = {
   // Two people, one behind the other: playing someone online.
   people: {
     d: 'M9 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM3.5 19.5a5.5 5.5 0 0 1 11 0M16 5.5a2.5 2.5 0 0 1 0 5M17 14a5 5 0 0 1 4 5.5',
+  },
+  // A stopwatch: its face, the hand, the crown on top (the puzzle race).
+  stopwatch: {
+    d: 'M12 6a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15zM12 10v3.5l2.5 1.5M10 2.5h4M12 2.5V6M18.5 6.5l1.5-1.5',
+  },
+  // Two links of a chain: a link to share.
+  link: {
+    d: 'M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2',
   },
 };
 

@@ -1,4 +1,6 @@
 /** Types for room.mjs, for the relay's tests. */
+import type { Army } from './army.mjs';
+import type { DuelState } from './duel.mjs';
 import type { GameSpec } from './lobby.mjs';
 
 export type Color = 'white' | 'black';
@@ -10,16 +12,27 @@ export interface Seat {
 }
 
 export interface GameState {
-  v: 1;
+  v: 1 | 2;
   id: string;
   createdAt: number;
+  /** Chess when there is none (a game stored before the variants existed). */
+  game?: 'chess' | 'blindfold' | 'army';
+  opts?: Record<string, string | number>;
   tc: { id: string; initialMs: number; incrementMs: number };
   white: Seat;
   black: Seat;
+  /** The position an Army Draft game starts from, once both armies are in. */
+  startFen?: string | null;
+  draft?: {
+    budget: number;
+    by: number;
+    armies: { white: Army | null; black: Army | null };
+  } | null;
+  peeks?: { white: number; black: number } | null;
   moves: string[];
   clock: { white: number; black: number; running: Color | null; since: number };
   firstMoveBy: number | null;
-  status: 'playing' | 'over';
+  status: 'draft' | 'playing' | 'over';
   result: '1-0' | '0-1' | '1/2-1/2' | '*' | null;
   reason: string | null;
   endedAt: number | null;
@@ -29,6 +42,8 @@ export interface GameState {
   lastPhraseAt: { white: number; black: number };
   next: { id: string; seats: { white: string; black: string } } | null;
 }
+
+export type RoomState = GameState | DuelState;
 
 export interface RoomData {
   id: string;
@@ -47,8 +62,8 @@ export interface RoomConn {
 
 export interface RoomPlatform {
   connections(): RoomConn[];
-  load(): Promise<GameState | null>;
-  store(state: GameState): Promise<void>;
+  load(): Promise<RoomState | null>;
+  store(state: RoomState): Promise<void>;
   remove(): Promise<void>;
   schedule(at: number | null): void | Promise<void>;
   createGame(spec: GameSpec): Promise<void>;

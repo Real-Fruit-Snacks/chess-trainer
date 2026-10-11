@@ -254,7 +254,7 @@ export default function ProgressPage() {
                 !engineLadder.reason.startsWith(`Level ${engineLadder.height} is beaten`)
                   ? `Engine ladder: Level ${engineLadder.height} beaten · ${engineLadder.reason}`
                   : `Engine ladder: ${engineLadder.reason}`}{' '}
-                <Link to="/play">Play</Link>
+                <Link to="/play/computer">Play</Link>
               </p>
               <LevelResults games={engineGames} />
               <h3 style={{ fontSize: '0.95rem', margin: '16px 0 4px' }}>Recent games</h3>

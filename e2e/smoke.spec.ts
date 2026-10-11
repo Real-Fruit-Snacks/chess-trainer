@@ -93,7 +93,7 @@ test.describe('puzzles', () => {
 
 test.describe('play', () => {
   test('the engine answers a move', async ({ page }) => {
-    await page.goto('/play');
+    await page.goto('/play/computer');
     // The setup dialog opens automatically.
     await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();

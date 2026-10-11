@@ -18,7 +18,7 @@ test.describe('navigation', () => {
 
 test.describe('play with a clock', () => {
   test('clocks appear and count for the side to move', async ({ page }) => {
-    await page.goto('/play');
+    await page.goto('/play/computer');
     await page.getByLabel('Engine level').selectOption('1');
     await page.getByLabel('Time control').selectOption('3+2');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
@@ -31,7 +31,7 @@ test.describe('play with a clock', () => {
   });
 
   test('keyboard move entry plays a move', async ({ page }) => {
-    await page.goto('/play');
+    await page.goto('/play/computer');
     await page.getByLabel('Engine level').selectOption('1');
     await page.getByText('Keyboard move entry', { exact: true }).click();
     await page.getByRole('button', { name: 'Start', exact: true }).click();

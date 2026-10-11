@@ -44,7 +44,7 @@ export interface PendingLogin {
 }
 
 /**
- * `value` when it is a path inside the app ("/play/online"), else null. The
+ * `value` when it is a path inside the app ("/play"), else null. The
  * answer from Lichess must never lead anywhere else: not "//elsewhere.example"
  * (another site), nor "/\elsewhere.example", which browsers read the same way.
  */
@@ -178,7 +178,7 @@ export async function authorizationUrl(pending: Pick<PendingLogin, 'verifier' | 
 
 export interface BeginLoginOptions {
   /**
-   * The page of the app to come back to once connected ("/play/online");
+   * The page of the app to come back to once connected ("/play");
    * Settings when absent. Anything but a path inside the app is ignored.
    */
   returnTo?: string | null;

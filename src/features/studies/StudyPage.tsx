@@ -139,7 +139,7 @@ function StudyView({ study }: { study: Study }) {
                     Replay
                   </Button>
                   <LinkButton
-                    to={`/play?fen=${encodeURIComponent(state.fen)}&color=${state.solver}`}
+                    to={`/play/computer?fen=${encodeURIComponent(state.fen)}&color=${state.solver}`}
                     title="Continue from the final position against the engine"
                   >
                     Play it out

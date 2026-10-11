@@ -190,6 +190,152 @@ export function isRating(rating) {
 /** The colour a player asks for when posting a game. */
 export const COLOR_CHOICES = Object.freeze(['random', 'white', 'black']);
 
+/* ------------------------------------------------------------------ */
+/* The games                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * What two people can play. Chess and two variants of it are played by the
+ * rules of chess in a game room (room.mjs): blindfold, where neither player
+ * sees the pieces (each may peek a few times), and Army Draft, where each buys
+ * an army in secret before the game starts from the two armies. The other three
+ * are duels the room times and scores round by round (duel.mjs): a puzzle race,
+ * Arbiter (call the illegal move first) and Who Stands Better? (judge a position
+ * closer to the engine than the other player).
+ */
+export const GAMES = Object.freeze(['chess', 'blindfold', 'army', 'race', 'arbiter', 'judge']);
+/** The duels: rounds, not a game of chess. */
+export const DUELS = Object.freeze(['race', 'arbiter', 'judge']);
+
+/** @param {unknown} game */
+export function isGame(game) {
+  return typeof game === 'string' && GAMES.includes(game);
+}
+
+/** @param {unknown} game */
+export function isDuel(game) {
+  return typeof game === 'string' && DUELS.includes(game);
+}
+
+/** Army Draft's budgets, in points (39 buys the standard set). */
+export const ARMY_BUDGETS = Object.freeze([20, 30, 39]);
+/** Peeks a blindfold game allows each player. */
+export const BLINDFOLD_PEEKS = 3;
+/**
+ * A puzzle race: the first clean solve wins each round, first to two (best3);
+ * the same, but a clean solve within 15 seconds of the first shares the round
+ * (window); or as many puzzles as each can solve in three minutes (timed).
+ */
+export const RACE_FORMATS = Object.freeze(['best3', 'window', 'timed']);
+/** The puzzle ratings a race can be posted at. */
+export const RACE_LEVELS = Object.freeze([600, 900, 1200, 1500, 1800, 2100, 2400]);
+/** Arbiter's replay speeds. */
+export const ARBITER_PACES = Object.freeze(['normal', 'slow']);
+/** The illegal moves Arbiter shows (the app's arbiterMoves.ts makes them). */
+export const ARBITER_KINDS = Object.freeze([
+  'knight-shape',
+  'bishop-straight',
+  'rook-diagonal',
+  'pawn-backwards',
+  'pawn-straight-capture',
+  'pawn-diagonal-step',
+  'king-two-squares',
+  'own-capture',
+  'jumps-over',
+  'pawn-late-double',
+  'pawn-blocked-double',
+  'no-promotion',
+  'pinned-piece',
+  'king-into-check',
+  'ignores-check',
+  'castle-through-check',
+  'late-en-passant',
+  'moves-twice',
+]);
+
+/**
+ * A game's options, checked, with nothing else in them; null when they are not
+ * valid for the game. Chess, blindfold and Who Stands Better? have none.
+ * @param {unknown} game
+ * @param {unknown} opts
+ * @returns {Record<string, string | number> | null}
+ */
+export function gameOptions(game, opts) {
+  const o = /** @type {Record<string, unknown>} */ (
+    typeof opts === 'object' && opts !== null && !Array.isArray(opts) ? opts : {}
+  );
+  switch (game) {
+    case 'chess':
+    case 'blindfold':
+    case 'judge':
+      return {};
+    case 'army':
+      return ARMY_BUDGETS.includes(/** @type {number} */ (o.budget))
+        ? { budget: /** @type {number} */ (o.budget) }
+        : null;
+    case 'race':
+      return RACE_FORMATS.includes(/** @type {string} */ (o.format)) &&
+        RACE_LEVELS.includes(/** @type {number} */ (o.level))
+        ? { format: /** @type {string} */ (o.format), level: /** @type {number} */ (o.level) }
+        : null;
+    case 'arbiter':
+      return ARBITER_PACES.includes(/** @type {string} */ (o.pace))
+        ? { pace: /** @type {string} */ (o.pace) }
+        : null;
+    default:
+      return null;
+  }
+}
+
+/** Whether two games' options are the same (options are flat). */
+export function sameOptions(
+  /** @type {Record<string, unknown>} */ a,
+  /** @type {Record<string, unknown>} */ b,
+) {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
+}
+
+/** The rules of the duels, which the room and the app share. */
+export const DUEL_RULES = Object.freeze({
+  /** Before each round, the time to get ready. */
+  countdownMs: 3000,
+  /** After each round, the time its result stays up before the next countdown. */
+  revealMs: 4000,
+  /** The host's device has this long to send the rounds, and both players to arrive. */
+  setupMs: 60_000,
+  race: Object.freeze({
+    /** Points that win a race of rounds (best3 and window). */
+    target: 2,
+    /** Rounds at most, a puzzle each: a round nobody solves scores nothing. */
+    rounds: 5,
+    /** The longest a puzzle round lasts. */
+    roundMs: 90_000,
+    /** After a clean solve, how long the other's result may take to arrive (best3). */
+    graceMs: 3000,
+    /** window: a clean solve within this of the first one shares the round. */
+    windowMs: 15_000,
+    /** timed: how long the race lasts, the strikes that end it early, and its puzzles. */
+    timedMs: 180_000,
+    strikes: 3,
+    timedMin: 20,
+    timedMax: 60,
+  }),
+  arbiter: Object.freeze({
+    /** Rounds won that take the duel. */
+    target: 3,
+    rounds: 9,
+    /** The longest a round lasts (the replay and the call). */
+    roundMs: 40_000,
+    graceMs: 3000,
+  }),
+  judge: Object.freeze({
+    /** Positions judged: the higher total wins. */
+    rounds: 5,
+    roundMs: 30_000,
+  }),
+});
+
 /** Limits, the same on every platform. */
 export const LIMITS = Object.freeze({
   /** The largest message accepted, in bytes. */
@@ -218,6 +364,10 @@ export const LIMITS = Object.freeze({
   phraseMs: 2000,
   /** Phrases kept for a player who reconnects. */
   phrasesKept: 20,
+  /** The largest message accepted from the host of a duel sending its rounds, in bytes. */
+  contentBytes: 16_384,
+  /** Army Draft: the time to choose an army; whoever has not, gets a random one. */
+  draftMs: 120_000,
 });
 
 /** WebSocket close codes the relay uses (4000–4999 are free for applications). */

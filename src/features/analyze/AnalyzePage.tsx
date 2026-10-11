@@ -632,7 +632,7 @@ export default function AnalyzePage() {
                   <>
                     {' '}
                     <Link
-                      to={`/play?fen=${encodeURIComponent(current.parent.fen)}&color=${reviewedCurrent.mover}`}
+                      to={`/play/computer?fen=${encodeURIComponent(current.parent.fen)}&color=${reviewedCurrent.mover}`}
                     >
                       Retry from here vs the engine
                     </Link>
@@ -743,7 +743,7 @@ export default function AnalyzePage() {
               </Button>
               <LinkButton
                 size="sm"
-                to={`/play?fen=${encodeURIComponent(viewed.fen)}&color=${viewed.turn}`}
+                to={`/play/computer?fen=${encodeURIComponent(viewed.fen)}&color=${viewed.turn}`}
                 title="Play this position against the engine"
               >
                 Play it out
@@ -858,7 +858,7 @@ export default function AnalyzePage() {
                 <p className="small muted" style={{ margin: '8px 0 0' }}>
                   Finds inaccuracies, mistakes and blunders along the main line and shows the better
                   move. Play a game against the engine, then hit{' '}
-                  <Link to="/play">Analyze game</Link>, or paste a PGN above.
+                  <Link to="/play/computer">Analyze game</Link>, or paste a PGN above.
                   {hasMoves && analysis.engineStatus !== 'ready'
                     ? analysis.engineStatus === 'error'
                       ? ' The engine could not start, so the review is unavailable.'

@@ -1,7 +1,9 @@
 import type { Chess } from 'chess.js';
+import { type Army, parseArmy } from '../../../relay/src/live/army.mjs';
 import { playUci, replay } from '../../../relay/src/live/rules.mjs';
 import {
   CLOSE,
+  gameOptions,
   ID_PATTERN,
   isPhrase,
   LIMITS,
@@ -13,7 +15,9 @@ import { liveSocketUrl } from './relayUrls';
 import { liveGamePath, rememberSeat } from './seats';
 import { LiveSocket } from './socket';
 import type {
+  ChessKind,
   LiveClock,
+  LiveDraft,
   LiveEndReason,
   LiveGameSession,
   LiveGameView,
@@ -29,6 +33,8 @@ import type {
  * room tells it, plays its own moves on the board at once (the room's echo
  * then brings the clocks), and catches up from the room's snapshot whenever
  * it has missed something: after a refusal, and after every reconnection.
+ * Blindfold and Army Draft are games of chess too: the room counts the peeks,
+ * and keeps each army from the other player until both are in.
  *
  * The room sends durations (time left, time until), never its own clock, so
  * each is turned into a moment on this device's `performance.now()` clock as
@@ -170,20 +176,74 @@ function movesOf(value: unknown): string[] | null {
   return Array.isArray(value) && value.every((move) => typeof move === 'string') ? value : null;
 }
 
-/** The game a rematch leads to: its seat is kept at once, and its page is where to go. */
-function nextOf(value: unknown): LiveGameView['next'] {
+const CHESS_KINDS: readonly ChessKind[] = ['chess', 'blindfold', 'army'];
+
+function chessKindOf(value: unknown): ChessKind {
+  return CHESS_KINDS.find((kind) => kind === value) ?? 'chess';
+}
+
+/** A FEN to start from, when the room gives one that chess.js takes. */
+function startFenOf(value: unknown): string | null {
+  return typeof value === 'string' && replay([], value) !== null ? value : null;
+}
+
+const count = (value: unknown): number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
+
+function peeksOf(value: unknown): LiveGameView['peeks'] {
+  if (typeof value !== 'object' || value === null) return null;
+  const peeks = value as Record<string, unknown>;
+  return { white: count(peeks.white), black: count(peeks.black) };
+}
+
+function readyOf(value: unknown): LiveDraft['ready'] {
+  const ready = (typeof value === 'object' && value !== null ? value : {}) as Record<
+    string,
+    unknown
+  >;
+  return { white: ready.white === true, black: ready.black === true };
+}
+
+/** Army Draft's draft as the room tells it (the time left made a moment on this device's clock). */
+function draftOf(value: unknown, at: number): LiveDraft | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const draft = value as Record<string, unknown>;
+  const budget = finite(draft.budget);
+  if (budget === null) return null;
+  const inMs = finite(draft.inMs);
+  const armies = (
+    typeof draft.armies === 'object' && draft.armies !== null ? draft.armies : {}
+  ) as Record<string, unknown>;
+  return {
+    budget,
+    deadline: inMs !== null ? at + Math.max(0, inMs) : null,
+    ready: readyOf(draft.ready),
+    armies: { white: parseArmy(armies.white), black: parseArmy(armies.black) },
+  };
+}
+
+/**
+ * The game a rematch leads to (the same game as this one): its seat is kept at
+ * once, and its page is where to go.
+ */
+function nextOf(value: unknown, kind: ChessKind): LiveGameView['next'] {
   if (typeof value !== 'object' || value === null) return null;
   const { game, seat, color } = value as Record<string, unknown>;
   if (typeof game !== 'string' || !ID_PATTERN.test(game)) return null;
   if (typeof seat !== 'string' || !SEAT_PATTERN.test(seat) || !isSide(color)) return null;
-  rememberSeat(game, seat, color);
-  return { path: liveGamePath('relay', game) };
+  rememberSeat(game, seat, color, kind);
+  return { path: liveGamePath('relay', game, kind) };
 }
 
 function blankView(id: string, you: Side): LiveGameView {
   return {
     source: 'relay',
     id,
+    game: 'chess',
+    opts: {},
+    startFen: null,
+    draft: null,
+    peeks: null,
     connection: 'connecting',
     missing: false,
     you,
@@ -257,8 +317,8 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
     recordLiveGame(view);
   }
 
-  /** Stay connected while the game is on, or while someone is looking at it. */
-  const wanted = () => !closed && !gone && (view.status === 'playing' || listeners.size > 0);
+  /** Stay connected while the game is on (or its armies are being chosen), or while someone is looking at it. */
+  const wanted = () => !closed && !gone && (view.status !== 'over' || listeners.size > 0);
 
   function start(): void {
     if (!wanted() || socket.state !== 'idle') return;
@@ -318,10 +378,16 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
       case 'say':
         return onSay(message);
       case 'rematch': {
-        const next = nextOf(message);
+        const next = nextOf(message, view.game);
         if (next) emit({ next, offers: { ...view.offers, rematch: null }, error: null });
         return;
       }
+      case 'draft':
+        // An army is in (the other's stays hidden until both are, when a snapshot comes).
+        if (view.draft) emit({ draft: { ...view.draft, ready: readyOf(message.ready) } });
+        return;
+      case 'peeks':
+        return emit({ peeks: peeksOf(message) });
       case 'error':
         // The snapshot that follows puts the board right; a move refused is not sent again.
         unsent = null;
@@ -335,12 +401,15 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
 
   function onSnapshot(message: Record<string, unknown>): void {
     const moves = movesOf(message.moves);
-    const position = moves ? replay(moves) : null;
+    const startFen = startFenOf(message.startFen);
+    const position = moves ? replay(moves, startFen) : null;
     if (!moves || !position || !isSide(message.you)) return;
     const now = performance.now();
     const you = message.you;
     const opponent = other(you);
-    const status = message.status === 'over' ? 'over' : 'playing';
+    const game = chessKindOf(message.game);
+    const status =
+      message.status === 'over' ? 'over' : message.status === 'draft' ? 'draft' : 'playing';
     const present = (
       typeof message.present === 'object' && message.present !== null ? message.present : {}
     ) as Record<string, unknown>;
@@ -357,6 +426,11 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
       connection: 'open',
       missing: false,
       you,
+      game,
+      opts: gameOptions(game, message.opts) ?? {},
+      startFen,
+      draft: draftOf(message.draft, now),
+      peeks: peeksOf(message.peeks),
       white: playerOf(message.white),
       black: playerOf(message.black),
       tc: typeof message.tc === 'string' ? message.tc : view.tc,
@@ -369,7 +443,7 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
       offers: offersOf(message.offers),
       opponentPresent: present[opponent] === true,
       chat: chatOf(message.chat),
-      next: nextOf(message.next),
+      next: nextOf(message.next, game),
     });
     sendAgain();
     record();
@@ -417,7 +491,7 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
     if (typeof plies !== 'number' || !Number.isInteger(plies) || plies < 1) return catchUp();
     if (plies > view.moves.length) return catchUp();
     const moves = view.moves.slice(0, view.moves.length - plies);
-    const position = replay(moves);
+    const position = replay(moves, view.startFen);
     if (!position) return catchUp();
     chess = position;
     if (unsent && unsent.ply >= moves.length) unsent = null;
@@ -464,9 +538,13 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
   }
 
   function move(uci: string): void {
-    if (closed || gone || view.missing || view.status !== 'playing') return;
+    if (closed || gone || view.missing || view.status === 'over') return;
     if (!loaded) {
       emit({ error: 'The game is still loading.' });
+      return;
+    }
+    if (view.status === 'draft') {
+      emit({ error: 'The armies are still being chosen.' });
       return;
     }
     const ply = view.moves.length;
@@ -530,6 +608,12 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
     },
     say: (phrase) => {
       if (isPhrase(phrase)) act({ t: 'say', phrase });
+    },
+    army: (army: Army) => {
+      if (view.status === 'draft') act({ t: 'army', army });
+    },
+    peek: () => {
+      if (view.peeks && view.status === 'playing') act({ t: 'peek' });
     },
     close() {
       if (closed) return;

@@ -214,7 +214,7 @@ test.describe('drag feel', () => {
 test.describe('play', () => {
   test('focus mode hides the chrome during a game and brings it back after', async ({ page }) => {
     await seed(page, { playFocus: true });
-    await page.goto('/play');
+    await page.goto('/play/computer');
     await expect(page.locator('header.shell__header')).toBeVisible();
     await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();

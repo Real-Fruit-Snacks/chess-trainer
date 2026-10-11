@@ -23,6 +23,7 @@ import {
 } from './whoStandsBetter';
 import '@/features/play/play.css';
 import './arcade.css';
+import { PlayOnlineLink } from './arcadeControls';
 
 type Phase = 'intro' | 'guess' | 'reveal' | 'done';
 
@@ -122,7 +123,10 @@ export default function WhoStandsBetterPage() {
         <p className="card__eyebrow arcade__eyebrow">
           <Link to="/arcade">Arcade</Link> / Who Stands Better?
         </p>
-        <h1>Who Stands Better?</h1>
+        <div className="row row--between">
+          <h1>Who Stands Better?</h1>
+          <PlayOnlineLink kind="judge" />
+        </div>
         <p>
           Ten quiet positions from the classic games. Say who is better and by how much, then the
           engine shows the truth. Closeness scores points; calling the wrong side better scores

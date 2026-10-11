@@ -1,19 +1,24 @@
 import { shuffle } from '@/lib/random';
+import {
+  EQUAL_BAND,
+  judgeGuess,
+  POINTS_PER_PAWN,
+  SCALE_MAX,
+  SPOT_ON,
+  toScale,
+} from '../../../relay/src/live/duelRules.mjs';
 import type { EvalPosition } from './positions';
 
-/** "Who Stands Better?": judge ten quiet positions on a ±5 pawn scale. */
+/**
+ * "Who Stands Better?": judge ten quiet positions on a ±5 pawn scale. The
+ * scale and the scoring are the online duel's too (relay/src/live/
+ * duelRules.mjs), so a judgement scores the same alone and against a person.
+ */
 export const ROUND_SIZE = 10;
-export const SCALE_MAX = 5;
 /** The slider moves in tenths of a pawn. */
 export const SCALE_STEP = 0.1;
-/** Within this many pawns of the engine is spot on. */
-export const SPOT_ON = 0.3;
-/** Within this many pawns is close (and keeps a streak going). */
-export const CLOSE = 1;
-/** Points lost per pawn of error. */
-export const POINTS_PER_PAWN = 30;
-/** Evaluations closer to zero than this are equal: neither side stands better. */
-export const EQUAL_BAND = 0.3;
+/** Within SPOT_ON pawns of the engine is spot on (a close call, within a pawn, keeps a streak going). */
+export { EQUAL_BAND, POINTS_PER_PAWN, SCALE_MAX, SPOT_ON, toScale };
 
 /** Picks a round: at most two positions from any one game, in random order. */
 export function pickRound(
@@ -38,11 +43,6 @@ function tenths(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-/** Centipawns as pawns on the slider's scale (tenths, at most ±SCALE_MAX). */
-export function toScale(cp: number): number {
-  return Math.max(-SCALE_MAX, Math.min(SCALE_MAX, tenths(cp / 100)));
-}
-
 export type Verdict = 'spot on' | 'close' | 'right side' | 'wrong side';
 
 export interface Judgement {
@@ -52,26 +52,13 @@ export interface Judgement {
   truth: number;
 }
 
-function side(value: number): -1 | 0 | 1 {
-  if (value >= EQUAL_BAND) return 1;
-  if (value <= -EQUAL_BAND) return -1;
-  return 0;
-}
-
 /**
  * Points for a guess: 100 when exact, POINTS_PER_PAWN fewer per pawn of
  * error, and nothing at all for calling the wrong side better. Spot on is
  * within SPOT_ON of the engine, close within CLOSE.
  */
 export function judge(guess: number, cp: number): Judgement {
-  const truth = toScale(cp);
-  const diff = tenths(Math.abs(guess - truth));
-  if (side(guess) !== 0 && side(truth) !== 0 && side(guess) !== side(truth)) {
-    return { points: 0, verdict: 'wrong side', truth };
-  }
-  const points = Math.max(0, Math.round(100 - diff * POINTS_PER_PAWN));
-  const verdict: Verdict = diff <= SPOT_ON ? 'spot on' : diff <= CLOSE ? 'close' : 'right side';
-  return { points, verdict, truth };
+  return judgeGuess(guess, cp);
 }
 
 /** Streak bonus: ten extra points for every consecutive close call after the second. */

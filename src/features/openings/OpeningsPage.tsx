@@ -218,7 +218,7 @@ export default function OpeningsPage() {
                         </LinkButton>
                         <LinkButton
                           size="sm"
-                          to={`/play?book=${encodeURIComponent(rep.id)}`}
+                          to={`/play/computer?book=${encodeURIComponent(rep.id)}`}
                           title="Play a game in which the opponent follows this repertoire"
                         >
                           Play

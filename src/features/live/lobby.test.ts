@@ -163,7 +163,15 @@ describe('the waiting room', () => {
     const other = await otherPlayer({ tc: '3+0' });
     expect(state().players).toBe(2);
     expect(state().seeks).toEqual([
-      { id: expect.any(String) as string, tc: '3+0', color: 'random', name: THEM, rating: null },
+      {
+        id: expect.any(String) as string,
+        game: 'chess',
+        opts: {},
+        tc: '3+0',
+        color: 'random',
+        name: THEM,
+        rating: null,
+      },
     ]);
     // A page that shows the room twice (or remounts) holds it once more; a release is once only.
     const second = state().watch();
@@ -209,6 +217,8 @@ describe('the waiting room', () => {
     expect(sentToLobby().at(-1)).toEqual({
       t: 'seek',
       id: mine.id,
+      game: 'chess',
+      opts: {},
       tc: '5+3',
       color: 'white',
       name: ME,
@@ -217,7 +227,15 @@ describe('the waiting room', () => {
     });
     expect(other.last('lobby')!.seeks).toEqual([
       expect.objectContaining({ tc: '3+0', name: THEM }),
-      { id: mine.id, tc: '5+3', color: 'white', name: ME, rating: 1524 },
+      {
+        id: mine.id,
+        game: 'chess',
+        opts: {},
+        tc: '5+3',
+        color: 'white',
+        name: ME,
+        rating: 1524,
+      },
     ]);
     expect(state().seeks.map((s) => s.name)).toEqual([THEM]);
     expect(useLiveBar.getState().active).toBe(true);
@@ -276,6 +294,80 @@ describe('the waiting room', () => {
     state().clearPairing();
     expect(state().pairing).toBeNull();
     expect(useLiveBar.getState().active).toBe(false);
+  });
+
+  it('posts a duel with its options, hosts it, and goes to the duel’s page when paired', async () => {
+    post({ game: 'race', opts: { format: 'window', level: 1500 }, tc: null, color: 'black' });
+    expect(state().mine).toMatchObject({
+      game: 'race',
+      opts: { format: 'window', level: 1500 },
+      tc: null,
+      // A duel has no colours: the poster hosts it.
+      color: 'random',
+    });
+    await relay.settle();
+    expect(sentToLobby().at(-1)).toMatchObject({
+      t: 'seek',
+      game: 'race',
+      opts: { format: 'window', level: 1500 },
+      tc: null,
+      color: 'random',
+    });
+    // Someone posting the same duel is paired with it; the poster hosts (the white seat).
+    const other = relay.lobbyClient();
+    await other.send({
+      t: 'seek',
+      game: 'race',
+      opts: { format: 'window', level: 1500 },
+      name: THEM,
+      rating: null,
+      private: false,
+    });
+    await relay.settle();
+    const pairing = state().pairing!;
+    expect(pairing).toMatchObject({
+      kind: 'race',
+      opts: { format: 'window', level: 1500 },
+      color: 'white',
+      tc: null,
+    });
+    expect(pairing.path).toBe(`/play/duel/${pairing.game}`);
+    expect(seatOf(pairing.game)).toMatchObject({ kind: 'race', color: 'white' });
+    expect(other.last('paired')).toMatchObject({ kind: 'race', color: 'black' });
+  });
+
+  it('posts a variant of chess with its time control and colour, and never on Lichess', async () => {
+    useLichess.setState({
+      account: { id: 'me', username: 'Me', token: 't', connectedAt: 1, expiresAt: null },
+    });
+    post({ game: 'army', opts: { budget: 20 }, tc: '10+0', lichess: { rated: false } });
+    await relay.settle();
+    expect(state().mine).toMatchObject({
+      game: 'army',
+      opts: { budget: 20 },
+      tc: '10+0',
+      lichess: { status: 'off' },
+    });
+    expect(startLichessSeek).not.toHaveBeenCalled();
+    const other = await otherPlayer({ game: 'army', opts: { budget: 20 } });
+    expect(state().pairing).toMatchObject({
+      kind: 'army',
+      path: expect.stringMatching(/^\/play\/online\//) as string,
+    });
+    expect(other.last('paired')).toMatchObject({ kind: 'army', tc: '10+0' });
+  });
+
+  it('lists every kind of game, and refuses options that are not a game’s', async () => {
+    const release = state().watch();
+    await relay.settle();
+    await otherPlayer({ game: 'judge', opts: {} });
+    expect(state().seeks).toEqual([
+      expect.objectContaining({ game: 'judge', opts: {}, tc: null, name: THEM }),
+    ]);
+    post({ game: 'arbiter', opts: { pace: 'fast' } as never, tc: null });
+    expect(state().notice).toBe('That game cannot be posted.');
+    expect(state().mine).toBeNull();
+    release();
   });
 
   it('joins a game by its id, a private one too, and says when one is gone', async () => {
@@ -539,6 +631,8 @@ describe('looking on Lichess as well', () => {
     expect(state().pairing).toEqual({
       source: 'lichess',
       game: 'LiChEsS1',
+      kind: 'chess',
+      opts: {},
       color: 'black',
       tc: '10+0',
       opponent: { name: 'someone', rating: 1810, title: null },

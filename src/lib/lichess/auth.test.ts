@@ -190,12 +190,12 @@ describe('Log in with Lichess', () => {
 
 describe('coming back to a page of the app', () => {
   it('keeps the page a login started from, and hands it back once connected', async () => {
-    const { approve } = await startLogin(NOW, '/play/online');
-    expect(pendingReturnTo(NOW)).toBe('/play/online');
+    const { approve } = await startLogin(NOW, '/play');
+    expect(pendingReturnTo(NOW)).toBe('/play');
     // Reading it leaves the login in place.
     expect(localStorage.getItem(PENDING_LOGIN_KEY)).not.toBeNull();
     const account = await finishLichessLogin(approve.searchParams, NOW);
-    expect(account.returnTo).toBe('/play/online');
+    expect(account.returnTo).toBe('/play');
     expect(pendingReturnTo(NOW)).toBeNull();
   });
 
@@ -213,12 +213,12 @@ describe('coming back to a page of the app', () => {
       await startLogin(NOW, bad);
       expect(pendingReturnTo(NOW)).toBeNull();
     }
-    expect(appPath('/play/online?join=abc#top')).toBe('/play/online?join=abc#top');
+    expect(appPath('/play?join=abc#top')).toBe('/play?join=abc#top');
     expect(appPath(42)).toBeNull();
   });
 
   it('ignores a damaged return path in a stored login, and reads one saved without it', async () => {
-    const { approve } = await startLogin(NOW, '/play/online');
+    const { approve } = await startLogin(NOW, '/play');
     const pending = JSON.parse(localStorage.getItem(PENDING_LOGIN_KEY) ?? '{}') as object;
     localStorage.setItem(
       PENDING_LOGIN_KEY,
