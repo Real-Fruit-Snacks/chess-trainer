@@ -47,6 +47,7 @@ import { useGapOptions, useGapScan, useOtherAnswers } from './useGapScan';
 import { useRepertoireTrainer } from './useRepertoireTrainer';
 import './openings.css';
 import { Notated } from '@/chess/San';
+import { formatCount } from '@/lib/format';
 
 export default function RepertoirePage() {
   const { repertoireId = '' } = useParams<{ repertoireId: string }>();
@@ -237,6 +238,7 @@ function arrowFor(fen: Fen, san: San, brush: string): DrawShape[] {
 
 function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree: GameTree }) {
   const trainer = useRepertoireTrainer(repertoire.id, tree, repertoire.color);
+  const shortcutsOn = useSettings((s) => s.keyboardShortcuts);
   const allCards = useRepertoire((s) => s.cards);
   const resetRepertoire = useRepertoire((s) => s.resetRepertoire);
   const cards = useMemo(() => cardsFor(allCards, repertoire.id), [allCards, repertoire.id]);
@@ -622,7 +624,7 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
       </div>
 
       <div className="trainer">
-        <div className="trainer__board" style={{ position: 'relative' }} ref={boardRef}>
+        <div className="trainer__board" ref={boardRef}>
           {explore ? (
             <EditBoard
               fen={exploreNode.fen}
@@ -682,56 +684,6 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
               color={editFen.split(' ')[1] === 'b' ? 'black' : 'white'}
               onSelect={resolveExplorePromotion}
             />
-          ) : null}
-          {mode === 'train' && (phase === 'idle' || phase === 'sessionDone') ? (
-            <div className="trainer__overlay">
-              {/* What to do next is said once, in the status beside the board. */}
-              <Card className="summary">
-                {phase === 'sessionDone' && trainer.session.total > 0 ? (
-                  <>
-                    <p className="card__eyebrow">Session complete</p>
-                    <h2 style={{ margin: '4px 0 12px' }}>
-                      {trainer.session.correct}/{trainer.session.total} recalled
-                    </h2>
-                  </>
-                ) : (
-                  <h2 style={{ margin: '0 0 12px' }}>{repertoire.name}</h2>
-                )}
-                <div className="row">
-                  <Button variant="primary" size="lg" onClick={trainer.start}>
-                    {stats.learned === 0
-                      ? 'Start learning'
-                      : stats.due > 0
-                        ? 'Review due moves'
-                        : stats.fresh > 0
-                          ? 'Learn new lines'
-                          : 'Practise'}
-                  </Button>
-                  <Button size="lg" onClick={() => setMode('explore')}>
-                    {isCustom ? 'Edit lines' : 'Explore lines'}
-                  </Button>
-                  <Button size="lg" onClick={openGaps}>
-                    Find gaps
-                  </Button>
-                  <LinkButton
-                    size="lg"
-                    to={`/play/computer?book=${encodeURIComponent(repertoire.id)}`}
-                  >
-                    Practise in a game
-                  </LinkButton>
-                  <Button size="lg" variant="ghost" onClick={() => void shareRepertoire()}>
-                    {canShare ? 'Share' : 'Copy link'}
-                  </Button>
-                </div>
-                <div style={{ marginTop: 12 }}>
-                  <Switch
-                    checked={trainer.dueOnly}
-                    onChange={trainer.setDueOnly}
-                    label="Due moves only"
-                  />
-                </div>
-              </Card>
-            </div>
           ) : null}
         </div>
 
@@ -830,6 +782,45 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
             </>
           ) : (
             <>
+              {phase === 'idle' || phase === 'sessionDone' ? (
+                // Beside the board, not over it: the opening's position stays in view.
+                <Card className="repertoire__menu" data-testid="repertoire-menu">
+                  {phase === 'sessionDone' && trainer.session.total > 0 ? (
+                    <>
+                      <p className="card__eyebrow">Session complete</p>
+                      <h2 className="repertoire__menu-title">
+                        {trainer.session.correct}/{trainer.session.total} recalled
+                      </h2>
+                    </>
+                  ) : null}
+                  <Button variant="primary" size="lg" block onClick={trainer.start}>
+                    {stats.learned === 0
+                      ? 'Start learning'
+                      : stats.due > 0
+                        ? 'Review due moves'
+                        : stats.fresh > 0
+                          ? 'Learn new lines'
+                          : 'Practise'}
+                  </Button>
+                  <div className="repertoire__menu-grid">
+                    <Button onClick={() => setMode('explore')}>
+                      {isCustom ? 'Edit lines' : 'Explore lines'}
+                    </Button>
+                    <Button onClick={openGaps}>Find gaps</Button>
+                    <LinkButton to={`/play/computer?book=${encodeURIComponent(repertoire.id)}`}>
+                      Practise in a game
+                    </LinkButton>
+                    <Button onClick={() => void shareRepertoire()}>
+                      {canShare ? 'Share' : 'Copy link'}
+                    </Button>
+                  </div>
+                  <Switch
+                    checked={trainer.dueOnly}
+                    onChange={trainer.setDueOnly}
+                    label="Due moves only"
+                  />
+                </Card>
+              ) : null}
               <Card>
                 <p
                   className={`puzzle-status${phase === 'lineDone' ? ' puzzle-status--solved' : ''}`}
@@ -865,7 +856,7 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
                       onClick={trainer.nextLine}
                       data-testid="repertoire-next-line"
                     >
-                      Next line <Kbd>N</Kbd>
+                      Next line {shortcutsOn ? <Kbd>N</Kbd> : null}
                     </Button>
                   ) : null}
                   {phase !== 'idle' && phase !== 'sessionDone' ? (
@@ -931,7 +922,7 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
                   onClick={() => setConfirmForget(true)}
                   style={{ marginTop: 8 }}
                 >
-                  Forget all {stats.total} moves
+                  Forget all {formatCount(stats.total, siteConfig.locale)} moves
                 </Button>
               </details>
             </>

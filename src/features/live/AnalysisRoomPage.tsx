@@ -398,7 +398,7 @@ function RoomScreen({
 
       <div className="trainer">
         <div className="analyze__boardcol">
-          <div className="trainer__board" style={{ position: 'relative' }}>
+          <div className="trainer__board">
             <EvalBar score={score} turn={info.turn} orientation={orientation} result={result} />
             <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
               <Board

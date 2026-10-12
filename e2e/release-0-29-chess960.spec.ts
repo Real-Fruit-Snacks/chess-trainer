@@ -69,7 +69,7 @@ test.describe('Chess960', () => {
   }) => {
     await seed(page);
     await page.goto(`/play/computer?fen=${encodeURIComponent(P274)}&variant=chess960&color=white`);
-    const setup = page.getByRole('dialog', { name: 'New game' });
+    const setup = page.getByRole('region', { name: 'New game' });
     await expect(setup).toContainText('Starting from Chess960 position 274.');
     // What is standard chess only is shown off, and why.
     for (const name of ['Coach mode', 'Blunder check']) {

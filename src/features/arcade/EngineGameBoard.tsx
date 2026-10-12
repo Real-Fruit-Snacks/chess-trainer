@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, type Ref, useState } from 'react';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { MoveList } from '@/components/chess/MoveList';
@@ -22,6 +22,8 @@ export function EngineGameBoard({
   blindfold = false,
   showMaterial = true,
   below,
+  preview = null,
+  boardColRef,
 }: {
   play: UsePlayVsEngine;
   engineName: string;
@@ -31,39 +33,62 @@ export function EngineGameBoard({
   showMaterial?: boolean;
   /** Rendered under the bottom player bar (peek button, move input…). */
   below?: ReactNode;
+  /**
+   * While the game is set up: the position it will start from, as a picture (no moves), from the
+   * side the learner will play — with the pieces hidden for a blindfold game.
+   */
+  preview?: { fen: string; orientation?: LongColor; hidePieces?: boolean } | null;
+  boardColRef?: Ref<HTMLDivElement>;
 }) {
   const { game } = play;
   const { position } = game;
-  const topColor: LongColor = play.orientation === 'white' ? 'black' : 'white';
-  const bottomColor: LongColor = play.orientation;
-  const nameFor = (c: LongColor) => (c === play.playerColor ? 'You' : engineName);
+  const orientation: LongColor = preview ? (preview.orientation ?? 'white') : play.orientation;
+  const topColor: LongColor = orientation === 'white' ? 'black' : 'white';
+  const bottomColor: LongColor = orientation;
+  const fen = preview ? preview.fen : position.fen;
+  const nameFor = (c: LongColor) =>
+    c === (preview ? orientation : play.playerColor) ? 'You' : engineName;
   const playerTurn =
     play.started && !play.gameOver && !play.thinking && position.turn === play.playerColor;
 
   return (
-    <div className="play__boardcol">
+    <div className="play__boardcol" ref={boardColRef}>
       <PlayerBar
         name={nameFor(topColor)}
         color={topColor}
-        fen={position.fen}
-        thinking={play.thinking && topColor !== play.playerColor}
-        showMaterial={showMaterial}
+        fen={fen}
+        thinking={!preview && play.thinking && topColor !== play.playerColor}
+        showMaterial={showMaterial && !preview}
       />
-      <div className="trainer__board" style={{ position: 'relative' }}>
-        <Board
-          fen={position.fen}
-          orientation={play.orientation}
-          turnColor={position.turn}
-          movableColor={playerTurn ? play.playerColor : undefined}
-          dests={playerTurn ? position.dests : new Map()}
-          lastMove={position.lastMove}
-          check={position.inCheck}
-          autoShapes={play.hintShapes}
-          onMove={(from, to) => play.playerMove(from, to)}
-          ariaLabel={ariaLabel}
-          className={blindfold ? 'board--blindfold' : undefined}
-        />
-        {game.pendingPromotion ? (
+      <div className="trainer__board">
+        {preview ? (
+          <Board
+            fen={preview.fen}
+            orientation={orientation}
+            viewOnly
+            ariaLabel={
+              preview.hidePieces
+                ? 'The board, its pieces hidden as they will be in the game'
+                : `The game's starting position, ${orientation === 'white' ? 'White' : 'Black'} at the bottom`
+            }
+            className={preview.hidePieces ? 'board--blindfold' : undefined}
+          />
+        ) : (
+          <Board
+            fen={position.fen}
+            orientation={play.orientation}
+            turnColor={position.turn}
+            movableColor={playerTurn ? play.playerColor : undefined}
+            dests={playerTurn ? position.dests : new Map()}
+            lastMove={position.lastMove}
+            check={position.inCheck}
+            autoShapes={play.hintShapes}
+            onMove={(from, to) => play.playerMove(from, to)}
+            ariaLabel={ariaLabel}
+            className={blindfold ? 'board--blindfold' : undefined}
+          />
+        )}
+        {!preview && game.pendingPromotion ? (
           <PromotionPicker color={game.pendingPromotion.color} onSelect={play.resolvePromotion} />
         ) : null}
         {overlay ? <div className="trainer__overlay">{overlay}</div> : null}
@@ -71,11 +96,11 @@ export function EngineGameBoard({
       <PlayerBar
         name={nameFor(bottomColor)}
         color={bottomColor}
-        fen={position.fen}
-        thinking={play.thinking && bottomColor !== play.playerColor}
-        showMaterial={showMaterial}
+        fen={fen}
+        thinking={!preview && play.thinking && bottomColor !== play.playerColor}
+        showMaterial={showMaterial && !preview}
       />
-      {below}
+      {preview ? null : below}
     </div>
   );
 }

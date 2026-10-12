@@ -122,6 +122,12 @@ export default function CoursePage() {
                       />
                     ) : null}
                   </Link>
+                  <Icon
+                    name="chevron-right"
+                    size={18}
+                    className="course__chevron"
+                    aria-hidden="true"
+                  />
                 </li>
               ))}
             </ul>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Board, type DrawShape } from '@/components/board/Board';
 import { Badge, Button, Card, Stat, LinkButton } from '@/components/ui';
+import { SetupScreen } from '@/components/setup/SetupScreen';
 import { parseUci, uciToSan } from '@/chess/helpers';
 import { San } from '@/chess/San';
 import { siteConfig } from '@/site.config';
@@ -31,7 +32,8 @@ export default function WhoStandsBetterPage() {
   const recordArcade = useProgress((s) => s.recordArcade);
   const best = useProgress((s) => s.arcade['who-stands-better']);
   const pool = useMemo(() => quietPositions(), []);
-  const [round, setRound] = useState<EvalPosition[]>([]);
+  // The round is drawn before it starts, so the setup shows its first position on the board.
+  const [round, setRound] = useState<EvalPosition[]>(() => pickRound(pool));
   const [index, setIndex] = useState(0);
   const [guess, setGuess] = useState(0);
   const [phase, setPhase] = useState<Phase>('intro');
@@ -61,7 +63,8 @@ export default function WhoStandsBetterPage() {
 
   const begin = () => {
     setBestBefore(useProgress.getState().arcade['who-stands-better']?.best ?? null);
-    setRound(pickRound(pool));
+    // The round the setup showed; a fresh one for each round after it.
+    if (phase !== 'intro') setRound(pickRound(pool));
     setIndex(0);
     setGuess(0);
     setJudgements([]);
@@ -134,142 +137,151 @@ export default function WhoStandsBetterPage() {
         </p>
       </div>
 
-      {phase === 'intro' ? (
-        <Card className="arcade__summary" style={{ margin: '0 auto' }}>
-          <h2>Ready?</h2>
-          <p className="muted">
-            A round is {ROUND_SIZE} positions from a pool of {pool.length}, with White or Black to
-            move. Say who is better and by how much: within {SPOT_ON} of a pawn is spot on, every
-            pawn of error costs {POINTS_PER_PAWN} points, calling the wrong side better scores
-            nothing, and a run of close calls earns a streak bonus.
-          </p>
-          {best ? <p className="small muted">Best: {best.detail}</p> : null}
-          <div className="row">
-            <Button variant="primary" size="lg" onClick={begin} data-testid="wsb-start">
-              Start
-            </Button>
-          </div>
-        </Card>
-      ) : phase === 'done' ? (
-        <Card className="arcade__summary" style={{ margin: '0 auto' }} data-testid="wsb-result">
-          <h2>Round over</h2>
-          <div className="arcade__scoreline">
-            <Stat value={summary.score} label={`Points (max ${summary.max}+)`} />
-            <Stat value={summary.spotOn} label="Spot on" />
-            <Stat value={summary.wrongSide} label="Wrong side" />
-          </div>
-          <p className="muted" data-testid="wsb-best-line">
-            {describeRoundBest(summary.score, bestBefore)}
-          </p>
-          <div className="row" ref={againRowRef}>
-            <Button variant="primary" onClick={begin} data-testid="wsb-again">
-              Play again
-            </Button>
-            <LinkButton to="/arcade">Arcade</LinkButton>
-          </div>
-        </Card>
-      ) : position ? (
-        <div className="trainer">
-          <div className="play__boardcol">
-            <div className="trainer__board">
+      <div className={phase === 'intro' ? 'trainer trainer--setup' : 'trainer'}>
+        <div className="play__boardcol">
+          <div className="trainer__board">
+            {position ? (
               <Board
                 fen={position.fen}
                 orientation="white"
                 viewOnly
                 autoShapes={bestShape}
-                ariaLabel={`Position ${index + 1}, ${toMove} to move`}
+                ariaLabel={
+                  phase === 'intro'
+                    ? `The round's first position, ${toMove} to move`
+                    : `Position ${index + 1}, ${toMove} to move`
+                }
               />
-            </div>
+            ) : null}
+            {phase === 'done' ? (
+              <div className="trainer__overlay">
+                <Card className="arcade__summary" data-testid="wsb-result">
+                  <h2>Round over</h2>
+                  <div className="arcade__scoreline">
+                    <Stat value={summary.score} label={`Points (max ${summary.max}+)`} />
+                    <Stat value={summary.spotOn} label="Spot on" />
+                    <Stat value={summary.wrongSide} label="Wrong side" />
+                  </div>
+                  <p className="muted" data-testid="wsb-best-line">
+                    {describeRoundBest(summary.score, bestBefore)}
+                  </p>
+                  <div className="row arcade__summary-actions" ref={againRowRef}>
+                    <Button variant="primary" onClick={begin} data-testid="wsb-again">
+                      Play again
+                    </Button>
+                    <LinkButton to="/arcade">Arcade</LinkButton>
+                  </div>
+                </Card>
+              </div>
+            ) : null}
           </div>
-          <aside className="trainer__panel stack">
-            <Card>
-              <div className="row row--between">
-                <strong data-testid="wsb-progress">
-                  Position {index + 1} of {round.length}
-                </strong>
-                <Badge tone={toMove === 'white' ? 'neutral' : 'info'}>
-                  <span
-                    className={`arcade__to-move arcade__to-move--${toMove}`}
-                    aria-hidden="true"
-                  />
-                  <span data-testid="wsb-to-move">
-                    {toMove === 'white' ? 'White' : 'Black'} to move
-                  </span>
-                </Badge>
-              </div>
-              <p className="small muted" style={{ margin: '4px 0 12px' }}>
-                {describeGame(position)} · move {Math.ceil(position.ply / 2)}
-              </p>
-              <label className="small" htmlFor="wsb-slider">
-                Your judgement: <strong data-testid="wsb-guess">{describeScale(guess)}</strong>
-              </label>
-              <input
-                id="wsb-slider"
-                ref={sliderRef}
-                className="arcade__slider"
-                type="range"
-                min={-SCALE_MAX}
-                max={SCALE_MAX}
-                step={SCALE_STEP}
-                value={guess}
-                aria-valuetext={describeScale(guess)}
-                onChange={(e) => setGuess(Number(e.target.value))}
-                disabled={phase === 'reveal'}
-                data-testid="wsb-slider"
-              />
-              <div className="arcade__slider-labels" aria-hidden="true">
-                <span>Black winning</span>
-                <span>Equal</span>
-                <span>White winning</span>
-              </div>
-              {phase === 'guess' ? (
-                <div className="row" style={{ marginTop: 12 }}>
-                  <Button variant="primary" onClick={lockIn} data-testid="wsb-lock">
-                    Lock in
-                  </Button>
-                </div>
-              ) : current ? (
-                <div data-testid="wsb-reveal" role="status">
-                  <p className="arcade__verdict">
-                    {current.verdict.charAt(0).toUpperCase() + current.verdict.slice(1)} ·{' '}
-                    {current.points}
-                    {streakBonus(streak) > 0 ? ` + ${streakBonus(streak)} streak` : ''} points
-                  </p>
-                  <p className="small" style={{ margin: 0 }}>
-                    The engine says: <strong>{describeScale(current.truth)}</strong> — its move
-                    would be{' '}
-                    <strong>
-                      <San san={bestSan} />
-                    </strong>
-                    .
-                  </p>
-                </div>
-              ) : null}
-              {phase === 'reveal' ? (
-                <div className="row" style={{ marginTop: 12 }} ref={nextRowRef}>
-                  <Button variant="primary" onClick={next} data-testid="wsb-next">
-                    {index + 1 >= round.length ? 'See the score' : 'Next position'}
-                  </Button>
-                  <LinkButton size="sm" to={`/analyze?fen=${encodeURIComponent(position.fen)}`}>
-                    Analyze position
-                  </LinkButton>
-                </div>
-              ) : null}
-            </Card>
-            <Card>
-              <div className="row row--between">
-                <span className="small muted">Score so far</span>
-                <strong data-testid="wsb-score">{summary.score}</strong>
-              </div>
-              {streak >= 2 ? (
-                <p className="small muted" style={{ margin: '4px 0 0' }}>
-                  Streak: {streak} close calls in a row.
-                </p>
-              ) : null}
-            </Card>
-          </aside>
         </div>
-      ) : null}
+        <aside className="trainer__panel stack">
+          {phase === 'intro' ? (
+            <SetupScreen
+              intro={`A round is ${ROUND_SIZE} quiet positions from the classic games, from a pool of ${pool.length}, with White or Black to move. Say who is better and by how much; then the engine shows the truth.`}
+              onStart={begin}
+              startTestId="wsb-start"
+            >
+              <ul className="setup__list small">
+                <li>Within {SPOT_ON} of a pawn is spot on.</li>
+                <li>Every pawn of error costs {POINTS_PER_PAWN} points.</li>
+                <li>Calling the wrong side better scores nothing.</li>
+                <li>A run of close calls earns a streak bonus.</li>
+              </ul>
+              {best ? <p className="small muted setup__note">Your best: {best.detail}.</p> : null}
+            </SetupScreen>
+          ) : position ? (
+            <>
+              <Card>
+                <div className="row row--between">
+                  <strong data-testid="wsb-progress">
+                    Position {index + 1} of {round.length}
+                  </strong>
+                  <Badge tone={toMove === 'white' ? 'neutral' : 'info'}>
+                    <span
+                      className={`arcade__to-move arcade__to-move--${toMove}`}
+                      aria-hidden="true"
+                    />
+                    <span data-testid="wsb-to-move">
+                      {toMove === 'white' ? 'White' : 'Black'} to move
+                    </span>
+                  </Badge>
+                </div>
+                <p className="small muted" style={{ margin: '4px 0 12px' }}>
+                  {describeGame(position)} · move {Math.ceil(position.ply / 2)}
+                </p>
+                <label className="small" htmlFor="wsb-slider">
+                  Your judgement: <strong data-testid="wsb-guess">{describeScale(guess)}</strong>
+                </label>
+                <input
+                  id="wsb-slider"
+                  ref={sliderRef}
+                  className="arcade__slider"
+                  type="range"
+                  min={-SCALE_MAX}
+                  max={SCALE_MAX}
+                  step={SCALE_STEP}
+                  value={guess}
+                  aria-valuetext={describeScale(guess)}
+                  onChange={(e) => setGuess(Number(e.target.value))}
+                  disabled={phase === 'reveal'}
+                  data-testid="wsb-slider"
+                />
+                <div className="arcade__slider-labels" aria-hidden="true">
+                  <span>Black winning</span>
+                  <span>Equal</span>
+                  <span>White winning</span>
+                </div>
+                {phase === 'guess' ? (
+                  <div className="row" style={{ marginTop: 12 }}>
+                    <Button variant="primary" onClick={lockIn} data-testid="wsb-lock">
+                      Lock in
+                    </Button>
+                  </div>
+                ) : current ? (
+                  <div data-testid="wsb-reveal" role="status">
+                    <p className="arcade__verdict">
+                      {current.verdict.charAt(0).toUpperCase() + current.verdict.slice(1)} ·{' '}
+                      {current.points}
+                      {streakBonus(streak) > 0 ? ` + ${streakBonus(streak)} streak` : ''} points
+                    </p>
+                    <p className="small" style={{ margin: 0 }}>
+                      The engine says: <strong>{describeScale(current.truth)}</strong> — its move
+                      would be{' '}
+                      <strong>
+                        <San san={bestSan} />
+                      </strong>
+                      .
+                    </p>
+                  </div>
+                ) : null}
+                {phase === 'reveal' ? (
+                  <div className="row" style={{ marginTop: 12 }} ref={nextRowRef}>
+                    <Button variant="primary" onClick={next} data-testid="wsb-next">
+                      {index + 1 >= round.length ? 'See the score' : 'Next position'}
+                    </Button>
+                    <LinkButton size="sm" to={`/analyze?fen=${encodeURIComponent(position.fen)}`}>
+                      Analyze position
+                    </LinkButton>
+                  </div>
+                ) : null}
+              </Card>
+              <Card>
+                <div className="row row--between">
+                  <span className="small muted">Score so far</span>
+                  <strong data-testid="wsb-score">{summary.score}</strong>
+                </div>
+                {streak >= 2 ? (
+                  <p className="small muted" style={{ margin: '4px 0 0' }}>
+                    Streak: {streak} close calls in a row.
+                  </p>
+                ) : null}
+              </Card>
+            </>
+          ) : null}
+        </aside>
+      </div>
     </div>
   );
 }

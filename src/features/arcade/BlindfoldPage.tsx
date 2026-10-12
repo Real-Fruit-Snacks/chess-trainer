@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { Alert, Button, Card, Field, Select, Spinner, Stat, LinkButton } from '@/components/ui';
+import { Alert, Button, Card, Spinner, Stat, LinkButton } from '@/components/ui';
+import { ColourChoice, SetupScreen } from '@/components/setup/SetupScreen';
+import { useFocusBoardAfterSetup } from '@/components/setup/useFocusBoardAfterSetup';
+import { START_FEN } from '@/chess/helpers';
 import type { LongColor } from '@/chess/types';
 import { getLevel } from '@/engine/levels';
 import { usePlayVsEngine } from '@/features/play/usePlayVsEngine';
@@ -28,6 +31,10 @@ export default function BlindfoldPage() {
   const [color, setColor] = useState<LongColor | 'random'>('white');
   /** The setup card is up (before the first game, and after "New game"). */
   const [settingUp, setSettingUp] = useState(true);
+  /** "New game" after a game (not the first setup): the screen takes the focus then. */
+  const [reopened, setReopened] = useState(false);
+  const boardColRef = useRef<HTMLDivElement>(null);
+  useFocusBoardAfterSetup(settingUp, boardColRef);
   const [peeksUsed, setPeeksUsed] = useState(0);
   const [peeking, setPeeking] = useState(false);
   const [lastScore, setLastScore] = useState<number | null>(null);
@@ -84,41 +91,7 @@ export default function BlindfoldPage() {
   const over = play.gameOver;
   const blindfold = play.started && !peeking && !over;
 
-  const overlay = settingUp ? (
-    <Card className="arcade__summary">
-      <h2>Blindfold</h2>
-      <p className="muted">
-        The pieces stay hidden; the move list is all you get. You may peek {BLINDFOLD_PEEKS} times.
-      </p>
-      <div className="stack" style={{ textAlign: 'left' }}>
-        <EngineLevelField value={levelId} onChange={setLevelId} testId="blindfold-level" />
-        <Field label="Your colour">
-          {(id) => (
-            <Select
-              id={id}
-              value={color}
-              onChange={(e) => setColor(e.target.value as LongColor | 'random')}
-            >
-              <option value="white">White</option>
-              <option value="black">Black</option>
-              <option value="random">Random</option>
-            </Select>
-          )}
-        </Field>
-      </div>
-      <div className="row" style={{ marginTop: 12 }}>
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={begin}
-          disabled={play.engineStatus === 'error'}
-          data-testid="blindfold-start"
-        >
-          Start
-        </Button>
-      </div>
-    </Card>
-  ) : over ? (
+  const overlay = settingUp ? null : over ? (
     <Card className="arcade__summary" data-testid="blindfold-result">
       <h2>
         {over.verdict === 'win' ? 'You win' : over.verdict === 'draw' ? 'Draw' : 'The engine wins'}
@@ -142,7 +115,13 @@ export default function BlindfoldPage() {
         >
           Play again
         </Button>
-        <Button onClick={() => setSettingUp(true)} data-testid="blindfold-new">
+        <Button
+          onClick={() => {
+            setReopened(true);
+            setSettingUp(true);
+          }}
+          data-testid="blindfold-new"
+        >
           New game
         </Button>
         <AnalyzeGameButton pgn={play.pgn} orientation={play.playerColor} />
@@ -176,10 +155,21 @@ export default function BlindfoldPage() {
         </Alert>
       ) : null}
 
-      <div className="trainer">
+      <div className={settingUp ? 'trainer trainer--setup' : 'trainer'}>
         <EngineGameBoard
           play={play}
-          engineName={`Stockfish · ${play.level.name}`}
+          engineName={`Stockfish · ${(settingUp ? getLevel(levelId) : play.level).name}`}
+          // The board as it will be: the pieces hidden.
+          preview={
+            settingUp
+              ? {
+                  fen: START_FEN,
+                  orientation: color === 'black' ? 'black' : 'white',
+                  hidePieces: true,
+                }
+              : null
+          }
+          boardColRef={boardColRef}
           ariaLabel={`Blindfold board, ${play.game.position.turn} to move`}
           overlay={overlay}
           blindfold={blindfold}
@@ -205,21 +195,50 @@ export default function BlindfoldPage() {
         />
 
         <aside className="trainer__panel stack">
-          <Card>
-            <div className="row row--between">
-              <strong>{play.started ? `Stockfish · ${play.level.name}` : 'No game yet'}</strong>
-              {play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
-            </div>
-            <p
-              className="small muted"
-              style={{ margin: '4px 0 0' }}
-              data-testid="blindfold-scoring"
+          {settingUp ? (
+            <SetupScreen
+              intro={`The pieces stay hidden; the move list is all you get. You may peek ${BLINDFOLD_PEEKS} times.`}
+              onStart={begin}
+              startDisabled={play.engineStatus === 'error'}
+              startTestId="blindfold-start"
+              focusOnMount={reopened}
+              back={
+                play.started
+                  ? { label: 'Back to the board', onClick: () => setSettingUp(false) }
+                  : null
+              }
             >
-              {BLINDFOLD_SCORING}
-              {best ? ` Best: ${best.best} — ${best.detail ?? ''}.` : ''}
-            </p>
-          </Card>
-          <GameMoves play={play} />
+              <EngineLevelField
+                value={levelId}
+                onChange={setLevelId}
+                testId="blindfold-level"
+                describe
+              />
+              <ColourChoice value={color} onChange={setColor} />
+              <p className="small muted setup__note" data-testid="blindfold-scoring">
+                {BLINDFOLD_SCORING}
+                {best ? ` Your best: ${best.best} — ${best.detail ?? ''}.` : ''}
+              </p>
+            </SetupScreen>
+          ) : (
+            <>
+              <Card>
+                <div className="row row--between">
+                  <strong>{`Stockfish · ${play.level.name}`}</strong>
+                  {play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
+                </div>
+                <p
+                  className="small muted"
+                  style={{ margin: '4px 0 0' }}
+                  data-testid="blindfold-scoring"
+                >
+                  {BLINDFOLD_SCORING}
+                  {best ? ` Best: ${best.best} — ${best.detail ?? ''}.` : ''}
+                </p>
+              </Card>
+              <GameMoves play={play} />
+            </>
+          )}
         </aside>
       </div>
     </div>

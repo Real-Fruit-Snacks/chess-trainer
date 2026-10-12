@@ -94,9 +94,9 @@ export function knownPrefix(guesses: readonly OpeningLine[], answer: OpeningLine
 /** Hints that unlock as guesses are used up. */
 export function hints(answer: OpeningLine, wrongGuesses: number): string[] {
   const out = [`${answer.moves.length} moves (${Math.ceil(answer.moves.length / 2)} for White).`];
-  out.push(`ECO ${answer.eco.charAt(0)}.`);
+  out.push(`Its ECO code starts with ${answer.eco.charAt(0)}.`);
   if (wrongGuesses >= 2) out.push(`It starts with 1. ${answer.moves[0] ?? '?'}.`);
-  if (wrongGuesses >= 3) out.push(`ECO ${answer.eco}.`);
+  if (wrongGuesses >= 3) out.push(`Its ECO code is ${answer.eco}.`);
   if (wrongGuesses >= 4) {
     const family = answer.name.split(':')[0] ?? answer.name;
     out.push(`It is a line of the ${displayOpeningName(family)}.`);

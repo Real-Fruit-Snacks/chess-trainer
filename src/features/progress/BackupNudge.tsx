@@ -8,6 +8,8 @@ import { useProgress } from '@/store/progress';
 import { useRepertoire } from '@/store/repertoire';
 import { useBackupActions } from '@/features/settings/useBackupActions';
 import { useLichess } from '@/store/lichess';
+import { formatCount } from '@/lib/format';
+import { siteConfig } from '@/site.config';
 
 /** "14 days ago", "yesterday", "today". */
 function describeDays(days: number): string {
@@ -54,7 +56,7 @@ export function BackupNudge({ compact = false }: { compact?: boolean }) {
     },
   );
   if (!status.due || deviceSyncedRecently(SYNCED_WITHIN_MS)) return null;
-  const attempts = `${status.attemptsSince} rated puzzle attempt${status.attemptsSince === 1 ? '' : 's'}`;
+  const attempts = `${formatCount(status.attemptsSince, siteConfig.locale)} rated puzzle attempt${status.attemptsSince === 1 ? '' : 's'}`;
   const since =
     status.daysSince === null
       ? `You have never made a backup${status.attemptsSince > 0 ? ` (${attempts} so far)` : ''}.`

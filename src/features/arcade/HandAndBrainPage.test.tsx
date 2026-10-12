@@ -186,8 +186,11 @@ describe('HandAndBrainPage', () => {
       detail: 'Brain · 90% over 30 calls · beat Level 4',
     });
     expect(screen.getByTestId('hb-result')).toHaveTextContent('360');
+    // The next game's setup says how a game scores, and the best so far.
+    fireEvent.click(screen.getByTestId('hb-new'));
     expect(screen.getByTestId('hb-scoring')).toHaveTextContent(
       'Score: your accuracy × the engine level',
     );
+    expect(screen.getByTestId('hb-scoring')).toHaveTextContent('Your best: 360');
   });
 });

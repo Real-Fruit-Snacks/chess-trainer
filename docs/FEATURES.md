@@ -31,6 +31,9 @@ The complete reference of what Chess Trainer does, section by section. For how i
   course, or its own page — when you know it already; it then counts as completed in courses, on
   Learn and for the next lesson, but not as training (no streak day, no recall). Marking it not done
   starts it again; both come with an Undo. Doing every step later completes it for real.
+- **Find a lesson**: all the lessons are one list under a search (any words, in any order, accents
+  and punctuation ignored), a level and _Hide finished_, all kept in the address so Back returns to
+  them, with a count of the lessons shown.
 - A **mating patterns** gallery: the nineteen named mates as minimal diagrams, each with a drill and
   the library's puzzles of that shape.
 
@@ -50,6 +53,10 @@ The complete reference of what Chess Trainer does, section by section. For how i
   in spaced cycles and shared as links, hints, streaks and per-theme statistics. Only rated mode asks
   for a starting rating; the other modes are open at once. A promotion always asks for the piece, so
   underpromotions can be solved with auto-queen on.
+- A puzzle's **themes stay hidden** while you solve it, since they say what to look for: _Show the
+  themes_ brings them up, and they show by themselves once it is solved or missed. The theme and
+  opening catalogues have a search (and a group for themes), kept in the address; a theme you have
+  tried five times shows your accuracy on it, and _Work on this_ when that is below your average.
 - **Blind puzzles**: the board stays on the starting position while the line is played out in
   notation only, so the whole combination has to be seen in the head. Two, three or four-plus moves
   deep, each length with its own level (it starts a few hundred points under the puzzle rating, rises
@@ -81,7 +88,9 @@ The complete reference of what Chess Trainer does, section by section. For how i
   endings (Lucena, Philidor, Vancura, cutting off the king, the short-side and back-rank defences,
   rook against a pawn, bishop or knight); queen endings and minor pieces. A drill opened without a
   `?pos=` starts from one of its positions at random. A promotion counts once the new piece is safe,
-  and won material once it is kept (a trade or a piece taken straight back is not a win).
+  and won material once it is kept (a trade or a piece taken straight back is not a win). The
+  library is a compact index with a search and a group filter (kept in the address), and a drill
+  sets out its task beside the board, so the position can be studied before _Start_.
 - Eight **endgame studies** (Réti, Saavedra and the only-move endings) to solve move by move; every
   accepted move, and every refused alternative, is checked against the engine.
 
@@ -141,10 +150,17 @@ Guess-the-move for **46 famous games** — from Légal's mate, the Immortal Draw
 Immortal and the Evergreen through McDonnell–La Bourdonnais, Steinitz, Rubinstein, Capablanca,
 Réti–Alekhine, Torre–Lasker, the Polish and Peruvian Immortals, Fischer, Tal, Petrosian, Karpov and
 Kasparov to Deep Blue — with notes on every key moment, three points for the game move and two when
-the engine rates yours as good. Filter by era, difficulty and what you have played.
+the engine rates yours as good. Find a game by title, player, event, year or story, and filter by
+era, difficulty and what you have played; the search and filters are kept in the address.
 
 ## Play
 
+- **A new game screen** in the page, not a dialog over it: the opponent as cards (Stockfish, the
+  human-like opponent, two players at one device), the side and the game (standard or Chess960) as
+  one-tap choices, then the level or rating, the clock, an opening to practise and the help while
+  you play. On wide screens a preview of the board stands beside it, from the side you will play,
+  with the clocks as they will start and a Chess960 game's start drawn already (another one is a tap
+  away); on phones the form has the screen to itself and Start stays pinned above the bottom bar.
 - **Stockfish 19** in the browser at **eight strength levels**, from a beatable "Newcomer" (about 400)
   to full strength (the ratings are a rough guide), with optional clocks from bullet to classical. A
   flag that falls when the other side could never checkmate is a draw, as in the rules.
@@ -162,7 +178,7 @@ the engine rates yours as good. Filter by era, difficulty and what you have play
 - Take-backs (until the game is over — a finished game is recorded once), hints and "show threat"
   (the arrow's move is also given in words), keyboard move entry that keeps its focus between moves,
   PGN export and a hand-off to analysis from your side of the board. "Play again" repeats the last
-  settings; "New game" opens the setup.
+  settings; "New game" opens the new game screen, with the way back to the game on the board.
 - A **coach mode** that pauses after a mistake, explains it in words, links the lesson and offers a
   take-back. The coach judges at full strength whatever level you play against, and never interrupts a
   move that ends the game.
@@ -391,7 +407,10 @@ relay, and switching both pushed kinds off ends the browser's push subscription.
 
 ## Arcade
 
-Eleven games that are not puzzles, each with a score to beat:
+Eleven games that are not puzzles, each with a score to beat. Each is set up as a game against the
+computer is on Play: a setup card with its choices and your best so far, the board as the game will
+start beside it on wide screens, and on phones the form alone with _Start_ pinned above the bottom
+bar.
 
 - **Hand & Brain** — full-strength Stockfish as your partner: you call the piece and it finds the
   move, or the reverse, and every call is graded against the engine's best. The score is your
@@ -808,7 +827,8 @@ items the backup does not hold.
 
 ## Reference
 
-The rules of chess, notation (SAN, PGN, FEN, engine evaluations), a searchable glossary — including
+A bar of sections that follows down the page and marks the one being read, then the rules of chess,
+notation (SAN, PGN, FEN, engine evaluations), a searchable glossary — including
 the rating and tablebase terms the app prints (Glicko-2, rating deviation, DTZ, DTM) — linked to the
 step of the lesson that teaches each idea, and an FAQ. Every glossary term and every question can be
 linked to (`/reference#glossary-zugzwang`), and a linked question opens; quick search uses these

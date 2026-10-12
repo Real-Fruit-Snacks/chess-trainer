@@ -69,3 +69,26 @@
 .openings__line-upcoming {
   color: var(--text-faint);
 }
+
+/* ---------- A repertoire's start menu, beside the board ---------- */
+.repertoire__menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.repertoire__menu-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+/* The other ways in, two by two (one by one on the narrowest phones). */
+.repertoire__menu-grid {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+}
+
+.repertoire__menu-grid > .btn {
+  width: 100%;
+}

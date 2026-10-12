@@ -175,7 +175,7 @@ test.describe('reset and rating', () => {
 
     await page.getByTestId('rating-reset').click();
     await page.getByTestId('confirm-accept').click();
-    await expect(page.getByText(/Puzzle rating set to 1200/)).toBeVisible();
+    await expect(page.getByText(/Puzzle rating set to 1,200/)).toBeVisible();
     expect(await storedRating(page)).toBe(1200);
     const history = await page.evaluate(() => {
       const raw = localStorage.getItem('chess-trainer:progress') ?? '{}';

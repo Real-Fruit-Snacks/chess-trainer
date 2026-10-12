@@ -16,6 +16,8 @@ import {
   Stat,
 } from '@/components/ui';
 import { Difficulty } from '@/features/drills/Difficulty';
+import { ListNoMatch, ListSearch } from '@/components/list/ListSearch';
+import { matchesAllWords } from '@/lib/textMatch';
 import { NONE } from '@/lib/format';
 import { shortcutKey } from '@/lib/shortcutKey';
 import { siteConfig } from '@/site.config';
@@ -43,15 +45,35 @@ export default function ClassicsPage() {
     document.title = `Classic games · ${siteConfig.name}`;
   }, []);
 
+  const [query, setQuery] = useState(() => searchParams.get('q') ?? '');
   const played = useMemo(() => new Set(Object.keys(results)), [results]);
-  const games = useMemo(() => filterGames(CLASSIC_GAMES, filter, played), [filter, played]);
-  const update = (patch: Partial<ClassicsFilter>) => {
-    const next = { ...filter, ...patch };
-    setFilter(next);
+  const games = useMemo(
+    () =>
+      filterGames(CLASSIC_GAMES, filter, played).filter((g) =>
+        matchesAllWords(query, g.title, g.white, g.black, g.event, String(g.year), g.intro),
+      ),
+    [filter, played, query],
+  );
+  const writeParams = (next: ClassicsFilter, q: string) => {
     const params: Record<string, string> = {};
     if (next.era !== 'all') params.era = next.era;
     if (next.difficulty !== 'all') params.difficulty = String(next.difficulty);
-    setSearchParams(params, { replace: true });
+    if (q) params.q = q;
+    setSearchParams(params, { replace: true, preventScrollReset: true });
+  };
+  const update = (patch: Partial<ClassicsFilter>) => {
+    const next = { ...filter, ...patch };
+    setFilter(next);
+    writeParams(next, query);
+  };
+  const search = (q: string) => {
+    setQuery(q);
+    writeParams(filter, q);
+  };
+  const clearAll = () => {
+    setFilter(DEFAULT_FILTER);
+    setQuery('');
+    setSearchParams({}, { replace: true, preventScrollReset: true });
   };
 
   return (
@@ -65,49 +87,56 @@ export default function ClassicsPage() {
         </p>
       </div>
 
-      <div className="classics__filters" data-testid="classics-filters">
-        <Segmented
-          ariaLabel="Era"
-          value={filter.era}
-          onChange={(era) => update({ era: era })}
-          options={[
-            { value: 'all', label: 'All eras' },
-            ...ERAS.map((e) => ({ value: e.id, label: e.label })),
-          ]}
-        />
-        <Segmented
-          ariaLabel="Difficulty"
-          value={String(filter.difficulty)}
-          onChange={(d) => update({ difficulty: d === 'all' ? 'all' : (Number(d) as 1 | 2 | 3) })}
-          options={[
-            { value: 'all', label: 'Any' },
-            { value: '1', label: <Stars count={1} label="1 star" /> },
-            { value: '2', label: <Stars count={2} label="2 stars" /> },
-            { value: '3', label: <Stars count={3} label="3 stars" /> },
-          ]}
-        />
-        <Segmented
-          ariaLabel="Status"
-          value={filter.status}
-          onChange={(status) => update({ status: status })}
-          options={[
-            { value: 'all', label: 'All' },
-            { value: 'new', label: 'Not played' },
-            { value: 'played', label: 'Played' },
-          ]}
-        />
-        <span className="small muted" data-testid="classics-count">
-          {games.length} of {CLASSIC_GAMES.length} games
-          {filter.era !== 'all' ? ` · ${ERAS.find((e) => e.id === filter.era)?.blurb ?? ''}` : ''}
-        </span>
-      </div>
+      <ListSearch
+        value={query}
+        onChange={search}
+        label="Find a game"
+        placeholder="Find a game, a player, a year…"
+        shown={games.length}
+        total={CLASSIC_GAMES.length}
+        noun={['game', 'games']}
+        note={filter.era !== 'all' ? (ERAS.find((e) => e.id === filter.era)?.blurb ?? null) : null}
+        countTestId="classics-count"
+        testId="classics-filters"
+      >
+        <div className="classics__filters">
+          <Segmented
+            ariaLabel="Era"
+            value={filter.era}
+            onChange={(era) => update({ era: era })}
+            options={[
+              { value: 'all', label: 'All eras' },
+              ...ERAS.map((e) => ({ value: e.id, label: e.label })),
+            ]}
+          />
+          <Segmented
+            ariaLabel="Difficulty"
+            value={String(filter.difficulty)}
+            onChange={(d) => update({ difficulty: d === 'all' ? 'all' : (Number(d) as 1 | 2 | 3) })}
+            options={[
+              { value: 'all', label: 'Any' },
+              { value: '1', label: <Stars count={1} label="1 star" /> },
+              { value: '2', label: <Stars count={2} label="2 stars" /> },
+              { value: '3', label: <Stars count={3} label="3 stars" /> },
+            ]}
+          />
+          <Segmented
+            ariaLabel="Status"
+            value={filter.status}
+            onChange={(status) => update({ status: status })}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'new', label: 'Not played' },
+              { value: 'played', label: 'Played' },
+            ]}
+          />
+        </div>
+      </ListSearch>
 
       {games.length === 0 ? (
-        <Card>
-          <p className="muted" style={{ margin: 0 }}>
-            No games match — try another era or difficulty.
-          </p>
-        </Card>
+        <ListNoMatch onClear={clearAll}>
+          No game matches{query ? ` “${query}”` : ''} — try another era, difficulty or word.
+        </ListNoMatch>
       ) : null}
       <div className="grid grid--cards">
         {games.map((game) => {
@@ -120,16 +149,14 @@ export default function ClassicsPage() {
               className="card card--interactive classic-card"
             >
               <span className="card__title">{game.title}</span>
-              <span className="classic-card__players">
+              <span className="small classic-card__players">
                 {game.white} – {game.black}
               </span>
               <span className="small muted">
                 {game.event} {game.year} · {game.result}
                 {era ? ` · ${era.label}` : ''}
               </span>
-              <p className="small muted" style={{ margin: 0 }}>
-                {game.intro}
-              </p>
+              <p className="small muted classic-card__intro">{game.intro}</p>
               {/* The side you play and the result or difficulty at the foot, so the title has
                   the card's whole width. */}
               <div className="card__foot">
@@ -228,7 +255,7 @@ function GuessTrainer({ game }: { game: ClassicGame }) {
       </div>
 
       <div className="trainer">
-        <div className="trainer__board" style={{ position: 'relative' }}>
+        <div className="trainer__board">
           <Board
             fen={board.fen}
             orientation={game.guessColor}

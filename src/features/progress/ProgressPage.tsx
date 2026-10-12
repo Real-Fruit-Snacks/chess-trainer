@@ -14,7 +14,7 @@ import { themeName } from '@/features/puzzles/themes';
 import { formatDate, formatDuration, trainingStreak } from '@/lib/dates';
 import { formatCount, NONE } from '@/lib/format';
 import { isProvisional, PROVISIONAL_RD } from '@/lib/glicko';
-import { formatRating, ratingBand } from '@/lib/rating';
+import { formatRating, formatRatingChange, ratingBand } from '@/lib/rating';
 import { approximateGameRatings, formatRange } from '@/lib/ratingScales';
 import { siteConfig } from '@/site.config';
 import { summarizeProgress, useProgress } from '@/store/progress';
@@ -215,19 +215,17 @@ export default function ProgressPage() {
                           >
                             {a.id}
                           </Link>{' '}
-                          <span className="faint">({a.puzzleRating})</span>
+                          <span className="faint">
+                            ({formatRating(a.puzzleRating, siteConfig.locale)})
+                          </span>
                         </td>
                         <td>
                           <Badge tone={a.outcome === 'solved' ? 'success' : 'danger'}>
                             {outcomeLabel(a.outcome, a.hintUsed)}
                           </Badge>
                         </td>
-                        <td className="num">{a.ratingAfter}</td>
-                        <td className="num">
-                          {a.ratingAfter - a.ratingBefore === 0
-                            ? '·'
-                            : `${a.ratingAfter - a.ratingBefore > 0 ? '+' : ''}${a.ratingAfter - a.ratingBefore}`}
-                        </td>
+                        <td className="num">{formatRating(a.ratingAfter, siteConfig.locale)}</td>
+                        <td className="num">{formatRatingChange(a.ratingBefore, a.ratingAfter)}</td>
                         <td className="faint">
                           {a.themes
                             .split(' ')
@@ -373,8 +371,11 @@ export default function ProgressPage() {
                         <span className="themes-report__bar" aria-hidden="true">
                           <span style={{ width: `${row.accuracy}%` }} />
                         </span>
-                        <span className="num small">
-                          {row.accuracy}% <span className="faint">({row.attempts})</span>
+                        <span className="themes-report__figure num small">
+                          {row.accuracy}%{' '}
+                          <span className="faint">
+                            ({formatCount(row.attempts, siteConfig.locale)})
+                          </span>
                         </span>
                       </li>
                     ))}
@@ -397,8 +398,11 @@ export default function ProgressPage() {
                         >
                           <span style={{ width: `${row.accuracy}%` }} />
                         </span>
-                        <span className="num small">
-                          {row.accuracy}% <span className="faint">({row.attempts})</span>
+                        <span className="themes-report__figure num small">
+                          {row.accuracy}%{' '}
+                          <span className="faint">
+                            ({formatCount(row.attempts, siteConfig.locale)})
+                          </span>
                         </span>
                       </li>
                     ))}

@@ -78,7 +78,6 @@ export function ArmyShop({
             <span className="arcade__shop-stepper">
               <Button
                 size="sm"
-                variant="ghost"
                 icon
                 aria-label={`Remove a ${PIECE_NAME[piece].toLowerCase()}`}
                 onClick={() => add(piece, -1)}
@@ -96,7 +95,6 @@ export function ArmyShop({
               </span>
               <Button
                 size="sm"
-                variant="ghost"
                 icon
                 aria-label={`Add a ${PIECE_NAME[piece].toLowerCase()}`}
                 onClick={() => add(piece, 1)}
@@ -108,7 +106,10 @@ export function ArmyShop({
           </div>
         ))}
       </div>
-      <div className="row arcade__presets">
+      <div className="row arcade__presets" role="group" aria-labelledby="army-presets-label">
+        <span className="small muted" id="army-presets-label">
+          Ready-made:
+        </span>
         {ARMY_PRESETS.filter((p) => p.budget <= budget).map((preset) => (
           <Button
             key={preset.id}
@@ -127,6 +128,7 @@ export function ArmyShop({
         <Button
           size="sm"
           variant="ghost"
+          className="arcade__clear"
           disabled={disabled}
           onClick={() =>
             onChange(EMPTY_ARMY, `Army cleared. ${describeBudget(EMPTY_ARMY, budget)}`)

@@ -127,19 +127,23 @@ describe('OddsLadderPage', () => {
 
   it('lists the rungs as readable rows and counts a draw as played', () => {
     const rerender = renderPage(OddsLadderPage);
-    const rungs = screen.getByRole('list', { name: 'Rungs' });
-    expect(within(rungs).getAllByRole('listitem')).toHaveLength(ODDS_RUNGS.length);
+    // The rungs are the setup's choice: one card each, the locked ones out of reach.
+    const rungs = screen.getByRole('group', { name: 'Rung' });
+    expect(within(rungs).getAllByRole('radio')).toHaveLength(ODDS_RUNGS.length);
     expect(screen.getByTestId('odds-rung-0')).toHaveTextContent('Queen odds');
     expect(screen.getByTestId('odds-rung-0')).toHaveTextContent('Current');
+    expect(within(rungs).getByRole('radio', { name: 'Queen odds' })).toBeChecked();
     expect(screen.getByTestId('odds-rung-1')).toHaveTextContent('Locked');
-    expect(screen.getByRole('button', { name: 'Play Queen odds' })).toBeInTheDocument();
+    expect(within(rungs).getByRole('radio', { name: 'Rook odds' })).toBeDisabled();
     fireEvent.click(screen.getByTestId('odds-start'));
     act(() => rerender());
     finish(rerender, 'draw');
     expect(useProgress.getState().oddsLadder.results[0]).toEqual({ wins: 0, losses: 0, draws: 1 });
-    expect(screen.getByTestId('odds-rung-0')).toHaveTextContent('1 draw');
     expect(screen.getByTestId('odds-result')).toHaveTextContent('only a win climbs');
     expect(screen.getByTestId('odds-next')).toHaveTextContent('Play again');
+    // "Choose a rung" opens the setup again, with the game counted on its rung.
+    fireEvent.click(screen.getByTestId('odds-choose'));
+    expect(screen.getByTestId('odds-rung-0')).toHaveTextContent('1 draw');
   });
 
   it('says so when the top rung is beaten, and offers it again', () => {

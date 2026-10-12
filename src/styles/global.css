@@ -16,6 +16,9 @@ html {
   /* A focused or targeted element scrolls clear of the sticky header and the bottom bar. */
   scroll-padding-top: calc(var(--header-height) + 8px);
   scroll-padding-bottom: calc(var(--bottom-nav-height) + 8px);
+  /* Where scroll bars take room (a mouse on Windows or Linux), the page keeps it while a dialog
+     holds the page still, so nothing shifts sideways as one opens and closes. */
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -127,6 +130,22 @@ kbd {
 
 ::selection {
   background: var(--accent-soft);
+}
+
+/* Boxes that scroll inside the page — a move list, the coach's conversation, a dialog's body, a
+   list of games — wear a thin scroll bar in the theme's colours, where scroll bars show at all:
+   the page's own stays the one that stands out. */
+.movelist,
+.treemoves,
+.coach,
+.import__games,
+.arcade__options,
+.simul__moves,
+.dialog__body,
+.search__panel,
+.more__menu {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 /* ---------- Layout helpers ---------- */
@@ -251,7 +270,9 @@ kbd {
   align-items: start;
 }
 
+/* Positioned, for the overlays and pickers laid over the board. */
 .trainer__board {
+  position: relative;
   display: flex;
   gap: var(--space-2);
   align-items: stretch;
@@ -362,11 +383,12 @@ kbd {
     max-width: calc(100dvh - var(--header-height) - var(--bottom-nav-height) - 100px);
   }
 
-  .trainer__panel {
-    max-height: calc(100dvh - var(--header-height) - var(--bottom-nav-height) - 84px);
-    overflow-y: auto;
+  /* One scroller, the page's: the board stays on screen while the panel passes beside it, rather
+     than the panel scrolling in a box of its own next to the page's scroll bar. */
+  .trainer > :not(.trainer__panel, .trainer__lead) {
     position: sticky;
     top: calc(var(--header-height) + var(--space-2));
+    align-self: start;
   }
 
   .page-header {
@@ -433,6 +455,16 @@ kbd {
   background: color-mix(in srgb, var(--bg) 60%, transparent);
   border-radius: var(--radius-md);
   z-index: 5;
+}
+
+/* A Start button alone over the board leaves the board as it is: no veil, which muddied the
+   board and showed its edge round the veil's corners. */
+.trainer__overlay:has(> .btn:only-child) {
+  background: transparent;
+}
+
+.trainer__overlay > .btn:only-child {
+  box-shadow: var(--shadow-md);
 }
 
 /* As wide as the board up to the card's own limit: on a phone a settings card taller than
@@ -502,9 +534,36 @@ kbd {
   cursor: pointer;
 }
 
-/* A disclosure's row is at least 24px high, a comfortable target for a pointer. */
+/* A disclosure's row is at least 24px high, a comfortable target for a pointer, and opens with
+   a chevron of its own (the browsers' triangles differ, and look dated beside the icons). */
 summary {
   min-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 3px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  opacity: 0.7;
+  transform: rotate(-45deg);
+  transition: transform var(--transition);
+}
+
+details[open] > summary::before {
+  transform: translateY(-2px) rotate(45deg);
 }
 
 /* Hints that only make sense with a keyboard (see also .kbd in ui.css). */

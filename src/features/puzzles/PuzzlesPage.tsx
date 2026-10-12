@@ -47,6 +47,9 @@ import { WOODPECKER_NEAR } from './woodpecker';
 import { RushTrainer } from './RushTrainer';
 import { BlindTrainer } from './BlindTrainer';
 import { PRACTICE_GROUPS, THEMES, themeDescription, themeName } from './themes';
+import { ListNoMatch, ListSearch } from '@/components/list/ListSearch';
+import { buildThemeReport, themeBaseline } from '@/features/progress/themeReport';
+import { matchesAllWords } from '@/lib/textMatch';
 import { type PuzzleOutcomeEvent, usePuzzleTrainer, type VerifyMove } from './usePuzzleTrainer';
 import './puzzles.css';
 import { Icon } from '@/components/ui';
@@ -182,7 +185,7 @@ export default function PuzzlesPage() {
                     Due
                     {dueCount ? (
                       <span className="segmented__count">
-                        {dueCount}
+                        {formatCount(dueCount, siteConfig.locale)}
                         <span className="sr-only"> due</span>
                       </span>
                     ) : null}
@@ -244,7 +247,7 @@ function MineEmpty() {
         position where you went wrong, with the engine’s better move as the solution. They come back
         here — and among the due puzzles — until you find the right move without thinking.
       </p>
-      <div className="row">
+      <div className="row puzzles__empty-actions">
         <LinkButton variant="primary" to="/analyze">
           Review a game
         </LinkButton>
@@ -264,20 +267,20 @@ function ReviewEmpty() {
   const total = Object.keys(queue).length;
   return (
     <Card className="puzzles__empty">
-      <p className="card__eyebrow">Redo missed puzzles</p>
+      <p className="card__eyebrow">Due puzzles</p>
       <h2>Nothing due right now</h2>
       <p className="muted">
         Puzzles you miss — in rated, theme or rush mode — come back here after a day. Solve them
         cleanly and they return after 3, 7, 14 and 30 days before graduating.
       </p>
-      <p className="small muted">
+      <p className="small muted" data-testid="review-next">
         {total === 0
-          ? 'Your queue is empty. Go solve some puzzles!'
-          : `${total} puzzle${total === 1 ? '' : 's'} scheduled · next due ${
+          ? 'None scheduled yet: the next puzzle you miss starts the queue.'
+          : `${formatCount(total, siteConfig.locale)} puzzle${total === 1 ? '' : 's'} scheduled · the next is due ${
               upcoming ? formatDate(upcoming.due, siteConfig.locale) : NONE
             }${upcoming && upcoming.due - now < 3_600_000 ? ' (soon)' : ''}.`}
       </p>
-      <div className="row">
+      <div className="row puzzles__empty-actions">
         <LinkButton variant="primary" to="/puzzles">
           Rated puzzles
         </LinkButton>
@@ -297,7 +300,7 @@ function Onboarding() {
   const selected = STARTING_RATINGS.find((o) => o.id === choice);
 
   return (
-    <div className="narrow">
+    <div className="puzzles__onboarding">
       <Card>
         <p className="card__eyebrow">Before you start</p>
         <h2>Where should your puzzle rating start?</h2>
@@ -335,7 +338,7 @@ function Onboarding() {
                 onChange={() => setChoice(option.id)}
               />
               <span>{option.label}</span>
-              <span className="badge">~{option.rating}</span>
+              <span className="badge">~{formatRating(option.rating, siteConfig.locale)}</span>
             </label>
           ))}
         </div>
@@ -365,6 +368,21 @@ function Onboarding() {
 function ThemeCatalog() {
   const [index, setIndex] = useState<PuzzleIndex | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const themeStats = useProgress((s) => s.themeStats);
+  const [params, setParams] = useSearchParams();
+  const query = params.get('q') ?? '';
+  const groupParam = params.get('group');
+  const group = PRACTICE_GROUPS.find((g) => g === groupParam) ?? null;
+  const setParam = (key: string, value: string | null) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true, preventScrollReset: true },
+    );
 
   useEffect(() => {
     loadPuzzleIndex()
@@ -372,42 +390,99 @@ function ThemeCatalog() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   }, []);
 
+  // How the learner does on each theme (once tried a few times), against their own average.
+  const report = useMemo(
+    () => new Map(buildThemeReport(themeStats).map((row) => [row.tag, row])),
+    [themeStats],
+  );
+  const baseline = useMemo(() => themeBaseline(themeStats), [themeStats]);
+
   if (error) return <Alert tone="danger">Could not load the puzzle index: {error}</Alert>;
   if (!index) return <Spinner label="Loading themes…" />;
 
-  const groups = PRACTICE_GROUPS.map((group) => ({
-    group,
+  const all = PRACTICE_GROUPS.map((g) => ({
+    group: g,
     themes: Object.entries(THEMES)
-      .filter(([tag, info]) => info.group === group && (index.themes[tag] ?? 0) >= 10)
+      .filter(([tag, info]) => info.group === g && (index.themes[tag] ?? 0) >= 10)
       .map(([tag, info]) => ({ tag, info, count: index.themes[tag] ?? 0 }))
-      .sort((a, b) => b.count - a.count),
+      .sort((x, y) => y.count - x.count),
   })).filter((g) => g.themes.length > 0);
+  const total = all.reduce((sum, g) => sum + g.themes.length, 0);
+  const groups = all
+    .filter((g) => !group || g.group === group)
+    .map((g) => ({
+      ...g,
+      themes: g.themes.filter(({ info }) => matchesAllWords(query, info.name, info.description)),
+    }))
+    .filter((g) => g.themes.length > 0);
+  const shown = groups.reduce((sum, g) => sum + g.themes.length, 0);
 
   return (
-    <div className="stack">
+    <div>
       <p className="muted">
         Practise one idea at a time. Theme practice is <strong>unrated</strong> so you can drill
         freely.
       </p>
-      {groups.map(({ group, themes }) => (
-        <section key={group}>
-          <h2>{group}</h2>
+      <ListSearch
+        value={query}
+        onChange={(q) => setParam('q', q || null)}
+        label="Find a theme"
+        shown={shown}
+        total={total}
+        noun={['theme', 'themes']}
+        testId="theme-search"
+      >
+        <label className="sr-only" htmlFor="theme-group">
+          Group
+        </label>
+        <select
+          id="theme-group"
+          className="select list-search__select"
+          value={group ?? ''}
+          onChange={(e) => setParam('group', e.target.value || null)}
+        >
+          <option value="">Every group</option>
+          {all.map((g) => (
+            <option key={g.group} value={g.group}>
+              {g.group} ({g.themes.length})
+            </option>
+          ))}
+        </select>
+      </ListSearch>
+      {shown === 0 ? (
+        <ListNoMatch onClear={() => setParams({}, { replace: true, preventScrollReset: true })}>
+          No theme {group ? `in ${group} ` : ''}matches “{query}”.
+        </ListNoMatch>
+      ) : null}
+      {groups.map(({ group: g, themes }) => (
+        <section key={g} className="theme-section">
+          <h2>{g}</h2>
           <div className="grid grid--cards">
-            {themes.map(({ tag, info, count }) => (
-              <Link
-                key={tag}
-                to={`/puzzles/themes?theme=${encodeURIComponent(tag)}`}
-                className="card card--interactive theme-card"
-              >
-                <div className="row row--between">
-                  <span className="card__title">{info.name}</span>
-                  <Badge>{formatCount(count, siteConfig.locale)}</Badge>
-                </div>
-                <p className="small muted" style={{ margin: 0 }}>
-                  {info.description}
-                </p>
-              </Link>
-            ))}
+            {themes.map(({ tag, info, count }) => {
+              const mine = report.get(tag);
+              const weak = mine && baseline !== null && mine.accuracy < baseline;
+              return (
+                <Link
+                  key={tag}
+                  to={`/puzzles/themes?theme=${encodeURIComponent(tag)}`}
+                  className="card card--interactive theme-card"
+                >
+                  <div className="row row--between theme-card__head">
+                    <span className="card__title">{info.name}</span>
+                    <Badge>{formatCount(count, siteConfig.locale)}</Badge>
+                  </div>
+                  <p className="small muted theme-card__about">{info.description}</p>
+                  {mine ? (
+                    <span
+                      className={`small theme-card__mine${weak ? ' theme-card__mine--weak' : ''}`}
+                    >
+                      {weak ? 'Work on this · ' : 'You: '}
+                      {mine.accuracy}% of {formatCount(mine.attempts, siteConfig.locale)}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
           </div>
         </section>
       ))}
@@ -699,7 +774,7 @@ function Trainer({
 
   return (
     <div className="trainer" ref={trainerRef}>
-      <div className="trainer__board" style={{ position: 'relative' }} ref={boardRef}>
+      <div className="trainer__board" ref={boardRef}>
         <Board
           fen={trainer.position.fen}
           orientation={trainer.solverColor}
@@ -873,6 +948,8 @@ function Trainer({
                   </span>
                 }
               />
+            ) : mode === 'daily' && !puzzleId ? (
+              <DailyStat />
             ) : (
               <Stat
                 value={
@@ -914,25 +991,28 @@ function Trainer({
               . <Link to="/puzzles/openings">All openings</Link>
             </p>
           ) : null}
+          {!puzzleId && mode !== 'daily' ? (
+            <div className="puzzle-autonext">
+              <Switch
+                checked={autoNext}
+                onChange={(v) => updateSettings({ puzzleAutoNext: v })}
+                label="Auto-advance after a solve"
+              />
+            </div>
+          ) : null}
         </Card>
 
         {puzzle ? (
           <Card>
             <PuzzleAbout
+              key={puzzle.id}
               puzzle={puzzle}
               fen={trainer.position.fen}
               mode={mode}
+              done={trainer.phase === 'solved' || trainer.phase === 'failed'}
               onRemoved={() => void next()}
             />
           </Card>
-        ) : null}
-
-        {!puzzleId && mode !== 'daily' ? (
-          <Switch
-            checked={autoNext}
-            onChange={(v) => updateSettings({ puzzleAutoNext: v })}
-            label="Auto-advance after a solve"
-          />
         ) : null}
 
         {mode === 'rated' && !puzzleId ? (
@@ -949,6 +1029,24 @@ function Trainer({
   );
 }
 
+/** Today's date, and how long until the next daily puzzle (at local midnight). */
+function DailyStat() {
+  const now = useNow(60_000);
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0);
+  const minutes = Math.max(1, Math.ceil((midnight.getTime() - now) / 60_000));
+  const hours = Math.floor(minutes / 60);
+  const left = hours > 0 ? `${hours} h ${minutes % 60} min` : `${minutes} min`;
+  return (
+    <Stat
+      value={new Intl.DateTimeFormat(siteConfig.locale, { day: 'numeric', month: 'short' }).format(
+        now,
+      )}
+      label={<span data-testid="daily-next">Daily puzzle · the next in {left}</span>}
+    />
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* About this puzzle: source, themes, bookmark                          */
 /* ------------------------------------------------------------------ */
@@ -956,13 +1054,19 @@ function PuzzleAbout({
   puzzle,
   fen,
   mode,
+  done,
   onRemoved,
 }: {
   puzzle: Puzzle;
   fen: string;
   mode: Mode;
+  /** Solved or failed: its themes no longer give the answer away. */
+  done: boolean;
   onRemoved?: () => void;
 }) {
+  /** The themes on request before the puzzle is done ("fork" says what to look for). */
+  const [themesAsked, setThemesAsked] = useState(false);
+  const showThemes = done || themesAsked;
   const bookmarked = useProgress((s) => puzzle.id in s.puzzleReviews);
   const bookmark = useProgress((s) => s.bookmarkPuzzle);
   const dismiss = useProgress((s) => s.dismissReview);
@@ -991,7 +1095,18 @@ function PuzzleAbout({
           ) : (
             <Badge tone="accent">Rating {puzzle.rating}</Badge>
           )}
-          {themes.map((t) => (
+          {!showThemes && themes.length > 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setThemesAsked(true)}
+              title="The themes say what to look for: they show by themselves once the puzzle is done"
+              data-testid="show-themes"
+            >
+              Show the themes
+            </Button>
+          ) : null}
+          {(showThemes ? themes : []).map((t) => (
             <Link
               key={t}
               to={`/puzzles/themes?theme=${encodeURIComponent(t)}`}

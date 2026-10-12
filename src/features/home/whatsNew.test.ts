@@ -93,6 +93,20 @@ describe('the highlights', () => {
     }
   });
 
+  it('give 0.30 the polish pass: the setup screens, the searchable lists and the hidden themes', () => {
+    const release = RELEASES[0];
+    expect(release?.version).toBe('0.30.0');
+    expect(release?.date).toBe('2026-10-12');
+    expect(release?.highlights.map((h) => h.title)).toEqual([
+      'A new game screen',
+      'Arcade set-ups',
+      'Searchable lists',
+      'Themes after the solve',
+      'Endgames in view',
+      'Reference',
+    ]);
+  });
+
   it('give 0.29 its most notable features, the quick search among them, and keep 0.28', () => {
     const release = RELEASES.find((r) => r.version === '0.29.0');
     expect(release?.date).toBe('2026-10-12');

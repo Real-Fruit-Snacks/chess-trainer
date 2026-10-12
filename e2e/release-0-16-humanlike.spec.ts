@@ -42,12 +42,13 @@ async function axe(page: Page) {
   return results.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) }));
 }
 
-const setupDialog = (page: Page) => page.getByRole('dialog', { name: 'New game' });
+/** The new game screen. */
+const setupDialog = (page: Page) => page.getByRole('region', { name: 'New game' });
 
-/** Chooses the human-like opponent in the setup dialog and downloads it. */
+/** Chooses the human-like opponent on the new game screen and downloads it. */
 async function downloadFromSetup(page: Page, rating: string) {
   const setup = setupDialog(page);
-  await setup.getByLabel('Opponent').selectOption('humanlike');
+  await setup.getByRole('radio', { name: 'Human-like (Maia)' }).check();
   await setup.getByLabel('Rating').selectOption(rating);
   const status = setup.getByTestId('human-download-status');
   await expect(status).toContainText('A one-time download of about 25 MB');
@@ -133,7 +134,7 @@ test.describe('the human-like opponent with the service worker', () => {
     await page.reload();
     await page.waitForLoadState('load');
     const setup = setupDialog(page);
-    await setup.getByLabel('Opponent').selectOption('humanlike');
+    await setup.getByRole('radio', { name: 'Human-like (Maia)' }).check();
     await expect(setup.getByTestId('human-download-status')).toContainText('On this device');
     await dismissToasts(page);
     await context.setOffline(browserName !== 'webkit');

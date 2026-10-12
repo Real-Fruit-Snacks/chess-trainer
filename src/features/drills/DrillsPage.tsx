@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router';
-import { Badge, LinkButton } from '@/components/ui';
+import { Badge, Icon, LinkButton } from '@/components/ui';
+import { ListNoMatch, ListSearch } from '@/components/list/ListSearch';
+import { matchesAllWords } from '@/lib/textMatch';
+import { useListParams } from '@/lib/useListParams';
 import { siteConfig } from '@/site.config';
 import { type DrillResult, useProgress } from '@/store/progress';
 import { Difficulty } from './Difficulty';
@@ -107,6 +110,15 @@ export default function DrillsPage() {
 
   const groups = DRILL_GROUPS;
   const ladder = buildEndgameLadder(drills);
+  // The search and the group are kept in the address, so Back from a drill returns to them.
+  const list = useListParams();
+  const query = list.get('q');
+  const groupFilter = DRILL_GROUPS.find((g) => g === list.get('group')) ?? '';
+  const rungsShown = ladder.rungs.filter(
+    ({ drill }) =>
+      (!groupFilter || drill.group === groupFilter) &&
+      matchesAllWords(query, drill.title, drill.description, drill.group),
+  );
 
   return (
     <div>
@@ -179,14 +191,16 @@ export default function DrillsPage() {
           >
             <span style={{ width: `${(ladder.done / ladder.total) * 100}%` }} />
           </div>
-          <div className="ladder__groups">
+          <ul className="ladder__groups" role="list" aria-label="Groups">
             {ladder.groups.map((g) => (
-              <span key={g.group} className="small muted">
-                {g.group} {g.done}/{g.total}
-              </span>
+              <li key={g.group}>
+                <Badge tone={g.done === g.total ? 'success' : 'neutral'}>
+                  {g.group} {g.done}/{g.total}
+                </Badge>
+              </li>
             ))}
-          </div>
-          <p className="small muted" style={{ margin: 0 }}>
+          </ul>
+          <p className="small muted ladder__about">
             Every drill is a rung, from the elementary mates up to Réti and Vancura; a rung is
             climbed the first time you complete it. Each position was checked with the engine, and
             you play it out against Stockfish at full strength.
@@ -194,50 +208,92 @@ export default function DrillsPage() {
         </div>
       </section>
 
-      {groups.map((group) => (
-        <section key={group} className="drills__section">
-          <h2>
-            {group}{' '}
-            <span className="small muted" style={{ fontWeight: 400 }}>
-              {ladder.groups.find((g) => g.group === group)?.done ?? 0}/
-              {ladder.groups.find((g) => g.group === group)?.total ?? 0}
-            </span>
-          </h2>
-          <div className="grid grid--cards">
-            {ladder.rungs
-              .filter((r) => r.drill.group === group)
-              .map(({ drill, rung, done }) => {
+      <ListSearch
+        value={query}
+        onChange={(q) => list.set('q', q)}
+        label="Find an endgame"
+        shown={rungsShown.length}
+        total={ladder.rungs.length}
+        noun={['endgame', 'endgames']}
+      >
+        <label className="sr-only" htmlFor="drill-group">
+          Group
+        </label>
+        <select
+          id="drill-group"
+          className="select list-search__select"
+          value={groupFilter}
+          onChange={(e) => list.set('group', e.target.value)}
+        >
+          <option value="">Every group</option>
+          {groups.map((group) => (
+            <option key={group} value={group}>
+              {group}
+            </option>
+          ))}
+        </select>
+      </ListSearch>
+      {rungsShown.length === 0 ? (
+        <ListNoMatch onClear={() => list.clear('q', 'group')}>
+          No endgame {groupFilter ? `in ${groupFilter} ` : ''}matches “{query}”.
+        </ListNoMatch>
+      ) : null}
+
+      {groups.map((group) => {
+        const rows = rungsShown.filter((r) => r.drill.group === group);
+        if (rows.length === 0) return null;
+        const counts = ladder.groups.find((g) => g.group === group);
+        return (
+          <section key={group} className="drills__section">
+            <h2>
+              {group}{' '}
+              <span className="small muted drills__count">
+                {counts?.done ?? 0}/{counts?.total ?? 0}
+              </span>
+            </h2>
+            {/* An index of rows, not cards: forty endgames read best as a list. */}
+            <ol className="endgame-index" role="list">
+              {rows.map(({ drill, rung, done }) => {
                 const result = drills[drill.id];
                 const best = bestLabel(result, 'endgame');
                 return (
-                  <Link
-                    key={drill.id}
-                    to={`/drills/endgame/${drill.id}`}
-                    className={`card card--interactive drill-card${done ? ' drill-card--done' : ''}`}
-                  >
-                    <span className="card__title">{drill.title}</span>
-                    <p className="small muted" style={{ margin: 0 }}>
-                      {drill.description}
-                    </p>
-                    <div className="card__foot">
-                      <span className="drill-card__meta">
-                        Rung {rung} · You play {drill.color}
-                        {result?.attempts
-                          ? ` · ${result.attempts} attempt${result.attempts === 1 ? '' : 's'}`
-                          : ''}
+                  <li key={drill.id}>
+                    <Link
+                      to={`/drills/endgame/${drill.id}`}
+                      className={`endgame-row${done ? ' endgame-row--done' : ''}`}
+                    >
+                      <span
+                        className={`endgame-row__mark${done ? ' is-done' : ''}`}
+                        aria-hidden="true"
+                      >
+                        <Icon name="check" size={14} />
                       </span>
-                      {best && result?.best ? (
-                        <Badge tone="success">{best}</Badge>
-                      ) : (
-                        <Difficulty level={drill.difficulty} max={4} />
-                      )}
-                    </div>
-                  </Link>
+                      <span className="endgame-row__text">
+                        <span className="endgame-row__title">{drill.title}</span>
+                        <span className="endgame-row__about small muted">{drill.description}</span>
+                        <span className="drill-card__meta">
+                          Rung {rung} · You play {drill.color}
+                          {result?.attempts
+                            ? ` · ${result.attempts} attempt${result.attempts === 1 ? '' : 's'}`
+                            : ''}
+                          {done ? ' · climbed' : ''}
+                        </span>
+                      </span>
+                      <span className="endgame-row__end">
+                        {best && result?.best ? (
+                          <Badge tone="success">{best}</Badge>
+                        ) : (
+                          <Difficulty level={drill.difficulty} max={4} />
+                        )}
+                      </span>
+                    </Link>
+                  </li>
                 );
               })}
-          </div>
-        </section>
-      ))}
+            </ol>
+          </section>
+        );
+      })}
     </div>
   );
 }

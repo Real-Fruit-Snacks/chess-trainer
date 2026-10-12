@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
+  EmptyState,
   Alert,
   Badge,
   Button,
@@ -666,7 +667,7 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
 
   return (
     <Card>
-      <div className="row row--between">
+      <div className="row row--between games__head">
         <h2 style={{ fontSize: '1.15rem', margin: 0 }}>Games ({list.length})</h2>
         {list.length > 0 ? (
           <div className="row">
@@ -787,9 +788,12 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
         </Alert>
       ) : null}
       {list.length === 0 ? (
-        <p className="small muted">
-          Nothing imported yet: fetch your games by username, or paste a PGN.
-        </p>
+        <EmptyState icon={<Icon name="games" size={32} />} title="No games yet">
+          <p className="small muted" style={{ margin: 0 }}>
+            Nothing imported yet: fetch your games by username, or paste a PGN. Each review turns
+            your mistakes into puzzles.
+          </p>
+        </EmptyState>
       ) : (
         // One row per game, wrapping inside the card: a table's last columns (the actions)
         // were cut off at the card's edge on every screen.

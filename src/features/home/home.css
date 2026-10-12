@@ -215,3 +215,16 @@
   padding-top: var(--space-3);
   border-top: 1px dashed var(--border);
 }
+
+/* The install and backup notices: spaced like the cards round them, and no room at all when
+   neither has anything to say. */
+.home__notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.home__notices:empty {
+  display: none;
+}

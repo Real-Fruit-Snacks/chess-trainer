@@ -4,7 +4,7 @@ import type { ClassicGame } from './games';
 export const CLASSIC_GAMES_2: readonly ClassicGame[] = [
   {
     id: 'lasker-thomas',
-    title: 'The king walk',
+    title: 'The king hunt',
     white: 'Edward Lasker',
     black: 'Sir George Thomas',
     event: 'London (casual)',

@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { formatDate } from '@/lib/dates';
 import type { RatingPoint } from '@/store/progress';
 import './progress.css';
+import { formatRating } from '@/lib/rating';
 
 /** The drawing's width before the chart has been measured (and where it cannot be). */
 const DEFAULT_WIDTH = 640;
@@ -102,7 +103,7 @@ export function RatingChart({ points, locale }: { points: RatingPoint[]; locale:
       <svg
         viewBox={`0 0 ${width} ${HEIGHT}`}
         role="img"
-        aria-label={`Puzzle rating over time, from ${first?.rating ?? ''} to ${last?.rating ?? ''}`}
+        aria-label={`Puzzle rating over time, from ${first ? formatRating(first.rating, locale) : ''} to ${last ? formatRating(last.rating, locale) : ''}`}
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
         onTouchStart={onMove}
@@ -130,7 +131,7 @@ export function RatingChart({ points, locale }: { points: RatingPoint[]; locale:
               textAnchor="end"
               className="ratingchart__tick"
             >
-              {g}
+              {formatRating(g, locale)}
             </text>
           </g>
         ))}
@@ -165,11 +166,13 @@ export function RatingChart({ points, locale }: { points: RatingPoint[]; locale:
       <figcaption className="ratingchart__tooltip" aria-live="polite">
         {active ? (
           <>
-            <strong>{active.point.rating}</strong> · {formatDate(active.point.at, locale)}
+            <strong>{formatRating(active.point.rating, locale)}</strong> ·{' '}
+            {formatDate(active.point.at, locale)}
           </>
         ) : (
           <span className="muted">
-            {points.length} rated puzzles · now <strong>{last?.rating}</strong>
+            {points.length} rated puzzles · now{' '}
+            <strong>{last ? formatRating(last.rating, locale) : ''}</strong>
           </span>
         )}
       </figcaption>

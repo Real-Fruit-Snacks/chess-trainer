@@ -95,20 +95,20 @@ test.describe('arcade hub', () => {
 });
 
 test.describe('odds ladder', () => {
-  test('the rungs are a readable list: name, results, badge and Play on one row each', async ({
+  test('the rungs are the setup’s choice: name, results and a badge, one card each', async ({
     page,
   }) => {
     await seed(page, {
       oddsLadder: { rung: 1, best: 1, results: { 0: { wins: 1, losses: 2, draws: 1 } } },
     });
     await page.goto('/arcade/odds-ladder');
-    const rungs = page.getByTestId('odds-rungs').locator('.ladder__rung');
+    const rungs = page.getByRole('group', { name: 'Rung' }).locator('.setup__choice');
     await expect(rungs).toHaveCount(6);
     let bottom = 0;
     for (let i = 0; i < 6; i++) {
       const box = await rungs.nth(i).boundingBox();
       if (!box) throw new Error(`rung ${i} is not visible`);
-      // Not the 30 px boxes of 0.11: a full-width row, stacked under the one before.
+      // A full-width row, stacked under the one before.
       expect(box.width).toBeGreaterThan(200);
       expect(box.height).toBeGreaterThan(30);
       expect(box.y).toBeGreaterThanOrEqual(bottom - 1);
@@ -126,8 +126,12 @@ test.describe('odds ladder', () => {
     expect(badge.y + badge.height).toBeLessThanOrEqual(row.y + row.height + 1);
     expect(badge.x + badge.width).toBeLessThanOrEqual(row.x + row.width + 1);
     await expect(current.locator('.badge')).toHaveText('Current');
-    await expect(page.getByRole('button', { name: 'Play Rook odds' })).toBeVisible();
+    // The current rung is chosen; a climbed one can be chosen to replay; a locked one cannot.
+    await expect(page.getByRole('radio', { name: 'Rook odds' })).toBeChecked();
+    await page.getByRole('radio', { name: 'Queen odds' }).check();
+    await expect(page.locator('.play__boardcol cg-board piece.black.queen')).toHaveCount(0);
     await expect(page.getByTestId('odds-rung-2')).toContainText('Locked');
+    await expect(page.getByRole('radio', { name: 'Knight odds' })).toBeDisabled();
   });
 });
 

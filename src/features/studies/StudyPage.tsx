@@ -74,7 +74,7 @@ function StudyView({ study }: { study: Study }) {
       </div>
 
       <div className="trainer">
-        <div className="trainer__board" style={{ position: 'relative' }}>
+        <div className="trainer__board">
           <Board
             fen={state.fen}
             orientation={state.solver}

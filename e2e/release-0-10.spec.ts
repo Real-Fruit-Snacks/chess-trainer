@@ -44,7 +44,8 @@ test.describe('notation', () => {
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
-    expect(overflow).toBe(0);
+    // (Less than none where the page keeps room for its scroll bar.)
+    expect(overflow).toBeLessThanOrEqual(0);
 
     await page.goto('/settings');
     await page

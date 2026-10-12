@@ -10,6 +10,7 @@ import { sortedGames, type StoredGame, useGames } from '@/store/games';
 import { nextMoves, type PositionHit } from './positionIndex';
 import { usePositionIndex } from './usePositionIndex';
 import './in-your-games.css';
+import { formatCount } from '@/lib/format';
 
 /** Games listed before "Show all". */
 const SHOWN = 5;
@@ -71,7 +72,7 @@ export function InYourGamesCard({
       ) : !index ? (
         <div className="stack-sm" style={{ marginTop: 6 }}>
           <p className="small muted" style={{ margin: 0 }} role="status">
-            Looking through your {games.length.toLocaleString('en-GB')} game
+            Looking through your {formatCount(games.length, siteConfig.locale)} game
             {games.length === 1 ? '' : 's'}…
           </p>
           {progress && progress.total > 0 ? (
@@ -85,15 +86,15 @@ export function InYourGamesCard({
         </div>
       ) : found.length === 0 ? (
         <p className="small muted" style={{ margin: '6px 0 0' }} data-testid="in-your-games-none">
-          None of your {index.games.toLocaleString('en-GB')} game{index.games === 1 ? '' : 's'}{' '}
-          reached this position.
+          None of your {formatCount(index.games, siteConfig.locale)} game
+          {index.games === 1 ? '' : 's'} reached this position.
         </p>
       ) : (
         <>
           <p className="small" style={{ margin: '6px 0 0' }} data-testid="in-your-games-count">
             {found.length === 1
               ? 'One of your games reached this position.'
-              : `${found.length.toLocaleString('en-GB')} of your games reached this position.`}
+              : `${formatCount(found.length, siteConfig.locale)} of your games reached this position.`}
           </p>
           <ul role="list" className="ingames__tally" aria-label="Played next">
             {tally.map(({ san, count }) => (
@@ -148,7 +149,7 @@ export function InYourGamesCard({
           </ul>
           {found.length > SHOWN ? (
             <Button size="sm" variant="ghost" onClick={() => setShowAll((v) => !v)}>
-              {showAll ? 'Show fewer' : `Show all ${found.length.toLocaleString('en-GB')}`}
+              {showAll ? 'Show fewer' : `Show all ${formatCount(found.length, siteConfig.locale)}`}
             </Button>
           ) : null}
         </>

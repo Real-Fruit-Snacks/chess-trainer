@@ -179,7 +179,7 @@ export default function CoordinatesDrill() {
       </div>
 
       <div className="trainer trainer--lead">
-        <div className="trainer__board" style={{ position: 'relative' }}>
+        <div className="trainer__board">
           <ClickBoard
             pieces={withPieces ? START_PIECES : undefined}
             orientation={orientation}
@@ -229,14 +229,21 @@ export default function CoordinatesDrill() {
             aria-live="assertive"
             data-testid="coordinates-prompt"
           >
-            {target ?? NONE}
+            {target ?? (
+              <span className="drill__prompt-ready">
+                {finished ? 'Time!' : 'Press Start: a square name appears here'}
+              </span>
+            )}
           </div>
-          <div
-            className={`drill__timer${leftMs < 5000 && running ? ' drill__timer--low' : ''}`}
-            aria-hidden="true"
-          >
-            <span style={{ width: `${timerPct}%` }} />
-          </div>
+          {/* The clock runs from Start: before it, no full bar that looks like time spent. */}
+          {running || finished ? (
+            <div
+              className={`drill__timer${leftMs < 5000 && running ? ' drill__timer--low' : ''}`}
+              aria-hidden="true"
+            >
+              <span style={{ width: `${timerPct}%` }} />
+            </div>
+          ) : null}
           <div className="drill__hud">
             <Stat value={score} label="Correct" />
             <Stat value={mistakes} label="Mistakes" />
@@ -277,6 +284,7 @@ export default function CoordinatesDrill() {
           <Card>
             <div className="stack">
               <Segmented
+                block
                 ariaLabel="Board side"
                 value={side}
                 onChange={(v) => {

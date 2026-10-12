@@ -130,8 +130,8 @@ test.describe('Play', () => {
       .getByRole('link', { name: 'Pass and play' })
       .click();
     await expect(page).toHaveURL(/\/play\/computer$/);
-    const setup = page.getByRole('dialog', { name: 'New game' });
-    await expect(setup.getByLabel('Opponent')).toHaveValue('human');
+    const setup = page.getByRole('region', { name: 'New game' });
+    await expect(setup.getByRole('radio', { name: 'Two players' })).toBeChecked();
 
     // A link to a position, from before Play was a page of its own.
     await page.goto(`/play?fen=${encodeURIComponent('4k3/8/8/8/8/8/8/3QK3 w - - 0 1')}`);

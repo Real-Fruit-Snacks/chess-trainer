@@ -42,7 +42,7 @@ export function RushTrainer() {
 
   return (
     <div className="trainer trainer--lead">
-      <div className="trainer__board" style={{ position: 'relative' }}>
+      <div className="trainer__board">
         <Board
           fen={trainer.position.fen}
           orientation={trainer.solverColor}

@@ -36,8 +36,14 @@ import {
 } from './fortress';
 import { describeGame, fortressTier } from './positions';
 import { useFortress } from './useFortress';
+import { SetupScreen } from '@/components/setup/SetupScreen';
+import { useFocusBoardAfterSetup } from '@/components/setup/useFocusBoardAfterSetup';
+import { getLevel } from '@/engine/levels';
 import '@/features/play/play.css';
 import './arcade.css';
+
+/** No pieces: the board before the first position of a run. */
+const EMPTY_BOARD = '8/8/8/8/8/8/8/8 w - - 0 1';
 
 const OUTCOME_TEXT: Record<NonNullable<ReturnType<typeof useFortress>['outcome']>, string> = {
   survived: `Held for ${HOLD_MOVES} moves. The fortress stands.`,
@@ -66,6 +72,10 @@ export default function FortressPage() {
 
   const { position } = fortress.game;
   const { phase, current } = fortress;
+  // The setup screen: before the first run, and after "New game".
+  const setupShown = phase === 'idle' || settingUp;
+  const boardColRef = useRef<HTMLDivElement>(null);
+  useFocusBoardAfterSetup(setupShown, boardColRef);
   useArcadeFocus(phase !== 'idle' && phase !== 'over');
 
   const playerTurn =
@@ -94,83 +104,72 @@ export default function FortressPage() {
   }, [phase, fortress.held, fortress.level.id, fortress.level.name, recordArcade]);
 
   const tier = current ? fortressTier(current) : null;
-  const engineName = `Stockfish · ${fortress.level.name}`;
+  // While setting up, the level chosen; during a run, the level it is played at.
+  const engineName = `Stockfish · ${(setupShown ? getLevel(levelId) : fortress.level).name}`;
   const opponentColor = fortress.playerColor === 'white' ? 'black' : 'white';
 
-  const setupCard = (
-    <Card className="arcade__summary">
-      <h2>Fortress</h2>
-      <p className="muted">
-        You start clearly worse. Hold the position for {HOLD_MOVES} moves — or reach a draw — and it
-        counts. If the evaluation drops too far, it falls. {LIVES} lives, positions get harder as
-        you go. {fortress.pool.length} positions in the pool.
+  const setupScreen = (
+    <SetupScreen
+      intro={`You start clearly worse. Hold the position for ${HOLD_MOVES} moves — or reach a draw — and it counts; if the evaluation drops too far, it falls. ${LIVES} lives, and the positions get harder as you go.`}
+      onStart={begin}
+      startDisabled={fortress.engineStatus === 'error' || fortress.pool.length === 0}
+      startTestId="fortress-start"
+      focusOnMount={settingUp}
+      back={settingUp ? { label: 'Back to the board', onClick: () => setSettingUp(false) } : null}
+    >
+      <EngineLevelField value={levelId} onChange={setLevelId} testId="fortress-level" describe />
+      <p className="small muted setup__note">
+        {FORTRESS_SCORING}
+        {best ? ` Your best: ${best.detail}.` : ''}
       </p>
-      <div className="stack" style={{ textAlign: 'left' }}>
-        <EngineLevelField value={levelId} onChange={setLevelId} testId="fortress-level" />
-      </div>
-      {best ? <p className="small muted">Best: {best.detail}</p> : null}
-      <div className="row" style={{ marginTop: 12 }}>
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={begin}
-          disabled={fortress.engineStatus === 'error' || fortress.pool.length === 0}
-          data-testid="fortress-start"
-        >
-          Start
-        </Button>
-      </div>
-    </Card>
+    </SetupScreen>
   );
 
-  const overlay =
-    phase === 'idle' || settingUp ? (
-      setupCard
-    ) : phase === 'held' || phase === 'fallen' ? (
-      <Card className="arcade__summary" data-testid="fortress-outcome">
-        <h2>{phase === 'held' ? 'Held!' : 'Fallen'}</h2>
-        <p className="muted">
-          {fortress.outcome ? OUTCOME_TEXT[fortress.outcome] : ''}{' '}
-          {phase === 'fallen'
-            ? `${fortress.lives} ${fortress.lives === 1 ? 'life' : 'lives'} left.`
-            : `${fortress.held} held so far.`}
-        </p>
-        <div className="row arcade__summary-actions">
-          <Button variant="primary" onClick={fortress.nextPosition} data-testid="fortress-next">
-            Next position
-          </Button>
-          <AnalyzeGameButton pgn={fortress.pgn} orientation={fortress.playerColor} />
-        </div>
-      </Card>
-    ) : phase === 'over' ? (
-      <Card className="arcade__summary" data-testid="fortress-result">
-        <h2>Run over</h2>
-        <div className="arcade__scoreline">
-          <Stat value={fortress.held} label="Positions held" />
-          <Stat value={lastScore} label="Score" />
-          <Stat value={best ? Math.max(best.best, lastScore) : lastScore} label="Best" />
-        </div>
-        <p className="muted">
-          {fortress.outcome ? OUTCOME_TEXT[fortress.outcome] : ''} Against Level {fortress.level.id}{' '}
-          · {fortress.level.name}.
-        </p>
-        <div className="row arcade__summary-actions">
-          <Button
-            variant="primary"
-            onClick={begin}
-            title="A new run at the same engine level"
-            data-testid="fortress-again"
-          >
-            Play again
-          </Button>
-          <Button onClick={() => setSettingUp(true)} data-testid="fortress-new">
-            New game
-          </Button>
-          <AnalyzeGameButton pgn={fortress.pgn} orientation={fortress.playerColor} />
-          <LinkButton to="/arcade">Arcade</LinkButton>
-        </div>
-      </Card>
-    ) : null;
+  const overlay = setupShown ? null : phase === 'held' || phase === 'fallen' ? (
+    <Card className="arcade__summary" data-testid="fortress-outcome">
+      <h2>{phase === 'held' ? 'Held!' : 'Fallen'}</h2>
+      <p className="muted">
+        {fortress.outcome ? OUTCOME_TEXT[fortress.outcome] : ''}{' '}
+        {phase === 'fallen'
+          ? `${fortress.lives} ${fortress.lives === 1 ? 'life' : 'lives'} left.`
+          : `${fortress.held} held so far.`}
+      </p>
+      <div className="row arcade__summary-actions">
+        <Button variant="primary" onClick={fortress.nextPosition} data-testid="fortress-next">
+          Next position
+        </Button>
+        <AnalyzeGameButton pgn={fortress.pgn} orientation={fortress.playerColor} />
+      </div>
+    </Card>
+  ) : phase === 'over' ? (
+    <Card className="arcade__summary" data-testid="fortress-result">
+      <h2>Run over</h2>
+      <div className="arcade__scoreline">
+        <Stat value={fortress.held} label="Positions held" />
+        <Stat value={lastScore} label="Score" />
+        <Stat value={best ? Math.max(best.best, lastScore) : lastScore} label="Best" />
+      </div>
+      <p className="muted">
+        {fortress.outcome ? OUTCOME_TEXT[fortress.outcome] : ''} Against Level {fortress.level.id} ·{' '}
+        {fortress.level.name}.
+      </p>
+      <div className="row arcade__summary-actions">
+        <Button
+          variant="primary"
+          onClick={begin}
+          title="A new run at the same engine level"
+          data-testid="fortress-again"
+        >
+          Play again
+        </Button>
+        <Button onClick={() => setSettingUp(true)} data-testid="fortress-new">
+          New game
+        </Button>
+        <AnalyzeGameButton pgn={fortress.pgn} orientation={fortress.playerColor} />
+        <LinkButton to="/arcade">Arcade</LinkButton>
+      </div>
+    </Card>
+  ) : null;
 
   return (
     <div>
@@ -194,8 +193,8 @@ export default function FortressPage() {
         </Alert>
       ) : null}
 
-      <div className="trainer">
-        <div className="play__boardcol">
+      <div className={setupShown ? 'trainer trainer--setup' : 'trainer'}>
+        <div className="play__boardcol" ref={boardColRef}>
           <PlayerBar
             name={engineName}
             color={opponentColor}
@@ -203,18 +202,28 @@ export default function FortressPage() {
             thinking={fortress.busy === 'opponent'}
             showMaterial={false}
           />
-          <div className="trainer__board" style={{ position: 'relative' }}>
-            <Board
-              fen={position.fen}
-              orientation={fortress.playerColor}
-              turnColor={position.turn}
-              movableColor={playerTurn ? fortress.playerColor : undefined}
-              dests={playerTurn ? position.dests : new Map()}
-              lastMove={position.lastMove}
-              check={position.inCheck}
-              onMove={(from, to) => fortress.playerMove(from, to)}
-              ariaLabel={`Fortress board, ${position.turn} to move`}
-            />
+          <div className="trainer__board">
+            {setupShown ? (
+              // The positions are drawn as the run goes: the board waits, empty, until then.
+              <Board
+                fen={EMPTY_BOARD}
+                orientation="white"
+                viewOnly
+                ariaLabel="The board, empty until the first position is set up"
+              />
+            ) : (
+              <Board
+                fen={position.fen}
+                orientation={fortress.playerColor}
+                turnColor={position.turn}
+                movableColor={playerTurn ? fortress.playerColor : undefined}
+                dests={playerTurn ? position.dests : new Map()}
+                lastMove={position.lastMove}
+                check={position.inCheck}
+                onMove={(from, to) => fortress.playerMove(from, to)}
+                ariaLabel={`Fortress board, ${position.turn} to move`}
+              />
+            )}
             {fortress.game.pendingPromotion ? (
               <PromotionPicker
                 color={fortress.game.pendingPromotion.color}
@@ -233,84 +242,89 @@ export default function FortressPage() {
         </div>
 
         <aside className="trainer__panel stack">
-          <Card>
-            <div className="row row--between">
-              <strong>{current ? `Position ${fortress.held + 1}` : 'Fortress'}</strong>
-              <span className="row">
-                {tier ? <Badge>{describeTier(tier)}</Badge> : null}
-                {fortress.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
-              </span>
-            </div>
-            {current ? (
-              <p className="small muted" style={{ margin: '4px 0 0' }}>
-                {describeGame(current)}. You defend as {fortress.playerColor}.
-              </p>
-            ) : null}
-            <div
-              className={`arcade__health ${barClass}`}
-              role="progressbar"
-              aria-label="Health"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(bar * 100)}
-              aria-valuetext={`${Math.round(bar * 100)}%, evaluation ${evaluation}`}
-              data-testid="fortress-health"
-            >
-              <span style={{ width: `${bar * 100}%` }} />
-            </div>
-            <div className="arcade__scoreline arcade__scoreline--panel">
-              <Stat value={`${fortress.movesMade}/${HOLD_MOVES}`} label="Moves held" />
-              <Stat
-                value={<span data-testid="fortress-eval">{evaluation}</span>}
-                label="Evaluation"
-              />
-              <Stat value={fortress.lives} label="Lives" />
-            </div>
-            <p
-              className={`arcade__status${phase === 'playing' ? '' : ' arcade__status--idle'}`}
-              role="status"
-              data-testid="fortress-status"
-            >
-              {phase === 'playing'
-                ? fortress.busy === 'opponent'
-                  ? 'The attacker is thinking…'
-                  : fortress.busy === 'grading'
-                    ? 'Measuring the damage…'
-                    : 'Your move. Hold on.'
-                : ''}
-            </p>
-            <p className="small muted" style={{ margin: '0 0 8px' }}>
-              {FORTRESS_SCORING}
-            </p>
-            <div className="row arcade__game-actions">
-              {phase === 'playing' ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setConfirmGiveUp(true)}
-                  data-testid="fortress-give-up"
+          {setupShown ? (
+            setupScreen
+          ) : (
+            <>
+              <Card>
+                <div className="row row--between">
+                  <strong>{current ? `Position ${fortress.held + 1}` : 'Fortress'}</strong>
+                  <span className="row">
+                    {tier ? <Badge>{describeTier(tier)}</Badge> : null}
+                    {fortress.engineStatus === 'loading' ? (
+                      <Spinner label="Loading engine" />
+                    ) : null}
+                  </span>
+                </div>
+                {current ? (
+                  <p className="small muted" style={{ margin: '4px 0 0' }}>
+                    {describeGame(current)}. You defend as {fortress.playerColor}.
+                  </p>
+                ) : null}
+                <div
+                  className={`arcade__health ${barClass}`}
+                  role="progressbar"
+                  aria-label="Health"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(bar * 100)}
+                  aria-valuetext={`${Math.round(bar * 100)}%, evaluation ${evaluation}`}
+                  data-testid="fortress-health"
                 >
-                  Give up this position
-                </Button>
-              ) : null}
-              <FocusToggle />
-            </div>
-          </Card>
-          <Card>
-            <MoveList
-              moves={position.history}
-              currentPly={position.history.length}
-              startsWithBlack={position.startFen.split(' ')[1] === 'b'}
-              startMoveNumber={Number(position.startFen.split(' ')[5] ?? 1)}
-            />
-            <div className="row arcade__game-actions">
-              <GameExportButtons
-                pgn={fortress.pgn}
-                orientation={fortress.playerColor}
-                disabled={position.history.length === 0}
-              />
-            </div>
-          </Card>
+                  <span style={{ width: `${bar * 100}%` }} />
+                </div>
+                <div className="arcade__scoreline arcade__scoreline--panel">
+                  <Stat value={`${fortress.movesMade}/${HOLD_MOVES}`} label="Moves held" />
+                  <Stat
+                    value={<span data-testid="fortress-eval">{evaluation}</span>}
+                    label="Evaluation"
+                  />
+                  <Stat value={fortress.lives} label="Lives" />
+                </div>
+                <p
+                  className={`arcade__status${phase === 'playing' ? '' : ' arcade__status--idle'}`}
+                  role="status"
+                  data-testid="fortress-status"
+                >
+                  {phase === 'playing'
+                    ? fortress.busy === 'opponent'
+                      ? 'The attacker is thinking…'
+                      : fortress.busy === 'grading'
+                        ? 'Measuring the damage…'
+                        : 'Your move. Hold on.'
+                    : ''}
+                </p>
+                <div className="row arcade__game-actions">
+                  {phase === 'playing' ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setConfirmGiveUp(true)}
+                      data-testid="fortress-give-up"
+                    >
+                      Give up this position
+                    </Button>
+                  ) : null}
+                  <FocusToggle />
+                </div>
+              </Card>
+              <Card>
+                <MoveList
+                  moves={position.history}
+                  currentPly={position.history.length}
+                  startsWithBlack={position.startFen.split(' ')[1] === 'b'}
+                  startMoveNumber={Number(position.startFen.split(' ')[5] ?? 1)}
+                />
+                <div className="row arcade__game-actions">
+                  <GameExportButtons
+                    pgn={fortress.pgn}
+                    orientation={fortress.playerColor}
+                    disabled={position.history.length === 0}
+                  />
+                </div>
+              </Card>
+            </>
+          )}
         </aside>
       </div>
 

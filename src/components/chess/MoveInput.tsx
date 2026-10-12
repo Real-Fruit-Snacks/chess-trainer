@@ -93,7 +93,7 @@ export function MoveInput({
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${errorId} ${hintId}` : hintId}
       />
-      <Button type="submit" size="sm" disabled={disabled || !value.trim()}>
+      <Button type="submit" disabled={disabled || !value.trim()}>
         Play
       </Button>
       <span id={hintId} className="sr-only">

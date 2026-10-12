@@ -37,6 +37,48 @@ export interface Release {
 /** Newest first. */
 export const RELEASES: readonly Release[] = [
   {
+    version: '0.30.0',
+    date: '2026-10-12',
+    highlights: [
+      {
+        icon: 'play',
+        title: 'A new game screen',
+        text: 'Set up a game against the computer in the page, with the board as it will start beside it.',
+        to: '/play',
+      },
+      {
+        icon: 'gamepad',
+        title: 'Arcade set-ups',
+        text: 'Every arcade game starts from the same screen as Play, its choices on cards and Start in reach.',
+        to: '/arcade',
+      },
+      {
+        icon: 'search',
+        title: 'Searchable lists',
+        text: 'Find a lesson, classic game, puzzle theme, opening or endgame drill by typing a few words.',
+        to: '/learn',
+      },
+      {
+        icon: 'eye-off',
+        title: 'Themes after the solve',
+        text: 'A puzzle’s themes stay hidden while you solve it, so they no longer say what to look for.',
+        to: '/puzzles',
+      },
+      {
+        icon: 'drills',
+        title: 'Endgames in view',
+        text: 'An endgame drill shows its position and its task beside the board before you start.',
+        to: '/drills',
+      },
+      {
+        icon: 'reference',
+        title: 'Reference',
+        text: 'The sections follow you down the page, and the glossary and questions read as one card each.',
+        to: '/reference',
+      },
+    ],
+  },
+  {
     version: '0.29.0',
     date: '2026-10-12',
     highlights: [

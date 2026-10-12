@@ -6,6 +6,7 @@ import { usePlayVsEngine } from '@/features/play/usePlayVsEngine';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
+import { SetupScreen } from '@/components/setup/SetupScreen';
 import { AnalyzeGameButton, EngineLevelField, PlayOnlineLink } from './arcadeControls';
 import { useArcadeFocus } from './arcadeGame';
 import {
@@ -41,6 +42,8 @@ export default function ArmyDraftPage() {
   const [engineArmy, setEngineArmy] = useState<Army>(() => randomArmy(DEFAULT_BUDGET));
   const [levelId, setLevelId] = useState(settings.playLevel);
   const [drafting, setDrafting] = useState(true);
+  /** "New game" after a battle (not the first draft): the screen takes the focus then. */
+  const [reopened, setReopened] = useState(false);
   /** The last change to the army, read out with the new total (the stepper is silent otherwise). */
   const [budgetNews, setBudgetNews] = useState('');
   const recordedRef = useRef(false);
@@ -111,6 +114,7 @@ export default function ArmyDraftPage() {
   const over = play.gameOver;
 
   const backToDraft = () => {
+    setReopened(true);
     setDrafting(true);
     setEngineArmy(randomArmy(budget));
   };
@@ -130,72 +134,61 @@ export default function ArmyDraftPage() {
             </p>
           </div>
           <aside className="trainer__panel stack">
-            <Card>
-              <ArmyShop
-                army={army}
-                budget={budget}
-                news={budgetNews}
-                onChange={(next, news) => {
-                  setArmy(next);
-                  setBudgetNews(news);
-                }}
-              />
-            </Card>
-            <Card>
-              <div className="stack">
-                <Field label="Budget">
-                  {(id) => (
-                    <Select
-                      id={id}
-                      value={budget}
-                      onChange={(e) => changeBudget(Number(e.target.value))}
-                      data-testid="army-budget-select"
-                    >
-                      {BUDGETS.map((b) => (
-                        <option key={b} value={b}>
-                          {b} points{b === 39 ? ' (a full set)' : ''}
-                        </option>
-                      ))}
-                    </Select>
-                  )}
-                </Field>
-                <Field label="The engine’s army">
-                  {(id) => (
-                    <Select
-                      id={id}
-                      value={engineArmyMode}
-                      onChange={(e) => setEngineArmyMode(e.target.value as EngineArmy)}
-                    >
-                      <option value="random">Random draft, same budget</option>
-                      <option value="mirror">Same army as yours</option>
-                    </Select>
-                  )}
-                </Field>
-                <EngineLevelField
-                  value={levelId}
-                  onChange={setLevelId}
-                  testId="army-level"
-                  describe
-                />
-                <div className="row">
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    onClick={() => begin()}
-                    disabled={problem !== null || play.engineStatus === 'error'}
-                    data-testid="army-start"
+            <SetupScreen
+              intro="Spend the budget on your army; the engine drafts its own. Kings are free, and nobody castles."
+              onStart={() => begin()}
+              startDisabled={problem !== null || play.engineStatus === 'error'}
+              startTestId="army-start"
+              focusOnMount={reopened}
+            >
+              <Field label="Budget">
+                {(id) => (
+                  <Select
+                    id={id}
+                    value={budget}
+                    onChange={(e) => changeBudget(Number(e.target.value))}
+                    data-testid="army-budget-select"
                   >
-                    Start the battle
-                  </Button>
-                  {play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
-                </div>
-                {best ? (
-                  <p className="small muted" style={{ margin: 0 }}>
-                    Best: {best.detail}
-                  </p>
-                ) : null}
+                    {BUDGETS.map((b) => (
+                      <option key={b} value={b}>
+                        {b} points{b === 39 ? ' (a full set)' : ''}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <div>
+                <ArmyShop
+                  army={army}
+                  budget={budget}
+                  news={budgetNews}
+                  onChange={(next, news) => {
+                    setArmy(next);
+                    setBudgetNews(news);
+                  }}
+                />
               </div>
-            </Card>
+              <Field label="The engine’s army">
+                {(id) => (
+                  <Select
+                    id={id}
+                    value={engineArmyMode}
+                    onChange={(e) => setEngineArmyMode(e.target.value as EngineArmy)}
+                  >
+                    <option value="random">Random draft, same budget</option>
+                    <option value="mirror">Same army as yours</option>
+                  </Select>
+                )}
+              </Field>
+              <EngineLevelField
+                value={levelId}
+                onChange={setLevelId}
+                testId="army-level"
+                describe
+              />
+              {best ? <p className="small muted setup__note">Your best: {best.detail}.</p> : null}
+              {play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
+            </SetupScreen>
           </aside>
         </div>
       </div>

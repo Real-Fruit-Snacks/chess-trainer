@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from 'react';
-import { Link } from 'react-router';
-import { Badge, LinkButton, ProgressBar } from '@/components/ui';
+import { Link, useSearchParams } from 'react-router';
+import { Badge, LinkButton, ProgressBar, Segmented, Switch } from '@/components/ui';
+import { ListNoMatch, ListSearch } from '@/components/list/ListSearch';
+import { matchesAllWords } from '@/lib/textMatch';
 import { dueReviews } from '@/lib/puzzleReview';
 import { useNow } from '@/lib/useNow';
 import { siteConfig } from '@/site.config';
@@ -15,8 +17,35 @@ import './learn.css';
 
 const LEVELS: LessonLevel[] = ['beginner', 'intermediate', 'advanced'];
 
+type LevelFilter = LessonLevel | 'all';
+const isLevel = (value: string | null): value is LessonLevel =>
+  LEVELS.includes(value as LessonLevel);
+
 export default function LearnPage() {
   const progress = useProgress((s) => s.lessons);
+  // The search, the level and "hide finished" live in the address, so Back returns to them.
+  const [params, setParams] = useSearchParams();
+  const query = params.get('q') ?? '';
+  const levelParam = params.get('level');
+  const level: LevelFilter = isLevel(levelParam) ? levelParam : 'all';
+  const hideDone = params.get('hide') === 'done';
+  const setParam = (key: string, value: string | null) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  const shown = LESSON_META.filter(
+    (l) =>
+      (level === 'all' || l.level === level) &&
+      !(hideDone && progress[l.id]?.completedAt) &&
+      matchesAllWords(query, l.title, l.summary, l.category),
+  );
+  const filtered = shown.length !== LESSON_META.length;
 
   useEffect(() => {
     document.title = `Learn · ${siteConfig.name}`;
@@ -70,62 +99,110 @@ export default function LearnPage() {
 
       <CoursesSection />
 
-      {LEVELS.map((level) => {
-        const meta = LEVEL_LABELS[level];
-        const list = LESSON_META.filter((l) => l.level === level);
-        return (
-          <section key={level} className="learn__level" aria-labelledby={`level-${level}`}>
-            <div className="learn__level-header">
-              <h2 id={`level-${level}`}>{meta.title}</h2>
-              <Badge>{meta.ratingHint}</Badge>
-            </div>
-            <p className="muted">{meta.blurb}</p>
-            <ol className="learn__grid" role="list">
-              {list.map((lesson, index) => {
-                const state = progress[lesson.id];
-                const done = countKeysDone(lesson.stepKeys, state?.stepsDone);
-                const total = lesson.steps;
-                const status = state?.completedAt ? 'done' : done > 0 ? 'started' : 'new';
-                return (
-                  <li key={lesson.id} className="lesson-card__item">
-                    <Link
-                      to={`/learn/${lesson.id}`}
-                      className={`lesson-card lesson-card--${status}`}
-                    >
-                      <div className="lesson-card__top">
-                        <span className="lesson-card__index">{index + 1}</span>
-                        <span className="lesson-card__category">{lesson.category}</span>
-                        <span className="lesson-card__time">{lesson.minutes} min</span>
-                      </div>
-                      <h3 className="lesson-card__title">{lesson.title}</h3>
-                      <p className="lesson-card__summary">{lesson.summary}</p>
-                      <div className="lesson-card__footer">
-                        {status === 'done' ? (
-                          <Badge tone="success">
-                            {state?.marked ? 'Marked done' : 'Completed'}
-                          </Badge>
-                        ) : status === 'started' ? (
-                          <Badge tone="accent">
-                            {done}/{total} steps
-                          </Badge>
-                        ) : (
-                          <Badge>{total} steps</Badge>
-                        )}
-                      </div>
-                    </Link>
-                    {/* Beside the link, not inside it: a button cannot sit in a link. */}
-                    <LessonCheck
-                      lessonId={lesson.id}
-                      title={lesson.title}
-                      done={status === 'done'}
-                    />
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-        );
-      })}
+      <section className="learn__lessons" aria-labelledby="lessons-title">
+        <h2 id="lessons-title" className="learn__lessons-title">
+          All lessons
+        </h2>
+        <ListSearch
+          value={query}
+          onChange={(q) => setParam('q', q || null)}
+          label="Find a lesson"
+          shown={shown.length}
+          total={LESSON_META.length}
+          noun={['lesson', 'lessons']}
+          testId="lesson-search"
+        >
+          <Segmented<LevelFilter>
+            ariaLabel="Level"
+            value={level}
+            onChange={(next) => setParam('level', next === 'all' ? null : next)}
+            options={[
+              { value: 'all', label: 'All' },
+              ...LEVELS.map((l) => ({ value: l, label: LEVEL_LABELS[l].title })),
+            ]}
+          />
+          <Switch
+            checked={hideDone}
+            onChange={(next) => setParam('hide', next ? 'done' : null)}
+            label="Hide finished"
+          />
+        </ListSearch>
+
+        {shown.length === 0 ? (
+          <ListNoMatch onClear={() => setParams({}, { replace: true, preventScrollReset: true })}>
+            No lesson matches{query ? ` “${query}”` : ''}
+            {level !== 'all' ? ` in ${LEVEL_LABELS[level].title}` : ''}
+            {hideDone ? ' among the ones you have not finished' : ''}.
+          </ListNoMatch>
+        ) : null}
+
+        {LEVELS.map((lessonLevel) => {
+          const meta = LEVEL_LABELS[lessonLevel];
+          const all = LESSON_META.filter((l) => l.level === lessonLevel);
+          const list = shown.filter((l) => l.level === lessonLevel);
+          if (list.length === 0) return null;
+          return (
+            <section
+              key={lessonLevel}
+              className="learn__level"
+              aria-labelledby={`level-${lessonLevel}`}
+            >
+              <div className="learn__level-header">
+                <h3 id={`level-${lessonLevel}`}>{meta.title}</h3>
+                <Badge>{meta.ratingHint}</Badge>
+                <span className="small muted learn__level-count">
+                  {filtered ? `${list.length} of ${all.length}` : `${all.length} lessons`}
+                </span>
+              </div>
+              {filtered ? null : <p className="muted learn__level-blurb">{meta.blurb}</p>}
+              <ol className="learn__grid" role="list">
+                {list.map((lesson) => {
+                  const index = all.indexOf(lesson);
+                  const state = progress[lesson.id];
+                  const done = countKeysDone(lesson.stepKeys, state?.stepsDone);
+                  const total = lesson.steps;
+                  const status = state?.completedAt ? 'done' : done > 0 ? 'started' : 'new';
+                  return (
+                    <li key={lesson.id} className="lesson-card__item">
+                      <Link
+                        to={`/learn/${lesson.id}`}
+                        className={`lesson-card lesson-card--${status}`}
+                      >
+                        <div className="lesson-card__top">
+                          <span className="lesson-card__index">{index + 1}</span>
+                          <span className="lesson-card__category">{lesson.category}</span>
+                          <span className="lesson-card__time">{lesson.minutes} min</span>
+                        </div>
+                        <h4 className="lesson-card__title">{lesson.title}</h4>
+                        <p className="lesson-card__summary">{lesson.summary}</p>
+                        <div className="lesson-card__footer">
+                          {status === 'done' ? (
+                            <Badge tone="success">
+                              {state?.marked ? 'Marked done' : 'Completed'}
+                            </Badge>
+                          ) : status === 'started' ? (
+                            <Badge tone="accent">
+                              {done}/{total} steps
+                            </Badge>
+                          ) : (
+                            <Badge>{total} steps</Badge>
+                          )}
+                        </div>
+                      </Link>
+                      {/* Beside the link, not inside it: a button cannot sit in a link. */}
+                      <LessonCheck
+                        lessonId={lesson.id}
+                        title={lesson.title}
+                        done={status === 'done'}
+                      />
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          );
+        })}
+      </section>
     </div>
   );
 }

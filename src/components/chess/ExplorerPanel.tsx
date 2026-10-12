@@ -6,6 +6,8 @@ import { useExplorer } from '@/lib/useExplorer';
 import { useSettings } from '@/store/settings';
 import './explorer.css';
 import { San } from '@/chess/San';
+import { formatCount } from '@/lib/format';
+import { siteConfig } from '@/site.config';
 
 /**
  * Opening explorer card: what people play in the position and how it goes.
@@ -72,7 +74,7 @@ export function ExplorerPanel({
               {state.result.opening
                 ? `${state.result.opening.eco} ${displayOpeningName(state.result.opening.name)} · `
                 : ''}
-              {state.result.total.toLocaleString()} games
+              {formatCount(state.result.total, siteConfig.locale)} games
             </p>
             <table className="explorer__table">
               <thead>
@@ -107,7 +109,7 @@ export function ExplorerPanel({
                       )}
                     </td>
                     <td className="explorer__games">
-                      {m.total.toLocaleString()}
+                      {formatCount(m.total, siteConfig.locale)}
                       <span className="small faint"> · {formatPercent(m.share)}</span>
                     </td>
                     <td>

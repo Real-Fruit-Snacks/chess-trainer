@@ -14,7 +14,6 @@ import {
   Field,
   Kbd,
   LinkButton,
-  Segmented,
   Select,
   Spinner,
   Stat,
@@ -31,6 +30,7 @@ import { useTicker } from '@/lib/useTicker';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
 import { DEFAULT_SETTINGS, type SimulColor, useSettings } from '@/store/settings';
+import { SetupScreen, SetupSegmented } from '@/components/setup/SetupScreen';
 import { EngineLevelField } from './arcadeControls';
 import { useArcadeFocus } from './arcadeGame';
 import {
@@ -108,6 +108,7 @@ export default function SimulPage() {
 
 function SimulSetupCard({ simul }: { simul: UseSimul }) {
   const saved = useSettings((s) => s.simul);
+  const shortcutsOn = useSettings((s) => s.keyboardShortcuts);
   const update = useSettings((s) => s.update);
   const best = useProgress((s) => s.arcade[SIMUL_ARCADE_ID]);
   const [setup, setSetup] = useState<SimulSetup>(() => ({ ...DEFAULT_SETTINGS.simul, ...saved }));
@@ -122,106 +123,93 @@ function SimulSetupCard({ simul }: { simul: UseSimul }) {
 
   return (
     <div className="simul__setup-layout">
-      <Card className="simul__setup" data-testid="simul-setup">
-        <h2>Set up the simul</h2>
-        <div className="stack-sm">
-          <div className="simul__row">
-            <span className="simul__label">Boards</span>
-            <Segmented<number>
-              ariaLabel="Boards"
-              value={setup.boards}
-              onChange={(boards) => patch({ boards })}
-              options={SIMUL_BOARD_COUNTS.map((n) => ({ value: n, label: String(n) }))}
-            />
-          </div>
-          <EngineLevelField
-            value={setup.levelId}
-            onChange={(levelId) => patch({ levelId })}
-            testId="simul-level"
-            describe
-          />
-          <Switch
-            checked={setup.rising}
-            onChange={(rising) => patch({ rising })}
-            label="Rising strength"
-            description={`Each board one level stronger than the last: ${describeLevels({ ...setup, rising: true })}.`}
-          />
-          <div className="simul__row">
-            <span className="simul__label">Your colour</span>
-            <Segmented<SimulColor>
-              ariaLabel="Your colour"
-              value={setup.color}
-              onChange={(color) => patch({ color })}
-              options={[
-                { value: 'white', label: 'White' },
-                { value: 'black', label: 'Black' },
-                { value: 'alternate', label: 'Alternate' },
-              ]}
-            />
-          </div>
-          <Field
-            label="Clocks"
-            hint={
-              control
-                ? `Every board has its own clock for you and for the engine. Yours runs on every board where it is your move — even while you play another — so with ${setup.boards} boards at ${control.label} you have about ${Math.max(1, Math.round(pace ?? 0))} seconds a move.`
-                : 'No clocks: take as long as you like on every board.'
-            }
-          >
-            {(id) => (
-              <Select
-                id={id}
-                value={setup.timeControlId}
-                onChange={(e) => patch({ timeControlId: e.target.value })}
-                data-testid="simul-clock"
-              >
-                {SIMUL_TIME_CONTROLS.map((tc) => (
-                  <option key={tc} value={tc}>
-                    {tc === 'none' ? 'No clocks' : `${getTimeControl(tc).label} on every board`}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-          <Switch
-            checked={setup.autoAdvance}
-            onChange={(autoAdvance) => patch({ autoAdvance })}
-            label="Move on after each move"
-            description="After you move, the next board waiting for you comes up — the way a simul giver walks the room."
-          />
-        </div>
-        <div className="row" style={{ marginTop: 16 }}>
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={begin}
-            disabled={simul.engineStatus === 'error'}
-            data-testid="simul-start"
-          >
-            Start the simul
-          </Button>
-          {simul.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
-        </div>
-      </Card>
+      <SetupScreen
+        title="New simul"
+        intro="Several boards against Stockfish at once, each its own game."
+        onStart={begin}
+        startDisabled={simul.engineStatus === 'error'}
+        startTestId="simul-start"
+        testId="simul-setup"
+      >
+        <SetupSegmented<number>
+          label="Boards"
+          value={setup.boards}
+          onChange={(boards) => patch({ boards })}
+          options={SIMUL_BOARD_COUNTS.map((n) => ({ value: n, label: String(n) }))}
+        />
+        <EngineLevelField
+          value={setup.levelId}
+          onChange={(levelId) => patch({ levelId })}
+          testId="simul-level"
+          describe
+        />
+        <Switch
+          checked={setup.rising}
+          onChange={(rising) => patch({ rising })}
+          label="Rising strength"
+          description={`Each board one level stronger than the last: ${describeLevels({ ...setup, rising: true })}.`}
+        />
+        <SetupSegmented<SimulColor>
+          label="Your colour"
+          value={setup.color}
+          onChange={(color) => patch({ color })}
+          options={[
+            { value: 'white', label: 'White' },
+            { value: 'black', label: 'Black' },
+            { value: 'alternate', label: 'Alternate' },
+          ]}
+        />
+        <Field
+          label="Clocks"
+          hint={
+            control
+              ? `Your clock runs on every board where it is your move: with ${setup.boards} boards at ${control.label}, about ${Math.max(1, Math.round(pace ?? 0))} seconds a move.`
+              : 'No clocks: take as long as you like on every board.'
+          }
+        >
+          {(id) => (
+            <Select
+              id={id}
+              value={setup.timeControlId}
+              onChange={(e) => patch({ timeControlId: e.target.value })}
+              data-testid="simul-clock"
+            >
+              {SIMUL_TIME_CONTROLS.map((tc) => (
+                <option key={tc} value={tc}>
+                  {tc === 'none' ? 'No clocks' : `${getTimeControl(tc).label} on every board`}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Switch
+          checked={setup.autoAdvance}
+          onChange={(autoAdvance) => patch({ autoAdvance })}
+          label="Move on after each move"
+          description="After you move, the next board waiting for you comes up — the way a simul giver walks the room."
+        />
+        {simul.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
+      </SetupScreen>
 
       <Card className="simul__about">
         <h2>How it works</h2>
         <ul className="simul__list">
-          <li>Every board is its own game against Stockfish.</li>
           <li>
             The big board is the one you are playing. Tap a small board to switch
-            <span className="keyboard-only">
-              , or press <Kbd>N</Kbd> for the next one waiting for you
-            </span>
+            {shortcutsOn ? (
+              <span className="keyboard-only">
+                , or press <Kbd>N</Kbd> for the next one waiting for you
+              </span>
+            ) : null}
             .
           </li>
           <li>
-            With clocks, every board has a clock for you and one for the engine. Yours runs wherever
-            it is your move, so each board you add makes your time go faster. The engine’s clock
-            runs only while it thinks.
+            With clocks, yours runs wherever it is your move, so each board you add makes your time
+            go faster; the engine’s runs only while it thinks.
           </li>
           <li>No take-backs and no hints: a simul is a test.</li>
           <li>
-            Score: each win counts its board’s level (1 to 8), a draw half of it.{' '}
+            Each win scores its board’s level (1 to 8), a draw half of it.{' '}
             {best?.best ? (
               <>
                 Best so far: <strong data-testid="simul-best">{formatPoints(best.best)}</strong>
@@ -262,6 +250,7 @@ function SimulGame({ simul, state }: { simul: UseSimul; state: SimulState }) {
   // Bumped to put the board back when a promotion is cancelled.
   const [boardKey, setBoardKey] = useState(0);
   const playFocus = useSettings((s) => s.playFocus);
+  const shortcutsOn = useSettings((s) => s.keyboardShortcuts);
   const update = useSettings((s) => s.update);
 
   // Focus mode, as in Play: no header and navigation while the simul is on.
@@ -386,7 +375,7 @@ function SimulGame({ simul, state }: { simul: UseSimul; state: SimulState }) {
             thinking={board.engine === 'thinking'}
             extra={timed ? <SimulClock clock={board.clock} side={engineColor} /> : null}
           />
-          <div className="trainer__board" style={{ position: 'relative' }}>
+          <div className="trainer__board">
             <Board
               key={`${state.id}-${state.active}-${boardKey}`}
               fen={board.fen}
@@ -466,7 +455,7 @@ function SimulGame({ simul, state }: { simul: UseSimul; state: SimulState }) {
             </p>
             <div className="row">
               <Button onClick={simul.next} disabled={finished} data-testid="simul-next">
-                Next board <Kbd>N</Kbd>
+                Next board {shortcutsOn ? <Kbd>N</Kbd> : null}
               </Button>
               <Button
                 variant="danger"

@@ -2,17 +2,9 @@ import { Chess, type Square } from 'chess.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Board } from '@/components/board/Board';
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Field,
-  Segmented,
-  Spinner,
-  Stat,
-  LinkButton,
-} from '@/components/ui';
+import { Alert, Badge, Button, Card, Segmented, Spinner, Stat, LinkButton } from '@/components/ui';
+import { SetupScreen, SetupSegmented } from '@/components/setup/SetupScreen';
+import { useFocusBoardAfterSetup } from '@/components/setup/useFocusBoardAfterSetup';
 import { START_FEN } from '@/chess/helpers';
 import { Notated, San } from '@/chess/San';
 import { useChess } from '@/chess/useChess';
@@ -55,6 +47,11 @@ export default function EngineSaysPage() {
   const game = useChess(START_FEN, { autoQueen: true });
   const timer = useRef<number | null>(null);
   const recordedRef = useRef(false);
+  /** "New game" after a run: the setup screen again, to change the pace. */
+  const [settingUp, setSettingUp] = useState(false);
+  const setupShown = phase === 'idle' || settingUp;
+  const boardColRef = useRef<HTMLDivElement>(null);
+  useFocusBoardAfterSetup(setupShown, boardColRef);
 
   useEffect(() => {
     document.title = `Engine Says · ${siteConfig.name}`;
@@ -122,6 +119,7 @@ export default function EngineSaysPage() {
     if (!next) return;
     if (timer.current) window.clearTimeout(timer.current);
     recordedRef.current = false;
+    setSettingUp(false);
     setLine(next);
     setRound(1);
     setScore(0);
@@ -214,9 +212,9 @@ export default function EngineSaysPage() {
       ) : null}
       {!lines && !loadError ? <Spinner label="Loading the opening book" /> : null}
 
-      <div className="trainer">
-        <div className="play__boardcol">
-          <div className="trainer__board" style={{ position: 'relative' }}>
+      <div className={setupShown ? 'trainer trainer--setup' : 'trainer'}>
+        <div className="play__boardcol" ref={boardColRef}>
+          <div className="trainer__board">
             <Board
               fen={boardFen}
               orientation="white"
@@ -230,37 +228,31 @@ export default function EngineSaysPage() {
               announceMoves={phase !== 'showing'}
               ariaLabel={`Engine Says board, ${phase === 'showing' ? 'watch' : 'replay'}`}
             />
-            {phase === 'idle' || phase === 'over' ? (
+            {phase === 'over' && !settingUp ? (
               <div className="trainer__overlay">
                 <Card className="arcade__summary" data-testid="engine-says-card">
-                  <h2>{phase === 'over' ? 'Run over' : 'Engine Says'}</h2>
-                  {phase === 'over' ? (
-                    <div className="arcade__scoreline">
-                      <Stat value={score} label="Moves replayed" />
-                      <Stat value={best ? Math.max(best.best, score) : score} label="Best" />
-                    </div>
-                  ) : (
-                    <p className="muted">
-                      Round one shows three moves. Replay them in order and the next round adds one
-                      more; replay a whole line and a new one starts, with your moves kept.{' '}
-                      {best ? `Best so far: ${best.best}.` : ''}
-                    </p>
-                  )}
-                  {phase === 'over' && line ? (
+                  <h2>Run over</h2>
+                  <div className="arcade__scoreline">
+                    <Stat value={score} label="Moves replayed" />
+                    <Stat value={best ? Math.max(best.best, score) : score} label="Best" />
+                  </div>
+                  {line ? (
                     <p className="small muted">
                       The line was <strong>{line.name}</strong>:{' '}
                       <Notated text={movesToPgn(line.moves)} />
                     </p>
                   ) : null}
-                  <div className="row">
+                  <div className="row arcade__summary-actions">
                     <Button
                       variant="primary"
-                      size="lg"
                       onClick={begin}
                       disabled={!lines?.length}
-                      data-testid="engine-says-start"
+                      data-testid="engine-says-again"
                     >
-                      {phase === 'over' ? 'Play again' : 'Start'}
+                      Play again
+                    </Button>
+                    <Button onClick={() => setSettingUp(true)} data-testid="engine-says-new">
+                      New game
                     </Button>
                     <LinkButton to="/arcade">Arcade</LinkButton>
                   </div>
@@ -271,92 +263,123 @@ export default function EngineSaysPage() {
         </div>
 
         <aside className="trainer__panel stack">
-          <Card>
-            <div className="row row--between">
-              <strong>
-                {phase === 'showing'
-                  ? 'Watch…'
-                  : phase === 'replay'
-                    ? 'Your turn: replay the moves'
-                    : 'Engine Says'}
-              </strong>
-              {line ? <Badge>Round {round}</Badge> : null}
-            </div>
-            <p
-              className={`arcade__status${
-                phase === 'showing' || phase === 'replay' ? '' : ' arcade__status--idle'
-              }`}
-              role="status"
-              data-testid="engine-says-status"
+          {setupShown ? (
+            <SetupScreen
+              intro="Watch the engine play a few moves of a real opening line, then replay them from memory — both sides."
+              onStart={begin}
+              startDisabled={!lines?.length}
+              startTestId="engine-says-start"
+              focusOnMount={settingUp}
+              back={
+                settingUp
+                  ? { label: 'Back to the board', onClick: () => setSettingUp(false) }
+                  : null
+              }
             >
-              {phase === 'showing' ? (
-                <>
-                  Move {Math.min(shown, sequence.length)} of {sequence.length}
-                  {shownSan ? (
-                    <>
-                      : <San san={shownSan} />
-                    </>
-                  ) : null}
-                </>
-              ) : phase === 'replay' ? (
-                `${replayed} of ${sequence.length} replayed`
-              ) : (
-                ''
-              )}
-            </p>
-            {phase === 'replay' || phase === 'showing' ? (
-              <ol
-                className="arcade__sequence"
-                role="list"
-                aria-label="The sequence"
-                data-testid="engine-says-sequence"
+              <ul className="setup__list small">
+                <li>Round one shows three moves; each round you replay adds one more.</li>
+                <li>
+                  Replay a whole line and a new one starts, with your moves kept.
+                  {best ? ` Your best: ${best.best}.` : ''}
+                </li>
+              </ul>
+              <SetupSegmented<Pace>
+                label="Pace"
+                hint="How long each move stays on the board. You can change it during a run too."
+                value={pace}
+                onChange={setPace}
+                options={[
+                  { value: 'normal', label: 'Normal' },
+                  { value: 'slow', label: 'Slow' },
+                ]}
+              />
+            </SetupScreen>
+          ) : (
+            <Card>
+              <div className="row row--between">
+                <strong>
+                  {phase === 'showing'
+                    ? 'Watch…'
+                    : phase === 'replay'
+                      ? 'Your turn: replay the moves'
+                      : 'Engine Says'}
+                </strong>
+                {line ? <Badge>Round {round}</Badge> : null}
+              </div>
+              <p
+                className={`arcade__status${
+                  phase === 'showing' || phase === 'replay' ? '' : ' arcade__status--idle'
+                }`}
+                role="status"
+                data-testid="engine-says-status"
               >
-                {sequence.map((san, i) => {
-                  const revealed = phase === 'showing' ? i < shown : i < replayed;
-                  const current = phase === 'replay' && i === replayed;
-                  return (
-                    <li
-                      key={`${i}-${san}`}
-                      className={`arcade__sequence-move${
-                        revealed ? ' arcade__sequence-move--done' : ''
-                      }${current ? ' arcade__sequence-move--current' : ''}`}
-                      data-san={revealed ? san : undefined}
-                      aria-current={current ? 'step' : undefined}
-                    >
-                      {revealed ? (
-                        <San san={san} />
-                      ) : (
-                        <>
-                          <span aria-hidden="true">?</span>
-                          <span className="sr-only">Move {i + 1}</span>
-                        </>
-                      )}
-                    </li>
-                  );
-                })}
-              </ol>
-            ) : null}
-            <p className="small muted" style={{ margin: '12px 0 0' }}>
-              Score: <strong data-testid="engine-says-score">{score}</strong>
-              {carried > 0 ? ` (${carried} from finished lines)` : ''}
-              {best ? ` · best ${best.best}` : ''}
-            </p>
-            <div style={{ marginTop: 12 }}>
-              <Field label="Pace">
-                {() => (
-                  <Segmented<Pace>
-                    ariaLabel="Pace"
-                    value={pace}
-                    onChange={setPace}
-                    options={[
-                      { value: 'normal', label: 'Normal' },
-                      { value: 'slow', label: 'Slow' },
-                    ]}
-                  />
+                {phase === 'showing' ? (
+                  <>
+                    Move {Math.min(shown, sequence.length)} of {sequence.length}
+                    {shownSan ? (
+                      <>
+                        : <San san={shownSan} />
+                      </>
+                    ) : null}
+                  </>
+                ) : phase === 'replay' ? (
+                  `${replayed} of ${sequence.length} replayed`
+                ) : (
+                  ''
                 )}
-              </Field>
-            </div>
-          </Card>
+              </p>
+              {phase === 'replay' || phase === 'showing' ? (
+                <ol
+                  className="arcade__sequence"
+                  role="list"
+                  aria-label="The sequence"
+                  data-testid="engine-says-sequence"
+                >
+                  {sequence.map((san, i) => {
+                    const revealed = phase === 'showing' ? i < shown : i < replayed;
+                    const current = phase === 'replay' && i === replayed;
+                    return (
+                      <li
+                        key={`${i}-${san}`}
+                        className={`arcade__sequence-move${
+                          revealed ? ' arcade__sequence-move--done' : ''
+                        }${current ? ' arcade__sequence-move--current' : ''}`}
+                        data-san={revealed ? san : undefined}
+                        aria-current={current ? 'step' : undefined}
+                      >
+                        {revealed ? (
+                          <San san={san} />
+                        ) : (
+                          <>
+                            <span aria-hidden="true">?</span>
+                            <span className="sr-only">Move {i + 1}</span>
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : null}
+              <p className="small muted" style={{ margin: '12px 0 0' }}>
+                Score: <strong data-testid="engine-says-score">{score}</strong>
+                {carried > 0 ? ` (${carried} from finished lines)` : ''}
+                {best ? ` · best ${best.best}` : ''}
+              </p>
+              <div className="field" style={{ marginTop: 12 }}>
+                <span className="field__label">Pace</span>
+                <Segmented<Pace>
+                  ariaLabel="Pace"
+                  value={pace}
+                  onChange={setPace}
+                  block
+                  options={[
+                    { value: 'normal', label: 'Normal' },
+                    { value: 'slow', label: 'Slow' },
+                  ]}
+                />
+              </div>
+            </Card>
+          )}
         </aside>
       </div>
     </div>

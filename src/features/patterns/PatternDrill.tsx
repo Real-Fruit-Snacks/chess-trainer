@@ -110,7 +110,7 @@ export function PatternDrill({
 
   return (
     <div className="trainer" data-testid="pattern-drill">
-      <div className="trainer__board" style={{ position: 'relative' }}>
+      <div className="trainer__board">
         <Board
           fen={trainer.position.fen}
           orientation={trainer.solverColor}

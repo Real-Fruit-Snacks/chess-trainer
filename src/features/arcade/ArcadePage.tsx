@@ -21,36 +21,42 @@ export default function ArcadePage() {
       <div className="page-header">
         <h1>Arcade</h1>
         <p>
-          Eleven games that are not puzzles: play with the engine as your partner, guess the opening
-          of the day, judge positions, climb the odds ladder, draft an army, hold a fortress, replay
-          lines from memory, play blindfold, take on several engines at once, catch illegal moves as
-          the arbiter, or hunt a knight you cannot see. Every game keeps a score to beat.
+          Games that are not puzzles — with the engine as a partner, a rival or a referee. Every
+          game keeps a score to beat.
         </p>
       </div>
-      <div className="grid grid--cards" data-testid="arcade-games">
+      <div className="grid grid--cards arcade-grid" data-testid="arcade-games">
         {ARCADE_GAMES.map((game) => {
           const best = describeArcadeBest(game, { arcade, dailyOpening, oddsLadder });
+          // The game of the day stands out, two columns wide (and the grid comes out even).
+          const featured = game.id === 'daily-opening';
           return (
-            <div key={game.id} className="card arcade-card" data-testid={`arcade-${game.id}`}>
-              <div className="row row--between">
-                <span className="arcade-card__icon">
-                  <Icon name={game.icon} size={24} />
+            <div
+              key={game.id}
+              className={featured ? 'card arcade-card arcade-card--wide' : 'card arcade-card'}
+              data-testid={`arcade-${game.id}`}
+            >
+              <div className="arcade-card__head">
+                <span className="arcade-card__icon" aria-hidden="true">
+                  <Icon name={game.icon} size={22} />
                 </span>
-                <span className="row arcade-card__meta">
-                  <Badge>{game.minutes} min</Badge>
-                  {game.engine ? <Badge tone="accent">Engine</Badge> : null}
+                <span className="arcade-card__heading">
+                  <Link to={`/arcade/${game.id}`} className="card__title">
+                    {game.name}
+                  </Link>
+                  <span className="small muted">{game.minutes} min</span>
                 </span>
+                {featured ? (
+                  <Badge tone="accent">New every day</Badge>
+                ) : game.engine ? (
+                  <Badge>Engine</Badge>
+                ) : null}
               </div>
-              <Link to={`/arcade/${game.id}`} className="card__title">
-                {game.name}
-              </Link>
               <p className="arcade-card__tagline">{game.tagline}</p>
-              <p className="small muted" style={{ margin: 0 }}>
-                {game.description}
-              </p>
-              <p className="small" style={{ margin: 0 }}>
-                <strong>Trains:</strong> {game.trains}
-              </p>
+              {featured ? (
+                <p className="small muted arcade-card__more">{game.description}</p>
+              ) : null}
+              <p className="small muted arcade-card__trains">Trains: {game.trains}</p>
               <div className="row row--between arcade-card__footer">
                 <span className="small muted" data-testid={`arcade-best-${game.id}`}>
                   {best ?? 'Not played yet'}

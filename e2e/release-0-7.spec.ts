@@ -51,7 +51,7 @@ test.describe('opening practice', () => {
     await expect(page).toHaveURL(/\/play/);
     await expect(page.getByTestId('book-select')).toHaveValue('caro-kann');
     // The repertoire fixes the colour, so there is no colour field.
-    await expect(page.getByLabel('Your colour')).toHaveCount(0);
+    await expect(page.getByRole('radiogroup', { name: 'Your colour' })).toHaveCount(0);
     await page.getByLabel('Engine level').selectOption('1');
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
@@ -244,7 +244,7 @@ test.describe('woodpecker', () => {
     await seedProgress(page, { onboarded: true, puzzleRating: 1200, puzzleRd: 60 });
     await page.goto('/puzzles/woodpecker');
     const start = page.getByTestId('woodpecker-start');
-    await start.getByRole('button', { name: '50 puzzles' }).click();
+    await start.getByRole('radio', { name: '50 puzzles' }).click();
     await start.getByRole('button', { name: 'Start a set of 50' }).click();
     // The trainer opens on puzzle 1 of the set.
     await expectBoard(page);
@@ -370,7 +370,6 @@ test.describe('engine ladder', () => {
       ],
     });
     await page.goto('/play/computer');
-    await page.getByRole('button', { name: 'Cancel' }).click();
     const ladder = page.getByTestId('engine-ladder');
     await expect(ladder.locator('.engine-ladder__rung--climbed')).toHaveCount(2);
     await expect(ladder.locator('.engine-ladder__rung--current')).toContainText(
@@ -433,7 +432,7 @@ test.describe('classic games', () => {
   test('filters by era and difficulty and plays a new miniature', async ({ page }) => {
     await seedProgress(page, { onboarded: true });
     await page.goto('/classics');
-    await expect(page.getByTestId('classics-count')).toHaveText(/^46 of 46 games/);
+    await expect(page.getByTestId('classics-count')).toHaveText(/^46 games/);
     await page.getByRole('radio', { name: 'Romantic' }).click();
     await expect(page.getByTestId('classics-count')).toContainText(/^\d+ of 46 games · to 1880/);
     await expect(page.getByRole('link', { name: /Légal’s mate/ })).toBeVisible();

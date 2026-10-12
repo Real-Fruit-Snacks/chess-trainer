@@ -6,10 +6,162 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-10-12
+
+A polish pass across the app, on phones and desktops alike: games against the computer and every
+arcade game set up on a screen of their own rather than in a dialog over the board, long lists you
+can search, quieter puzzle tabs and drills, and a round of smaller fixes.
+
+### Changed
+
+- **A new game screen.** A game against the computer is set up in the page rather than in a dialog
+  over it: the opponent as cards that say what each is, your colour and the game (standard or
+  Chess960) as one-tap choices, then the level or the rating, the clock, an opening to practise and
+  the help while you play. On wide screens a preview of the board stands beside the form — from the
+  side you will play, the clocks as they will start, a Chess960 game's start drawn already, with
+  _Another position_ to draw again — and the engine ladder sits under it. On phones the form has the
+  screen to itself, scrolling with the page, and Start stays pinned above the bottom bar. _New game_
+  during or after a game opens it again, with _Back to the game_; the focus moves to the screen and
+  then to the board, which comes back into view at once.
+- **Phones held sideways** scroll the page alone: the panel beside the board no longer scrolls in a
+  box of its own; the board stays on screen while the panel passes beside it.
+- **Scroll bars.** Boxes that scroll inside a page (move lists, the coach's conversation, a dialog's
+  body) have a thin scroll bar in the theme's colours where scroll bars show, and the page keeps the
+  room of its own while a dialog is open, so nothing shifts sideways.
+- **Arcade: every game is set up the same way.** Hand & Brain, the Odds Ladder, Fortress, Blindfold,
+  Engine Says, Arbiter, Ghost Knight, Who Stands Better?, the Simul and Army Draft are set up as
+  Play's new game is: a card beside the board rather than over it, with the game in a line or two,
+  its choices, your best so far and _Start_ at the foot. On wide screens the board stands beside the
+  form as the game will begin, from your side and with the engine level you have chosen; on phones
+  the form has the screen to itself, scrolling with the page, and _Start_ stays pinned above the
+  bottom bar. After a game or a run, _Play again_ keeps the same choices and _New game_ opens the
+  setup again, with _Back to the board_.
+  - Hand & Brain's roles are two cards that say what each does (_Brain_: you say which piece moves
+    and your partner finds the move; _Hand_: the other way round). Your colour is _White_, _Random_
+    or _Black_ at a tap, here and in Blindfold, and Blindfold, Hand & Brain and Fortress describe
+    the engine level chosen, as Play does.
+  - The Odds Ladder's rungs are cards to choose from: the ones climbed, with your results, the
+    current one, and the locked ones, each saying which rung to win first. _Choose a rung_ after a
+    game brings them back.
+  - Arbiter, Engine Says, Ghost Knight and Who Stands Better? set out their rules in a few short
+    lines, and the pace or the mode is chosen on the setup (Engine Says' pace can still be changed
+    during a run). Who Stands Better? shows the round's first position beside its rules.
+  - Army Draft puts the budget first and the shop in one column, with the ready-made armies under
+    a _Ready-made:_ label, _Clear_ at the end of their row and outlined − and + buttons; its preview
+    of both armies stays in view. The Simul's setup, _New simul_, stands beside _How it works_.
+- **Arcade.** A shorter introduction, and cards that lead with the game: its name beside its icon,
+  with the minutes it takes under it, then what it is and what it trains. The Daily Opening stands
+  out at twice the width, _New every day_, with its description; the other cards leave theirs to
+  the game's page, and the grid closes up with no gaps. Home's Arcade card says it in one line too.
+- **Long lists, shorter and searchable.** Learn, Classic games, the puzzle themes and openings and
+  the endgame drills have a search field over the list, their filters beside it, and a count of
+  what shows ("12 of 75 lessons"), which screen readers hear as it changes. A search matches every
+  word typed, in any order, ignoring accents, apostrophes and punctuation ("queens gam" finds the
+  Queen's Gambit); Escape clears it, and when nothing matches, _Show everything_ brings the whole
+  list back.
+  - **Learn** gathers the lessons under _All lessons_, with a level choice and _Hide finished_
+    beside the search; all three are kept in the address, so Back returns to them. Each level says
+    how many lessons it has, a card shows two lines of its summary (one on a phone), and the circle
+    that marks a lesson done shows a faint tick, so it no longer reads as a radio button. On a
+    course's page, a unit's steps sit in two columns on wide screens, each row ending in a chevron,
+    and a unit that comes later has a plain background as well as its dashed edge.
+  - **Classic games** are found by title, player, event, year or story, with the era, difficulty
+    and status filters beside the field (kept in the address too). Each card shows three lines of
+    the story, two on a phone, so the cards line up. Lasker–Thomas is now _The king hunt_.
+  - **Puzzles → By theme** has a search and a group (_Every group_, or one with its number of
+    themes), kept in the address. A theme you have tried five times or more shows how you do on it
+    ("You: 72% of 40"), and _Work on this_ when that is below your own average.
+  - **Puzzles → By opening** searches both lists, the search kept in the address. A repertoire's
+    card says which other openings it takes in ("With …"), and _All openings_ is an index, a name
+    and its number of puzzles to a row, in columns on wide screens, rather than a card each.
+  - **Drills**: the endgame library is an index of rows rather than cards, with a tick for each
+    rung climbed, a line on what the endgame is (left out on a phone) and your best or its
+    difficulty at the end. Find an endgame by name, or narrow the list to one group (both kept in
+    the address); each group's progress is a badge, green once the group is done.
+- **Reference.** The bar of sections (_Rules_, _Notation_, _Glossary_, _FAQ_) follows you down the
+  page and marks the section you are reading. The glossary's search counts the terms it shows and
+  matches as the lists do, with _Show everything_ when nothing matches; the terms sit in one card,
+  flowing down two columns on wide screens. The frequently asked questions are one card, with a
+  rule between them. Disclosures across the app, these questions among them, open with a chevron
+  that turns instead of the browser's own triangle.
+- **Puzzles.** A puzzle's themes no longer show while you solve it, since they say what to look for
+  (a fork, a pin): _Show the themes_ brings them up, and they appear by themselves once the puzzle
+  is solved or missed. _Auto-advance after a solve_ sits at the foot of the session's card.
+  - _Daily_ shows today's date and how long until the next puzzle ("the next in 5 h 12 min").
+  - _Woodpecker_'s start card is laid out like the other puzzle cards, its text on the left and the
+    size of the set as a choice under _Set size_.
+  - _Blind_ shows _Level_, _Solved_, _Run_ and _Best run_ as four figures, and the lesson _How to
+    see moves ahead_ is linked from the explanation at any time, not only before your first try.
+  - _Due_, with nothing due, says when the next puzzle comes back, or that the next puzzle you miss
+    starts the queue.
+- **Drills.** An endgame drill sets out its task (your side, the goal, the technique and its lesson)
+  in a card beside the board, with _Start_ under it, rather than over the board: the position can
+  be studied before you start, and the moves played read "3/20" as you go. In Vision the choice of
+  drill (_Moves_, _Captures_, _Checks_, _Guess_) heads the panel. In Vision and Coordinates the time
+  bar appears with _Start_ rather than standing full before it, the _Start_ button no longer dims
+  the board behind it, and Coordinates says where the square to find will appear, then _Time!_ at
+  the end.
+- **Patterns.** Larger diagrams, with their coordinates; _Spot it_ stands apart under the
+  explanation as the line to remember, and a pattern you have solved offers _Solve it again_ in a
+  quieter button, so the ones still to solve stand out.
+
 ### Fixed
 
 - **Home.** The What's new card left no space before the card under it (Your progress, or the
-  welcome for a newcomer); it now has the same gap as the other cards.
+  welcome for a newcomer), and the install and backup notices sat against the cards above and
+  below them; all now have the same gap as the other cards, and the notices take no room when
+  neither has anything to say.
+- **Progress → Strengths and weaknesses.** A theme's name could run into its bar (Middlegame,
+  Advantage, Capturing the defender) where the card is narrow. Each theme now has its name and figure
+  on one line and the bar under both, and the two lists sit side by side only when there is room.
+- **Progress → Recent puzzles.** Ratings and changes showed every decimal (1446.3100785634942,
+  +15.3100785634942) and pushed the table off its card: they are whole numbers now, the change the
+  difference of the ratings shown.
+- **Dialogs** had two scroll bars side by side when their content was taller than the screen (the
+  new game's, on a laptop): a dialog now scrolls in one place, its body, between its title and
+  buttons.
+- **Arcade.**
+  - In Fortress, Hand & Brain and Blindfold, the engine's name on the board's bar kept the level of
+    the last game while another was being chosen; it now follows the choice.
+  - The Odds Ladder's board showed the engine's full army before a game, its queen included at
+    queen odds; it now shows the chosen rung's position, without the piece the engine gives.
+  - Blindfold's board showed the pieces before a game; they are now hidden, as they will be.
+  - Fortress's board shows empty before a run, as the positions are drawn as it goes, rather than
+    the last run's position.
+  - Who Stands Better?'s start and its score stood alone in the page as centred cards, with no
+    board; the board is there from the start now, and _Round over_ comes up over it as the other
+    games' results do.
+  - Daily Opening: your guesses had no place on the page until the first one, and a guess could be
+    made only with Enter. The card of guesses is there from the start, with a row for each try
+    still to come (six in all), and _Guess_ plays the first opening in the list. The hints spell
+    out the ECO code ("Its ECO code starts with C."), and on a phone the board comes up higher.
+- **Openings → a repertoire.** The start menu (_Start learning_, _Explore lines_, _Find gaps_…) lay
+  over the board and, on a phone, hid it; it now sits beside the board (under it on a phone), the
+  main button the card's width and the other ways in two by two, so the opening stays in view.
+- **Analyze.** An engine line too long for its row ended in an ellipsis drawn over the pieces'
+  figurines; it now fades out at the edge.
+- **My games.** With no games yet, the list was one line of small print; it is now _No games yet_,
+  with how to fetch or paste your games and a word on what their reviews give you. The list's title
+  row has room under it.
+- **Tabs and choices.** On a phone, the Settings tabs wrapped into ragged rows; they now come three
+  and two, each row the full width. In the dark themes, the chosen option of a row of choices (and
+  the chosen Settings tab) was darker than its track, as if pressed in; it is now lighter, lifted
+  off it. The _Play_ button beside a move field is as tall as the field.
+- **Page edges.** Placement, Recall with nothing due and the first visit to Puzzles ("Where should
+  your puzzle rating start?") were centred in the page; they now start on its left edge, under the
+  page's title, as every other page does.
+- **Single-key shortcuts.** With _Single-key shortcuts_ off in _Settings → Play_, the H and N chips
+  still showed on buttons that no longer answered to them: _Hint_ in a lesson, _Hint_ and _Next_ in
+  Recall, _Next line_ in a repertoire, and _Next board_ and the line under _How it works_ in the
+  Simul. They are hidden now, as on Puzzles.
+- **Numbers.** Counts in the thousands read the same way everywhere now, with the app's separator
+  (12,345). Some had none (the _Due_ tab's count, a theme's attempts on Progress, the backup
+  reminder's puzzle attempts, a pattern's puzzles, _Forget all … moves_ in a repertoire, the
+  offline download's progress) and some followed the browser's language instead (the opening
+  explorer, the offline puzzle library, a backup's import summary, the long-link warning in
+  Analyze). Ratings are written one way too, as your puzzle rating is (1,445): the rating chart, a
+  puzzle's rating under _Recent puzzles_, a shared Woodpecker set, the Blind level, a Lichess
+  account's puzzle rating and the starting ratings in Settings and on a first visit to Puzzles.
 
 ## [0.29.0] - 2026-10-12
 

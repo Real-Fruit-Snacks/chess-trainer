@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Board, type DrawShape, type Key } from '@/components/board/Board';
 import { knightSquares } from '@/chess/geometry';
-import { Badge, Button, Card, Field, Icon, LinkButton, Segmented, Stat } from '@/components/ui';
+import { Badge, Button, Card, Icon, LinkButton, Stat } from '@/components/ui';
+import { SetupScreen, SetupSegmented } from '@/components/setup/SetupScreen';
+import { useFocusBoardAfterSetup } from '@/components/setup/useFocusBoardAfterSetup';
 import { pageShortcutKey } from '@/lib/shortcutKey';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
@@ -51,6 +53,15 @@ export default function GhostKnightPage() {
   const hunting = phase === 'hunting';
   const running = phase === 'hunting' || phase === 'ended';
   const squad = hunt?.squad ?? HUNTS[huntIndex];
+  /** "New game" after a run: the setup screen again, to change the mode. */
+  const [settingUp, setSettingUp] = useState(false);
+  const setupShown = phase === 'idle' || settingUp;
+  const boardColRef = useRef<HTMLDivElement>(null);
+  useFocusBoardAfterSetup(setupShown, boardColRef);
+  const begin = () => {
+    setSettingUp(false);
+    ghost.start();
+  };
 
   useEffect(() => {
     document.title = `Ghost Knight · ${siteConfig.name}`;
@@ -173,9 +184,9 @@ export default function GhostKnightPage() {
         </p>
       </div>
 
-      <div className="trainer">
-        <div className="play__boardcol">
-          <div className="trainer__board" style={{ position: 'relative' }}>
+      <div className={setupShown ? 'trainer trainer--setup' : 'trainer'}>
+        <div className="play__boardcol" ref={boardColRef}>
+          <div className="trainer__board">
             <Board
               fen={hunt ? huntFen(hunt) : squad ? squadFen(squad) : '8/8/8/8/8/8/8/8 w - - 0 1'}
               orientation="white"
@@ -194,33 +205,21 @@ export default function GhostKnightPage() {
               className="ghost-board"
               ariaLabel="Ghost Knight board, your hunters"
             />
-            {phase === 'idle' || phase === 'over' ? (
+            {phase === 'over' && !settingUp ? (
               <div className="trainer__overlay">
                 <Card className="arcade__summary" data-testid="ghost-card">
-                  <h2>{phase === 'over' ? 'Run over' : 'Ghost Knight'}</h2>
-                  {phase === 'over' ? (
-                    <div className="arcade__scoreline">
-                      <Stat value={`${caught} of ${HUNTS.length}`} label="Hunts" />
-                      <Stat value={points} label="Points" />
-                      <Stat value={best ? Math.max(best.best, points) : points} label="Best" />
-                    </div>
-                  ) : (
-                    <p className="muted">
-                      Your pieces move as always, one move a turn. The knight moves too, unseen: it
-                      never jumps onto a square you attack, and it takes any piece you leave
-                      unprotected within its reach. Catch it by landing on it, or corner it so every
-                      square it could jump to is covered. Five hunts, three lives.{' '}
-                      {best ? `Best so far: ${best.best} points.` : ''}
-                    </p>
-                  )}
-                  <div className="row">
-                    <Button
-                      variant="primary"
-                      size="lg"
-                      onClick={ghost.start}
-                      data-testid="ghost-start"
-                    >
-                      {phase === 'over' ? 'Play again' : 'Start'}
+                  <h2>Run over</h2>
+                  <div className="arcade__scoreline">
+                    <Stat value={`${caught} of ${HUNTS.length}`} label="Hunts" />
+                    <Stat value={points} label="Points" />
+                    <Stat value={best ? Math.max(best.best, points) : points} label="Best" />
+                  </div>
+                  <div className="row arcade__summary-actions">
+                    <Button variant="primary" onClick={begin} data-testid="ghost-again">
+                      Play again
+                    </Button>
+                    <Button onClick={() => setSettingUp(true)} data-testid="ghost-new">
+                      New game
                     </Button>
                     <LinkButton to="/arcade">Arcade</LinkButton>
                   </div>
@@ -232,61 +231,79 @@ export default function GhostKnightPage() {
         </div>
 
         <aside className="trainer__panel stack">
-          <Card>
-            <div className="row row--between">
-              <strong>{running && squad ? squad.name : 'Ghost Knight'}</strong>
-              {running ? (
-                <Badge>
-                  Hunt {huntIndex + 1} of {HUNTS.length}
-                </Badge>
-              ) : null}
-            </div>
-            <p
-              className={`arcade__status${running ? '' : ' arcade__status--idle'}`}
-              role="status"
-              data-testid="ghost-status"
+          {setupShown ? (
+            <SetupScreen
+              intro={`An enemy knight hides on the board and shows itself every third move. ${HUNTS.length} hunts, ${LIVES} lives.`}
+              onStart={begin}
+              startTestId="ghost-start"
+              focusOnMount={settingUp}
+              back={
+                settingUp
+                  ? { label: 'Back to the board', onClick: () => setSettingUp(false) }
+                  : null
+              }
             >
-              {hunt && running ? huntMessage(hunt) : ''}
-            </p>
-            {whereabouts}
-            <div className="row row--between ghost__tally">
-              {hunt && running ? (
-                <span data-testid="ghost-moves">
-                  Move <strong>{hunt.turn}</strong> of {hunt.squad.budget}
-                </span>
-              ) : null}
-              <span data-testid="ghost-points">
-                Points: <strong>{points}</strong>
-                {best ? <span className="muted"> · best {best.best}</span> : null}
-              </span>
-              {running ? <Lives left={lives} /> : null}
-            </div>
-            {!running ? (
-              <div style={{ marginTop: 12 }}>
-                <Field
-                  label="Mode"
-                  hint={
-                    mode === 'shaded'
-                      ? 'The board shades every square the knight could be on.'
-                      : 'No shading: you track the knight yourself, for double points.'
-                  }
+              <ul className="setup__list small">
+                <li>Your pieces move as always, one move a turn; the knight moves too, unseen.</li>
+                <li>
+                  It never jumps onto a square you attack, and it takes any piece you leave
+                  unprotected within its reach.
+                </li>
+                <li>
+                  Catch it by landing on it, or corner it so every square it could jump to is
+                  covered.{best ? ` Your best: ${best.best} points.` : ''}
+                </li>
+              </ul>
+              <SetupSegmented<HuntMode>
+                label="Mode"
+                hint={
+                  mode === 'shaded'
+                    ? 'The board shades every square the knight could be on.'
+                    : 'No shading: you track the knight yourself, for double points.'
+                }
+                value={mode}
+                onChange={ghost.setMode}
+                options={[
+                  { value: 'shaded', label: 'Shaded' },
+                  { value: 'unshaded', label: 'Unshaded' },
+                ]}
+              />
+            </SetupScreen>
+          ) : (
+            <>
+              <Card>
+                <div className="row row--between">
+                  <strong>{running && squad ? squad.name : 'Ghost Knight'}</strong>
+                  {running ? (
+                    <Badge>
+                      Hunt {huntIndex + 1} of {HUNTS.length}
+                    </Badge>
+                  ) : null}
+                </div>
+                <p
+                  className={`arcade__status${running ? '' : ' arcade__status--idle'}`}
+                  role="status"
+                  data-testid="ghost-status"
                 >
-                  {() => (
-                    <Segmented<HuntMode>
-                      ariaLabel="Mode"
-                      value={mode}
-                      onChange={ghost.setMode}
-                      options={[
-                        { value: 'shaded', label: 'Shaded' },
-                        { value: 'unshaded', label: 'Unshaded' },
-                      ]}
-                    />
-                  )}
-                </Field>
-              </div>
-            ) : null}
-          </Card>
-          {!stacked ? endedCard : null}
+                  {hunt && running ? huntMessage(hunt) : ''}
+                </p>
+                {whereabouts}
+                <div className="row row--between ghost__tally">
+                  {hunt && running ? (
+                    <span data-testid="ghost-moves">
+                      Move <strong>{hunt.turn}</strong> of {hunt.squad.budget}
+                    </span>
+                  ) : null}
+                  <span data-testid="ghost-points">
+                    Points: <strong>{points}</strong>
+                    {best ? <span className="muted"> · best {best.best}</span> : null}
+                  </span>
+                  {running ? <Lives left={lives} /> : null}
+                </div>
+              </Card>
+              {!stacked ? endedCard : null}
+            </>
+          )}
         </aside>
       </div>
     </div>

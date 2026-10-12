@@ -35,6 +35,16 @@ export function formatRating(rating: number, locale = 'en-GB'): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(rating);
 }
 
+/**
+ * The change a puzzle made, as the difference of the ratings shown ("+15", "-16"; "·" for none),
+ * so a column of them adds up. Ratings are kept unrounded for the next update.
+ */
+export function formatRatingChange(before: number, after: number): string {
+  const change = Math.round(after) - Math.round(before);
+  if (!Number.isFinite(change) || change === 0) return '·';
+  return change > 0 ? `+${change}` : String(change);
+}
+
 /** Human label for a rating band, used in progress summaries. */
 export function ratingBand(rating: number): string {
   if (rating < 800) return 'Beginner';

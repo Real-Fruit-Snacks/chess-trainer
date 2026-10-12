@@ -1,3 +1,4 @@
+import { normalizeText } from '@/lib/textMatch';
 import { KIND_ORDER, KINDS, type SearchEntry, type SearchKind } from './searchIndex';
 
 /**
@@ -9,16 +10,7 @@ import { KIND_ORDER, KINDS, type SearchEntry, type SearchKind } from './searchIn
  */
 
 /** The words of a text, in plain lower case: "Queen’s Gambit" → "queens gambit". */
-export function normalize(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/['’ʼ`]/g, '')
-    .replace(/&/g, ' and ')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
-}
+export const normalize = normalizeText;
 
 /** Words that may go unmatched when the query has others ("the", "of", "and"). */
 const STOP_WORDS = new Set(['a', 'an', 'and', 'the', 'of', 'to', 'in', 'on', 'for', 'with', 'my']);

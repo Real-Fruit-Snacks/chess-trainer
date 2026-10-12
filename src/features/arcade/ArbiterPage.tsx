@@ -1,18 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Board, type DrawShape } from '@/components/board/Board';
-import {
-  Badge,
-  Button,
-  Card,
-  Field,
-  Icon,
-  Kbd,
-  LinkButton,
-  Segmented,
-  Spinner,
-  Stat,
-} from '@/components/ui';
+import { Badge, Button, Card, Icon, Kbd, LinkButton, Spinner, Stat } from '@/components/ui';
+import { SetupScreen, SetupSegmented } from '@/components/setup/SetupScreen';
+import { useFocusBoardAfterSetup } from '@/components/setup/useFocusBoardAfterSetup';
 import { San } from '@/chess/San';
 import { pageShortcutKey } from '@/lib/shortcutKey';
 import { siteConfig } from '@/site.config';
@@ -53,6 +44,15 @@ export default function ArbiterPage() {
   const { phase, round, strikes, caught, fastestMs, current, verdict, falseAlarm, paused, move } =
     arbiter;
   const running = phase === 'watching' || phase === 'verdict';
+  /** "New game" after a run: the setup screen again, to change the pace. */
+  const [settingUp, setSettingUp] = useState(false);
+  const setupShown = phase === 'idle' || settingUp;
+  const boardColRef = useRef<HTMLDivElement>(null);
+  useFocusBoardAfterSetup(setupShown, boardColRef);
+  const begin = () => {
+    setSettingUp(false);
+    arbiter.start();
+  };
 
   useEffect(() => {
     document.title = `Arbiter · ${siteConfig.name}`;
@@ -209,9 +209,9 @@ export default function ArbiterPage() {
         </p>
       </div>
 
-      <div className="trainer">
-        <div className="play__boardcol">
-          <div className="trainer__board" style={{ position: 'relative' }}>
+      <div className={setupShown ? 'trainer trainer--setup' : 'trainer'}>
+        <div className="play__boardcol" ref={boardColRef}>
+          <div className="trainer__board">
             <Board
               fen={arbiter.fen}
               orientation="white"
@@ -236,36 +236,28 @@ export default function ArbiterPage() {
                 </Card>
               </div>
             ) : null}
-            {phase === 'idle' || phase === 'over' ? (
+            {phase === 'over' && !settingUp ? (
               <div className="trainer__overlay">
                 <Card className="arcade__summary" data-testid="arbiter-card">
-                  <h2>{phase === 'over' ? 'Run over' : 'Arbiter'}</h2>
-                  {phase === 'over' ? (
-                    <div className="arcade__scoreline">
-                      <Stat value={caught} label="Caught" />
-                      <Stat value={best ? Math.max(best.best, caught) : caught} label="Best" />
-                      {fastestMs !== null ? (
-                        <Stat value={formatSeconds(fastestMs)} label="Fastest call" />
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="muted">
-                      Every round shows a few real moves, then one illegal one: a knight off its L,
-                      a pawn going backwards, a pinned piece moving, castling through check. Call it
-                      with the button or Space before the next move would come. Calling a legal move
-                      or letting the illegal one pass is a strike; three end the run.{' '}
-                      {best ? `Best so far: ${best.best}.` : ''}
-                    </p>
-                  )}
-                  <div className="row">
+                  <h2>Run over</h2>
+                  <div className="arcade__scoreline">
+                    <Stat value={caught} label="Caught" />
+                    <Stat value={best ? Math.max(best.best, caught) : caught} label="Best" />
+                    {fastestMs !== null ? (
+                      <Stat value={formatSeconds(fastestMs)} label="Fastest call" />
+                    ) : null}
+                  </div>
+                  <div className="row arcade__summary-actions">
                     <Button
                       variant="primary"
-                      size="lg"
-                      onClick={arbiter.start}
+                      onClick={begin}
                       disabled={!games}
-                      data-testid="arbiter-start"
+                      data-testid="arbiter-again"
                     >
-                      {phase === 'over' ? 'Play again' : 'Start'}
+                      Play again
+                    </Button>
+                    <Button onClick={() => setSettingUp(true)} data-testid="arbiter-new">
+                      New game
                     </Button>
                     <LinkButton to="/arcade">Arcade</LinkButton>
                   </div>
@@ -277,64 +269,77 @@ export default function ArbiterPage() {
         </div>
 
         <aside className="trainer__panel stack">
-          <Card>
-            <div className="row row--between">
-              <strong>{running && current ? current.title : 'Arbiter'}</strong>
-              {running ? <Badge>Round {round}</Badge> : null}
-            </div>
-            {running && current ? <p className="small muted">{current.caption}</p> : null}
-            <p
-              className={`arcade__status${running ? '' : ' arcade__status--idle'}`}
-              role="status"
-              data-testid="arbiter-status"
+          {setupShown ? (
+            <SetupScreen
+              intro="Every round replays a few real moves from a classic game, then one illegal one — a knight off its L, a pawn going backwards, a pinned piece moving, castling through check."
+              onStart={begin}
+              startDisabled={!games}
+              startTestId="arbiter-start"
+              focusOnMount={settingUp}
+              back={
+                settingUp
+                  ? { label: 'Back to the board', onClick: () => setSettingUp(false) }
+                  : null
+              }
             >
-              {phase === 'watching' && paused ? (
-                'Paused'
-              ) : move && running ? (
-                <>
-                  {move.label}
-                  <San san={move.san} />
-                </>
-              ) : phase === 'watching' ? (
-                'Watch the board…'
-              ) : null}
-            </p>
-            <div className="row row--between arbiter__tally">
-              <span data-testid="arbiter-caught">
-                Caught: <strong>{caught}</strong>
-                {best ? <span className="muted"> · best {best.best}</span> : null}
-              </span>
-              <Strikes used={strikes} />
-            </div>
-            {phase === 'watching' ? (
-              <div className="row" style={{ marginTop: 12 }}>
-                <Button size="sm" onClick={arbiter.pause} disabled={paused}>
-                  Pause
-                </Button>
-              </div>
-            ) : null}
-            {!running ? (
-              <div style={{ marginTop: 12 }}>
-                <Field
-                  label="Pace"
-                  hint="Slow gives every move nearly twice as long, and speeds up more gently."
+              <ul className="setup__list small">
+                <li>Call it with the button or Space before the next move would come.</li>
+                <li>Calling a legal move, or letting the illegal one pass, is a strike.</li>
+                <li>Three strikes end the run.{best ? ` Your best: ${best.best} caught.` : ''}</li>
+              </ul>
+              <SetupSegmented<ArbiterPace>
+                label="Pace"
+                hint="Slow gives every move nearly twice as long, and speeds up more gently."
+                value={pace}
+                onChange={setPace}
+                options={[
+                  { value: 'normal', label: 'Normal' },
+                  { value: 'slow', label: 'Slow' },
+                ]}
+              />
+            </SetupScreen>
+          ) : (
+            <>
+              <Card>
+                <div className="row row--between">
+                  <strong>{running && current ? current.title : 'Arbiter'}</strong>
+                  {running ? <Badge>Round {round}</Badge> : null}
+                </div>
+                {running && current ? <p className="small muted">{current.caption}</p> : null}
+                <p
+                  className={`arcade__status${running ? '' : ' arcade__status--idle'}`}
+                  role="status"
+                  data-testid="arbiter-status"
                 >
-                  {() => (
-                    <Segmented<ArbiterPace>
-                      ariaLabel="Pace"
-                      value={pace}
-                      onChange={setPace}
-                      options={[
-                        { value: 'normal', label: 'Normal' },
-                        { value: 'slow', label: 'Slow' },
-                      ]}
-                    />
-                  )}
-                </Field>
-              </div>
-            ) : null}
-          </Card>
-          {!stacked ? underBoard : null}
+                  {phase === 'watching' && paused ? (
+                    'Paused'
+                  ) : move && running ? (
+                    <>
+                      {move.label}
+                      <San san={move.san} />
+                    </>
+                  ) : phase === 'watching' ? (
+                    'Watch the board…'
+                  ) : null}
+                </p>
+                <div className="row row--between arbiter__tally">
+                  <span data-testid="arbiter-caught">
+                    Caught: <strong>{caught}</strong>
+                    {best ? <span className="muted"> · best {best.best}</span> : null}
+                  </span>
+                  <Strikes used={strikes} />
+                </div>
+                {phase === 'watching' ? (
+                  <div className="row" style={{ marginTop: 12 }}>
+                    <Button size="sm" onClick={arbiter.pause} disabled={paused}>
+                      Pause
+                    </Button>
+                  </div>
+                ) : null}
+              </Card>
+              {!stacked ? underBoard : null}
+            </>
+          )}
           {!games ? <Spinner label="Reading the classic games" /> : null}
         </aside>
       </div>

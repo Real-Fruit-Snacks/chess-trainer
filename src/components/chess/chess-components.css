@@ -175,9 +175,11 @@ button.movelist__move:hover {
 .line__pv {
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   font-family: var(--font-mono);
   color: var(--text-muted);
+  /* A long line fades out at the edge: an ellipsis was drawn over the figurines of the move it
+     cut (they are images, not letters). */
+  mask-image: linear-gradient(to right, #000 calc(100% - 2em), transparent);
 }
 
 .line__pv button {
@@ -345,6 +347,11 @@ button.movelist__move:hover {
   font-family: var(--font-mono);
   flex: 1;
   min-width: 0;
+}
+
+/* Play is as tall as the field beside it. */
+.moveinput > .btn {
+  align-self: stretch;
 }
 
 .moveinput__error {

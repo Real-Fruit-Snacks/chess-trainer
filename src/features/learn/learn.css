@@ -11,18 +11,32 @@
   margin-bottom: var(--space-6);
 }
 
+.learn__lessons-title {
+  margin: 0 0 var(--space-3);
+}
+
 .learn__level {
   margin-bottom: var(--space-6);
 }
 
 .learn__level-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
 }
 
-.learn__level-header h2 {
+.learn__level-header h3 {
   margin: 0;
+  font-size: 1.25rem;
+}
+
+.learn__level-count {
+  margin-left: auto;
+}
+
+.learn__level-blurb {
+  margin: var(--space-1) 0 0;
 }
 
 .learn__grid {
@@ -114,13 +128,41 @@
 .lesson-card__title {
   margin: 0;
   font-size: 1.05rem;
+  line-height: 1.3;
 }
 
+/* Two lines of the summary: the cards keep one height, the lesson says the rest. */
 .lesson-card__summary {
   margin: 0;
   font-size: 0.9rem;
   color: var(--text-muted);
   flex: 1;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Phones: the title, its place and its progress — the list is for finding a lesson. */
+@media (max-width: 599px) {
+  .learn__grid {
+    gap: var(--space-2);
+  }
+
+  .lesson-card {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .lesson-card__summary {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+  }
+
+  .lesson-card__item > .lesson-check {
+    right: var(--space-3);
+    bottom: var(--space-3);
+  }
 }
 
 .lesson-card__footer {
@@ -145,7 +187,8 @@
   border-radius: 50%;
   border: 2px solid var(--border-strong);
   background: var(--surface);
-  color: transparent;
+  /* A faint tick, so the circle reads as "mark done" rather than as a radio button. */
+  color: var(--border-strong);
 }
 
 .lesson-check::before {
@@ -305,8 +348,8 @@
  * sized to fit the screen under the page title), and the coach's conversation
  * scrolls inside it (CoachLog keeps the newest words in view) rather than
  * lengthening the page, so the board and the question stay in view together.
- * (Phones held sideways scroll the whole panel instead: there is no room for a
- * box inside it.)
+ * (Phones held sideways scroll the panel with the page instead, the board held
+ * in view beside it: there is no room for a box inside it.)
  */
 @media (min-width: 900px) {
   .lesson__panel {
@@ -419,9 +462,10 @@
 }
 
 /* A unit that comes later keeps full-contrast text (it can still be opened);
-   the dashed edge and the badge say it is not up yet. */
+   the dashed edge, the plain background and the badge say it is not up yet. */
 .course__unit.is-locked {
   border-style: dashed;
+  background: transparent;
 }
 
 .course__unit-header {
@@ -470,9 +514,10 @@
   list-style: none;
   margin: var(--space-3) 0 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  display: grid;
+  gap: var(--space-1) var(--space-3);
+  /* Wide screens: the steps in two columns, so a unit uses its width. */
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
 }
 
 /* A course step: its check (a button for a lesson, which can be marked done) and its link,
@@ -488,6 +533,21 @@
 
 .course__row:hover {
   background: var(--surface-2);
+}
+
+/* The way into the step, at the end of its row. */
+.course__chevron {
+  flex: none;
+  align-self: center;
+  color: var(--text-faint);
+}
+
+.course__row:hover .course__chevron {
+  color: var(--accent);
+}
+
+.course__item .progress {
+  max-width: 260px;
 }
 
 .course__row > .lesson-check {
@@ -540,7 +600,7 @@
   height: 28px;
   border-radius: 50%;
   border: 2px solid var(--border-strong);
-  color: transparent;
+  color: var(--border-strong);
 }
 
 .course__status.is-done {
@@ -576,4 +636,9 @@
 
 .turn-dot--black {
   background: #222;
+}
+
+/* Nothing due: a readable card under the page header, on the page's own left edge. */
+.recall__empty {
+  max-width: 620px;
 }

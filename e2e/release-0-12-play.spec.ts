@@ -43,7 +43,7 @@ test.describe('play', () => {
   }) => {
     await seedProgress(page, { onboarded: true, puzzleRating: 1200 });
     await page.goto(`/play/computer?fen=${encodeURIComponent(MATE_IN_ONE)}&color=white`);
-    const setup = page.getByRole('dialog', { name: 'New game' });
+    const setup = page.getByRole('region', { name: 'New game' });
     const level = setup.getByLabel('Engine level');
     await expect(level).toBeVisible();
     // The ratings beside the levels are a guide, and the setup says so.
@@ -61,7 +61,7 @@ test.describe('play', () => {
     await expect(over).toContainText('by checkmate');
     await expect(over.getByRole('button', { name: 'New game' })).toBeVisible();
 
-    // "Play again": the same game at once, without the setup dialog.
+    // "Play again": the same game at once, without the new game screen.
     await over.getByRole('button', { name: 'Play again' }).click();
     await expect(over).toBeHidden();
     await expect(setup).toBeHidden();
@@ -90,7 +90,7 @@ test.describe('play', () => {
     await seedProgress(page, { onboarded: true, puzzleRating: 1200 });
     // Black to move: the learner plays Black.
     await page.goto(`/play/computer?fen=${encodeURIComponent(BLACK_MATES_IN_ONE)}`);
-    const setup = page.getByRole('dialog', { name: 'New game' });
+    const setup = page.getByRole('region', { name: 'New game' });
     await setup.getByLabel('Engine level').selectOption('1');
     await setup.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
@@ -129,7 +129,7 @@ test.describe('play', () => {
     // Black is in check although it is White's move.
     await page.goto(`/play/computer?fen=${encodeURIComponent('4k3/4Q3/8/8/8/8/8/4K3 w - - 0 1')}`);
     await expect(page.getByTestId('toasts')).toContainText('Cannot play from that position');
-    await expect(page.getByRole('dialog', { name: 'New game' })).not.toContainText(
+    await expect(page.getByRole('region', { name: 'New game' })).not.toContainText(
       'Starting from a custom position',
     );
     // A game that is already over (bare kings) is refused too.
@@ -145,7 +145,7 @@ test.describe('play', () => {
       games: [],
     });
     await page.goto('/play/computer');
-    await page.getByRole('button', { name: 'Cancel' }).click();
+    // The ladder stands beside the new game screen.
     const ladder = page.getByTestId('engine-ladder');
     const rungs = ladder.getByRole('listitem');
     await expect(rungs).toHaveCount(8);

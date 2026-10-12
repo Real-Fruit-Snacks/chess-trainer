@@ -146,7 +146,7 @@ export function ArbiterDuelRound({
 
   return (
     <>
-      <div className="trainer__board" style={{ position: 'relative' }}>
+      <div className="trainer__board">
         <Board
           fen={fen}
           orientation="white"

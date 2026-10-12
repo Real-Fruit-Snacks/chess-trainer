@@ -147,6 +147,7 @@ test.describe('odds ladder', () => {
     await page.getByRole('button', { name: 'Resign' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Resign' }).click();
     await expect(page.getByTestId('odds-result')).toContainText('The engine wins');
+    await page.getByTestId('odds-choose').click();
     await expect(page.getByTestId('odds-rung-0')).toContainText('1 loss');
     const progress = await storedProgress(page);
     expect((progress.oddsLadder as { rung: number }).rung).toBe(0);

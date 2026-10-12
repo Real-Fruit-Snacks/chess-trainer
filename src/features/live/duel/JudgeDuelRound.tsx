@@ -48,7 +48,7 @@ export function JudgeDuelRound({
 
   return (
     <>
-      <div className="trainer__board" style={{ position: 'relative' }}>
+      <div className="trainer__board">
         <Board
           fen={visible && item ? item.fen : EMPTY_FEN}
           orientation="white"

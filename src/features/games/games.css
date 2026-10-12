@@ -122,3 +122,8 @@
   font-size: 0.85em;
   color: var(--text-faint);
 }
+
+/* The list's title row stands apart from what it heads. */
+.games__head {
+  margin-bottom: var(--space-3);
+}

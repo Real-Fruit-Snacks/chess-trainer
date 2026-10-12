@@ -149,7 +149,7 @@ describe('PuzzlesPage', () => {
     renderAt('/puzzles/review');
     expect(screen.getByRole('radio', { name: 'Due' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Practise by theme' })).toBeInTheDocument();
-    expect(screen.getByText('Redo missed puzzles')).toBeInTheDocument();
+    expect(screen.getByText('Due puzzles')).toBeInTheDocument();
   });
 
   it('takes letter shortcuts in either case, ignores Ctrl/Cmd and does not auto-advance after the solution', async () => {

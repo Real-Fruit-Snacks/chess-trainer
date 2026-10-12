@@ -507,6 +507,19 @@ letters.
 | `useArbiter`                                   | idle → watching (start position → real moves → the illegal move) → verdict → … → over                                              | Each round comes from `arbiter.ts`: a classic game replayed with chess.js, two to six of its real moves, then an illegal move from `arbiterMoves.ts` — eighteen kinds in three tiers (a piece moving in a way it never can; the right movement where it is not allowed; what the king's safety and the move order forbid). They are worked out on a bare board (`chess/geometry.ts`) since chess.js refuses them, and a test checks every one it finds across the collection against chess.js. The replay speeds up each round, pauses itself when the page is hidden (covering the board), and a call counts until the next move would have come, plus a quarter of a second.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `useGhostKnight`                               | idle → hunting → ended → … → over                                                                                                  | `ghostKnight.ts` keeps a hunt as pure state: hunter moves on a board without kings, the knight's reply by fixed rules (take an unprotected hunter in reach, else the safe square with the most room, with a little chance) and, because those rules are fixed, the exact set of squares it could be on — what the shaded mode draws. A slider that runs into the unseen knight stops and takes it. Budgets were set from simulated hunts, and a test plays every squad with a hunter that looks one move ahead.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
+### Setup screens and long lists
+
+A game is set up on a screen of its own, never in a dialog over the board:
+`components/setup/SetupScreen.tsx` is the form every game against the computer and every arcade
+game shares (a titled card, choice cards, segmented choices, the colour, and the action bar that is
+pinned above the bottom bar on phones). The page marks its `trainer` with `trainer--setup` while the
+form shows, which on phones hides everything but the panel, and `useFocusBoardAfterSetup` hands the
+focus to the board once the game starts. Long lists (lessons, classic games, puzzle themes and
+openings, the endgame library, the glossary) share `components/list/ListSearch.tsx`: a search
+field, the list's own filters, and a live count. `lib/textMatch.ts` matches every typed word in any
+order, ignoring case, accents and punctuation, and `lib/useListParams.ts` keeps a list's search and
+filters in the address, replacing the history entry rather than adding one.
+
 ## Analyze and My games: human moves, time, your own games
 
 - **Human moves** (`HumanMovesCard.tsx`, `useHumanMoves.ts`, `humanMoves.ts`). `useHumanPrediction`

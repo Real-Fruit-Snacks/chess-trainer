@@ -279,6 +279,9 @@ test.describe('phone layout', () => {
     await page.goto('/puzzles');
     await completeOnboarding(page);
     await expect(page.locator('.puzzle-status')).toContainText(/Your move/i, { timeout: 30_000 });
+    // The themes would give the answer away: they show on request, or once the puzzle is done.
+    await expect(page.locator('.puzzle-themes__link')).toHaveCount(0);
+    await page.getByTestId('show-themes').click();
     const link = page.locator('.puzzle-themes__link').first();
     await expect(link).toBeVisible();
     const box = await link.boundingBox();

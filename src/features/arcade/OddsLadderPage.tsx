@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { Alert, Badge, Button, Card, Icon, Spinner, LinkButton } from '@/components/ui';
+import { Alert, Badge, Button, Card, Spinner, LinkButton } from '@/components/ui';
+import { ChoiceCards, SetupScreen } from '@/components/setup/SetupScreen';
+import { useFocusBoardAfterSetup } from '@/components/setup/useFocusBoardAfterSetup';
 import { usePlayVsEngine } from '@/features/play/usePlayVsEngine';
 import { siteConfig } from '@/site.config';
 import { useProgress } from '@/store/progress';
@@ -44,6 +46,13 @@ export default function OddsLadderPage() {
   const ladder = useProgress((s) => s.oddsLadder);
   const setOddsLadder = useProgress((s) => s.setOddsLadder);
   const [rungIndex, setRungIndex] = useState(ladder.rung);
+  /** The rung chosen on the setup screen (the current one, or a climbed one to replay). */
+  const [chosen, setChosen] = useState(ladder.rung);
+  /** "Choose a rung" after a game: the setup screen again. */
+  const [settingUp, setSettingUp] = useState(false);
+  const setupShown = !play.started || settingUp;
+  const boardColRef = useRef<HTMLDivElement>(null);
+  useFocusBoardAfterSetup(setupShown, boardColRef);
   /** What the last game did to the ladder (worked out before the ladder moved). */
   const [step, setStep] = useState<OddsStep | null>(null);
   const recordedRef = useRef(false);
@@ -58,6 +67,8 @@ export default function OddsLadderPage() {
     const rung = ODDS_RUNGS[index];
     if (!rung) return;
     setRungIndex(index);
+    setChosen(index);
+    setSettingUp(false);
     setStep(null);
     recordedRef.current = false;
     play.start({
@@ -83,29 +94,11 @@ export default function OddsLadderPage() {
   }, [play.gameOver, rungIndex, setOddsLadder]);
 
   const rung = ODDS_RUNGS[rungIndex];
+  const chosenRung = ODDS_RUNGS[chosen];
   const over = play.gameOver;
   const climbed = step === 'climbed' || step === 'reached-top';
 
-  const overlay = !play.started ? (
-    <Card className="arcade__summary">
-      <h2>{describeRung(ladder.rung)}</h2>
-      <p className="muted">
-        {ODDS_RUNGS[ladder.rung]?.handicap} You play White against Stockfish at full strength. Win
-        to climb.
-      </p>
-      <div className="row">
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={() => begin(ladder.rung)}
-          disabled={play.engineStatus === 'error'}
-          data-testid="odds-start"
-        >
-          Start
-        </Button>
-      </div>
-    </Card>
-  ) : over ? (
+  const overlay = setupShown ? null : over ? (
     <Card className="arcade__summary" data-testid="odds-result">
       <h2>
         {over.verdict === 'win' ? 'You win' : over.verdict === 'draw' ? 'Draw' : 'The engine wins'}
@@ -128,6 +121,15 @@ export default function OddsLadderPage() {
             Play again
           </Button>
         )}
+        <Button
+          onClick={() => {
+            setChosen(ladder.rung);
+            setSettingUp(true);
+          }}
+          data-testid="odds-choose"
+        >
+          Choose a rung
+        </Button>
         <AnalyzeGameButton pgn={play.pgn} orientation={play.playerColor} />
         <LinkButton to="/arcade">Arcade</LinkButton>
       </div>
@@ -156,74 +158,77 @@ export default function OddsLadderPage() {
         </Alert>
       ) : null}
 
-      <div className="trainer">
+      <div className={setupShown ? 'trainer trainer--setup' : 'trainer'}>
         <EngineGameBoard
           play={play}
           engineName="Stockfish (full strength)"
           ariaLabel={`Odds ladder board, ${play.game.position.turn} to move`}
           overlay={overlay}
           showMaterial={false}
+          preview={setupShown && chosenRung ? { fen: oddsFen(chosenRung) } : null}
+          boardColRef={boardColRef}
         />
 
         <aside className="trainer__panel stack">
-          <Card>
-            <div className="row row--between">
-              <strong>{play.started && rung ? describeRung(rungIndex) : 'Odds Ladder'}</strong>
-              {play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
-            </div>
-            {play.started && rung ? (
-              <p className="small muted" style={{ margin: '4px 0 0' }}>
-                {rung.handicap} No take-backs, no hints: a win has to be earned.
-              </p>
-            ) : null}
-            <ol
-              className="ladder__rungs"
-              // Unstyled lists lose their list semantics in Safari unless the role is given.
-              role="list"
-              data-testid="odds-rungs"
-              aria-label="Rungs"
+          {setupShown ? (
+            <SetupScreen
+              intro="You play White against Stockfish at full strength, which starts without some of its pieces. Win to climb: the head start shrinks with each rung. No take-backs, no hints."
+              onStart={() => begin(chosen)}
+              startDisabled={play.engineStatus === 'error'}
+              startTestId="odds-start"
+              focusOnMount={settingUp}
+              back={
+                settingUp
+                  ? { label: 'Back to the board', onClick: () => setSettingUp(false) }
+                  : null
+              }
             >
-              {ODDS_RUNGS.map((r, i) => {
-                const results = describeRungResults(ladder.results[i]);
-                const state =
-                  i < ladder.rung ? 'climbed' : i === ladder.rung ? 'current' : 'locked';
-                return (
-                  <li
-                    key={r.id}
-                    className={`ladder__rung ladder__rung--${state}`}
-                    data-testid={`odds-rung-${i}`}
-                  >
-                    <span className="ladder__rung-mark" aria-hidden="true">
-                      <Icon name={state === 'climbed' ? 'check' : 'circle'} size={16} />
-                    </span>
-                    <span className="ladder__rung-text">
-                      <strong className="ladder__rung-name">{r.name}</strong>
-                      <span className="small muted">
-                        {state === 'climbed' ? 'Climbed' : state === 'locked' ? 'Locked' : null}
-                        {state !== 'current' && results ? ' · ' : null}
-                        {results}
-                      </span>
-                    </span>
-                    <span className="ladder__rung-actions">
-                      {state === 'current' ? <Badge tone="accent">Current</Badge> : null}
-                      {state !== 'locked' && (!play.started || play.gameOver) ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => begin(i)}
-                          aria-label={`Play ${r.name}`}
-                        >
-                          Play
-                        </Button>
-                      ) : null}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
-          </Card>
-
-          <GameMoves play={play} />
+              <div data-testid="odds-rungs">
+                <ChoiceCards
+                  name="odds-rung"
+                  legend="Rung"
+                  value={String(chosen)}
+                  onChange={(value) => setChosen(Number(value))}
+                  choices={ODDS_RUNGS.map((r, i) => {
+                    const results = describeRungResults(ladder.results[i]);
+                    const state =
+                      i < ladder.rung ? 'climbed' : i === ladder.rung ? 'current' : 'locked';
+                    return {
+                      value: String(i),
+                      title: r.name,
+                      description:
+                        state === 'climbed'
+                          ? `Climbed${results ? ` · ${results}` : ''}`
+                          : `${r.handicap}${results ? ` ${results}.` : ''}`,
+                      icon:
+                        state === 'climbed' ? 'check' : state === 'current' ? 'ladder' : 'circle',
+                      unavailable:
+                        state === 'locked'
+                          ? `Locked: win ${ODDS_RUNGS[i - 1]?.name.toLowerCase() ?? 'the rung before'} first.`
+                          : null,
+                      badge: state === 'current' ? <Badge tone="accent">Current</Badge> : null,
+                      testId: `odds-rung-${i}`,
+                    };
+                  })}
+                />
+              </div>
+            </SetupScreen>
+          ) : (
+            <>
+              <Card>
+                <div className="row row--between">
+                  <strong>{rung ? describeRung(rungIndex) : 'Odds Ladder'}</strong>
+                  {play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
+                </div>
+                {rung ? (
+                  <p className="small muted" style={{ margin: '4px 0 0' }}>
+                    {rung.handicap} No take-backs, no hints: a win has to be earned.
+                  </p>
+                ) : null}
+              </Card>
+              <GameMoves play={play} />
+            </>
+          )}
         </aside>
       </div>
     </div>

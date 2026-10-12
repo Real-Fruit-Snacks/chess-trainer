@@ -327,11 +327,14 @@ export function Segmented<T extends string | number>({
   options,
   onChange,
   ariaLabel,
+  block = false,
 }: {
   value: T | null;
   options: { value: T; label: ReactNode }[];
   onChange: (value: T) => void;
   ariaLabel: string;
+  /** Take the full width, the options sharing it (a choice of two or three in a card). */
+  block?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const selectedIndex = options.findIndex((opt) => opt.value === value);
@@ -369,7 +372,7 @@ export function Segmented<T extends string | number>({
 
   return (
     <div
-      className="segmented"
+      className={block ? 'segmented segmented--block' : 'segmented'}
       role="radiogroup"
       aria-label={ariaLabel}
       ref={ref}

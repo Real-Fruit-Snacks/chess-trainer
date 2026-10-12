@@ -306,10 +306,15 @@ test.describe('what’s new', () => {
     // A gap on both sides: the card does not touch "Today" above or "Your progress" below.
     const todayBox = await today.boundingBox();
     const cardBox = await card.boundingBox();
-    const nextBox = await card.locator('xpath=following-sibling::*[1]').boundingBox();
+    // The next thing shown: an empty box for notices (nothing to say) takes no room.
+    const nextTop = await card
+      .locator('xpath=following-sibling::*')
+      .evaluateAll(
+        (els) => els.find((el) => el.getBoundingClientRect().height > 0)?.getBoundingClientRect().y,
+      );
     const cardBottom = (cardBox?.y ?? 0) + (cardBox?.height ?? 0);
     expect((cardBox?.y ?? 0) - ((todayBox?.y ?? 0) + (todayBox?.height ?? 0))).toBeGreaterThan(8);
-    expect((nextBox?.y ?? 0) - cardBottom).toBeGreaterThan(8);
+    expect((nextTop ?? 0) - cardBottom).toBeGreaterThan(8);
 
     // Each highlight leads to its feature; a long list opens in full on request.
     const items = card.getByRole('listitem');
@@ -386,9 +391,11 @@ test.describe('what’s new', () => {
     test.skip(Number(LABEL.split('.')[1]) < 29, 'quick search is news from 0.29 on');
     await seed(page, '0.28.0');
     await page.goto('/');
+    // The card has the newest release; 0.29's highlights are among the earlier ones.
     const card = page.getByTestId('whats-new');
-    await card.getByRole('button', { name: /^Show all/ }).click();
-    await card.getByRole('button', { name: /^Quick search/ }).click();
+    await card.getByRole('button', { name: 'Earlier releases' }).click();
+    const releases = page.getByTestId('whats-new-releases');
+    await releases.getByRole('button', { name: /^Quick search/ }).click();
     await expect(searchDialog(page)).toBeVisible();
     await expect(searchField(page)).toBeFocused();
   });

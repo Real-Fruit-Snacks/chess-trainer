@@ -7,21 +7,13 @@ import { ClickBoard } from '@/components/board/ClickBoard';
 import { piecesFromFen } from '@/components/board/clickBoardPieces';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { MoveInput } from '@/components/chess/MoveInput';
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Kbd,
-  LinkButton,
-  Segmented,
-  Spinner,
-  Stat,
-} from '@/components/ui';
+import { Alert, Badge, Button, Card, Kbd, Segmented, Spinner, Stat } from '@/components/ui';
 import { pageShortcutKey } from '@/lib/shortcutKey';
 import { useStackedLayout } from '@/lib/useStackedLayout';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
+import { formatRating } from '@/lib/rating';
+import { siteConfig } from '@/site.config';
 import { BLIND_DEPTH_LABELS, BLIND_DEPTHS, type BlindDepth, blindLevel } from './blind';
 import { blindFen, blindLine } from './blindLine';
 import { useBlindPuzzle } from './useBlindPuzzle';
@@ -135,7 +127,7 @@ export function BlindTrainer() {
 
   return (
     <div className="trainer trainer--lead">
-      <div className="trainer__board" style={{ position: 'relative' }}>
+      <div className="trainer__board">
         <ClickBoard
           pieces={pieces}
           orientation={setup?.solverColor ?? 'white'}
@@ -283,9 +275,10 @@ export function BlindTrainer() {
             options={BLIND_DEPTHS.map((value) => ({ value, label: BLIND_DEPTH_LABELS[value] }))}
           />
           <div className="puzzle-stats" style={{ marginTop: 12 }}>
-            <Stat value={level} label={`Level · ${BLIND_DEPTH_LABELS[depth]}`} />
+            <Stat value={formatRating(level, siteConfig.locale)} label="Level" />
             <Stat value={`${stats.solved} / ${stats.solved + stats.failed}`} label="Solved" />
-            <Stat value={stats.bestRun} label={`Best run (now ${stats.run})`} />
+            <Stat value={stats.run} label="Run" />
+            <Stat value={stats.bestRun} label="Best run" />
           </div>
         </Card>
 
@@ -305,13 +298,9 @@ export function BlindTrainer() {
           Calculation without the board: the pieces stay where they were when the puzzle began, and
           the line exists only in notation. Click the two squares of a move or type it. A peek shows
           the current position but keeps your level from rising for that puzzle. Each length keeps
-          its own level, separate from your <Link to="/puzzles">puzzle rating</Link>.
+          its own level, separate from your <Link to="/puzzles">puzzle rating</Link>. New to it? The
+          lesson <Link to="/learn/visualisation">How to see moves ahead</Link> shows the way.
         </p>
-        {stats.solved + stats.failed === 0 ? (
-          <LinkButton variant="ghost" to="/learn/visualisation">
-            How to see moves ahead
-          </LinkButton>
-        ) : null}
       </aside>
     </div>
   );

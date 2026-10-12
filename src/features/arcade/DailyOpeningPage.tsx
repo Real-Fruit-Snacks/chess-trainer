@@ -214,7 +214,7 @@ export default function DailyOpeningPage() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header page-header--lean">
         <p className="card__eyebrow arcade__eyebrow">
           <Link to="/arcade">Arcade</Link> / Daily Opening
         </p>
@@ -265,7 +265,13 @@ export default function DailyOpeningPage() {
                 ))}
               </ul>
               {!done ? (
-                <div style={{ marginTop: 12 }}>
+                <form
+                  className="daily__guess-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (matches[0]) submit(matches[0]);
+                  }}
+                >
                   <div className="arcade__results">
                     <Input
                       value={query}
@@ -274,9 +280,6 @@ export default function DailyOpeningPage() {
                       aria-label="Opening name"
                       autoComplete="off"
                       data-testid="daily-opening-input"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && matches[0]) submit(matches[0]);
-                      }}
                     />
                     {matches.length ? (
                       <ul
@@ -301,53 +304,72 @@ export default function DailyOpeningPage() {
                       </ul>
                     ) : null}
                   </div>
-                  <div className="row" style={{ marginTop: 8 }}>
+                  <div className="row row--between daily__guess-actions">
                     <Button
                       size="sm"
-                      variant="ghost"
                       onClick={() => setConfirmGiveUp(true)}
                       data-testid="daily-give-up"
                     >
                       Give up
                     </Button>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={!matches[0]}
+                      title="Guess the first opening in the list"
+                      data-testid="daily-guess"
+                    >
+                      Guess
+                    </Button>
                   </div>
-                </div>
+                </form>
               ) : null}
             </Card>
 
-            {rows.length ? (
-              <Card>
-                <ol
-                  className="arcade__guesses"
-                  role="list"
-                  aria-label="Your guesses"
-                  data-testid="daily-opening-guesses"
-                >
-                  {rows.map((row, i) => (
-                    <li key={`${guesses[i]?.name ?? i}`} className="arcade__guess">
-                      <span className="arcade__guess-name">
-                        {guesses[i] ? displayOpeningName(guesses[i].name) : null}
-                      </span>
-                      <ol
-                        className="arcade__guess-moves"
-                        role="list"
-                        aria-label={`Moves of ${guesses[i] ? displayOpeningName(guesses[i].name) : 'the guess'}`}
-                      >
-                        {row.map((tile, j) => (
-                          <li
-                            key={j}
-                            className={`arcade__tile arcade__tile--${tile}`}
-                            data-tile={tile}
-                          >
-                            <TileMark tile={tile} />
-                            <San san={guesses[i]?.moves[j] ?? ''} />
-                            <span className="sr-only">: {TILE_LABEL[tile]}</span>
-                          </li>
-                        ))}
-                      </ol>
-                    </li>
-                  ))}
-                </ol>
+            <Card>
+              <p className="field__label" style={{ margin: '0 0 8px' }}>
+                Your guesses
+              </p>
+              <ol
+                className="arcade__guesses"
+                role="list"
+                aria-label="Your guesses"
+                data-testid="daily-opening-guesses"
+              >
+                {rows.map((row, i) => (
+                  <li key={`${guesses[i]?.name ?? i}`} className="arcade__guess">
+                    <span className="arcade__guess-name">
+                      {guesses[i] ? displayOpeningName(guesses[i].name) : null}
+                    </span>
+                    <ol
+                      className="arcade__guess-moves"
+                      role="list"
+                      aria-label={`Moves of ${guesses[i] ? displayOpeningName(guesses[i].name) : 'the guess'}`}
+                    >
+                      {row.map((tile, j) => (
+                        <li
+                          key={j}
+                          className={`arcade__tile arcade__tile--${tile}`}
+                          data-tile={tile}
+                        >
+                          <TileMark tile={tile} />
+                          <San san={guesses[i]?.moves[j] ?? ''} />
+                          <span className="sr-only">: {TILE_LABEL[tile]}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </li>
+                ))}
+                {/* The tries still to come, as empty rows: six in all. */}
+                {done
+                  ? null
+                  : Array.from({ length: MAX_GUESSES - rows.length }, (_, i) => (
+                      <li key={`empty-${i}`} className="arcade__guess-empty" aria-hidden="true">
+                        <span className="arcade__guess-slot">Guess {rows.length + i + 1}</span>
+                      </li>
+                    ))}
+              </ol>
+              {rows.length ? (
                 <ul
                   className="arcade__legend small muted"
                   role="list"
@@ -362,8 +384,8 @@ export default function DailyOpeningPage() {
                     </li>
                   ))}
                 </ul>
-              </Card>
-            ) : null}
+              ) : null}
+            </Card>
 
             {done ? (
               <Card data-testid="daily-opening-result">

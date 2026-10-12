@@ -1,6 +1,6 @@
+/* A readable column that starts where every other page starts, on the page's left edge. */
 .placement {
   max-width: 820px;
-  margin: 0 auto;
 }
 
 .placement__tactic {

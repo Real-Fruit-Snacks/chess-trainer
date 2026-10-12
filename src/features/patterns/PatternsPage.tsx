@@ -16,6 +16,7 @@ import {
 import { PatternDrill } from './PatternDrill';
 import './patterns.css';
 import { Notated } from '@/chess/San';
+import { formatCount } from '@/lib/format';
 
 /**
  * The gallery of named mating patterns: a diagram and explanation for each,
@@ -136,7 +137,6 @@ export default function PatternsPage() {
                       fen={patternDiagram(pattern)}
                       orientation="white"
                       viewOnly
-                      coordinates={false}
                       animate={false}
                       announceMoves={false}
                       ariaLabel={`${pattern.name} diagram, White to play and mate`}
@@ -151,22 +151,26 @@ export default function PatternsPage() {
                         <Difficulty level={pattern.difficulty} />
                       )}
                     </div>
-                    <p className="small muted" style={{ margin: '0 0 6px' }}>
+                    <p className="small muted pattern-card__meta">
                       {pattern.pieces} · White to play and mate
                       {pattern.line.length > 1 ? ` in ${Math.ceil(pattern.line.length / 2)}` : ''}
                     </p>
                     <p className="pattern-card__text">
                       <Notated text={pattern.explanation} />
                     </p>
-                    <p className="pattern-card__text">
-                      <strong>Spot it:</strong> {pattern.spot}
+                    <p className="pattern-card__spot">
+                      <strong>Spot it</strong> {pattern.spot}
                     </p>
                     <div className="row pattern-card__actions">
-                      <Button size="sm" onClick={() => startDrill([pattern], false)}>
-                        Solve it
+                      <Button
+                        size="sm"
+                        variant={solved ? 'secondary' : 'primary'}
+                        onClick={() => startDrill([pattern], false)}
+                      >
+                        {solved ? 'Solve it again' : 'Solve it'}
                       </Button>
                       <LinkButton size="sm" to={`/puzzles/themes?theme=${pattern.id}`}>
-                        {count ? `${count} puzzles` : 'Puzzles'}
+                        {count ? `${formatCount(count, siteConfig.locale)} puzzles` : 'Puzzles'}
                       </LinkButton>
                     </div>
                   </div>

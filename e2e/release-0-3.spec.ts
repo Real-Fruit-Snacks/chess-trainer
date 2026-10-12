@@ -61,8 +61,12 @@ test.describe('play from any position', () => {
   test('starts a game from a FEN with the side to move preselected', async ({ page }) => {
     const fen = '8/8/4k3/8/4K3/4P3/8/8 b - - 0 1';
     await page.goto(`/play/computer?fen=${encodeURIComponent(fen)}&level=2`);
-    await expect(page.locator('.dialog .alert')).toContainText(/custom position/i);
-    await expect(page.getByLabel('Your colour')).toHaveValue('black');
+    await expect(page.getByRole('region', { name: 'New game' }).locator('.alert')).toContainText(
+      /custom position/i,
+    );
+    await expect(
+      page.getByRole('radiogroup', { name: 'Your colour' }).getByRole('radio', { name: 'Black' }),
+    ).toBeChecked();
     await expect(page.getByLabel('Engine level')).toHaveValue('2');
     // The query string is consumed so a reload does not restart the setup.
     await expect(page).toHaveURL(/\/play\/computer$/);

@@ -12,6 +12,8 @@ import {
   stopPuzzleDownload,
   subscribeToPuzzleDownload,
 } from './offlineDownload';
+import { formatCount } from '@/lib/format';
+import { siteConfig } from '@/site.config';
 
 /* ------------------------------------------------------------------ */
 /* The Settings row                                                    */
@@ -63,9 +65,11 @@ export function OfflinePuzzles() {
       <span className="small">
         {index
           ? complete
-            ? `All ${index.total.toLocaleString()} puzzles are available offline.`
-            : `${index.total.toLocaleString()} puzzles in the library; the ones you have played are kept offline${
-                status ? ` (${status.cached} of ${status.total} files)` : ''
+            ? `All ${formatCount(index.total, siteConfig.locale)} puzzles are available offline.`
+            : `${formatCount(index.total, siteConfig.locale)} puzzles in the library; the ones you have played are kept offline${
+                status
+                  ? ` (${formatCount(status.cached, siteConfig.locale)} of ${formatCount(status.total, siteConfig.locale)} files)`
+                  : ''
               }.`
           : 'Loading the puzzle index…'}
       </span>
@@ -73,7 +77,9 @@ export function OfflinePuzzles() {
         <div className="row">
           {/* Progress is shown, not announced: the live region speaks only the result. */}
           <span className="small muted" aria-hidden="true">
-            {progress.total ? `${progress.done} / ${progress.total}` : 'Starting…'}
+            {progress.total
+              ? `${formatCount(progress.done, siteConfig.locale)} / ${formatCount(progress.total, siteConfig.locale)}`
+              : 'Starting…'}
           </span>
           <span className="sr-only" role="status">
             Downloading puzzles. The result is announced when it finishes.

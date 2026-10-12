@@ -13,6 +13,7 @@ import { useProgress } from '@/store/progress';
 import { type EndgameDrill, getDrill } from './endgameDrills';
 import { buildEndgameLadder } from './endgameLadder';
 import { pickStartFen, requestedPosition, useDrillGame } from './useDrillGame';
+import { SetupScreen } from '@/components/setup/SetupScreen';
 import '@/features/play/play.css';
 import './drills.css';
 
@@ -61,6 +62,14 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
   const playerTurn = game.phase === 'playing' && position.turn === userColor && !game.thinking;
   const startsWithBlack = (game.startFen ?? '').split(' ')[1] === 'b';
   const startMoveNumber = Number((game.startFen ?? '').split(' ')[5] ?? 1);
+  const goalText =
+    drill.goal === 'mate'
+      ? `Checkmate within ${drill.moveLimit} moves.`
+      : drill.goal === 'promote'
+        ? `Promote the pawn within ${drill.moveLimit} moves.`
+        : drill.goal === 'capture'
+          ? `Win the opponent’s last piece (or mate) within ${drill.moveLimit} moves.`
+          : `Hold the draw for ${drill.moveLimit} moves.`;
 
   return (
     <div>
@@ -91,7 +100,7 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
             thinking={game.thinking}
             showMaterial={false}
           />
-          <div className="trainer__board" style={{ position: 'relative' }}>
+          <div className="trainer__board">
             <Board
               fen={shownFen}
               orientation={userColor}
@@ -109,33 +118,6 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
                 color={game.game.pendingPromotion.color}
                 onSelect={game.resolvePromotion}
               />
-            ) : null}
-            {game.phase === 'idle' ? (
-              <div className="trainer__overlay">
-                <Card className="summary">
-                  <h2 style={{ marginTop: 0 }}>{drill.title}</h2>
-                  <p className="muted">
-                    You play {userColor}.{' '}
-                    {drill.goal === 'mate'
-                      ? `Checkmate within ${drill.moveLimit} moves.`
-                      : drill.goal === 'promote'
-                        ? `Promote the pawn within ${drill.moveLimit} moves.`
-                        : drill.goal === 'capture'
-                          ? `Win the opponent’s last piece (or mate) within ${drill.moveLimit} moves.`
-                          : `Hold the draw for ${drill.moveLimit} moves.`}
-                  </p>
-                  <div className="row">
-                    <Button
-                      variant="primary"
-                      size="lg"
-                      onClick={begin}
-                      disabled={game.engineStatus === 'error'}
-                    >
-                      Start
-                    </Button>
-                  </div>
-                </Card>
-              </div>
             ) : null}
             {game.result ? (
               <div className="trainer__overlay">
@@ -179,55 +161,80 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
         </div>
 
         <aside className="trainer__panel stack">
-          <Card>
-            {game.engineStatus === 'loading' ? (
-              <div style={{ margin: '0 0 8px' }}>
-                <Spinner label="Loading engine…" />
+          {game.phase === 'idle' ? (
+            <SetupScreen
+              title="The task"
+              intro={`You play ${userColor}. ${goalText}`}
+              onStart={begin}
+              startDisabled={game.engineStatus === 'error'}
+              startTestId="drill-start"
+            >
+              <div className="drill__tip">
+                <strong>Technique.</strong> {drill.tip}
               </div>
-            ) : null}
-            <div className="drill__hud">
-              <Stat value={game.userMoves} label={`Moves (limit ${drill.moveLimit})`} />
-              <Stat value={best?.best ? (best.detail ?? 'Done') : NONE} label="Best" />
-              <Stat value={best?.attempts ?? 0} label="Attempts" />
-            </div>
-            <div className="puzzle-actions">
-              <Button
-                onClick={game.hint}
-                disabled={!playerTurn || game.hinting || game.engineStatus !== 'ready'}
-                loading={game.hinting}
-              >
-                Hint
-              </Button>
-              <Button variant="ghost" onClick={game.giveUp} disabled={game.phase !== 'playing'}>
-                Give up
-              </Button>
-              {game.startFen ? (
-                <LinkButton variant="ghost" to={`/analyze?fen=${encodeURIComponent(position.fen)}`}>
-                  Analyze position
-                </LinkButton>
+              {lesson ? (
+                <p className="small setup__note">
+                  Theory: <Link to={`/learn/${lesson.id}`}>{lesson.title}</Link>
+                </p>
               ) : null}
-            </div>
-          </Card>
+              {game.engineStatus === 'loading' ? <Spinner label="Loading engine…" /> : null}
+            </SetupScreen>
+          ) : (
+            <>
+              <Card>
+                {game.engineStatus === 'loading' ? (
+                  <div style={{ margin: '0 0 8px' }}>
+                    <Spinner label="Loading engine…" />
+                  </div>
+                ) : null}
+                <div className="drill__hud">
+                  <Stat value={`${game.userMoves}/${drill.moveLimit}`} label="Moves" />
+                  <Stat value={best?.best ? (best.detail ?? 'Done') : NONE} label="Best" />
+                  <Stat value={best?.attempts ?? 0} label="Attempts" />
+                </div>
+                <div className="puzzle-actions">
+                  <Button
+                    onClick={game.hint}
+                    disabled={!playerTurn || game.hinting || game.engineStatus !== 'ready'}
+                    loading={game.hinting}
+                  >
+                    Hint
+                  </Button>
+                  <Button onClick={game.giveUp} disabled={game.phase !== 'playing'}>
+                    Give up
+                  </Button>
+                  {game.startFen ? (
+                    <LinkButton
+                      variant="ghost"
+                      to={`/analyze?fen=${encodeURIComponent(position.fen)}`}
+                    >
+                      Analyze position
+                    </LinkButton>
+                  ) : null}
+                </div>
+              </Card>
 
-          <Card>
-            <div className="drill__tip">
-              <strong>Technique.</strong> {drill.tip}
-            </div>
-            {lesson ? (
-              <p className="small" style={{ margin: '8px 0 0' }}>
-                Theory: <Link to={`/learn/${lesson.id}`}>{lesson.title}</Link>
-              </p>
-            ) : null}
-          </Card>
+              <Card>
+                <div className="drill__tip">
+                  <strong>Technique.</strong> {drill.tip}
+                </div>
+                {lesson ? (
+                  <p className="small" style={{ margin: '8px 0 0' }}>
+                    Theory: <Link to={`/learn/${lesson.id}`}>{lesson.title}</Link>
+                  </p>
+                ) : null}
+              </Card>
 
-          <Card>
-            <MoveList
-              moves={position.history}
-              currentPly={position.history.length}
-              startsWithBlack={startsWithBlack}
-              startMoveNumber={startMoveNumber}
-            />
-          </Card>
+              <Card>
+                <MoveList
+                  moves={position.history}
+                  currentPly={position.history.length}
+                  startsWithBlack={startsWithBlack}
+                  startMoveNumber={startMoveNumber}
+                />
+              </Card>
+            </>
+          )}
         </aside>
       </div>
     </div>

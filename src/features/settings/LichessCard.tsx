@@ -10,6 +10,7 @@ import { useLichess } from '@/store/lichess';
 import { useProgress } from '@/store/progress';
 import { describeReport, describeWhen, plural } from './lichessStatus';
 import { LichessTokenConnect } from './LichessTokenConnect';
+import { formatRating } from '@/lib/rating';
 
 /** An app on the Home Screen of an iPhone or iPad: iOS finishes a sign-in elsewhere, in Safari. */
 const homeScreenApp = () =>
@@ -127,7 +128,10 @@ export function LichessCard() {
                 {account.username}
               </a>
               {puzzleRating ? (
-                <span className="small muted"> · puzzle rating {puzzleRating.rating}</span>
+                <span className="small muted">
+                  {' '}
+                  · puzzle rating {formatRating(puzzleRating.rating, siteConfig.locale)}
+                </span>
               ) : null}
             </span>
             <Button

@@ -1,18 +1,63 @@
+/* The sections, in a bar that follows down the page and marks the one being read. */
 .reference__tabs {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-bottom: var(--space-5);
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 var(--space-5);
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
 }
 
-.reference__tabs .badge {
+.reference__tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.9rem;
   text-decoration: none;
-  padding: 6px 12px;
+}
+
+.reference__tab:hover {
+  color: var(--text);
+}
+
+.reference__tab[aria-current='location'] {
+  background: var(--segmented-on);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 599px) {
+  .reference__tabs {
+    width: 100%;
+  }
+
+  .reference__tab {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 0 var(--space-2);
+  }
 }
 
 .reference__section {
   margin-bottom: var(--space-7);
-  scroll-margin-top: calc(var(--header-height) + 12px);
+  /* Clear of the header and the bar of sections. */
+  scroll-margin-top: calc(var(--header-height) + 64px);
+}
+
+.reference__section > h2 {
+  margin-bottom: var(--space-3);
 }
 
 .reference__section h3 {
@@ -48,37 +93,29 @@
   overflow-wrap: anywhere;
 }
 
-.reference__search {
-  max-width: 100%;
-}
-
-.reference__search .input {
-  min-width: min(220px, 100%);
-}
-
 .reference__glossary {
-  display: grid;
-  gap: var(--space-3);
   margin: 0;
-  grid-template-columns: minmax(0, 1fr);
+  padding: var(--space-2) var(--space-4);
 }
 
+/* Wide screens: two columns the terms flow down, each as tall as its definition. */
 @media (min-width: 900px) {
   .reference__glossary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    columns: 2;
+    column-gap: var(--space-6);
   }
 }
 
 .reference__entry {
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
+  break-inside: avoid;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+  scroll-margin-top: calc(var(--header-height) + 64px);
 }
 
 .reference__entry dt {
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .reference__entry dd {
@@ -87,13 +124,31 @@
   font-size: 0.95rem;
 }
 
+/* The questions, one card, a rule between them. */
 .reference__faqs {
-  max-width: 52rem;
+  padding: 0 var(--space-4);
 }
 
-/* The question is the tap target: a finger-sized row, not just the text. */
-.reference__faq summary {
-  cursor: pointer;
+.reference__faq {
+  border-bottom: 1px solid var(--border);
+  scroll-margin-top: calc(var(--header-height) + 64px);
+}
+
+.reference__faq:last-child {
+  border-bottom: 0;
+}
+
+/* The question is the tap target: a finger-sized row, the chevron beside it. */
+.reference__faq > summary {
   font-weight: 600;
-  padding: var(--space-1) 0;
+  padding-block: var(--space-3);
+  align-items: flex-start;
+}
+
+.reference__faq > summary::before {
+  margin-top: 0.5em;
+}
+
+.reference__answer {
+  margin: 0 0 var(--space-3) calc(13px + var(--space-2));
 }

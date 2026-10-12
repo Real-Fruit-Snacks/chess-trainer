@@ -13,12 +13,23 @@ import {
   ConfirmDialog,
   Dialog,
   Field,
+  Icon,
   Select,
   Spinner,
   Switch,
 } from '@/components/ui';
+import {
+  ChoiceCards,
+  ColourChoice,
+  type SetupChoice,
+  SetupGroup,
+  SetupScreen,
+  SetupSegmented,
+} from '@/components/setup/SetupScreen';
+import { useFocusBoardAfterSetup } from '@/components/setup/useFocusBoardAfterSetup';
+import { EngineLevelField } from '@/features/arcade/arcadeControls';
 import { toast } from '@/components/ui/toastStore';
-import { chess960Number } from '@/chess/chess960';
+import { chess960Number, randomChess960 } from '@/chess/chess960';
 import { START_FEN } from '@/chess/helpers';
 import { PIECE_NAMES } from '@/chess/blunderCheck';
 import { MOTIF_HELP } from '@/features/analyze/commentary';
@@ -28,7 +39,7 @@ import { EngineCrashedError } from '@/engine/EngineClient';
 import { ENGINE_LEVELS } from '@/engine/levels';
 import { useMaiaDownload } from '@/engine/maia/maiaDownload';
 import { HUMAN_MAX_RATING, HUMAN_RATINGS } from '@/engine/maia/ratings';
-import { TIME_CONTROLS } from '@/lib/clock';
+import { getTimeControl, TIME_CONTROLS } from '@/lib/clock';
 import { siteConfig } from '@/site.config';
 import { PLAY_OPPONENTS, type PlayVariant, useSettings } from '@/store/settings';
 import { useRepertoire } from '@/store/repertoire';
@@ -49,6 +60,28 @@ import { useLichess } from '@/store/lichess';
 /** How long a blindfold "peek" shows the pieces. */
 const PEEK_MS = 2000;
 
+/** The opponents the setup offers, as cards: what each is, in a line. */
+const OPPONENT_CHOICES: readonly SetupChoice<Opponent>[] = [
+  {
+    value: 'engine',
+    title: 'Stockfish',
+    description: 'Eight levels, from “just learned the rules” to master.',
+    icon: 'chip',
+  },
+  {
+    value: 'humanlike',
+    title: 'Human-like (Maia)',
+    description: 'Plays the moves people of a rating play, from 600 to 2600.',
+    icon: 'brain',
+  },
+  {
+    value: 'human',
+    title: 'Two players',
+    description: 'Take turns at this device.',
+    icon: 'device',
+  },
+];
+
 const CATEGORY_LABEL: Record<string, string> = {
   none: 'Untimed',
   bullet: 'Bullet',
@@ -68,7 +101,14 @@ export default function PlayPage() {
   const settings = useSettings();
   const play = usePlayVsEngine();
   const stacked = useStackedLayout();
+  // The new game screen: up until the first game, and again after "New game".
   const [setupOpen, setSetupOpen] = useState(true);
+  /** The screen takes the focus when "New game" opens it (not on arriving at the page). */
+  const [setupFocus, setSetupFocus] = useState(false);
+  const boardColRef = useRef<HTMLDivElement>(null);
+  // A Chess960 game's start, drawn when the screen opens so the preview shows it (and another
+  // can be drawn); a game handed over keeps its own.
+  const [drawn, setDrawn] = useState(randomChess960);
   // Focus mode: the shell drops its header and navigation while a game is on.
   const setFocus = useFocus((s) => s.set);
   const focusOn = settings.playFocus && play.started && !play.gameOver;
@@ -197,11 +237,12 @@ export default function PlayPage() {
       <ClockDisplay ms={play.clock[c]} running={play.clock.running === c && !play.gameOver} />
     ) : null;
 
-  /** The last game's settings, so "Play again" can repeat them without the setup dialog. */
+  /** The last game's settings, so "Play again" can repeat them without the new game screen. */
   const lastSetupRef = useRef<Parameters<typeof play.start>[0] | null>(null);
 
-  const launch = (setup: Parameters<typeof play.start>[0]) => {
-    lastSetupRef.current = setup;
+  const launch = (setup: Parameters<typeof play.start>[0], drawnStart = false) => {
+    // "Play again" draws a new Chess960 start, as each game does; a position handed over stays.
+    lastSetupRef.current = drawnStart ? { ...setup, fen: undefined } : setup;
     play.start(setup);
     // Only games set up here become the Play defaults (arcade games go through the hook too).
     settings.update({
@@ -229,19 +270,23 @@ export default function PlayPage() {
       });
       return;
     }
-    launch({
-      color,
-      levelId,
-      timeControlId,
-      fen: startFrom ?? undefined,
-      opponent: chess960Setup && opponent === 'humanlike' ? 'engine' : opponent,
-      humanRating,
-      autoFlip: opponent === 'human' && autoFlip,
-      coach: settings.playCoach && !chess960Setup,
-      blunderCheck: settings.playBlunderCheck && !chess960Setup,
-      book,
-      variant,
-    });
+    const drawnStart = chess960Setup && !startFrom;
+    launch(
+      {
+        color,
+        levelId,
+        timeControlId,
+        fen: startFrom ?? (drawnStart ? drawn.fen : undefined),
+        opponent: chess960Setup && opponent === 'humanlike' ? 'engine' : opponent,
+        humanRating,
+        autoFlip: opponent === 'human' && autoFlip,
+        coach: settings.playCoach && !chess960Setup,
+        blunderCheck: settings.playBlunderCheck && !chess960Setup,
+        book,
+        variant,
+      },
+      drawnStart,
+    );
     // A position handed over says nothing about the next game's kind.
     if (!startFrom) settings.update({ playVariant: variant });
   };
@@ -274,8 +319,17 @@ export default function PlayPage() {
 
   const openSetup = () => {
     dismissResult();
+    setDrawn(randomChess960());
+    setSetupFocus(true);
     setSetupOpen(true);
   };
+
+  /** Back to the game on the board, as it was. */
+  const closeSetup = () => {
+    setSetupOpen(false);
+  };
+
+  useFocusBoardAfterSetup(setupOpen, boardColRef);
 
   /** A ladder game: the next rung, from the initial position, with the usual settings. */
   const playLadder = (nextLevelId: number) => {
@@ -389,6 +443,283 @@ export default function PlayPage() {
     return acc;
   }, {});
 
+  // The setup's preview: the start the game will have, from the side the learner will play.
+  const bookApplies = !!bookChoice && opponent !== 'human' && !startFrom && !chess960Setup;
+  const previewFen: Fen = startFrom ?? (chess960Setup ? drawn.fen : START_FEN);
+  const previewSide: LongColor = bookApplies
+    ? (bookChoice?.color ?? 'white')
+    : color === 'black'
+      ? 'black'
+      : 'white';
+  const setupLevel = ENGINE_LEVELS.find((l) => l.id === levelId) ?? ENGINE_LEVELS[0];
+  const previewOpponent =
+    opponent === 'humanlike' && !chess960Setup
+      ? `Maia · ${humanRating}`
+      : `Stockfish · ${setupLevel?.name ?? ''}`;
+  const previewName = (c: LongColor) =>
+    opponent === 'human'
+      ? c === 'white'
+        ? 'White'
+        : 'Black'
+      : c === previewSide
+        ? color === 'random' && !bookApplies
+          ? 'You (colour drawn at the start)'
+          : 'You'
+        : previewOpponent;
+  const setupClock = getTimeControl(timeControlId);
+  const previewClock =
+    setupClock.initialMs > 0 ? <ClockDisplay ms={setupClock.initialMs} running={false} /> : null;
+  // On the board: the preview while the setup is up, the game otherwise.
+  const boardTop: LongColor = setupOpen ? (previewSide === 'white' ? 'black' : 'white') : topColor;
+  const boardBottom: LongColor = setupOpen ? previewSide : bottomColor;
+
+  /** Maia plays once its files are on the device (the setup offers the download). */
+  const humanUnavailable = opponent === 'humanlike' && humanFiles.downloaded !== true;
+
+  const newGameSetup = (
+    <SetupScreen
+      onStart={startGame}
+      startDisabled={humanUnavailable}
+      focusOnMount={setupFocus}
+      back={
+        play.started
+          ? {
+              label: play.gameOver ? 'Back to the board' : 'Back to the game',
+              onClick: closeSetup,
+            }
+          : null
+      }
+    >
+      {startFrom ? (
+        <Alert tone="info">
+          {chess960Setup && chess960Number(startFrom) !== null
+            ? `Starting from Chess960 position ${chess960Number(startFrom) ?? ''}.`
+            : `Starting from a ${chess960Setup ? 'Chess960' : 'custom'} position (${startFrom.split(' ')[1] === 'b' ? 'Black' : 'White'} to move).`}{' '}
+          <Button size="sm" variant="ghost" onClick={() => setStartFrom(null)}>
+            Use the initial position instead
+          </Button>
+        </Alert>
+      ) : null}
+
+      <ChoiceCards
+        name="newgame-opponent"
+        legend="Opponent"
+        hint={
+          <>
+            Or play a person online: <Link to="/play">post a game, or join one</Link>.
+          </>
+        }
+        choices={OPPONENT_CHOICES.map((choice) => ({
+          ...choice,
+          unavailable:
+            choice.value === 'humanlike' && chess960Setup ? 'Standard chess only.' : null,
+        }))}
+        value={opponent}
+        onChange={setOpponent}
+      />
+
+      {play.suggestedLevel && opponent === 'engine' ? (
+        <Alert tone="info">
+          Based on your last two games, try{' '}
+          <strong>
+            Level {play.suggestedLevel.id} · {play.suggestedLevel.name}
+          </strong>
+          .{' '}
+          <Button size="sm" onClick={() => setLevelId(play.suggestedLevel?.id ?? levelId)}>
+            Use it
+          </Button>
+        </Alert>
+      ) : null}
+      {play.suggestedRating && opponent === 'humanlike' ? (
+        <Alert tone="info">
+          Based on your last two games, try <strong>Maia · {play.suggestedRating}</strong>.{' '}
+          <Button size="sm" onClick={() => setHumanRating(play.suggestedRating ?? humanRating)}>
+            Use it
+          </Button>
+        </Alert>
+      ) : null}
+      {lichessHint &&
+      !play.suggestedRating &&
+      opponent === 'humanlike' &&
+      lichessHint.rating !== humanRating ? (
+        <Alert tone="info">
+          Your Lichess {lichessHint.perf} rating is {lichessHint.lichess}: try{' '}
+          <strong>Maia · {lichessHint.rating}</strong>.{' '}
+          <Button size="sm" onClick={() => setHumanRating(lichessHint.rating)}>
+            Use it
+          </Button>
+        </Alert>
+      ) : null}
+
+      {opponent === 'engine' ? (
+        <EngineLevelField value={levelId} onChange={setLevelId} describe />
+      ) : opponent === 'humanlike' ? (
+        <>
+          <Field
+            label="Rating"
+            hint="Maia learned from millions of real games: it plays the moves people of this rating play — the misjudged plans and missed tactics included — rather than an engine’s random blunders."
+          >
+            {(id) => (
+              <Select
+                id={id}
+                value={humanRating}
+                onChange={(e) => setHumanRating(Number(e.target.value))}
+              >
+                {HUMAN_RATINGS.map((rating) => (
+                  <option key={rating} value={rating}>
+                    {rating}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <HumanOpponentDownload />
+        </>
+      ) : null}
+
+      {startFrom ? null : (
+        <SetupSegmented
+          label="Game"
+          value={variant}
+          onChange={chooseVariant}
+          options={[
+            { value: 'standard', label: 'Standard' },
+            { value: 'chess960', label: 'Chess960' },
+          ]}
+          hint={
+            chess960Setup
+              ? 'The pieces behind the pawns start in one of 960 arrangements. Castle by moving your king onto its rook. Coach mode, the blunder check, opening practice and Maia are for standard chess, so they are off.'
+              : 'The usual starting position.'
+          }
+        >
+          {chess960Setup ? (
+            <div className="setup__row">
+              <span className="small" data-testid="newgame-chess960">
+                Position {drawn.number}
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => setDrawn(randomChess960())}>
+                <Icon name="shuffle" size={16} />
+                <span>Another position</span>
+              </Button>
+            </div>
+          ) : null}
+        </SetupSegmented>
+      )}
+
+      {bookApplies ? null : (
+        <ColourChoice
+          label={opponent === 'human' ? 'Board faces' : 'Your colour'}
+          value={color}
+          onChange={setColor}
+        />
+      )}
+      {opponent === 'human' ? (
+        <Switch
+          checked={autoFlip}
+          onChange={setAutoFlip}
+          label="Turn the board after every move"
+          description="The board faces whoever is to move."
+        />
+      ) : null}
+
+      <Field
+        label="Time control"
+        hint={
+          timeControlId === 'none'
+            ? 'No clock — take as long as you like. Good while learning.'
+            : 'Run out of time and you lose. 10 + 5 is a good first rapid game; the engine always moves quickly.'
+        }
+      >
+        {(id) => (
+          <Select id={id} value={timeControlId} onChange={(e) => setTimeControlId(e.target.value)}>
+            {Object.entries(groupedControls).map(([category, controls]) => (
+              <optgroup key={category} label={CATEGORY_LABEL[category] ?? category}>
+                {controls.map((tc) => (
+                  <option key={tc.id} value={tc.id}>
+                    {tc.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </Select>
+        )}
+      </Field>
+
+      {opponent !== 'human' && !startFrom ? (
+        <Field
+          label="Practise an opening"
+          hint={
+            chess960Setup
+              ? 'Standard chess only.'
+              : bookChoice
+                ? `You play ${bookChoice.color}. The opponent follows the repertoire’s lines; when the book runs out, ${opponent === 'humanlike' ? 'Maia' : 'the engine'} takes over. Leaving the book pauses the game.`
+                : 'Rehearse a repertoire against a live opponent.'
+          }
+        >
+          {(id) => (
+            <Select
+              id={id}
+              value={chess960Setup ? '' : bookId}
+              onChange={(e) => setBookId(e.target.value)}
+              disabled={chess960Setup}
+              data-testid="book-select"
+            >
+              <option value="">No — a normal game</option>
+              {repertoires.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} ({r.color})
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      ) : null}
+
+      <SetupGroup legend="While you play" className="setup__options">
+        {opponent !== 'human' ? (
+          <Switch
+            checked={settings.playCoach && !chess960Setup}
+            onChange={(next) => settings.update({ playCoach: next })}
+            disabled={chess960Setup}
+            label="Coach mode"
+            description={
+              chess960Setup
+                ? 'Standard chess only.'
+                : timeControlId === 'none'
+                  ? 'After a mistake the game pauses, explains what went wrong and offers a take-back.'
+                  : 'Only in untimed games — the coach needs time to check each move.'
+            }
+          />
+        ) : null}
+        {opponent !== 'human' ? (
+          <Switch
+            checked={settings.playBlunderCheck && !chess960Setup}
+            onChange={(next) => settings.update({ playBlunderCheck: next })}
+            disabled={chess960Setup}
+            label="Blunder check"
+            description={
+              chess960Setup
+                ? 'Standard chess only.'
+                : 'Before a move that hangs material or allows mate is played, ask: checks, captures, threats? Play it anyway if you meant it.'
+            }
+          />
+        ) : null}
+        <Switch
+          checked={settings.moveInput}
+          onChange={(next) => settings.update({ moveInput: next })}
+          label="Keyboard move entry"
+          description="Type moves like Nf3 or e2e4 under the board."
+        />
+        <Switch
+          checked={settings.playBlindfold}
+          onChange={(next) => settings.update({ playBlindfold: next })}
+          label="Blindfold"
+          description="The pieces are hidden — follow the moves in the notation panel and play by clicking squares. Peek when you must."
+        />
+      </SetupGroup>
+    </SetupScreen>
+  );
+
   return (
     <div>
       <div className="page-header page-header--lean">
@@ -427,54 +758,57 @@ export default function PlayPage() {
         </Alert>
       ) : null}
 
-      <div className="trainer">
-        <div className="play__boardcol">
+      <div className={setupOpen ? 'trainer trainer--setup' : 'trainer'}>
+        <div className="play__boardcol" ref={boardColRef}>
           <PlayerBar
-            name={nameFor(topColor)}
-            color={topColor}
-            fen={position.fen}
-            thinking={play.thinking && topColor !== play.playerColor}
-            extra={clockFor(topColor)}
-            showMaterial={!customStart}
+            name={setupOpen ? previewName(boardTop) : nameFor(topColor)}
+            color={boardTop}
+            fen={setupOpen ? previewFen : position.fen}
+            thinking={!setupOpen && play.thinking && topColor !== play.playerColor}
+            extra={setupOpen ? previewClock : clockFor(topColor)}
+            showMaterial={!setupOpen && !customStart}
           />
-          <div className="trainer__board" style={{ position: 'relative' }}>
-            <Board
-              fen={position.fen}
-              orientation={play.orientation}
-              turnColor={position.turn}
-              movableColor={movableColor}
-              dests={playerTurn ? position.dests : new Map()}
-              chess960={chess960}
-              lastMove={position.lastMove}
-              check={position.inCheck}
-              autoShapes={play.hintShapes}
-              onMove={(from, to) => play.playerMove(from, to)}
-              ariaLabel={`Game board, ${position.turn} to move`}
-              className={blindfold && !peeking ? 'board--blindfold' : undefined}
-            />
-            {game.pendingPromotion ? (
+          <div className="trainer__board">
+            {setupOpen ? (
+              <Board
+                fen={previewFen}
+                orientation={previewSide}
+                viewOnly
+                chess960={chess960Setup}
+                ariaLabel={`The new game's starting position, ${previewSide === 'white' ? 'White' : 'Black'} at the bottom`}
+              />
+            ) : (
+              <Board
+                fen={position.fen}
+                orientation={play.orientation}
+                turnColor={position.turn}
+                movableColor={movableColor}
+                dests={playerTurn ? position.dests : new Map()}
+                chess960={chess960}
+                lastMove={position.lastMove}
+                check={position.inCheck}
+                autoShapes={play.hintShapes}
+                onMove={(from, to) => play.playerMove(from, to)}
+                ariaLabel={`Game board, ${position.turn} to move`}
+                className={blindfold && !peeking ? 'board--blindfold' : undefined}
+              />
+            )}
+            {!setupOpen && game.pendingPromotion ? (
               <PromotionPicker
                 color={game.pendingPromotion.color}
                 onSelect={play.resolvePromotion}
               />
             ) : null}
-            {!play.started && !setupOpen ? (
-              <div className="trainer__overlay">
-                <Button variant="primary" size="lg" onClick={openSetup}>
-                  New game
-                </Button>
-              </div>
-            ) : null}
           </div>
           <PlayerBar
-            name={nameFor(bottomColor)}
-            color={bottomColor}
-            fen={position.fen}
-            thinking={play.thinking && bottomColor !== play.playerColor}
-            extra={clockFor(bottomColor)}
-            showMaterial={!customStart}
+            name={setupOpen ? previewName(boardBottom) : nameFor(bottomColor)}
+            color={boardBottom}
+            fen={setupOpen ? previewFen : position.fen}
+            thinking={!setupOpen && play.thinking && bottomColor !== play.playerColor}
+            extra={setupOpen ? previewClock : clockFor(bottomColor)}
+            showMaterial={!setupOpen && !customStart}
           />
-          {blindfold ? (
+          {!setupOpen && blindfold ? (
             <div className="row row--between" data-testid="blindfold-bar">
               <span className="small muted">
                 Blindfold · {peeks} peek{peeks === 1 ? '' : 's'}
@@ -484,416 +818,162 @@ export default function PlayPage() {
               </Button>
             </div>
           ) : null}
-          {settings.moveInput && play.started ? (
+          {!setupOpen && settings.moveInput && play.started ? (
             <MoveInput onMove={play.playerNotation} disabled={!playerTurn} keepFocus />
           ) : null}
-          {stacked &&
+          {!setupOpen &&
+          stacked &&
           (play.blunderAlert || play.bookAlert || play.coachAlert || play.coachChecking) ? (
             <div className="stack play__alerts">{pauseAlerts}</div>
           ) : null}
         </div>
 
         <aside className="trainer__panel stack">
-          <Card>
-            <div className="row row--between">
-              <strong>{play.started ? opponentName : 'No game in progress'}</strong>
-              {humanlike && play.started && play.humanStatus === 'loading' ? (
-                <Spinner label="Loading the human-like opponent" />
-              ) : play.engineStatus === 'loading' ? (
-                <Spinner label="Loading engine" />
-              ) : null}
-            </div>
-            {play.started && chess960 ? (
-              <p className="small" style={{ margin: '4px 0 0' }} data-testid="play-variant">
-                <strong>
-                  {play.chess960Position === null
-                    ? 'Chess960'
-                    : `Chess960 · position ${play.chess960Position}`}
-                </strong>
-              </p>
-            ) : null}
-            {play.started ? (
-              <p className="small muted" style={{ margin: '4px 0 0' }}>
-                {hotSeat
-                  ? `Pass the device after each move${hasClock ? ` · ${play.timeControl.label}` : ''}.`
-                  : `${humanlike ? `Plays like a ${play.humanRating}-rated player.` : play.level.description} You play ${play.playerColor}${hasClock ? ` · ${play.timeControl.label}` : ''}${play.coach ? ' · Coach on' : ''}${play.blunderCheck ? ' · Blunder check on' : ''}.`}
-                {play.book ? (
-                  <>
-                    {' '}
-                    <span data-testid="book-status">
-                      {play.book.status === 'in-book'
-                        ? `Book: ${play.book.name} — the opponent follows your repertoire.`
-                        : play.book.status === 'deviated'
-                          ? `Book: ${play.book.name} — you left it at move ${Math.ceil((play.book.deviation?.ply ?? 0) / 2)}; ${playsOn}.`
-                          : `Book: ${play.book.name} — out of book after move ${Math.ceil((play.book.endedAtPly ?? 0) / 2)}; ${playsOn}.`}
-                    </span>
-                  </>
-                ) : null}
-                {customStart ? (
-                  <>
-                    {' '}
-                    Custom starting position ·{' '}
-                    <Link
-                      to={`/analyze?fen=${encodeURIComponent(play.startFen)}${chess960 ? '&variant=chess960' : ''}`}
-                    >
-                      analyze it
-                    </Link>
-                    .
-                  </>
-                ) : null}
-              </p>
-            ) : null}
-            <div className="play__actions">
-              <Button variant="primary" onClick={openSetup}>
-                New game
-              </Button>
-              <Button
-                onClick={play.takeBack}
-                disabled={!play.started || !!play.gameOver || position.history.length === 0}
-              >
-                Take back
-              </Button>
-              <Button
-                onClick={play.hint}
-                disabled={!playerTurn || play.hinting || play.engineStatus !== 'ready'}
-                loading={play.hinting}
-                title="Show the engine’s suggested move for you"
-              >
-                Hint
-              </Button>
-              <Button
-                onClick={play.showThreat}
-                disabled={
-                  !playerTurn || play.hinting || position.inCheck || play.engineStatus !== 'ready'
-                }
-                title="Show what your opponent is threatening to play"
-              >
-                Threat
-              </Button>
-              <Button onClick={play.flip}>Flip</Button>
-              <Button
-                onClick={() => settings.update({ playFocus: !settings.playFocus })}
-                aria-pressed={settings.playFocus}
-                title="Hide the header and navigation while a game is on"
-                data-testid="focus-toggle"
-              >
-                Focus
-              </Button>
-              <Button
-                variant="danger"
-                onClick={() => setConfirmResign(true)}
-                disabled={!play.started || !!play.gameOver}
-              >
-                Resign
-              </Button>
-            </div>
-            <p className="small muted play__hint" role="status" data-testid="hint-text">
-              {play.hintMove ? (
-                <>
-                  {play.hintMove.kind === 'hint' ? 'Suggested move: ' : 'Threat: '}
-                  <San san={play.hintMove.san} />
-                </>
-              ) : null}
-            </p>
-          </Card>
-
-          {stacked ? null : pauseAlerts}
-
-          {!play.started || play.gameOver ? <LadderCard onPlay={playLadder} /> : null}
-
-          <Card>
-            <MoveList
-              moves={position.history}
-              currentPly={position.history.length}
-              startsWithBlack={play.startFen.split(' ')[1] === 'b'}
-              startMoveNumber={Number(play.startFen.split(' ')[5] ?? 1)}
-            />
-            <div className="row" style={{ marginTop: 12 }}>
-              <Button
-                size="sm"
-                onClick={() => void copyPgn()}
-                disabled={position.history.length === 0}
-              >
-                Copy PGN
-              </Button>
-              <Button size="sm" onClick={() => analyze()} disabled={position.history.length === 0}>
-                Analyze game
-              </Button>
-            </div>
-          </Card>
-        </aside>
-      </div>
-
-      {/* New game setup */}
-      <Dialog
-        open={setupOpen}
-        onClose={() => setSetupOpen(false)}
-        title="New game"
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setSetupOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={startGame}
-              disabled={opponent === 'humanlike' && humanFiles.downloaded !== true}
-            >
-              Start
-            </Button>
-          </>
-        }
-      >
-        <div className="stack">
-          {startFrom ? (
-            <Alert tone="info">
-              {chess960Setup && chess960Number(startFrom) !== null
-                ? `Starting from Chess960 position ${chess960Number(startFrom) ?? ''}.`
-                : `Starting from a ${chess960Setup ? 'Chess960' : 'custom'} position (${startFrom.split(' ')[1] === 'b' ? 'Black' : 'White'} to move).`}{' '}
-              <Button size="sm" variant="ghost" onClick={() => setStartFrom(null)}>
-                Use the initial position instead
-              </Button>
-            </Alert>
-          ) : null}
-          {lichessHint &&
-          !play.suggestedRating &&
-          opponent === 'humanlike' &&
-          lichessHint.rating !== humanRating ? (
-            <Alert tone="info">
-              Your Lichess {lichessHint.perf} rating is {lichessHint.lichess}: try{' '}
-              <strong>Maia · {lichessHint.rating}</strong>.{' '}
-              <Button size="sm" onClick={() => setHumanRating(lichessHint.rating)}>
-                Use it
-              </Button>
-            </Alert>
-          ) : null}
-          {play.suggestedRating && opponent === 'humanlike' ? (
-            <Alert tone="info">
-              Based on your last two games, try <strong>Maia · {play.suggestedRating}</strong>.{' '}
-              <Button size="sm" onClick={() => setHumanRating(play.suggestedRating ?? humanRating)}>
-                Use it
-              </Button>
-            </Alert>
-          ) : null}
-          {play.suggestedLevel && opponent === 'engine' ? (
-            <Alert tone="info">
-              Based on your last two games, try{' '}
-              <strong>
-                Level {play.suggestedLevel.id} · {play.suggestedLevel.name}
-              </strong>
-              .{' '}
-              <Button size="sm" onClick={() => setLevelId(play.suggestedLevel?.id ?? levelId)}>
-                Use it
-              </Button>
-            </Alert>
-          ) : null}
-          <Field
-            label="Opponent"
-            hint={
-              <>
-                Or play a person online: <Link to="/play">post a game, or join one</Link>.
-              </>
-            }
-          >
-            {(id) => (
-              <Select
-                id={id}
-                value={opponent}
-                onChange={(e) => setOpponent(e.target.value as Opponent)}
-              >
-                <option value="engine">Stockfish (engine)</option>
-                <option value="humanlike" disabled={chess960Setup}>
-                  {chess960Setup
-                    ? 'A human-like opponent (Maia) — standard chess only'
-                    : 'A human-like opponent (Maia)'}
-                </option>
-                <option value="human">Another person at this device</option>
-              </Select>
-            )}
-          </Field>
-          {startFrom ? null : (
-            <Field
-              label="Game"
-              hint={
-                chess960Setup
-                  ? 'The pieces behind the pawns start in one of 960 arrangements, a new one each game. Castle by moving your king onto its rook. Coach mode, the blunder check, opening practice and Maia are for standard chess, so they are off.'
-                  : 'The usual starting position.'
-              }
-            >
-              {(id) => (
-                <Select
-                  id={id}
-                  value={variant}
-                  onChange={(e) => chooseVariant(e.target.value as PlayVariant)}
-                  data-testid="variant-select"
-                >
-                  <option value="standard">Standard chess</option>
-                  <option value="chess960">Chess960 (a random start position)</option>
-                </Select>
-              )}
-            </Field>
-          )}
-          {opponent !== 'human' && !startFrom ? (
-            <Field
-              label="Practise an opening"
-              hint={
-                chess960Setup
-                  ? 'Standard chess only.'
-                  : bookChoice
-                    ? `You play ${bookChoice.color}. The opponent follows the repertoire’s lines; when the book runs out, ${opponent === 'humanlike' ? 'Maia' : 'the engine'} takes over. Leaving the book pauses the game.`
-                    : 'Rehearse a repertoire against a live opponent.'
-              }
-            >
-              {(id) => (
-                <Select
-                  id={id}
-                  value={chess960Setup ? '' : bookId}
-                  onChange={(e) => setBookId(e.target.value)}
-                  disabled={chess960Setup}
-                  data-testid="book-select"
-                >
-                  <option value="">No — a normal game</option>
-                  {repertoires.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name} ({r.color})
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-          ) : null}
-          {opponent === 'engine' ? (
-            <Field
-              label="Engine level"
-              hint={`${ENGINE_LEVELS.find((l) => l.id === levelId)?.description ?? ''} The rating in brackets is a rough guide, not a measured strength.`}
-            >
-              {(id) => (
-                <Select
-                  id={id}
-                  value={levelId}
-                  onChange={(e) => setLevelId(Number(e.target.value))}
-                >
-                  {ENGINE_LEVELS.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      Level {l.id} · {l.name} (~{l.approxElo})
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-          ) : opponent === 'humanlike' ? (
+          {setupOpen ? (
             <>
-              <Field
-                label="Rating"
-                hint="Maia learned from millions of real games: it plays the moves people of this rating play — the misjudged plans and missed tactics included — rather than an engine’s random blunders."
-              >
-                {(id) => (
-                  <Select
-                    id={id}
-                    value={humanRating}
-                    onChange={(e) => setHumanRating(Number(e.target.value))}
-                  >
-                    {HUMAN_RATINGS.map((rating) => (
-                      <option key={rating} value={rating}>
-                        {rating}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
-              <HumanOpponentDownload />
+              {newGameSetup}
+              <LadderCard onPlay={playLadder} />
             </>
           ) : (
-            <Switch
-              checked={autoFlip}
-              onChange={setAutoFlip}
-              label="Turn the board after every move"
-              description="The board faces whoever is to move."
-            />
+            <>
+              <Card>
+                <div className="row row--between">
+                  <strong>{play.started ? opponentName : 'No game in progress'}</strong>
+                  {humanlike && play.started && play.humanStatus === 'loading' ? (
+                    <Spinner label="Loading the human-like opponent" />
+                  ) : play.engineStatus === 'loading' ? (
+                    <Spinner label="Loading engine" />
+                  ) : null}
+                </div>
+                {play.started && chess960 ? (
+                  <p className="small" style={{ margin: '4px 0 0' }} data-testid="play-variant">
+                    <strong>
+                      {play.chess960Position === null
+                        ? 'Chess960'
+                        : `Chess960 · position ${play.chess960Position}`}
+                    </strong>
+                  </p>
+                ) : null}
+                {play.started ? (
+                  <p className="small muted" style={{ margin: '4px 0 0' }}>
+                    {hotSeat
+                      ? `Pass the device after each move${hasClock ? ` · ${play.timeControl.label}` : ''}.`
+                      : `${humanlike ? `Plays like a ${play.humanRating}-rated player.` : play.level.description} You play ${play.playerColor}${hasClock ? ` · ${play.timeControl.label}` : ''}${play.coach ? ' · Coach on' : ''}${play.blunderCheck ? ' · Blunder check on' : ''}.`}
+                    {play.book ? (
+                      <>
+                        {' '}
+                        <span data-testid="book-status">
+                          {play.book.status === 'in-book'
+                            ? `Book: ${play.book.name} — the opponent follows your repertoire.`
+                            : play.book.status === 'deviated'
+                              ? `Book: ${play.book.name} — you left it at move ${Math.ceil((play.book.deviation?.ply ?? 0) / 2)}; ${playsOn}.`
+                              : `Book: ${play.book.name} — out of book after move ${Math.ceil((play.book.endedAtPly ?? 0) / 2)}; ${playsOn}.`}
+                        </span>
+                      </>
+                    ) : null}
+                    {customStart ? (
+                      <>
+                        {' '}
+                        Custom starting position ·{' '}
+                        <Link
+                          to={`/analyze?fen=${encodeURIComponent(play.startFen)}${chess960 ? '&variant=chess960' : ''}`}
+                        >
+                          analyze it
+                        </Link>
+                        .
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
+                <div className="play__actions">
+                  <Button variant="primary" onClick={openSetup}>
+                    New game
+                  </Button>
+                  <Button
+                    onClick={play.takeBack}
+                    disabled={!play.started || !!play.gameOver || position.history.length === 0}
+                  >
+                    Take back
+                  </Button>
+                  <Button
+                    onClick={play.hint}
+                    disabled={!playerTurn || play.hinting || play.engineStatus !== 'ready'}
+                    loading={play.hinting}
+                    title="Show the engine’s suggested move for you"
+                  >
+                    Hint
+                  </Button>
+                  <Button
+                    onClick={play.showThreat}
+                    disabled={
+                      !playerTurn ||
+                      play.hinting ||
+                      position.inCheck ||
+                      play.engineStatus !== 'ready'
+                    }
+                    title="Show what your opponent is threatening to play"
+                  >
+                    Threat
+                  </Button>
+                  <Button onClick={play.flip}>Flip</Button>
+                  <Button
+                    onClick={() => settings.update({ playFocus: !settings.playFocus })}
+                    aria-pressed={settings.playFocus}
+                    title="Hide the header and navigation while a game is on"
+                    data-testid="focus-toggle"
+                  >
+                    Focus
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => setConfirmResign(true)}
+                    disabled={!play.started || !!play.gameOver}
+                  >
+                    Resign
+                  </Button>
+                </div>
+                <p className="small muted play__hint" role="status" data-testid="hint-text">
+                  {play.hintMove ? (
+                    <>
+                      {play.hintMove.kind === 'hint' ? 'Suggested move: ' : 'Threat: '}
+                      <San san={play.hintMove.san} />
+                    </>
+                  ) : null}
+                </p>
+              </Card>
+
+              {stacked ? null : pauseAlerts}
+
+              {!play.started || play.gameOver ? <LadderCard onPlay={playLadder} /> : null}
+
+              <Card>
+                <MoveList
+                  moves={position.history}
+                  currentPly={position.history.length}
+                  startsWithBlack={play.startFen.split(' ')[1] === 'b'}
+                  startMoveNumber={Number(play.startFen.split(' ')[5] ?? 1)}
+                />
+                <div className="row" style={{ marginTop: 12 }}>
+                  <Button
+                    size="sm"
+                    onClick={() => void copyPgn()}
+                    disabled={position.history.length === 0}
+                  >
+                    Copy PGN
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => analyze()}
+                    disabled={position.history.length === 0}
+                  >
+                    Analyze game
+                  </Button>
+                </div>
+              </Card>
+            </>
           )}
-          {bookChoice && opponent !== 'human' && !startFrom && !chess960Setup ? null : (
-            <Field label={opponent === 'human' ? 'Board faces' : 'Your colour'}>
-              {(id) => (
-                <Select
-                  id={id}
-                  value={color}
-                  onChange={(e) => setColor(e.target.value as LongColor | 'random')}
-                >
-                  <option value="white">White</option>
-                  <option value="black">Black</option>
-                  <option value="random">Random</option>
-                </Select>
-              )}
-            </Field>
-          )}
-          <Field
-            label="Time control"
-            hint={
-              timeControlId === 'none'
-                ? 'No clock — take as long as you like. Good while learning.'
-                : 'Run out of time and you lose. 10 + 5 is a good first rapid game; the engine always moves quickly.'
-            }
-          >
-            {(id) => (
-              <Select
-                id={id}
-                value={timeControlId}
-                onChange={(e) => setTimeControlId(e.target.value)}
-              >
-                {Object.entries(groupedControls).map(([category, controls]) => (
-                  <optgroup key={category} label={CATEGORY_LABEL[category] ?? category}>
-                    {controls.map((tc) => (
-                      <option key={tc.id} value={tc.id}>
-                        {tc.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </Select>
-            )}
-          </Field>
-          <Switch
-            checked={settings.moveInput}
-            onChange={(next) => settings.update({ moveInput: next })}
-            label="Keyboard move entry"
-            description="Type moves like Nf3 or e2e4 under the board."
-          />
-          {opponent !== 'human' ? (
-            <Switch
-              checked={settings.playCoach && !chess960Setup}
-              onChange={(next) => settings.update({ playCoach: next })}
-              disabled={chess960Setup}
-              label="Coach mode"
-              description={
-                chess960Setup
-                  ? 'Standard chess only.'
-                  : timeControlId === 'none'
-                    ? 'After a mistake the game pauses, explains what went wrong and offers a take-back.'
-                    : 'Only in untimed games — the coach needs time to check each move.'
-              }
-            />
-          ) : null}
-          {opponent !== 'human' ? (
-            <Switch
-              checked={settings.playBlunderCheck && !chess960Setup}
-              onChange={(next) => settings.update({ playBlunderCheck: next })}
-              disabled={chess960Setup}
-              label="Blunder check"
-              description={
-                chess960Setup
-                  ? 'Standard chess only.'
-                  : 'Before a move that hangs material or allows mate is played, ask: checks, captures, threats? Play it anyway if you meant it.'
-              }
-            />
-          ) : null}
-          <Switch
-            checked={settings.playBlindfold}
-            onChange={(next) => settings.update({ playBlindfold: next })}
-            label="Blindfold"
-            description="The pieces are hidden — follow the moves in the notation panel and play by clicking squares. Peek when you must."
-          />
-        </div>
-      </Dialog>
+        </aside>
+      </div>
 
       {/* Leaving mid-game */}
       <ConfirmDialog

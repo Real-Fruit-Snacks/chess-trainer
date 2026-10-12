@@ -3,9 +3,10 @@ import { Button, Card, ConfirmDialog, Field, Select, Switch } from '@/components
 import { toast } from '@/components/ui/toastStore';
 import { ENGINE_LEVELS } from '@/engine/levels';
 import { HumanOpponentDownload } from '@/features/play/HumanOpponentDownload';
-import { CALIBRATION_PUZZLES, STARTING_RATINGS } from '@/lib/rating';
+import { CALIBRATION_PUZZLES, formatRating, STARTING_RATINGS } from '@/lib/rating';
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
+import { siteConfig } from '@/site.config';
 
 type RatingChoice = 'calibrate' | (typeof STARTING_RATINGS)[number]['id'];
 
@@ -122,7 +123,7 @@ function RatingCard() {
     }
     if (option) {
       completeOnboarding(option.rating);
-      toast(`Puzzle rating set to ${option.rating}.`);
+      toast(`Puzzle rating set to ${formatRating(option.rating, siteConfig.locale)}.`);
     }
   };
 
@@ -144,7 +145,7 @@ function RatingCard() {
               <option value="calibrate">Find my level with {CALIBRATION_PUZZLES} puzzles</option>
               {STARTING_RATINGS.map((o) => (
                 <option key={o.id} value={o.id}>
-                  {o.label} (~{o.rating})
+                  {o.label} (~{formatRating(o.rating, siteConfig.locale)})
                 </option>
               ))}
             </Select>

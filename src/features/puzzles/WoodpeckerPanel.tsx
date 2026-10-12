@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Alert, Button, Card, ConfirmDialog, Dialog, ScrollRegion, Stat } from '@/components/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  ConfirmDialog,
+  Dialog,
+  ScrollRegion,
+  Segmented,
+  Stat,
+} from '@/components/ui';
+import { formatRating } from '@/lib/rating';
 import { toast } from '@/components/ui/toastStore';
 import { formatDate } from '@/lib/dates';
 import { readShare, shareUrl } from '@/lib/shareCodes';
@@ -131,7 +141,8 @@ export function WoodpeckerPanel({ onContinue }: { onContinue: () => void }) {
         <div data-testid="shared-woodpecker">
           <p>
             A friend shared a Woodpecker set of {shared.puzzleIds.length} puzzles (around rating{' '}
-            {Math.round(shared.rating)}).{set ? ' Taking it replaces your current set.' : ''}
+            {formatRating(shared.rating, siteConfig.locale)}).
+            {set ? ' Taking it replaces your current set.' : ''}
           </p>
           {shared.unknown > 0 ? (
             <p className="small muted">
@@ -163,34 +174,34 @@ export function WoodpeckerPanel({ onContinue }: { onContinue: () => void }) {
 
   if (!set) {
     return (
-      <Card className="rush__start" data-testid="woodpecker-start">
+      <Card className="puzzles__empty" data-testid="woodpecker-start">
         {sharedOffer}
         <p className="card__eyebrow">The Woodpecker method</p>
-        <h2 style={{ marginTop: 4 }}>One set, solved seven times</h2>
+        <h2>One set, solved seven times</h2>
         <p className="muted">
           Pick a fixed set of puzzles at your level and solve it in cycles, each one faster than the
-          last, until the patterns are automatic. The set is chosen once; every cycle records your
-          time and accuracy so you can see the improvement.
+          last, until the patterns are automatic. Every cycle records your time and accuracy, so you
+          can see the improvement.
         </p>
-        <div className="row" style={{ justifyContent: 'center', margin: '12px 0' }}>
-          {WOODPECKER_SIZES.map((n) => (
-            <Button
-              key={n}
-              size="sm"
-              variant={n === size ? 'primary' : 'secondary'}
-              onClick={() => setSize(n)}
-              aria-pressed={n === size}
-            >
-              {n} puzzles
-            </Button>
-          ))}
+        <div className="field">
+          <span className="field__label">Set size</span>
+          <Segmented
+            ariaLabel="Set size"
+            value={size}
+            onChange={setSize}
+            block
+            options={WOODPECKER_SIZES.map((n) => ({ value: n, label: `${n} puzzles` }))}
+          />
         </div>
-        <Button variant="primary" size="lg" onClick={() => void start()} disabled={building}>
-          {building ? 'Choosing puzzles…' : `Start a set of ${size}`}
-        </Button>
-        <p className="small muted" style={{ margin: '12px 0 0' }}>
-          Around your rating of {Math.round(rating)}. Woodpecker solving is unrated.
+        <p className="small muted">
+          Around your rating of {formatRating(rating, siteConfig.locale)}. Woodpecker solving is
+          unrated.
         </p>
+        <div className="row puzzles__empty-actions">
+          <Button variant="primary" onClick={() => void start()} disabled={building}>
+            {building ? 'Choosing puzzles…' : `Start a set of ${size}`}
+          </Button>
+        </div>
       </Card>
     );
   }

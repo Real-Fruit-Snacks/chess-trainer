@@ -162,6 +162,20 @@ function openDialog(title: string): HTMLElement | null {
   return null;
 }
 
+/** The new game screen, or null when the game is on the board. */
+const setupScreen = (): HTMLElement | null => screen.queryByRole('region', { name: 'New game' });
+
+/** The new game screen (a test fails plainly when it is not there). */
+function setup(): HTMLElement {
+  const found = setupScreen();
+  if (!found) throw new Error('The new game screen is not up');
+  return found;
+}
+
+/** Picks an opponent on the new game screen. */
+const chooseOpponent = (name: 'Stockfish' | 'Human-like (Maia)' | 'Two players') =>
+  fireEvent.click(within(setup()).getByRole('radio', { name }));
+
 /** Lets the dialogs' close events (a later task) arrive. */
 const nextTask = () =>
   act(async () => {
@@ -213,10 +227,9 @@ describe('PlayPage', () => {
 
   it('"Play again" repeats the game, and the next result opens the dialog again', async () => {
     renderPlay();
-    const setup = openDialog('New game')!;
-    expect(within(setup).getByLabelText('Engine level')).toBeInTheDocument();
-    expect(setup).toHaveTextContent('The rating in brackets is a rough guide');
-    fireEvent.click(within(setup).getByRole('button', { name: 'Start' }));
+    expect(within(setup()).getByLabelText('Engine level')).toBeInTheDocument();
+    expect(setup()).toHaveTextContent('The rating in brackets is a rough guide');
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Start' }));
     await nextTask();
 
     act(() => board.props?.onMove?.('a1', 'a8'));
@@ -226,7 +239,7 @@ describe('PlayPage', () => {
     fireEvent.click(within(result!).getByRole('button', { name: 'Play again' }));
     await nextTask();
     expect(openDialog('You won!')).toBeNull();
-    expect(openDialog('New game')).toBeNull();
+    expect(setupScreen()).toBeNull();
 
     act(() => board.props?.onMove?.('a1', 'a8'));
     expect(openDialog('You won!')).not.toBeNull();
@@ -236,12 +249,16 @@ describe('PlayPage', () => {
     fireEvent.click(within(openDialog('You won!')!).getByRole('button', { name: 'New game' }));
     await nextTask();
     expect(openDialog('You won!')).toBeNull();
-    expect(openDialog('New game')).toHaveTextContent('Starting from a custom position');
+    expect(setup()).toHaveTextContent('Starting from a custom position');
+    // And back to the finished game, as it was.
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Back to the board' }));
+    expect(setupScreen()).toBeNull();
+    expect(useProgress.getState().games).toHaveLength(2);
   });
 
   it('asks before resigning, with "Keep playing" first', async () => {
     renderPlay();
-    fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Start' }));
     await nextTask();
     fireEvent.click(screen.getByRole('button', { name: 'Resign' }));
     const confirm = openDialog('Resign this game?')!;
@@ -263,7 +280,7 @@ describe('PlayPage', () => {
   it('lifts the blindfold at the end, and hands the game to analysis from the learner’s side', async () => {
     useSettings.getState().update({ playBlindfold: true });
     renderPlay(`/play/computer?fen=${encodeURIComponent(BLACK_MATES_IN_ONE)}`);
-    fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Start' }));
     await nextTask();
     expect(board.props?.className).toBe('board--blindfold');
     act(() => board.props?.onMove?.('b8', 'b1'));
@@ -277,12 +294,11 @@ describe('PlayPage', () => {
 
   it('asks "checks, captures, threats?" before a hanging move when the blunder check is on', async () => {
     renderPlay();
-    const setup = openDialog('New game')!;
-    const toggle = within(setup).getByRole('switch', { name: 'Blunder check' });
+    const toggle = within(setup()).getByRole('switch', { name: 'Blunder check' });
     expect(toggle).not.toBeChecked();
     fireEvent.click(toggle);
     expect(useSettings.getState().playBlunderCheck).toBe(true);
-    fireEvent.click(within(setup).getByRole('button', { name: 'Start' }));
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Start' }));
     await nextTask();
     expect(screen.getByText(/Blunder check on/)).toBeInTheDocument();
 
@@ -324,7 +340,7 @@ describe('PlayPage', () => {
     try {
       useSettings.getState().update({ playBlunderCheck: true });
       renderPlay();
-      fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+      fireEvent.click(within(setup()).getByRole('button', { name: 'Start' }));
       await nextTask();
       act(() => board.props?.onMove?.('a1', 'f6'));
       const alert = screen.getByTestId('blunder-alert');
@@ -337,27 +353,24 @@ describe('PlayPage', () => {
 
   it('offers a human-like opponent by rating, startable once its files are on the device', async () => {
     renderPlay();
-    const setup = openDialog('New game')!;
-    fireEvent.change(within(setup).getByLabelText('Opponent'), {
-      target: { value: 'humanlike' },
-    });
-    expect(within(setup).queryByLabelText('Engine level')).toBeNull();
-    const rating = within(setup).getByLabelText('Rating');
+    chooseOpponent('Human-like (Maia)');
+    expect(within(setup()).queryByLabelText('Engine level')).toBeNull();
+    const rating = within(setup()).getByLabelText('Rating');
     expect(rating).toHaveValue('1200');
     expect(
       within(rating)
         .getAllByRole('option')
         .map((o) => o.textContent),
     ).toHaveLength(21);
-    expect(within(setup).getByTestId('human-download-status')).toHaveTextContent(
+    expect(within(setup()).getByTestId('human-download-status')).toHaveTextContent(
       'A one-time download of about 25 MB',
     );
-    const start = within(setup).getByRole('button', { name: 'Start' });
+    const start = within(setup()).getByRole('button', { name: 'Start' });
     expect(start).toBeDisabled();
 
-    fireEvent.click(within(setup).getByRole('button', { name: 'Download (25 MB)' }));
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Download (25 MB)' }));
     expect(maiaFiles.state.downloads).toBe(1);
-    expect(within(setup).getByTestId('human-download-status')).toHaveTextContent(
+    expect(within(setup()).getByTestId('human-download-status')).toHaveTextContent(
       'On this device (25 MB), ready offline.',
     );
     expect(start).toBeEnabled();
@@ -389,14 +402,13 @@ describe('PlayPage', () => {
     maiaFiles.state.downloaded = true;
     useSettings.getState().update({ playOpponent: 'humanlike', playHumanRating: 2000 });
     const { unmount } = renderPlay();
-    const setup = openDialog('New game')!;
-    expect(within(setup).getByLabelText('Opponent')).toHaveValue('humanlike');
-    expect(within(setup).getByLabelText('Rating')).toHaveValue('2000');
-    expect(within(setup).getByRole('button', { name: 'Start' })).toBeEnabled();
+    expect(within(setup()).getByRole('radio', { name: 'Human-like (Maia)' })).toBeChecked();
+    expect(within(setup()).getByLabelText('Rating')).toHaveValue('2000');
+    expect(within(setup()).getByRole('button', { name: 'Start' })).toBeEnabled();
     unmount();
 
     renderPlay('/play/computer?level=5');
-    expect(within(openDialog('New game')!).getByLabelText('Opponent')).toHaveValue('engine');
+    expect(within(setup()).getByRole('radio', { name: 'Stockfish' })).toBeChecked();
   });
 
   it('says when the human-like opponent could not run, with Retry', async () => {
@@ -404,7 +416,7 @@ describe('PlayPage', () => {
     maiaWorker.loadFails = true;
     useSettings.getState().update({ playOpponent: 'humanlike' });
     renderPlay();
-    fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Start' }));
     await nextTask();
     const alert = screen.getByRole('alert');
     expect(within(alert).getByTestId('human-failed')).toHaveTextContent(
@@ -423,7 +435,7 @@ describe('PlayPage', () => {
     // No coach: its check of the move would wait for an engine that never answers here.
     useSettings.getState().update({ playOpponent: 'humanlike', playCoach: false });
     renderPlay();
-    fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Start' }));
     await nextTask();
     // Not the mate: 1.Qa2, and the opponent is to move.
     act(() => board.props?.onMove?.('a1', 'a2'));
@@ -438,28 +450,31 @@ describe('PlayPage', () => {
     expect(maiaWorker.loads).toBe(1);
   });
 
-  it('leads back to Play, from the page’s path and from the new game’s dialog', () => {
+  it('leads back to Play, from the page’s path and from the new game screen', () => {
     renderPlay('/play/computer');
     expect(screen.getByRole('link', { name: 'Play' })).toHaveAttribute('href', '/play');
-    const setup = openDialog('New game')!;
-    expect(within(setup).getByRole('link', { name: 'post a game, or join one' })).toHaveAttribute(
+    expect(within(setup()).getByRole('link', { name: 'post a game, or join one' })).toHaveAttribute(
       'href',
       '/play',
     );
-    expect(within(setup).getByLabelText('Opponent')).toHaveAccessibleDescription(
+    expect(within(setup()).getByRole('group', { name: 'Opponent' })).toHaveAccessibleDescription(
       'Or play a person online: post a game, or join one.',
+    );
+    // Each opponent says what it is.
+    expect(within(setup()).getByRole('radio', { name: 'Two players' })).toHaveAccessibleDescription(
+      'Take turns at this device.',
     );
   });
 
   it('offers the human-like opponent when the waiting room suggests it, and clears the link', () => {
     renderPlay('/play/computer?opponent=humanlike');
-    expect(within(openDialog('New game')!).getByLabelText('Opponent')).toHaveValue('humanlike');
+    expect(within(setup()).getByRole('radio', { name: 'Human-like (Maia)' })).toBeChecked();
     expect(screen.getByTestId('location').textContent).toBe('/play/computer');
   });
 
   it('asks before leaving a game in progress, and leaves when told to', async () => {
     renderPlay('/play/computer');
-    fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Start' }));
     await nextTask();
     // Nothing played yet: nothing to lose.
     fireEvent.click(screen.getByRole('link', { name: 'Leave for the puzzles' }));
@@ -469,7 +484,7 @@ describe('PlayPage', () => {
 
   it('keeps a game in progress when the player stays', async () => {
     renderPlay();
-    fireEvent.click(within(openDialog('New game')!).getByRole('button', { name: 'Start' }));
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Start' }));
     await nextTask();
     // Not the mate: 1.Qa2, and the game goes on.
     act(() => board.props?.onMove?.('a1', 'a2'));
@@ -509,12 +524,6 @@ describe('PlayPage in Chess960', () => {
     sessionStorage.clear();
   });
 
-  /** The open setup dialog (a test fails plainly when it is not there). */
-  const setupDialog = (): HTMLElement => {
-    const dialog = openDialog('New game');
-    if (!dialog) throw new Error('The setup dialog is not open');
-    return dialog;
-  };
   const boardChess960 = () => (board.props as { chess960?: boolean } | null)?.chess960;
 
   it('turns off what is standard chess only, and names the start position on the page', async () => {
@@ -522,33 +531,38 @@ describe('PlayPage in Chess960', () => {
       .getState()
       .update({ playCoach: true, playBlunderCheck: true, playOpponent: 'humanlike' });
     renderPlay('/play/computer');
-    const setup = setupDialog();
-    const game = within(setup).getByLabelText('Game');
-    expect(game).toHaveValue('standard');
-    fireEvent.change(game, { target: { value: 'chess960' } });
-    // Maia plays standard chess only: the engine takes her place, and her option says why.
-    expect(within(setup).getByLabelText('Opponent')).toHaveValue('engine');
-    const maia = within(setup).getByRole('option', {
-      name: 'A human-like opponent (Maia) — standard chess only',
-    });
+    const game = within(setup()).getByRole('radiogroup', { name: 'Game' });
+    expect(within(game).getByRole('radio', { name: 'Standard' })).toBeChecked();
+    fireEvent.click(within(game).getByRole('radio', { name: 'Chess960' }));
+    // Maia plays standard chess only: the engine takes her place, and her card says why.
+    expect(within(setup()).getByRole('radio', { name: 'Stockfish' })).toBeChecked();
+    const maia = within(setup()).getByRole('radio', { name: 'Human-like (Maia)' });
     expect(maia).toBeDisabled();
+    expect(maia).toHaveAccessibleDescription('Standard chess only.');
     for (const name of ['Coach mode', 'Blunder check']) {
-      const toggle = within(setup).getByRole('switch', { name });
+      const toggle = within(setup()).getByRole('switch', { name });
       expect(toggle).not.toBeChecked();
       expect(toggle).toBeDisabled();
     }
-    expect(within(setup).getByTestId('book-select')).toBeDisabled();
-    expect(setup).toHaveTextContent('Castle by moving your king onto its rook.');
-    expect(setup).toHaveTextContent(
+    expect(within(setup()).getByTestId('book-select')).toBeDisabled();
+    // The start is drawn now, shown on the preview board, and can be drawn again.
+    const drawn = within(setup()).getByTestId('newgame-chess960').textContent ?? '';
+    expect(drawn).toMatch(/^Position \d+$/);
+    expect(boardChess960()).toBe(true);
+    expect(setup()).toHaveTextContent('Castle by moving your king onto its rook.');
+    expect(setup()).toHaveTextContent(
       'Coach mode, the blunder check, opening practice and Maia are for standard chess, so they are off.',
     );
     // The settings themselves are kept for standard games.
     expect(useSettings.getState().playCoach).toBe(true);
 
-    fireEvent.click(within(setup).getByRole('button', { name: 'Start' }));
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Start' }));
     await nextTask();
     expect(useSettings.getState().playVariant).toBe('chess960');
-    expect(screen.getByTestId('play-variant').textContent).toMatch(/^Chess960 · position \d+$/);
+    // The game starts from the position the screen showed.
+    expect(screen.getByTestId('play-variant')).toHaveTextContent(
+      `Chess960 · position ${drawn.replace('Position ', '')}`,
+    );
     expect(boardChess960()).toBe(true);
     expect(screen.queryByText(/Coach on/)).toBeNull();
     expect(screen.queryByText(/Blunder check on/)).toBeNull();
@@ -557,11 +571,10 @@ describe('PlayPage in Chess960', () => {
   it('plays a handed-over Chess960 position: castling, the PGN and the hand-off to analysis', async () => {
     const fen = 'bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1';
     renderPlay(`/play/computer?fen=${encodeURIComponent(fen)}&variant=chess960&color=white`);
-    const setup = setupDialog();
-    expect(setup).toHaveTextContent('Starting from Chess960 position 274.');
+    expect(setup()).toHaveTextContent('Starting from Chess960 position 274.');
     // The position decides the game: no choice to make.
-    expect(within(setup).queryByLabelText('Game')).toBeNull();
-    fireEvent.click(within(setup).getByRole('button', { name: 'Start' }));
+    expect(within(setup()).queryByRole('radiogroup', { name: 'Game' })).toBeNull();
+    fireEvent.click(within(setup()).getByRole('button', { name: 'Start' }));
     await nextTask();
     expect(screen.getByTestId('play-variant')).toHaveTextContent('Chess960 · position 274');
     // A handed-over position does not change the next game's kind.
@@ -582,6 +595,10 @@ describe('PlayPage in Chess960', () => {
   it('remembers the choice and offers it again', () => {
     useSettings.getState().update({ playVariant: 'chess960' });
     renderPlay('/play/computer');
-    expect(within(setupDialog()).getByLabelText('Game')).toHaveValue('chess960');
+    expect(
+      within(within(setup()).getByRole('radiogroup', { name: 'Game' })).getByRole('radio', {
+        name: 'Chess960',
+      }),
+    ).toBeChecked();
   });
 });

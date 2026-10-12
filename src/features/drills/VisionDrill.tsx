@@ -309,7 +309,7 @@ export default function VisionDrill() {
       </div>
 
       <div className="trainer">
-        <div className="trainer__board" style={{ position: 'relative' }}>
+        <div className="trainer__board">
           {mode === 'moves' || mode === 'recall' ? (
             <ClickBoard
               pieces={clickPieces ?? new Map()}
@@ -368,6 +368,25 @@ export default function VisionDrill() {
         <aside className="trainer__panel stack">
           {error ? <Alert tone="warning">{error}</Alert> : null}
           <Card>
+            <p className="field__label vision__mode-label">Drill</p>
+            <Segmented
+              block
+              ariaLabel="Drill mode"
+              value={mode}
+              onChange={(m) => {
+                if (running) return;
+                setFinished(null);
+                setSearchParams({ mode: m });
+              }}
+              options={[
+                { value: 'moves', label: 'Moves' },
+                { value: 'captures', label: 'Captures' },
+                { value: 'checks', label: 'Checks' },
+                { value: 'recall', label: 'Guess' },
+              ]}
+            />
+          </Card>
+          <Card>
             <p className="puzzle-status" role="status" data-testid="vision-status">
               {running && task && question
                 ? `Where is the ${question.color} ${ROLE_NAME[question.role] ?? question.role} that started on ${question.origin}?`
@@ -394,12 +413,15 @@ export default function VisionDrill() {
                 </div>
               </>
             ) : null}
-            <div
-              className={`drill__timer${leftMs < 8000 && running ? ' drill__timer--low' : ''}`}
-              aria-hidden="true"
-            >
-              <span style={{ width: `${timerPct}%` }} />
-            </div>
+            {/* The clock runs from Start: before it, no full bar that looks like time spent. */}
+            {running || finished ? (
+              <div
+                className={`drill__timer${leftMs < 8000 && running ? ' drill__timer--low' : ''}`}
+                aria-hidden="true"
+              >
+                <span style={{ width: `${timerPct}%` }} />
+              </div>
+            ) : null}
             <div className="drill__hud">
               <Stat value={score} label="Found" />
               <Stat value={mistakes} label="Mistakes" />
@@ -427,24 +449,6 @@ export default function VisionDrill() {
               </div>
             </Card>
           ) : null}
-
-          <Card>
-            <Segmented
-              ariaLabel="Drill mode"
-              value={mode}
-              onChange={(m) => {
-                if (running) return;
-                setFinished(null);
-                setSearchParams({ mode: m });
-              }}
-              options={[
-                { value: 'moves', label: 'Moves' },
-                { value: 'captures', label: 'Captures' },
-                { value: 'checks', label: 'Checks' },
-                { value: 'recall', label: 'Guess' },
-              ]}
-            />
-          </Card>
 
           <Card>
             <div className="puzzle-stats">

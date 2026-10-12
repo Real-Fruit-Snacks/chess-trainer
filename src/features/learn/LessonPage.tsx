@@ -61,6 +61,7 @@ function LessonView({ lesson }: { lesson: Lesson }) {
   const visitLesson = useProgress((s) => s.visitLesson);
   const resetLesson = useProgress((s) => s.resetLesson);
   const autoQueen = useSettings((s) => s.autoQueen);
+  const shortcutsOn = useSettings((s) => s.keyboardShortcuts);
   const course = useCourseContext(lesson);
 
   const keys = useMemo(() => lessonStepKeys(lesson), [lesson]);
@@ -272,7 +273,7 @@ function LessonView({ lesson }: { lesson: Lesson }) {
       <LessonHeader lesson={lesson} course={course} done={progress?.completedAt != null} />
 
       <div className="trainer">
-        <div className="trainer__board" style={{ position: 'relative' }} ref={boardRef}>
+        <div className="trainer__board" ref={boardRef}>
           <Board
             fen={state.fen}
             orientation={orientation}
@@ -368,7 +369,7 @@ function LessonView({ lesson }: { lesson: Lesson }) {
               ) : step.task && !isDone ? (
                 <>
                   <Button onClick={state.hint} disabled={state.phase !== 'awaiting'}>
-                    Hint <Kbd>H</Kbd>
+                    Hint {shortcutsOn ? <Kbd>H</Kbd> : null}
                   </Button>
                   <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
                     Show answer

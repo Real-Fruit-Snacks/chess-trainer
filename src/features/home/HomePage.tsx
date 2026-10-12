@@ -77,7 +77,7 @@ const FEATURES = [
     to: '/arcade',
     icon: 'gamepad' as IconName,
     title: 'Arcade',
-    text: 'Eleven games: Hand & Brain with Stockfish as your partner, the Daily Opening, Who Stands Better?, the Odds Ladder, Army Draft, Fortress, Engine Says, Blindfold, a Simul on up to eight boards, Arbiter and Ghost Knight.',
+    text: 'Eleven games that are not puzzles — Hand & Brain with Stockfish as your partner, the Daily Opening, a Simul on up to eight boards and more — each with a score to beat.',
     cta: 'Pick a game',
   },
   {
@@ -177,10 +177,10 @@ export default function HomePage() {
       )}
 
       {returning ? null : (
-        <>
+        <div className="home__notices">
           <InstallBanner />
           <BackupNudge compact />
-        </>
+        </div>
       )}
 
       {returning ? (
@@ -246,10 +246,10 @@ export default function HomePage() {
       <WhatsNewCard returning={returning} />
 
       {returning ? (
-        <>
+        <div className="home__notices">
           <InstallBanner />
           <BackupNudge compact />
-        </>
+        </div>
       ) : null}
 
       {!hasActivity && !tourDismissed ? (

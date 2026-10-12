@@ -70,6 +70,7 @@ import './analyze.css';
 import { Icon } from '@/components/ui';
 import { Notated, San } from '@/chess/San';
 import { characterShortcutsOn } from '@/lib/shortcutKey';
+import { formatCount } from '@/lib/format';
 
 const GLYPH_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: '–' },
@@ -379,7 +380,7 @@ export default function AnalyzePage() {
     await copy(url, 'Link');
     if (url.length > SHARE_LINK_WARN_CHARS) {
       toast(
-        `This link is ${url.length.toLocaleString()} characters long — some apps cut links around 2,000. If it fails to open, share the PGN instead.`,
+        `This link is ${formatCount(url.length, siteConfig.locale)} characters long — some apps cut links around 2,000. If it fails to open, share the PGN instead.`,
         { tone: 'warning' },
       );
     }
@@ -457,7 +458,7 @@ export default function AnalyzePage() {
 
       <div className="trainer">
         <div className="analyze__boardcol">
-          <div className="trainer__board" style={{ position: 'relative' }}>
+          <div className="trainer__board">
             <EvalBar
               score={analysis.engineOn ? score : null}
               turn={fix.board ? fix.board.turn : viewed.turn}

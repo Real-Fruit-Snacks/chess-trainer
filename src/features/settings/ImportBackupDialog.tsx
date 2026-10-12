@@ -7,6 +7,7 @@ import { siteConfig } from '@/site.config';
 import type { BackupPreview, BackupSummary } from '@/store/progress';
 import { describeChanges } from './deviceSyncStatus';
 import { useBackupActions } from './useBackupActions';
+import { formatCount } from '@/lib/format';
 
 export interface PendingImport {
   raw: unknown;
@@ -21,7 +22,7 @@ function describeExportedAt(summary: BackupSummary): string {
 }
 
 function count(n: number, noun: string, plural = `${noun}s`): string {
-  return `${n.toLocaleString()} ${n === 1 ? noun : plural}`;
+  return `${formatCount(n, siteConfig.locale)} ${n === 1 ? noun : plural}`;
 }
 
 /**

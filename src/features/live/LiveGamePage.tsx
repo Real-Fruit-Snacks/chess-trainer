@@ -405,7 +405,7 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
       <div className="trainer">
         <div className="play__boardcol">
           {playerBar(opposite(orientation))}
-          <div className="trainer__board" style={{ position: 'relative' }}>
+          <div className="trainer__board">
             <Board
               fen={position.fen}
               orientation={orientation}

@@ -119,9 +119,9 @@ describe('daily opening', () => {
 
   it('unlocks hints as guesses go wrong', () => {
     const answer = line('Sicilian Defense: Najdorf Variation', 'e4 c5 Nf3 d6 d4 cxd4', 'B90');
-    expect(hints(answer, 0)).toEqual(['6 moves (3 for White).', 'ECO B.']);
+    expect(hints(answer, 0)).toEqual(['6 moves (3 for White).', 'Its ECO code starts with B.']);
     expect(hints(answer, 2)).toContain('It starts with 1. e4.');
-    expect(hints(answer, 3)).toContain('ECO B90.');
+    expect(hints(answer, 3)).toContain('Its ECO code is B90.');
     expect(hints(answer, 4)).toContain('It is a line of the Sicilian Defence.');
   });
 

@@ -135,7 +135,7 @@ export default function ThreatDrillPage() {
       </div>
 
       <div className="trainer">
-        <div className="trainer__board" style={{ position: 'relative' }}>
+        <div className="trainer__board">
           {boardFen ? (
             <Board
               fen={boardFen}

@@ -401,7 +401,7 @@ test.describe('endgame studies', () => {
 test.describe('two players and blindfold', () => {
   test('a hot-seat game turns the board and ends by resignation', async ({ page }) => {
     await page.goto('/play/computer');
-    await page.getByLabel('Opponent').selectOption('human');
+    await page.getByRole('radio', { name: 'Two players' }).check();
     await page.getByText('Blindfold', { exact: true }).click();
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const board = await expectBoard(page);
@@ -503,7 +503,7 @@ test.describe('keyboard board control', () => {
     page,
   }) => {
     await page.goto('/play/computer');
-    await page.getByLabel('Opponent').selectOption('human');
+    await page.getByRole('radio', { name: 'Two players' }).check();
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expectBoard(page);
     const board = page.locator('.board__cg').first();

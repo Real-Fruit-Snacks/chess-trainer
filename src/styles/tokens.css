@@ -21,6 +21,8 @@
   --surface: #ffffff;
   --surface-2: #efece4;
   --surface-3: #e5e1d6;
+  /* The chosen option of a segmented control: lifted off its track. */
+  --segmented-on: var(--surface);
   --text: #1b1f1d;
   --text-muted: #5c655f;
   --text-faint: #5f6862;
@@ -94,6 +96,7 @@
   --surface: #161e1a;
   --surface-2: #1d2722;
   --surface-3: #263129;
+  --segmented-on: #2d3a33;
   --text: #e8ece9;
   --text-muted: #a3ada7;
   --text-faint: #8a958f;
@@ -135,6 +138,7 @@
     --surface: #161e1a;
     --surface-2: #1d2722;
     --surface-3: #263129;
+    --segmented-on: #2d3a33;
     --text: #e8ece9;
     --text-muted: #a3ada7;
     --text-faint: #8a958f;
@@ -170,6 +174,7 @@
   --surface: #0c100e;
   --surface-2: #151b18;
   --surface-3: #1e2622;
+  --segmented-on: #26302b;
   --border: #222b26;
   --border-strong: #35413b;
   --focus-halo: #000000;

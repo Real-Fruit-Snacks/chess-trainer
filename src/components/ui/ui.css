@@ -347,9 +347,17 @@ a.btn:focus {
   color: var(--text);
   padding: 0;
   width: min(92vw, 480px);
-  /* Tall content scrolls inside the dialog instead of pushing the title off screen. */
+  /* Tall content scrolls inside the dialog instead of pushing the title off screen — in one
+     scroller, the body: the dialog itself never scrolls (its border made it a pixel or two
+     taller than its limit, and two scroll bars stood side by side). */
   max-height: calc(100dvh - 2 * var(--space-5));
+  overflow: hidden;
   box-shadow: var(--shadow-md);
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
 }
 
 .dialog::backdrop {
@@ -358,8 +366,9 @@ a.btn:focus {
 }
 
 .dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: var(--space-5);
-  max-height: calc(100dvh - 2 * var(--space-5));
   overflow-y: auto;
   overscroll-behavior: contain;
   /* The pinned title and buttons keep to the dialog's rounded corners. */
@@ -562,9 +571,28 @@ a.btn:focus {
 }
 
 .segmented__option[aria-checked='true'] {
-  background: var(--surface);
+  background: var(--segmented-on);
   color: var(--text);
   box-shadow: var(--shadow-sm);
+}
+
+/* A choice of two or three in a card: the full width, the options sharing it on one line. */
+.segmented--block {
+  display: flex;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.segmented--block > .segmented__option {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+}
+
+@media (max-width: 599px) {
+  .segmented--block > .segmented__option {
+    padding-inline: 6px;
+  }
 }
 
 /* Phones: wrapped options share the width (eight puzzle modes never fit on one line). */
@@ -608,7 +636,7 @@ a.btn:focus {
 }
 
 .tabs__tab[aria-selected='true'] {
-  background: var(--surface);
+  background: var(--segmented-on);
   color: var(--text);
   box-shadow: var(--shadow-sm);
 }
@@ -617,14 +645,29 @@ a.btn:focus {
   color: var(--accent);
 }
 
+/* Phones: the tabs in even rows — three to a row on a grid of six, and a row of two (or a
+   lone pair) sharing it — rather than a ragged last row. */
 @media (max-width: 599px) {
   .tabs {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     width: 100%;
   }
 
   .tabs__tab {
-    flex: 1 1 auto;
-    padding: 6px 10px;
+    grid-column: span 2;
+    min-width: 0;
+    padding: 6px 8px;
+  }
+
+  /* Two, four or five tabs: the pairs (the last two of five) take half the row each. */
+  .tabs__tab:first-child:nth-last-child(2),
+  .tabs__tab:first-child:nth-last-child(2) ~ .tabs__tab,
+  .tabs__tab:first-child:nth-last-child(4),
+  .tabs__tab:first-child:nth-last-child(4) ~ .tabs__tab,
+  .tabs__tab:nth-child(4):nth-last-child(2),
+  .tabs__tab:nth-child(5):last-child {
+    grid-column: span 3;
   }
 }
 

@@ -84,7 +84,7 @@ describe('Settings → Lichess account', () => {
       'href',
       'https://lichess.org/@/Learner',
     );
-    expect(screen.getByText(/puzzle rating 1720/)).toBeInTheDocument();
+    expect(screen.getByText(/puzzle rating 1,720/)).toBeInTheDocument();
     expect(screen.getByTestId('lichess-status')).toHaveTextContent('Not synced yet.');
     fireEvent.click(screen.getByTestId('lichess-sync-now'));
     expect(syncNow).toHaveBeenCalledWith({ force: true });

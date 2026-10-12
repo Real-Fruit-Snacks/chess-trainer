@@ -68,7 +68,7 @@ export default function RecallPage() {
           <h1>Recall</h1>
           <p>Lesson positions come back a few days after you learn them, then further apart.</p>
         </div>
-        <Card className="narrow" data-testid="recall-empty">
+        <Card className="recall__empty" data-testid="recall-empty">
           <p className="card__eyebrow">Lesson recall</p>
           <h2>Nothing to recall right now</h2>
           <p className="muted">
@@ -142,6 +142,7 @@ function RecallCard({
 }) {
   const record = useProgress((s) => s.recordLessonRecall);
   const autoQueen = useSettings((s) => s.autoQueen);
+  const shortcutsOn = useSettings((s) => s.keyboardShortcuts);
   const [graded, setGraded] = useState<{ outcome: 'solved' | 'failed'; hinted: boolean } | null>(
     null,
   );
@@ -193,7 +194,7 @@ function RecallCard({
 
   return (
     <div className="trainer">
-      <div className="trainer__board" style={{ position: 'relative' }} ref={boardRef}>
+      <div className="trainer__board" ref={boardRef}>
         <Board
           fen={state.fen}
           orientation={orientation}
@@ -261,7 +262,7 @@ function RecallCard({
             ) : !graded ? (
               <>
                 <Button onClick={state.hint} disabled={state.phase !== 'awaiting'}>
-                  Hint <Kbd>H</Kbd>
+                  Hint {shortcutsOn ? <Kbd>H</Kbd> : null}
                 </Button>
                 <Button variant="ghost" onClick={state.reveal} disabled={!state.canReveal}>
                   Show answer
@@ -269,7 +270,7 @@ function RecallCard({
               </>
             ) : (
               <Button key="next" ref={nextRef} variant="primary" onClick={onNext}>
-                Next <Kbd>N</Kbd>
+                Next {shortcutsOn ? <Kbd>N</Kbd> : null}
               </Button>
             )}
             <LinkButton variant="ghost" to={`/learn/${lessonId}?step=${stepIndex + 1}`}>

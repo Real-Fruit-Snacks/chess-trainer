@@ -64,7 +64,7 @@ export function RaceRound({
 
   return (
     <>
-      <div className="trainer__board" style={{ position: 'relative' }}>
+      <div className="trainer__board">
         <Board
           fen={shown ? trainer.position.fen : EMPTY_FEN}
           orientation={shown ? trainer.solverColor : orientation}
