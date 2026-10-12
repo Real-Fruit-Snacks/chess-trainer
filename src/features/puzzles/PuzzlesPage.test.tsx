@@ -5,7 +5,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
 import type * as PuzzleServiceModule from './puzzleService';
-import { findPuzzleById, type Puzzle, PuzzleLoadError, selectPuzzle } from './puzzleService';
+import {
+  dailyPuzzle,
+  findPuzzleById,
+  type Puzzle,
+  PuzzleLoadError,
+  selectPuzzle,
+} from './puzzleService';
 import PuzzlesPage from './PuzzlesPage';
 
 vi.mock('@/lib/sound', () => ({ playSound: vi.fn(), playMoveSound: vi.fn() }));
@@ -188,6 +194,30 @@ describe('PuzzlesPage', () => {
     keyboardMove(board, 'd1', 'd8');
     await vi.waitFor(() => expect(status()).toHaveTextContent('Puzzle solved!'));
     expect(useProgress.getState().daily).toMatchObject({ id: 'm1', outcome: 'failed' });
+  });
+
+  it('counts a solve that runs past midnight for its own day, then moves on to the new puzzle', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 9, 12, 23, 59, 30));
+    try {
+      renderAt('/puzzles/daily');
+      await yourMove();
+      expect(dailyPuzzle).toHaveBeenLastCalledWith('2026-10-12');
+      // Midnight passes while the puzzle is on the board: the solve is the 12th's.
+      vi.setSystemTime(new Date(2026, 9, 13, 0, 0, 20));
+      const board = screen.getByRole('application', { name: /Puzzle m1/ });
+      act(() => board.focus());
+      keyboardMove(board, 'd1', 'd8');
+      await vi.waitFor(() => expect(status()).toHaveTextContent('Puzzle solved!'));
+      expect(useProgress.getState().daily).toMatchObject({ date: '2026-10-12', outcome: 'solved' });
+      // A minute on, the page has noticed the new day and loads its puzzle.
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      await vi.waitFor(() => expect(dailyPuzzle).toHaveBeenLastCalledWith('2026-10-13'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps the missed puzzle on the board while the due list changes', async () => {

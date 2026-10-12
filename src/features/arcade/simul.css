@@ -14,9 +14,17 @@
   }
 }
 
-.simul__about h2 {
+.simul__about h2,
+.simul__preview-title {
   margin-top: 0;
   font-size: 1.15rem;
+}
+
+/* The boards as they will start: the simul's own small boards, before it begins. */
+.simul__preview {
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
 }
 
 .simul__list {

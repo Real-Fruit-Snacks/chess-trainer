@@ -29,6 +29,7 @@ import { CountdownOverlay, PhaseClock } from './duel/PhaseClock';
 import { RaceRound } from './duel/RaceRound';
 import { Strikes, TimedRace } from './duel/TimedRace';
 import { seconds } from './duelView';
+import { OnlineNotice } from './LiveParts';
 import { PhraseCard } from './PhraseCard';
 import { useLivePrefs } from './prefs';
 import { racing } from './raceRoom';
@@ -80,21 +81,20 @@ function Room({ id }: { id: string }) {
 }
 
 function RoomAbsent({ title, children }: { title: string; children: ReactNode }) {
-  useEffect(() => {
-    document.title = `Puzzle race room · ${siteConfig.name}`;
-  }, []);
   return (
-    <div className="narrow">
-      <Card data-testid="race-room-absent">
-        <h1 className="live-game__absent-title">{title}</h1>
-        <p>{children}</p>
-        <div className="row">
-          <LinkButton variant="primary" to="/play">
-            Back to Play
-          </LinkButton>
-        </div>
-      </Card>
-    </div>
+    <OnlineNotice
+      crumb={CRUMB}
+      title={title}
+      docTitle="Puzzle race room"
+      testId="race-room-absent"
+      actions={
+        <LinkButton variant="primary" to="/play">
+          Back to Play
+        </LinkButton>
+      }
+    >
+      {children}
+    </OnlineNotice>
   );
 }
 
@@ -121,6 +121,9 @@ function nameOf(view: RaceRoomView, id: string): string {
     'Someone'
   );
 }
+
+/** The race room's place in the app. */
+const CRUMB = { to: '/play', label: 'Play', here: 'Puzzle race room' };
 
 function RoomScreen({ session, view }: { session: RaceRoomSession; view: RaceRoomView }) {
   const state = view.state;
@@ -156,6 +159,18 @@ function RoomScreen({ session, view }: { session: RaceRoomSession; view: RaceRoo
     else if (was?.status === 'playing' && now.status === 'over') playSound('gameEnd');
   }, [view]);
 
+  // Until the room has answered there is nobody to show and nothing to join: the line alone.
+  if (!state) {
+    return (
+      <OnlineNotice
+        crumb={CRUMB}
+        title="Puzzle race room"
+        docTitle="Puzzle race room"
+        status={<ConnectionLine view={view} />}
+      />
+    );
+  }
+
   return (
     <div>
       <div className="page-header page-header--lean">
@@ -163,9 +178,11 @@ function RoomScreen({ session, view }: { session: RaceRoomSession; view: RaceRoo
           <Link to="/play">Play</Link> / Puzzle race room
         </p>
         <h1>Puzzle race room</h1>
-        <p className="duel__subtitle" data-testid="race-room-options">
-          {shown ? `${describeRaceRoom(shown)} · ${raceRoomGoal(shown.format)}` : 'Connecting…'}
-        </p>
+        {shown ? (
+          <p className="duel__subtitle" data-testid="race-room-options">
+            {`${describeRaceRoom(shown)} · ${raceRoomGoal(shown.format)}`}
+          </p>
+        ) : null}
       </div>
       {view.connection !== 'open' ? <ConnectionLine view={view} /> : null}
       {iRace && race ? (
@@ -649,7 +666,7 @@ function OptionsCard({ session, view }: { session: RaceRoomSession; view: RaceRo
         {view.state?.race ? 'The next race' : 'The race'}
       </h2>
       {editable ? (
-        <div className="stack-sm">
+        <div className="stack-sm race-room__choices">
           <div className="live__row">
             <span className="live__label">Format</span>
             <Segmented<RaceRoomFormat>

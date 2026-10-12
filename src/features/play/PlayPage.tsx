@@ -480,6 +480,11 @@ export default function PlayPage() {
     <SetupScreen
       onStart={startGame}
       startDisabled={humanUnavailable}
+      status={
+        play.engineStatus === 'loading' && opponent !== 'humanlike' ? (
+          <Spinner label="Loading engine" />
+        ) : null
+      }
       focusOnMount={setupFocus}
       back={
         play.started
@@ -1026,6 +1031,7 @@ export default function PlayPage() {
                 ? 'Game over'
                 : 'Draw'
         }
+        stackActions
         actions={
           <>
             <Button variant="ghost" onClick={dismissResult}>

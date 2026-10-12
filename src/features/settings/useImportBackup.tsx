@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { toast } from '@/components/ui/toastStore';
 import { readBackupFile } from '@/lib/backup';
 import { inspectBackup } from '@/store/progress';
@@ -13,7 +13,11 @@ export function useImportBackup(): {
   offerParsed: (raw: unknown) => void;
   dialog: ReactNode;
 } {
-  const [pending, setPending] = useState<PendingImport | null>(null);
+  // Each file offered is its own question, with a dialog of its own: a file picked again just
+  // after Cancel is asked about afresh, and the closing of the dialog before it (an event that
+  // comes a moment later) does not take the new question away.
+  const [pending, setPending] = useState<(PendingImport & { id: number }) | null>(null);
+  const offers = useRef(0);
 
   const offerParsed = (raw: unknown) => {
     const preview = inspectBackup(raw);
@@ -21,7 +25,8 @@ export function useImportBackup(): {
       toast(preview.reason, { tone: preview.problem === 'damaged' ? 'danger' : 'warning' });
       return;
     }
-    setPending({ raw, preview });
+    offers.current += 1;
+    setPending({ raw, preview, id: offers.current });
   };
 
   const offerFile = async (file: File) => {
@@ -36,6 +41,15 @@ export function useImportBackup(): {
   return {
     offerFile,
     offerParsed,
-    dialog: <ImportBackupDialog pending={pending} onClose={() => setPending(null)} />,
+    dialog: (
+      <ImportBackupDialog
+        key={pending?.id ?? 0}
+        pending={pending}
+        onClose={() => {
+          const closing = pending?.id;
+          setPending((current) => (current && current.id === closing ? null : current));
+        }}
+      />
+    ),
   };
 }

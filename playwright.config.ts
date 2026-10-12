@@ -71,6 +71,8 @@ export default defineConfig({
   // sets PLAYWRIGHT_FAIL_ON_FLAKY=1, so a test that only passed on a retry fails there.
   retries: process.env.CI ? 2 : 0,
   failOnFlakyTests: process.env.PLAYWRIGHT_FAIL_ON_FLAKY === '1',
+  // One at a time by default (a two-core machine gains nothing from two). CI's Chromium shards
+  // pass --workers=2 on their four-core runners; Firefox and WebKit stay at one.
   workers: 1,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
   use: {

@@ -113,6 +113,7 @@ export default function FortressPage() {
       intro={`You start clearly worse. Hold the position for ${HOLD_MOVES} moves — or reach a draw — and it counts; if the evaluation drops too far, it falls. ${LIVES} lives, and the positions get harder as you go.`}
       onStart={begin}
       startDisabled={fortress.engineStatus === 'error' || fortress.pool.length === 0}
+      status={fortress.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
       startTestId="fortress-start"
       focusOnMount={settingUp}
       back={settingUp ? { label: 'Back to the board', onClick: () => setSettingUp(false) } : null}

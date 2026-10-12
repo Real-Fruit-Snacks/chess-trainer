@@ -210,8 +210,6 @@ export default function EngineSaysPage() {
       {loadError ? (
         <Alert tone="danger">The opening book could not be loaded: {loadError}</Alert>
       ) : null}
-      {!lines && !loadError ? <Spinner label="Loading the opening book" /> : null}
-
       <div className={setupShown ? 'trainer trainer--setup' : 'trainer'}>
         <div className="play__boardcol" ref={boardColRef}>
           <div className="trainer__board">
@@ -268,6 +266,7 @@ export default function EngineSaysPage() {
               intro="Watch the engine play a few moves of a real opening line, then replay them from memory — both sides."
               onStart={begin}
               startDisabled={!lines?.length}
+              status={!lines && !loadError ? <Spinner label="Loading the opening book" /> : null}
               startTestId="engine-says-start"
               focusOnMount={settingUp}
               back={

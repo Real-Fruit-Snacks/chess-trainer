@@ -526,6 +526,8 @@ function Trainer({
   const boardRef = useRef<HTMLDivElement>(null);
   // "Next" hands focus to the board once the new puzzle is ready for a move.
   const focusBoardRef = useRef(false);
+  /** The day of the daily puzzle on the board: its result counts for that day. */
+  const dailyDayRef = useRef(localDateKey());
 
   // Own-game puzzles whose review did not show a clear best move: the engine judges a
   // different answer before it is called wrong. The engine loads only for those puzzles.
@@ -574,10 +576,11 @@ function Trainer({
       else setSessionFailed((n) => n + 1);
       if (mode === 'woodpecker') state.recordWoodpeckerAttempt(event.outcome, event.durationMs);
       if (mode === 'daily') {
-        // The first result of the day stands; replaying the puzzle is unrated practice.
-        const today = localDateKey();
-        const done = state.daily?.date === today && state.daily.outcome !== null;
-        if (!done) state.setDaily({ date: today, id: puzzle.id, outcome: event.outcome });
+        // The first result of the day stands; replaying the puzzle is unrated practice. A solve
+        // that runs past midnight counts for the day its puzzle was.
+        const day = dailyDayRef.current;
+        const done = state.daily?.date === day && state.daily.outcome !== null;
+        if (!done) state.setDaily({ date: day, id: puzzle.id, outcome: event.outcome });
       }
     },
     [rated, mode, opening, openings],
@@ -599,7 +602,9 @@ function Trainer({
         puzzle = await findPuzzleById(puzzleId, ratingHint);
         if (!puzzle) throw new Error(`Puzzle "${puzzleId}" is not in the bundled set.`);
       } else if (mode === 'daily') {
-        puzzle = await dailyPuzzle(localDateKey());
+        const day = localDateKey();
+        dailyDayRef.current = day;
+        puzzle = await dailyPuzzle(day);
       } else if (mode === 'mine') {
         const state = useProgress.getState();
         const all = Object.values(state.ownPuzzles);
@@ -699,6 +704,20 @@ function Trainer({
   useEffect(() => {
     void next();
   }, [next]);
+
+  // The daily puzzle changes at local midnight. A page left open moves on to the new day's
+  // puzzle, unless a solve of the old one is under way: that one keeps its day until it ends.
+  const today = localDateKey(new Date(useNow(60_000)));
+  const solveUnderWay =
+    trainer.phase === 'checking' ||
+    trainer.phase === 'replying' ||
+    ((trainer.phase === 'solving' || trainer.phase === 'intro') &&
+      (trainer.position.progress > 0 || trainer.hintLevel > 0));
+  useEffect(() => {
+    if (mode !== 'daily' || puzzleId || loading) return;
+    if (today === dailyDayRef.current || solveUnderWay) return;
+    void next();
+  }, [mode, puzzleId, loading, today, solveUnderWay, next]);
 
   /** "Next" / "Skip": loads a puzzle and puts the keyboard on the board for it. */
   const nextAndFocus = useCallback(() => {

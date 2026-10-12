@@ -157,9 +157,22 @@
   background: var(--surface);
 }
 
+/* What is still getting ready, at the start of the bar: the buttons keep to its end. */
+.setup__status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-right: auto;
+}
+
 @media (max-width: 599px) {
   .setup__actions .btn--primary {
     flex: 1 1 auto;
+  }
+
+  /* A line of its own above the buttons. */
+  .setup__status {
+    flex-basis: 100%;
   }
 }
 

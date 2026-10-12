@@ -29,6 +29,28 @@ beforeAll(() => {
 });
 
 describe('Dialog', () => {
+  it('lays the ways on at the end of a game out in even rows when asked to', () => {
+    render(
+      <Dialog
+        open
+        onClose={() => undefined}
+        title="You won!"
+        stackActions
+        actions={
+          <>
+            <button type="button">Show the board</button>
+            <button type="button">New opponent</button>
+            <button type="button">Rematch</button>
+          </>
+        }
+      >
+        <p>2 rounds to 0.</p>
+      </Dialog>,
+    );
+    const rematch = screen.getByRole('button', { name: 'Rematch', hidden: true });
+    expect(rematch.parentElement).toHaveClass('dialog__actions', 'dialog__actions--stack');
+  });
+
   it('has a labelled close button when dismissible and fires onClose once', () => {
     const onClose = vi.fn();
     render(

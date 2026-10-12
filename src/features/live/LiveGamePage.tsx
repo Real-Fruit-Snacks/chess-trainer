@@ -644,6 +644,7 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
         open={resultOpen}
         onClose={() => setResultDismissed(true)}
         title={endTitle(verdict)}
+        stackActions
         actions={(close) => (
           <>
             <Button variant="ghost" onClick={close}>

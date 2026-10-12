@@ -15,8 +15,11 @@ const VERSION = (
     version: string;
   }
 ).version;
-/** "0.29" for 0.29.0, as the app names a version. */
-const LABEL = VERSION.replace(/\.0$/, '');
+/**
+ * The release whose news the app shows, as it names it: "0.30" for 0.30.0, and for 0.30.1 too,
+ * since a patch release has no highlights of its own (What's new shows its minor release's).
+ */
+const LABEL = VERSION.replace(/\.\d+$/, '');
 
 const PROGRESS_KEY = 'chess-trainer:progress';
 const SEEN_KEY = 'chess-trainer:seen-version';

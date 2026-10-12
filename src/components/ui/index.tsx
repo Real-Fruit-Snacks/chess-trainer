@@ -581,6 +581,7 @@ export function Dialog({
   actions,
   dismissible = true,
   wide = false,
+  stackActions = false,
   closeLabel = 'Close',
 }: {
   open: boolean;
@@ -592,6 +593,11 @@ export function Dialog({
   dismissible?: boolean;
   /** Use most of the viewport width (for editors and tables). */
   wide?: boolean;
+  /**
+   * The ways on at the end of a game, three or more: two to a row, the main one the full width
+   * under them, rather than a row that wraps where it happens to.
+   */
+  stackActions?: boolean;
   /** Accessible name of the close button in the title row. */
   closeLabel?: string;
 }) {
@@ -643,7 +649,9 @@ export function Dialog({
         </h2>
         {children}
         {actions ? (
-          <div className="dialog__actions">
+          <div
+            className={stackActions ? 'dialog__actions dialog__actions--stack' : 'dialog__actions'}
+          >
             {typeof actions === 'function' ? actions(close) : actions}
           </div>
         ) : null}

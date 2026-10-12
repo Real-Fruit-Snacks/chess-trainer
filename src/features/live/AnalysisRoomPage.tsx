@@ -27,6 +27,7 @@ import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
 import { ANALYSIS_ROOM } from '../../../relay/src/live/shared.mjs';
 import { moveNumber } from './analysisRoom';
+import { OnlineNotice } from './LiveParts';
 import { PhraseCard } from './PhraseCard';
 import { useLivePrefs } from './prefs';
 import { getAnalysisRoom } from './roomSessions';
@@ -87,19 +88,20 @@ function useTitle() {
 }
 
 function RoomAbsent({ title, children }: { title: string; children: ReactNode }) {
-  useTitle();
   return (
-    <div className="narrow">
-      <Card data-testid="together-absent">
-        <h1 className="live-game__absent-title">{title}</h1>
-        <p>{children}</p>
-        <div className="row">
-          <LinkButton variant="primary" to="/analyze">
-            Go to Analyze
-          </LinkButton>
-        </div>
-      </Card>
-    </div>
+    <OnlineNotice
+      crumb={{ to: '/analyze', label: 'Analyze', here: 'Together' }}
+      title={title}
+      docTitle="Analyse together"
+      testId="together-absent"
+      actions={
+        <LinkButton variant="primary" to="/analyze">
+          Go to Analyze
+        </LinkButton>
+      }
+    >
+      {children}
+    </OnlineNotice>
   );
 }
 
@@ -396,7 +398,7 @@ function RoomScreen({
       <Header state={state} />
       <ConnectionLine view={view} />
 
-      <div className="trainer">
+      <div className="trainer together__trainer">
         <div className="analyze__boardcol">
           <div className="trainer__board">
             <EvalBar score={score} turn={info.turn} orientation={orientation} result={result} />
@@ -524,8 +526,16 @@ function RoomScreen({
                 </span>
               </div>
             ) : null}
+            {/* The line keeps its height, so the card does not jump: until there is news, it says
+                what will show there (unannounced: only news is spoken). */}
             <p className="small together__news" role="status" data-testid="together-news">
-              <Notated text={news} />
+              {news ? (
+                <Notated text={news} />
+              ) : (
+                <span className="faint" aria-hidden="true">
+                  {alone ? 'Nobody else is here yet.' : 'What the others play and draw shows here.'}
+                </span>
+              )}
             </p>
             {view.error ? (
               <p className="small live-game__error" role="alert">

@@ -419,6 +419,25 @@ a.btn:focus {
   background: var(--bg-elevated);
 }
 
+/* The end of a game: the ways on two to a row, an odd one out and the main one (last) the full
+   width, in the order they are read (on a phone, one to a row). */
+.dialog__actions--stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dialog__actions--stack > :last-child,
+.dialog__actions--stack > :nth-last-child(2):nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* Phones: too narrow for two to a row without breaking the labels; one each, the full width. */
+@media (max-width: 599px) {
+  .dialog__actions--stack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---------- Form controls ---------- */
 .field {
   display: flex;

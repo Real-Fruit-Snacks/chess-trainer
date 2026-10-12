@@ -168,6 +168,7 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
               onStart={begin}
               startDisabled={game.engineStatus === 'error'}
               startTestId="drill-start"
+              status={game.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
             >
               <div className="drill__tip">
                 <strong>Technique.</strong> {drill.tip}
@@ -177,7 +178,6 @@ function DrillGame({ drill }: { drill: EndgameDrill }) {
                   Theory: <Link to={`/learn/${lesson.id}`}>{lesson.title}</Link>
                 </p>
               ) : null}
-              {game.engineStatus === 'loading' ? <Spinner label="Loading engine…" /> : null}
             </SetupScreen>
           ) : (
             <>

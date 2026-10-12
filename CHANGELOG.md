@@ -6,6 +6,54 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-10-12
+
+The online pages get the polish the rest of the app had in 0.30, and its last loose ends are tied
+up.
+
+### Changed
+
+- **Online pages.** Watching a game, a live game, a puzzle race room, a game for two and an analysis
+  room read as every page does when there is nothing to show yet, or any more: their place in the
+  app (_Play / Watching_) and a title on the page's left edge, then why (a game over and gone, a
+  room closed, a seat that is not this device's) or how the connection is going, and the way back,
+  rather than a card alone in the middle of the page. A correspondence invitation is laid out the
+  same way, its title the page's and the details in a card under it.
+- **Puzzle race rooms.** Until the room answers, the page says it is connecting and nothing more:
+  no list of nobody, no button to join and no link to a room not yet found. In the standings and
+  the places the row marked as yours keeps its score off its edge, and the note on the chosen
+  format stands apart from the choices above it.
+- **Games for two on a phone.** The score shows once, in the line above the board; the panel under
+  the board opens with how the round stands.
+- **The end of a game.** The ways on (_Show the board_, _Analyze game_, _New opponent_, _Rematch_
+  or _Play again_) come in even rows, two side by side and the main one the full width under them,
+  after a game against the computer, a live game and a game for two, rather than in a row that
+  wrapped wherever it ran out of room.
+- **Analysis rooms.** On wide screens the board stays in view while the panel beside it (the moves,
+  the engine, the people, the invitation) scrolls past. The line for what the others play and draw
+  says so until there is news (or that nobody else is here yet), rather than standing empty.
+- **Simul.** The setup shows the boards as they will start, beside how it works: how many, the side
+  you play on each and the level across from you, changing as you choose.
+- **Setup screens.** What is still getting ready (the engine, Engine Says' opening book, Arbiter's
+  classic games) is said in one place on every setup screen, at the start of the bar with _Start_;
+  _Start_ stays usable where the game can wait for it.
+- **Tests.** The accessibility sweep loads each page once and checks it in all three colour
+  schemes, in full in the light one and for colour in dark and black (contrast, and links told
+  apart from the text around them, the rules a scheme can change): 108 checks in place of 324, an
+  eighth faster, and run in parallel, so CI's shards share them out rather than one shard taking
+  the whole sweep. CI's Chromium shards run two tests at a time; the whole Chromium suite passes
+  two at a time on two cores. New end-to-end tests cover the online pages with nothing to show, a
+  race room while it connects, an analysis room's board on wide screens, the simul's preview, the
+  end-of-game rows and a duel's score on a phone, and a unit test the daily puzzle at midnight.
+
+### Fixed
+
+- **Daily puzzle.** A page left open past midnight showed the new date and countdown but kept
+  yesterday's puzzle until it was reloaded. It now moves on to the new puzzle once the old one is
+  not being solved, and a solve that runs past midnight counts for the day its puzzle was.
+- **Backups.** A backup picked again straight after _Cancel_ could leave no question on screen when
+  the device was busy: each file offered now gets a question of its own.
+
 ## [0.30.0] - 2026-10-12
 
 A polish pass across the app, on phones and desktops alike: games against the computer and every

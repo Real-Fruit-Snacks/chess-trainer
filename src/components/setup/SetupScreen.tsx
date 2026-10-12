@@ -20,6 +20,7 @@ export function SetupScreen({
   startDisabled = false,
   startTestId,
   back,
+  status,
   focusOnMount = false,
   testId,
 }: {
@@ -33,6 +34,11 @@ export function SetupScreen({
   startTestId?: string;
   /** A way back to the game on the board ("Back to the game"), when there is one. */
   back?: { label: string; onClick: () => void } | null;
+  /**
+   * What is still getting ready (the engine loading), beside Start. Start stays usable when the
+   * game can wait for it; a setup that cannot start without it disables Start as well.
+   */
+  status?: ReactNode;
   /**
    * Take the focus when the card appears (opened by "New game"), and bring it into view at once.
    * Not on arriving at a page: the focus starts at the top, as on any page.
@@ -65,6 +71,7 @@ export function SetupScreen({
         {intro ? <p className="setup__intro">{intro}</p> : null}
         {children}
         <div className="setup__actions">
+          {status ? <div className="setup__status">{status}</div> : null}
           {back ? (
             <Button variant="ghost" onClick={back.onClick}>
               {back.label}

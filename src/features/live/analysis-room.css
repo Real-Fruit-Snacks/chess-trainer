@@ -42,3 +42,13 @@
 .together__moves {
   margin-top: var(--space-2);
 }
+
+/* On wide screens the panel runs long (the moves, the engine, the people, the invitation): the
+   board's column stays in view beside it. The column fits the screen (the board is sized to it),
+   so nothing of it is ever out of reach. */
+@media (min-width: 900px) {
+  .together__trainer > .analyze__boardcol {
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-4));
+  }
+}

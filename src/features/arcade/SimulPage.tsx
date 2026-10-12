@@ -21,6 +21,7 @@ import {
 } from '@/components/ui';
 import { San } from '@/chess/San';
 import { legalDests, opposite } from '@/chess/helpers';
+import { START_FEN } from '@/chess/startFen';
 import type { LongColor, PromotionPiece } from '@/chess/types';
 import { getLevel } from '@/engine/levels';
 import { type ClockState, getTimeControl, remaining } from '@/lib/clock';
@@ -34,6 +35,8 @@ import { SetupScreen, SetupSegmented } from '@/components/setup/SetupScreen';
 import { EngineLevelField } from './arcadeControls';
 import { useArcadeFocus } from './arcadeGame';
 import {
+  boardColors,
+  boardLevels,
   boardPgn,
   describeLevels,
   describeResult,
@@ -128,6 +131,7 @@ function SimulSetupCard({ simul }: { simul: UseSimul }) {
         intro="Several boards against Stockfish at once, each its own game."
         onStart={begin}
         startDisabled={simul.engineStatus === 'error'}
+        status={simul.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
         startTestId="simul-start"
         testId="simul-setup"
       >
@@ -188,40 +192,86 @@ function SimulSetupCard({ simul }: { simul: UseSimul }) {
           label="Move on after each move"
           description="After you move, the next board waiting for you comes up — the way a simul giver walks the room."
         />
-        {simul.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
       </SetupScreen>
 
-      <Card className="simul__about">
-        <h2>How it works</h2>
-        <ul className="simul__list">
-          <li>
-            The big board is the one you are playing. Tap a small board to switch
-            {shortcutsOn ? (
-              <span className="keyboard-only">
-                , or press <Kbd>N</Kbd> for the next one waiting for you
-              </span>
-            ) : null}
-            .
-          </li>
-          <li>
-            With clocks, yours runs wherever it is your move, so each board you add makes your time
-            go faster; the engine’s runs only while it thinks.
-          </li>
-          <li>No take-backs and no hints: a simul is a test.</li>
-          <li>
-            Each win scores its board’s level (1 to 8), a draw half of it.{' '}
-            {best?.best ? (
-              <>
-                Best so far: <strong data-testid="simul-best">{formatPoints(best.best)}</strong>
-                {best.detail ? ` (${best.detail})` : ''}.
-              </>
-            ) : (
-              'Win a board to set a score to beat.'
-            )}
-          </li>
-        </ul>
-      </Card>
+      <div className="stack">
+        <SimulPreview setup={setup} />
+        <Card className="simul__about">
+          <h2>How it works</h2>
+          <ul className="simul__list">
+            <li>
+              The big board is the one you are playing. Tap a small board to switch
+              {shortcutsOn ? (
+                <span className="keyboard-only">
+                  , or press <Kbd>N</Kbd> for the next one waiting for you
+                </span>
+              ) : null}
+              .
+            </li>
+            <li>
+              With clocks, yours runs wherever it is your move, so each board you add makes your
+              time go faster; the engine’s runs only while it thinks.
+            </li>
+            <li>No take-backs and no hints: a simul is a test.</li>
+            <li>
+              Each win scores its board’s level (1 to 8), a draw half of it.{' '}
+              {best?.best ? (
+                <>
+                  Best so far: <strong data-testid="simul-best">{formatPoints(best.best)}</strong>
+                  {best.detail ? ` (${best.detail})` : ''}.
+                </>
+              ) : (
+                'Win a board to set a score to beat.'
+              )}
+            </li>
+          </ul>
+        </Card>
+      </div>
     </div>
+  );
+}
+
+/**
+ * The boards as they will start, as the setup changes: how many, the side you play on each, and
+ * the level across from you — the small boards of the simul itself, before it begins.
+ */
+function SimulPreview({ setup }: { setup: SimulSetup }) {
+  const levels = boardLevels(setup);
+  const colors = boardColors(setup);
+  return (
+    <Card as="section" aria-labelledby="simul-preview-title" data-testid="simul-preview">
+      <h2 id="simul-preview-title" className="simul__preview-title">
+        The boards
+      </h2>
+      <ol className="simul__thumbs simul__preview" role="list">
+        {colors.map((color, i) => (
+          <li key={i} className="simul-thumb simul-thumb--preview">
+            <div className="simul-thumb__board" aria-hidden="true">
+              <Board
+                fen={START_FEN}
+                orientation={color}
+                viewOnly
+                coordinates={false}
+                animate={false}
+                announceMoves={false}
+                drawable={false}
+              />
+            </div>
+            <div className="simul-thumb__meta">
+              <span className="simul-thumb__number" aria-hidden="true">
+                {i + 1}
+              </span>
+              <span className="simul-thumb__state" aria-hidden="true">
+                Level {levels[i]}
+              </span>
+              <span className="sr-only">
+                Board {i + 1}: you play {color} against level {levels[i]}.
+              </span>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </Card>
   );
 }
 

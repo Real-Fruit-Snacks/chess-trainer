@@ -281,6 +281,7 @@ export default function HandAndBrainPage() {
               intro="Full-strength Stockfish is your partner against an engine at the level you choose."
               onStart={begin}
               startDisabled={hb.engineStatus === 'error'}
+              status={hb.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
               startTestId="hb-start"
               focusOnMount={settingUp}
               back={

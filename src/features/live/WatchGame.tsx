@@ -17,7 +17,7 @@ import { playMoveSound } from '@/lib/sound';
 import { siteConfig } from '@/site.config';
 import { BLINDFOLD_PEEKS, isCorrespondence } from '../../../relay/src/live/shared.mjs';
 import { AnalyseTogether } from './AnalyseTogether';
-import { DaysLeft, GameAbsent, LiveClockDisplay, PlayerName } from './LiveParts';
+import { DaysLeft, GameAbsent, LiveClockDisplay, OnlineNotice, PlayerName } from './LiveParts';
 import { describeTimeControl, sideName, watchedEnd, watchingText } from './liveView';
 import { chess960Label, replayMoves } from './liveViewBoard';
 import { describeOptions, gameName } from './onlineGames';
@@ -41,7 +41,7 @@ export function WatchGame({ id, onJoined }: { id: string; onJoined?: () => void 
   const session = useMemo(() => watchLiveGame(id), [id]);
   if (!session) {
     return (
-      <GameAbsent title="Game not found">
+      <GameAbsent title="Game not found" here="Watching">
         That link does not lead to a game. Ask for the link again.
       </GameAbsent>
     );
@@ -70,18 +70,19 @@ function Watching({
 
   if (view.missing) {
     return (
-      <GameAbsent title="Game not found">
+      <GameAbsent title="Game not found" here="Watching">
         This game is over and gone, or the link is not quite right.
       </GameAbsent>
     );
   }
   if (view.connection === 'connecting') {
     return (
-      <div className="narrow">
-        <Card>
-          <Spinner label="Connecting to the game…" />
-        </Card>
-      </div>
+      <OnlineNotice
+        crumb={{ to: '/play', label: 'Play', here: 'Watching' }}
+        title="A live game"
+        docTitle="Live game"
+        status={<Spinner label="Connecting to the game…" />}
+      />
     );
   }
   if (onJoined && view.open && view.status === 'playing') {
@@ -107,15 +108,17 @@ function JoinCard({ session, view }: { session: LiveGameSession; view: LiveGameV
     document.title = `Invitation · ${siteConfig.name}`;
   }, []);
   return (
-    <div className="narrow">
-      <Card data-testid="live-join">
+    <div data-testid="live-join">
+      <div className="page-header">
         <p className="card__eyebrow">
           <Link to="/play">Play</Link> / Invitation
         </p>
-        <h1 className="live-game__absent-title">
+        <h1>
           {host.name} invites you to a {view.game === 'chess960' ? 'Chess960 ' : ''}correspondence
           game
         </h1>
+      </div>
+      <Card className="online-notice__card">
         <p>
           {describeTimeControl(view.tc)}: each of you has these days for every move, and plays
           whenever suits. You play {open}.

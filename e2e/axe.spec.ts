@@ -7,7 +7,15 @@ import { type LiveRelay, startLiveRelay } from './live';
  * the top-level ones and one of each parameterised route — in all three colour
  * schemes. It catches the mechanical slips — missing labels, bad contrast,
  * invalid ARIA — that the hand-written accessibility tests do not look for.
+ *
+ * Each page loads once and is checked in full in the light scheme, then switched to dark and
+ * to black with the header's own theme button (which goes light, dark, black) and checked for
+ * what a scheme can change: the colours (contrast, and links told apart from the text around
+ * them). Labels, roles and structure are the same in every scheme, so one page costs one load
+ * and one full check rather than three of each. The pages are independent: they run in
+ * parallel, and CI's shards share them out rather than one shard taking the whole sweep.
  */
+test.describe.configure({ mode: 'parallel' });
 const PAGES = [
   '/',
   '/learn',
@@ -82,14 +90,14 @@ async function seed(page: Page, scheme: Scheme) {
   );
 }
 
-async function audit(page: Page, path: string) {
-  await page.goto(path);
-  // Code-split pages: wait for the page's own heading, then for the engine or
-  // boards to settle so what is audited is what a visitor sees.
-  await expect(page.locator('main h1').first()).toBeVisible();
-  await page.waitForTimeout(400);
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+/** The rules a colour scheme can pass or fail: everything else is the same in each. */
+const COLOUR_RULES = ['color-contrast', 'link-in-text-block'];
+
+async function audit(page: Page, coloursOnly = false) {
+  const builder = new AxeBuilder({ page });
+  if (coloursOnly) builder.withRules(COLOUR_RULES);
+  else builder.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']);
+  const results = await builder
     // The chessground board draws pieces as CSS backgrounds inside custom
     // elements; its DOM is not something axe can judge.
     .exclude('cg-board')
@@ -140,15 +148,33 @@ test.afterAll(async () => {
   relay = null;
 });
 
-for (const scheme of ['light', 'dark', 'black'] as const) {
-  test.describe(`axe sweep (${scheme})`, () => {
-    for (const path of PAGES) {
-      test(`${path} has no WCAG A/AA violations`, async ({ page }) => {
-        if (relay) await relay.attach(page.context());
-        await seed(page, scheme);
-        const violations = await audit(page, path);
-        expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
-      });
-    }
-  });
-}
+const SCHEMES = ['light', 'dark', 'black'] as const satisfies readonly Scheme[];
+
+test.describe('axe sweep', () => {
+  for (const path of PAGES) {
+    test(`${path} has no WCAG A/AA violations in any colour scheme`, async ({ page }) => {
+      if (relay) await relay.attach(page.context());
+      await seed(page, 'light');
+      await page.goto(path);
+      // Code-split pages: wait for the page's own heading, then for the engine or
+      // boards to settle so what is audited is what a visitor sees.
+      await expect(page.locator('main h1').first()).toBeVisible();
+      await page.waitForTimeout(400);
+      const found: Partial<Record<Scheme, Awaited<ReturnType<typeof audit>>>> = {};
+      for (const [i, scheme] of SCHEMES.entries()) {
+        if (i > 0) {
+          // The next scheme, as a visitor would switch to it; the colours settle (their
+          // transitions are short) before the check.
+          await page
+            .getByRole('button', { name: `Theme: ${SCHEMES[i - 1]}. Switch theme` })
+            .click();
+          await expect(page.locator('html')).toHaveAttribute('data-theme', scheme);
+          await page.waitForTimeout(300);
+        }
+        const violations = await audit(page, i > 0);
+        if (violations.length) found[scheme] = violations;
+      }
+      expect(found, JSON.stringify(found, null, 2)).toEqual({});
+    });
+  }
+});

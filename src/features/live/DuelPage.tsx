@@ -35,6 +35,7 @@ import {
 import { formatCountdown, monotonicNow } from './liveView';
 import { useLobby } from './lobby';
 import { describeOptions, gameName } from './onlineGames';
+import { OnlineNotice } from './LiveParts';
 import { PhraseCard } from './PhraseCard';
 import { getDuel } from './sessions';
 import type { DuelSession, DuelView, LivePlayer, Side } from './types';
@@ -69,21 +70,20 @@ function Duel({ id }: { id: string }) {
 }
 
 function DuelAbsent({ title, children }: { title: string; children: ReactNode }) {
-  useEffect(() => {
-    document.title = `Duel · ${siteConfig.name}`;
-  }, []);
   return (
-    <div className="narrow">
-      <Card data-testid="duel-absent">
-        <h1 className="live-game__absent-title">{title}</h1>
-        <p>{children}</p>
-        <div className="row">
-          <LinkButton variant="primary" to="/play">
-            Back to Play
-          </LinkButton>
-        </div>
-      </Card>
-    </div>
+    <OnlineNotice
+      crumb={{ to: '/play', label: 'Play', here: 'Game for two' }}
+      title={title}
+      docTitle="Game for two"
+      testId="duel-absent"
+      actions={
+        <LinkButton variant="primary" to="/play">
+          Back to Play
+        </LinkButton>
+      }
+    >
+      {children}
+    </OnlineNotice>
   );
 }
 
@@ -136,15 +136,23 @@ function Scoreboard({ view, opponent }: { view: DuelView; opponent: LivePlayer }
   );
 }
 
-/** The score in one line, above the board on a phone (the panel with the scoreboard is below). */
+/**
+ * The score in one line, above the board on a phone, where it stands in for the scoreboard: the
+ * panel is under the board there, and the score is shown once.
+ */
 function ScoreLine({ view, opponent }: { view: DuelView; opponent: LivePlayer }) {
   const { mine, theirs } = scores(view);
   return (
     <p className="duel__line" data-testid="duel-strip">
-      <span className="duel__line-name">You</span> <b className="duel__line-points">{mine}</b>
+      <span className="duel__line-name">You</span>{' '}
+      <b className="duel__line-points" data-testid="duel-score-mine">
+        {mine}
+      </b>
       <span aria-hidden="true"> – </span>
       <span className="sr-only"> to </span>
-      <b className="duel__line-points">{theirs}</b>{' '}
+      <b className="duel__line-points" data-testid="duel-score-theirs">
+        {theirs}
+      </b>{' '}
       <span className="duel__line-name">{opponent.name}</span>
     </p>
   );
@@ -276,7 +284,7 @@ function DuelScreen({ session, view }: { session: DuelSession; view: DuelView })
 
         <aside className="trainer__panel stack">
           <Card>
-            <Scoreboard view={view} opponent={opponent} />
+            {stacked ? null : <Scoreboard view={view} opponent={opponent} />}
             <p className="live-game__status duel__state" role="status" data-testid="duel-status">
               {statusLine(view, opponent.name)}
             </p>
@@ -364,6 +372,7 @@ function DuelScreen({ session, view }: { session: DuelSession; view: DuelView })
         open={resultOpen}
         onClose={() => setResultDismissed(true)}
         title={duelEndTitle(verdict)}
+        stackActions
         actions={(close) => (
           <>
             <Button variant="ghost" onClick={close}>

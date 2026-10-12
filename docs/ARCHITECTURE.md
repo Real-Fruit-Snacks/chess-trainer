@@ -1402,13 +1402,18 @@ warning gives way to a confirmation.
   correspondence game, the notifications card, Chess960 online and race rooms.
 - **Accessibility sweep (axe-core):** `e2e/axe.spec.ts` audits every page — the top-level ones and
   one of each parameterised route — in all three colour schemes, against WCAG 2.1 A/AA, and fails on
-  any violation (the chessground board and the transient toasts are excluded). It sees each page as
-  it first renders; states reached by playing are covered by the release specs' own axe checks.
+  any violation (the chessground board and the transient toasts are excluded). A page loads once:
+  it is checked in full in the light scheme, then switched to dark and to black with the header's
+  theme button and checked for what a scheme can change, contrast and links told apart from text
+  (axe's `color-contrast` and `link-in-text-block`). Its pages run in parallel mode, so CI's shards
+  share them out. It sees each page as it first renders; states reached by playing are covered by
+  the release specs' own axe checks.
 - **Browsers.** CI runs four Playwright projects: the whole suite on desktop and mobile Chromium,
   and the shell, engine, arcade, settings, lab, small-phone, accessibility and release specs
   (`CROSS_BROWSER_SPECS` in `playwright.config.ts`, the 0.29 ones among them) on Firefox and
   WebKit. Each project is split across runners with Playwright's `--shard` — four for each Chromium
-  project, three for Firefox and for WebKit, fourteen jobs in all — and each shard uploads a blob
+  project, three for Firefox and for WebKit, fourteen jobs in all; the Chromium shards run two tests
+  at a time (`--workers=2`), Firefox and WebKit one — and each shard uploads a blob
   report; the _End-to-end report_ job merges them into one HTML report (`playwright merge-reports`),
   failures' traces and screenshots included, whether the shards passed or not. A local
   `npm run e2e` runs the two Chromium projects; `ALL_BROWSERS=1` adds the other two. CI allows two

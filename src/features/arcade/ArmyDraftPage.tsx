@@ -138,6 +138,7 @@ export default function ArmyDraftPage() {
               intro="Spend the budget on your army; the engine drafts its own. Kings are free, and nobody castles."
               onStart={() => begin()}
               startDisabled={problem !== null || play.engineStatus === 'error'}
+              status={play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
               startTestId="army-start"
               focusOnMount={reopened}
             >
@@ -187,7 +188,6 @@ export default function ArmyDraftPage() {
                 describe
               />
               {best ? <p className="small muted setup__note">Your best: {best.detail}.</p> : null}
-              {play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
             </SetupScreen>
           </aside>
         </div>

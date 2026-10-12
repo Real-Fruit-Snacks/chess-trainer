@@ -439,7 +439,8 @@ bar.
   another, and the engine's only while it thinks. Small boards show every game (on a phone a strip
   of board numbers sits under the big board too); tap one or press `N` for the next board waiting for
   you. Each win scores its board's level, a draw half of it. Leaving a simul in play asks first and
-  resigns the boards still going.
+  resigns the boards still going. The setup shows the boards as they will start (your side on each
+  and the level across from you), changing as you choose.
 - **Arbiter** — a stretch of a classic game replays at speed, and then one move breaks the rules. Call
   it (the button, or Space) before the next move would have come. Eighteen kinds of illegal move in
   three tiers: in rounds one to three a piece moves in a way it never can (a knight off its L, a bishop
@@ -533,8 +534,9 @@ from the engine ladder and the Play results.
   - Each device runs its own engine, with its lines and the evaluation bar, and can switch it off.
     The keys are Analyze's (← → Home End, F to flip). _Open in Analyze_ copies the whole tree to
     your own analysis board. The members (who is here), the set phrases and the link are beside the
-    board, and the bar under the header leads back to the room. A room is deleted 10 minutes after
-    its last member leaves, and 6 hours after it was made at most.
+    board, which stays in view on wide screens while they scroll past, and the bar under the header
+    leads back to the room. A room is deleted 10 minutes after its last member leaves, and 6 hours
+    after it was made at most.
 - **In your games**: every game in My games that reached the position on the board (the same
   pieces and side to move, by any order of moves), with the opponent, the date, the result and the
   move played next ("then 12. Nf3"), and how often each next move was chosen. Five show, then _Show

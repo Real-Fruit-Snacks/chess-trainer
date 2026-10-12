@@ -504,9 +504,14 @@
 }
 
 /* ---------- The game ---------- */
-.live-game__absent-title {
-  font-size: 1.35rem;
-  margin-bottom: var(--space-2);
+/* An online page with nothing to show yet, or no longer (OnlineNotice): the page's header,
+   then the connection's line or the ways on; a card under it reads at a comfortable width. */
+.online-notice__status {
+  margin-bottom: var(--space-4);
+}
+
+.online-notice__card {
+  max-width: 620px;
 }
 
 .live-game__title {

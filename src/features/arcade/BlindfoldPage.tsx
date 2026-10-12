@@ -200,6 +200,7 @@ export default function BlindfoldPage() {
               intro={`The pieces stay hidden; the move list is all you get. You may peek ${BLINDFOLD_PEEKS} times.`}
               onStart={begin}
               startDisabled={play.engineStatus === 'error'}
+              status={play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
               startTestId="blindfold-start"
               focusOnMount={reopened}
               back={

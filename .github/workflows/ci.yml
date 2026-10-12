@@ -112,6 +112,8 @@ jobs:
   # Each browser project split across runners (Playwright's --shard): the Chromium projects run
   # the whole suite in four shards, Firefox and WebKit their cross-browser sample
   # (CROSS_BROWSER_SPECS in playwright.config.ts), half as many tests but slower, in three.
+  # The Chromium shards run two tests at a time (the runners have four cores, and the whole
+  # Chromium suite passes two at a time on two); Firefox and WebKit, heavier, one.
   # e2e-report merges the shards' reports.
   e2e:
     name: End-to-end (${{ matrix.project }}, shard ${{ matrix.shard }} of ${{ matrix.shards }})
@@ -132,15 +134,19 @@ jobs:
           - project: desktop-chromium
             browser: chromium
             shards: 4
+            workers: 2
           - project: mobile-chromium
             browser: chromium
             shards: 4
+            workers: 2
           - project: desktop-firefox
             browser: firefox
             shards: 3
+            workers: 1
           - project: desktop-webkit
             browser: webkit
             shards: 3
+            workers: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -156,11 +162,14 @@ jobs:
 
       # The GitHub reporter annotates failures here; the blob report goes to e2e-report.
       - name: Run Playwright
-        run: npx playwright test --project="$PROJECT" --shard="$SHARD" --reporter=github,blob
+        run: >-
+          npx playwright test --project="$PROJECT" --shard="$SHARD" --workers="$WORKERS"
+          --reporter=github,blob
         env:
           CI: 'true'
           PROJECT: ${{ matrix.project }}
           SHARD: ${{ matrix.shard }}/${{ matrix.shards }}
+          WORKERS: ${{ matrix.workers }}
           # Pull requests and pushes keep two retries; the nightly run fails on any flaky test.
           PLAYWRIGHT_FAIL_ON_FLAKY: ${{ github.event_name == 'schedule' && '1' || '0' }}
 

@@ -83,6 +83,11 @@
   margin-top: var(--space-3);
 }
 
+/* On a phone the score is above the board: the state opens the card. */
+.duel__state:first-child {
+  margin-top: 0;
+}
+
 .duel__clock {
   display: flex;
   align-items: baseline;

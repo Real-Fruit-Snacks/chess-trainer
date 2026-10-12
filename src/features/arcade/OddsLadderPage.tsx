@@ -175,6 +175,7 @@ export default function OddsLadderPage() {
               intro="You play White against Stockfish at full strength, which starts without some of its pieces. Win to climb: the head start shrinks with each rung. No take-backs, no hints."
               onStart={() => begin(chosen)}
               startDisabled={play.engineStatus === 'error'}
+              status={play.engineStatus === 'loading' ? <Spinner label="Loading engine" /> : null}
               startTestId="odds-start"
               focusOnMount={settingUp}
               back={

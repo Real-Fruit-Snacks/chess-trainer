@@ -187,6 +187,12 @@ test.describe('games for two', () => {
     const puzzles = relay.sent('content')[0].items as RacePuzzle[];
     expect(puzzles).toHaveLength(5);
 
+    // The score shows once: on a phone in the line above the board, elsewhere in the panel.
+    const phone = (host.viewportSize()?.width ?? 1280) < 600;
+    await expect(host.getByTestId('duel-score')).toHaveCount(phone ? 0 : 1);
+    await expect(host.getByTestId('duel-strip')).toHaveCount(phone ? 1 : 0);
+    await expect(host.getByTestId('duel-score-mine')).toHaveCount(1);
+
     // Round 1: the host solves it; the guest never moves.
     await solve(host, puzzles[0]);
     await expect(host.getByTestId('race-status')).toContainText('Solved in');
@@ -197,8 +203,28 @@ test.describe('games for two', () => {
     await missPuzzle(guest, puzzles[1]);
     await expect(guest.getByTestId('race-status')).toContainText('Missed');
     await solve(host, puzzles[1]);
-    await expect(host.getByRole('dialog', { name: 'You won!' })).toBeVisible();
+    const won = host.getByRole('dialog', { name: 'You won!' });
+    await expect(won).toBeVisible();
     await expect(host.getByTestId('duel-end-sentence')).toHaveText('2 rounds to 0.');
+    // The ways on in even rows (0.30.1): two side by side and the rematch the full width under
+    // them, or on a phone one to a row; the rematch, the main one, last.
+    const box = async (control: Locator) => {
+      const b = await control.boundingBox();
+      if (!b) throw new Error('no box');
+      return b;
+    };
+    const show = await box(won.getByRole('button', { name: 'Show the board' }));
+    const other = await box(won.getByRole('link', { name: 'New opponent' }));
+    const rematch = await box(won.getByRole('button', { name: 'Rematch' }));
+    if (phone) {
+      expect(other.y).toBeGreaterThanOrEqual(show.y + show.height);
+      expect(Math.abs(other.width - rematch.width)).toBeLessThanOrEqual(1);
+    } else {
+      expect(Math.abs(show.y - other.y)).toBeLessThanOrEqual(1);
+    }
+    expect(rematch.y).toBeGreaterThanOrEqual(other.y + other.height);
+    expect(Math.abs(rematch.x - show.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(rematch.x + rematch.width - (other.x + other.width))).toBeLessThanOrEqual(1);
     await expect(guest.getByRole('dialog', { name: 'You lost' })).toBeVisible();
     await expect(guest.getByTestId('duel-rounds')).toContainText('Round 2');
   });

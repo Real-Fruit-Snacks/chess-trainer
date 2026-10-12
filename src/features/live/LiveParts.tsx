@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { ClockDisplay } from '@/components/chess/ClockDisplay';
-import { Badge, Card, LinkButton } from '@/components/ui';
+import { Badge, LinkButton } from '@/components/ui';
 import { useTicker } from '@/lib/useTicker';
 import { siteConfig } from '@/site.config';
 import { clockRemaining, formatTimeLeft, monotonicNow } from './liveView';
@@ -10,7 +11,8 @@ import './live.css';
 /**
  * Pieces of a live game's page that the player's board (LiveGamePage) and the
  * watcher's (WatchGame) share: a player's name in their bar, their clock (or a
- * correspondence game's days), and the page for a game that is not there.
+ * correspondence game's days), and the page for a game that is not there — the same
+ * notice every online page shows while it connects, or once there is nothing to show.
  */
 
 /** Under this much time on a clock, it shows as low (and the player's own warns once). */
@@ -38,32 +40,89 @@ export function PlayerName({
   );
 }
 
+/** Where an online page sits in the app: "Play / Live game". */
+export interface OnlineCrumb {
+  /** The page it belongs to. */
+  to: string;
+  label: string;
+  /** This page's own name. */
+  here: string;
+}
+
+/**
+ * An online page with nothing to show yet, or no longer: connecting, a game or room that has
+ * gone, a seat that is not this device's. It reads as every page does, its place in the app and
+ * a title on the page's left edge, then the reason (or the connection's progress) and the ways on.
+ */
+export function OnlineNotice({
+  crumb,
+  title,
+  docTitle,
+  children,
+  status,
+  actions,
+  testId,
+}: {
+  crumb: OnlineCrumb;
+  title: string;
+  /** The tab's title, before the site's name. */
+  docTitle: string;
+  /** Why, in a sentence or two. */
+  children?: ReactNode;
+  /** A live line under the header: the connection's progress. */
+  status?: ReactNode;
+  /** The ways on: buttons and links. */
+  actions?: ReactNode;
+  testId?: string;
+}) {
+  useEffect(() => {
+    document.title = `${docTitle} · ${siteConfig.name}`;
+  }, [docTitle]);
+  return (
+    <div className="online-notice" data-testid={testId}>
+      <div className="page-header">
+        <p className="card__eyebrow">
+          <Link to={crumb.to}>{crumb.label}</Link> / {crumb.here}
+        </p>
+        <h1>{title}</h1>
+        {children ? <p>{children}</p> : null}
+      </div>
+      {status ? <div className="online-notice__status">{status}</div> : null}
+      {actions ? <div className="row">{actions}</div> : null}
+    </div>
+  );
+}
+
 /** A game that cannot be shown: why, and the way back to Play. */
 export function GameAbsent({
   title,
   children,
   lichess = false,
+  here = 'Live game',
 }: {
   title: string;
   children: ReactNode;
   lichess?: boolean;
+  /** The page's name in its place in the app ("Watching" for a game watched). */
+  here?: string;
 }) {
-  useEffect(() => {
-    document.title = `Live game · ${siteConfig.name}`;
-  }, []);
   return (
-    <div className="narrow">
-      <Card data-testid="live-absent">
-        <h1 className="live-game__absent-title">{title}</h1>
-        <p>{children}</p>
-        <div className="row">
+    <OnlineNotice
+      crumb={{ to: '/play', label: 'Play', here }}
+      title={title}
+      docTitle="Live game"
+      testId="live-absent"
+      actions={
+        <>
           <LinkButton variant="primary" to="/play">
             Back to Play
           </LinkButton>
           {lichess ? <LinkButton to="/settings#lichess">Lichess in Settings</LinkButton> : null}
-        </div>
-      </Card>
-    </div>
+        </>
+      }
+    >
+      {children}
+    </OnlineNotice>
   );
 }
 

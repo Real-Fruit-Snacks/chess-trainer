@@ -274,6 +274,7 @@ export default function ArbiterPage() {
               intro="Every round replays a few real moves from a classic game, then one illegal one — a knight off its L, a pawn going backwards, a pinned piece moving, castling through check."
               onStart={begin}
               startDisabled={!games}
+              status={!games ? <Spinner label="Reading the classic games" /> : null}
               startTestId="arbiter-start"
               focusOnMount={settingUp}
               back={
@@ -340,7 +341,6 @@ export default function ArbiterPage() {
               {!stacked ? underBoard : null}
             </>
           )}
-          {!games ? <Spinner label="Reading the classic games" /> : null}
         </aside>
       </div>
     </div>
