@@ -1,6 +1,8 @@
 /* ---------- What's new (Home's card, and the releases dialog in Settings) ---------- */
+/* Space on both sides: the cards around it (Your progress) leave the gap above them to the card
+   before. */
 .whatsnew {
-  margin-top: var(--space-4);
+  margin: var(--space-4) 0;
 }
 
 .whatsnew__head {

@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Home.** The What's new card left no space before the card under it (Your progress, or the
+  welcome for a newcomer); it now has the same gap as the other cards.
+
 ## [0.29.0] - 2026-10-12
 
 Chess960 and correspondence games, premoves, games to watch, puzzle races for up to eight and a

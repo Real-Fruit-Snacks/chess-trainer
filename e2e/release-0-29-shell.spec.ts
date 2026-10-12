@@ -303,9 +303,13 @@ test.describe('what’s new', () => {
         (els) => els.find((el) => el.getBoundingClientRect().width > 1)?.textContent?.trim() ?? '',
       );
     expect(firstHeading).toBe('Today');
+    // A gap on both sides: the card does not touch "Today" above or "Your progress" below.
     const todayBox = await today.boundingBox();
     const cardBox = await card.boundingBox();
-    expect(cardBox?.y ?? 0).toBeGreaterThan((todayBox?.y ?? 0) + (todayBox?.height ?? 0) - 1);
+    const nextBox = await card.locator('xpath=following-sibling::*[1]').boundingBox();
+    const cardBottom = (cardBox?.y ?? 0) + (cardBox?.height ?? 0);
+    expect((cardBox?.y ?? 0) - ((todayBox?.y ?? 0) + (todayBox?.height ?? 0))).toBeGreaterThan(8);
+    expect((nextBox?.y ?? 0) - cardBottom).toBeGreaterThan(8);
 
     // Each highlight leads to its feature; a long list opens in full on request.
     const items = card.getByRole('listitem');
