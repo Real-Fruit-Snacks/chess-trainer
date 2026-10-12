@@ -346,7 +346,7 @@ describe('a full disk', () => {
     startDeviceSync()(); // runs only when the test asks
     load(solvePuzzle(takeSnapshot(), 'n1', T));
     // The agreement still fits; the note of a pending write, a little longer, does not.
-    fullFor(storageKeyFor('chess-trainer:device-sync'), true);
+    fullFor(storageKeyFor('open-file:device-sync'), true);
     useToasts.setState({ toasts: [] });
     for (let i = 0; i < 3; i++) await syncNow();
     expect(useToasts.getState().toasts.filter((t) => t.message === STORAGE_FULL)).toHaveLength(1);
@@ -436,7 +436,7 @@ describe('a full disk', () => {
     const other = await otherDevice(words);
     await other.change((s) => solvePuzzle(s, 'there', T));
     const agreed = useDeviceSyncStore.getState().etag;
-    const full = fullFor(storageKeyFor('chess-trainer:device-sync'));
+    const full = fullFor(storageKeyFor('open-file:device-sync'));
     await syncNow();
     full.mockRestore();
     expect(useDeviceSync.getState()).toMatchObject({ phase: 'failed', error: STORAGE_FULL });

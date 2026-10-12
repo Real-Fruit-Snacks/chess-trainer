@@ -6,9 +6,9 @@ import { expectBoard, playMove, waitForBoardIdle } from './helpers';
  * 0.15: the thinking skills — blind puzzles, the threat drill, the blunder
  * check in games, and analyzing a game yourself before the engine.
  */
-const PROGRESS_KEY = 'chess-trainer:progress';
-const SETTINGS_KEY = 'chess-trainer:settings';
-const HANDOFF_KEY = 'chess-trainer:handoff-pgn';
+const PROGRESS_KEY = 'open-file:progress';
+const SETTINGS_KEY = 'open-file:settings';
+const HANDOFF_KEY = 'open-file:handoff-pgn';
 
 // No service worker: its "ready to work offline" toast must not land on a board mid-test, and
 // without isolation every browser lets the puzzle files be served from the test.

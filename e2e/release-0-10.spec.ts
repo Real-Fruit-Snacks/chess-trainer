@@ -10,12 +10,12 @@ async function seed(page: Page, settings: Record<string, unknown> = {}) {
   await page.addInitScript(
     ([settingsJson]) => {
       localStorage.setItem(
-        'chess-trainer:progress',
+        'open-file:progress',
         JSON.stringify({ state: { onboarded: true, puzzleRating: 1200 }, version: 6 }),
       );
       // Seeded once; later pages keep what the test changed.
-      if (!localStorage.getItem('chess-trainer:settings')) {
-        localStorage.setItem('chess-trainer:settings', settingsJson);
+      if (!localStorage.getItem('open-file:settings')) {
+        localStorage.setItem('open-file:settings', settingsJson);
       }
     },
     [JSON.stringify({ state: { playCoach: false, ...settings }, version: 3 })] as const,

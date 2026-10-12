@@ -24,10 +24,10 @@ describe('app navigation allowlist', () => {
     expect(root.test('/other-project/')).toBe(false);
     expect(root.test('/blog/post')).toBe(false);
 
-    const project = appNavigationPattern('/chess-trainer/');
-    expect(project.test('/chess-trainer/')).toBe(true);
-    expect(project.test('/chess-trainer/arcade/simul')).toBe(true);
-    expect(project.test('/chess-trainer/nothing')).toBe(false);
+    const project = appNavigationPattern('/open-file/');
+    expect(project.test('/open-file/')).toBe(true);
+    expect(project.test('/open-file/arcade/simul')).toBe(true);
+    expect(project.test('/open-file/nothing')).toBe(false);
     expect(project.test('/')).toBe(false);
     expect(project.test('/other/puzzles')).toBe(false);
   });

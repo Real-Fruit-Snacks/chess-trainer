@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 import { expectBoard, playMove, showAnswersToTheEnd, waitForBoardIdle } from './helpers';
 
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 async function seedProgress(page: Page, state: Record<string, unknown>, version = 5) {
   await page.addInitScript(
@@ -76,7 +76,7 @@ test.describe('opening practice', () => {
     await expect(page.getByTestId('book-status')).toContainText('follows your repertoire');
     // The forgotten move was lapsed in the repertoire store.
     const cards = await page.evaluate(() => {
-      const raw = localStorage.getItem('chess-trainer:repertoire');
+      const raw = localStorage.getItem('open-file:repertoire');
       return raw
         ? (JSON.parse(raw) as { state: { cards: Record<string, { lapses: number }> } }).state.cards
         : {};
@@ -127,11 +127,11 @@ test.describe('insights', () => {
     });
     await page.addInitScript(
       ([gamesValue, progressValue]) => {
-        if (!localStorage.getItem('chess-trainer:games')) {
-          localStorage.setItem('chess-trainer:games', gamesValue);
+        if (!localStorage.getItem('open-file:games')) {
+          localStorage.setItem('open-file:games', gamesValue);
         }
-        if (!localStorage.getItem('chess-trainer:progress')) {
-          localStorage.setItem('chess-trainer:progress', progressValue);
+        if (!localStorage.getItem('open-file:progress')) {
+          localStorage.setItem('open-file:progress', progressValue);
         }
       },
       [
@@ -251,11 +251,11 @@ test.describe('woodpecker', () => {
     await expect(page.locator('.stat', { hasText: 'Woodpecker' }).first()).toBeVisible();
     // Shrink the set to three puzzles so the cycle can be completed quickly.
     await page.evaluate(() => {
-      const raw = localStorage.getItem('chess-trainer:progress');
+      const raw = localStorage.getItem('open-file:progress');
       if (!raw) return;
       const parsed = JSON.parse(raw) as { state: { woodpecker: { puzzleIds: string[] } } };
       parsed.state.woodpecker.puzzleIds = parsed.state.woodpecker.puzzleIds.slice(0, 3);
-      localStorage.setItem('chess-trainer:progress', JSON.stringify(parsed));
+      localStorage.setItem('open-file:progress', JSON.stringify(parsed));
     });
     await page.reload();
     await expect(page.getByTestId('woodpecker-panel')).toContainText('Cycle 1: puzzle 1 of 3');
@@ -610,7 +610,7 @@ test.describe('profiles', () => {
     // The first learner's data is untouched under the plain key.
     const stored = await page.evaluate(
       () =>
-        JSON.parse(localStorage.getItem('chess-trainer:progress') ?? '{}') as {
+        JSON.parse(localStorage.getItem('open-file:progress') ?? '{}') as {
           state?: { puzzleRating?: number };
         },
     );

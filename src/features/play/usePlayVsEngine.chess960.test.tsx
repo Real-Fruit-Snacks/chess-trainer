@@ -244,7 +244,7 @@ describe('usePlayVsEngine in Chess960', () => {
     expect(record?.pgn).toContain('[Variant "Chess960"]');
     expect(record?.pgn).toContain('[SetUp "1"]');
     expect(record?.pgn).toContain(`[FEN "${fen}"]`);
-    expect(record?.pgn).toContain('[Event "Chess Trainer — Chess960 vs engine"]');
+    expect(record?.pgn).toContain('[Event "Open File — Chess960 vs engine"]');
     expect(record?.pgn).toMatch(/1\. Ra8# 1-0$/);
     expect(result.current.pgn()).toBe(record?.pgn);
   });

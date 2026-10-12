@@ -1,25 +1,25 @@
 <p align="center">
-  <a href="https://real-fruit-snacks.github.io/chess-trainer/">
-    <img src="public/icons/icon-192.png" width="88" height="88" alt="Chess Trainer">
+  <a href="https://real-fruit-snacks.github.io/open-file/">
+    <img src="public/icons/icon-192.png" width="88" height="88" alt="Open File">
   </a>
 </p>
 
-<h1 align="center">Chess Trainer</h1>
+<h1 align="center">Open File</h1>
 
 <p align="center">
   <strong>Learn, practise and play chess at any level — free, private, and fully offline.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Real-Fruit-Snacks/chess-trainer/actions/workflows/ci.yml"><img src="https://github.com/Real-Fruit-Snacks/chess-trainer/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Real-Fruit-Snacks/chess-trainer/actions/workflows/deploy.yml"><img src="https://github.com/Real-Fruit-Snacks/chess-trainer/actions/workflows/deploy.yml/badge.svg" alt="Deploy"></a>
-  <a href="https://github.com/Real-Fruit-Snacks/chess-trainer/releases"><img src="https://img.shields.io/github/v/release/Real-Fruit-Snacks/chess-trainer?display_name=tag&color=1f6f5b" alt="Latest release"></a>
+  <a href="https://github.com/Real-Fruit-Snacks/open-file/actions/workflows/ci.yml"><img src="https://github.com/Real-Fruit-Snacks/open-file/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Real-Fruit-Snacks/open-file/actions/workflows/deploy.yml"><img src="https://github.com/Real-Fruit-Snacks/open-file/actions/workflows/deploy.yml/badge.svg" alt="Deploy"></a>
+  <a href="https://github.com/Real-Fruit-Snacks/open-file/releases"><img src="https://img.shields.io/github/v/release/Real-Fruit-Snacks/open-file?display_name=tag&color=1f6f5b" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0--or--later-blue.svg" alt="Licence: GPL-3.0-or-later"></a>
   <img src="https://img.shields.io/badge/PWA-works%20offline-1f6f5b" alt="PWA: works offline">
 </p>
 
 <p align="center">
-  <a href="https://real-fruit-snacks.github.io/chess-trainer/"><strong>Open the app</strong></a>
+  <a href="https://real-fruit-snacks.github.io/open-file/"><strong>Open the app</strong></a>
   &nbsp;·&nbsp;
   <a href="docs/FEATURES.md">Features</a>
   &nbsp;·&nbsp;
@@ -31,7 +31,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/hero.webp" width="880" alt="Chess Trainer: a rated puzzle on a laptop, and a game against the engine on a phone in the dark theme">
+  <img src="docs/screenshots/hero.webp" width="880" alt="Open File: a rated puzzle on a laptop, and a game against the engine on a phone in the dark theme">
 </p>
 
 A complete chess trainer in a single web app: lessons, 48,000 puzzles, drills, opening repertoires,
@@ -39,7 +39,10 @@ a Stockfish opponent with a coach, a human-like opponent that plays like a perso
 600 to 2600, game analysis and an arcade of chess games — with nothing to sign up for. It runs
 entirely in your browser, installs as an app and keeps working on a plane.
 
-## Why Chess Trainer
+The name: in chess, an open file is a column with no pawns on it, the road a rook takes into the
+game. This one is open too: free, open source, and yours to run anywhere.
+
+## Why Open File
 
 - **Everything in one place.** Learn a concept, drill it, solve puzzles on it, play it against the
   engine and review the game — every part links to the others, and Ctrl+K finds any lesson,
@@ -142,25 +145,25 @@ The full list, section by section, is in [docs/FEATURES.md](docs/FEATURES.md).
 
 ### Use it
 
-Open **<https://real-fruit-snacks.github.io/chess-trainer/>**. To install it as an app, use the
+Open **<https://real-fruit-snacks.github.io/open-file/>**. To install it as an app, use the
 install button in the address bar (Chrome and Edge), _Share → Add to Home Screen_ (iPhone and iPad)
 or _Menu → Install app_ (Android). Everything the app needs downloads on the first visit, after
 which it works offline; _Download every puzzle_ in Settings keeps all 48,000 puzzles offline too.
 
 ### Download it
 
-Every [release](https://github.com/Real-Fruit-Snacks/chess-trainer/releases/latest) has an offline
-copy, `chess-trainer-<version>-offline.zip` (about 190 MB): the whole app, with every lesson and
+Every [release](https://github.com/Real-Fruit-Snacks/open-file/releases/latest) has an offline
+copy, `open-file-<version>-offline.zip` (about 190 MB): the whole app, with every lesson and
 puzzle, the full engine and the human-like opponent. Unzip it and double-click **Start Chess
-Trainer** (the `.exe` on Windows, the `.command` on macOS; `start-chess-trainer.sh` on Linux). It
+Trainer** (the `.exe` on Windows, the `.command` on macOS; `start-open-file.sh` on Linux). It
 opens in your browser at `http://localhost:8064/`, with no internet connection and nothing to
 install; the README inside says what to click the first time Windows or macOS asks about it.
 
 ### Run it locally
 
 ```bash
-git clone https://github.com/Real-Fruit-Snacks/chess-trainer.git
-cd chess-trainer
+git clone https://github.com/Real-Fruit-Snacks/open-file.git
+cd open-file
 npm install     # Node 22.22 or newer
 npm run dev     # downloads the engine and the human-like opponent on first run, then serves http://localhost:5173
 ```
@@ -209,7 +212,7 @@ is written and verified. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ## Licence
 
-Chess Trainer is licensed under the [GNU General Public License v3.0 or later](LICENSE). It bundles
+Open File is licensed under the [GNU General Public License v3.0 or later](LICENSE). It bundles
 GPL-licensed components that are inseparable from the delivered app (Chessground for the board,
 Stockfish for the engine), so a copyleft licence for the whole is the honest choice. The human-like
 opponent's model, Maia-3, and Lichess's board pictures are under the GNU Affero General Public

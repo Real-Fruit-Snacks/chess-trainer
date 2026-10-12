@@ -70,7 +70,7 @@ const MODES: readonly Mode[] = [
   'woodpecker',
 ];
 
-/** The tab title of each mode ("Daily puzzle · Chess Trainer"). */
+/** The tab title of each mode ("Daily puzzle · Open File"). */
 const MODE_TITLES: Record<Mode, string> = {
   rated: 'Rated puzzles',
   daily: 'Daily puzzle',

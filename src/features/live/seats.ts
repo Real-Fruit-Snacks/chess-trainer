@@ -18,13 +18,13 @@ import type { GameKind, LiveSource, Side } from './types';
  * game's seat is kept while the game is on (a year at most), and a week after
  * its end, as long as its room.
  */
-export const SEATS_STORAGE_KEY = 'chess-trainer:live-seats';
+export const SEATS_STORAGE_KEY = 'open-file:live-seats';
 /**
  * The Lichess games played here, by id ({at, over?}): no seat is needed for
  * those (the Lichess sign-in plays them), but after a restart the app still
  * checks on one that may be under way.
  */
-export const LICHESS_GAMES_STORAGE_KEY = 'chess-trainer:live-lichess';
+export const LICHESS_GAMES_STORAGE_KEY = 'open-file:live-lichess';
 export const SEAT_KEEP_MS = 24 * 60 * 60 * 1000;
 
 export interface SeatEntry {

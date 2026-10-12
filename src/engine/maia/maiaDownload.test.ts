@@ -10,7 +10,7 @@ const files = vi.hoisted(() => {
 const digests = vi.hoisted(() => ({ runtime: '', model: '' }));
 
 vi.mock('@/sw/maiaFiles', () => ({
-  MAIA_CACHE: 'chess-trainer-maia',
+  MAIA_CACHE: 'open-file-maia',
   MAIA_DIR: 'maia/',
   get MAIA_FILES() {
     return {
@@ -62,14 +62,14 @@ function fakeCaches(initial: Record<string, Uint8Array> = {}) {
       Promise.resolve(stored.delete(typeof input === 'string' ? input : input.url)),
   };
   const storage = {
-    has: (name: string) => Promise.resolve(exists && name === 'chess-trainer-maia'),
+    has: (name: string) => Promise.resolve(exists && name === 'open-file-maia'),
     open: (name: string) => {
-      if (name !== 'chess-trainer-maia') return Promise.reject(new Error(name));
+      if (name !== 'open-file-maia') return Promise.reject(new Error(name));
       exists = true;
       return Promise.resolve(cache);
     },
     delete: (name: string) => {
-      const had = exists && name === 'chess-trainer-maia';
+      const had = exists && name === 'open-file-maia';
       if (had) stored.clear();
       exists = false;
       return Promise.resolve(had);

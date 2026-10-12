@@ -9,10 +9,10 @@ import { completeOnboarding, expectBoard } from './helpers';
 async function seed(page: Page, settings: Record<string, unknown> = {}) {
   await page.addInitScript(
     ([progress, settingsJson]) => {
-      if (!localStorage.getItem('chess-trainer:progress')) {
-        localStorage.setItem('chess-trainer:progress', progress);
+      if (!localStorage.getItem('open-file:progress')) {
+        localStorage.setItem('open-file:progress', progress);
       }
-      if (settingsJson) localStorage.setItem('chess-trainer:settings', settingsJson);
+      if (settingsJson) localStorage.setItem('open-file:settings', settingsJson);
     },
     [
       JSON.stringify({ state: { onboarded: true, puzzleRating: 1200 }, version: 6 }),
@@ -145,7 +145,7 @@ test.describe('shell', () => {
   test('the title and social tags come from one site config', async ({ page }) => {
     await seed(page);
     await page.goto('/');
-    await expect(page).toHaveTitle(/Chess Trainer — Learn, practise and solve at any level/);
+    await expect(page).toHaveTitle(/Open File — Learn, practise and solve at any level/);
     expect(await page.locator('meta[property="og:url"]').getAttribute('content')).toMatch(
       /^https:\/\//,
     );

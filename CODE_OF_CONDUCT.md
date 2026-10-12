@@ -11,7 +11,7 @@ others' private information. Maintainers may remove, edit or reject contribution
 not follow this code, and may ban repeat offenders.
 
 To report a problem, open an issue on the repository's
-[issue tracker](https://github.com/Real-Fruit-Snacks/chess-trainer/issues) or start a thread in its
-[Discussions](https://github.com/Real-Fruit-Snacks/chess-trainer/discussions). If the report should not
+[issue tracker](https://github.com/Real-Fruit-Snacks/open-file/issues) or start a thread in its
+[Discussions](https://github.com/Real-Fruit-Snacks/open-file/discussions). If the report should not
 be public, open an issue that only asks a maintainer to get in touch — no names or details — and the
 conversation will move somewhere private. Reports are handled with discretion.

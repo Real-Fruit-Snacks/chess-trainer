@@ -10,12 +10,12 @@ async function seed(page: Page, scheme?: 'light' | 'dark') {
   await page.addInitScript(
     ([schemeJson]) => {
       // Seeded once; later pages keep what the test played.
-      if (localStorage.getItem('chess-trainer:progress')) return;
+      if (localStorage.getItem('open-file:progress')) return;
       localStorage.setItem(
-        'chess-trainer:progress',
+        'open-file:progress',
         JSON.stringify({ state: { onboarded: true, puzzleRating: 1200 }, version: 6 }),
       );
-      if (schemeJson) localStorage.setItem('chess-trainer:settings', schemeJson);
+      if (schemeJson) localStorage.setItem('open-file:settings', schemeJson);
     },
     [scheme ? JSON.stringify({ state: { colorScheme: scheme }, version: 3 }) : ''] as const,
   );

@@ -30,7 +30,7 @@ export interface SavedAnalysis {
   updatedAt: number;
 }
 
-export const ANALYSES_STORAGE_KEY = 'chess-trainer:analyses';
+export const ANALYSES_STORAGE_KEY = 'open-file:analyses';
 export const ANALYSES_VERSION = 1;
 export const DEFAULT_COLLECTION = 'My analyses';
 export const MAX_ANALYSES = 500;

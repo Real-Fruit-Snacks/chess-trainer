@@ -69,7 +69,7 @@ export interface PuzzleIndex {
 
 const BASE = `${import.meta.env.BASE_URL}puzzles/`;
 /** Runtime cache the service worker keeps puzzle chunks in (see src/sw.ts). */
-export const PUZZLE_CACHE = 'chess-trainer-puzzles';
+export const PUZZLE_CACHE = 'open-file-puzzles';
 
 let indexPromise: Promise<PuzzleIndex> | null = null;
 const chunkCache = new Map<string, Promise<Puzzle[]>>();

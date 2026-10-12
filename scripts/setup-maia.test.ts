@@ -62,7 +62,7 @@ describe('the human-like opponent’s pinned files', () => {
 
 describe('the service worker’s view of the files', () => {
   it('knows them by path, and tells this version’s from an older one’s', () => {
-    expect(isMaiaFilePath('/chess-trainer/maia/maia3-5m.fp16.onnx')).toBe(true);
+    expect(isMaiaFilePath('/open-file/maia/maia3-5m.fp16.onnx')).toBe(true);
     expect(isMaiaFilePath('/maia/ort-1.29.0-simd-threaded.wasm')).toBe(true);
     expect(isMaiaFilePath('/engine/stockfish-19.wasm')).toBe(false);
     expect(isMaiaFilePath('/maia/version.json')).toBe(false);

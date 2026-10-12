@@ -9,7 +9,7 @@ import { expectBoard, playMove, waitForBoardIdle } from './helpers';
  * a button that takes the focus, no box scrolled back over what is being read
  * — and a hint asked for comes into view.
  */
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 /** A recall card for one lesson step ("lessonId:stepKey"), due a minute ago. */
 async function seedDueRecallCard(page: Page, id: string) {

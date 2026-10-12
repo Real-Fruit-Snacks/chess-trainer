@@ -37,8 +37,8 @@ the root scope and Pages serves its `404.html` for every unknown path. The worke
 navigations to the app's own routes (`src/sw/appRoutes.ts`), so another project published under the
 same user page keeps working — but `404.html` will still show this app's "not found" page for a path
 no project owns. Prefer a project site (`/<repo>/`) when the origin hosts more than one site. CI
-builds and tests the app under `/chess-trainer/` too, behind a server that answers like Pages
-(`npm run preview:pages -- --base /chess-trainer/` does the same locally after a build with that
+builds and tests the app under `/open-file/` too, behind a server that answers like Pages
+(`npm run preview:pages -- --base /open-file/` does the same locally after a build with that
 `VITE_BASE_PATH`).
 
 ### Custom domain
@@ -62,7 +62,7 @@ tag (`git tag v0.12.0 && git push origin v0.12.0`). The **Release** workflow ref
 not match `package.json`. Otherwise it builds the [offline copy](#the-offline-copy) from the tag,
 unzips it and tries it in a browser with its own launcher, then publishes a GitHub release for the
 tag: that section as the notes, a link to the live app (the `siteUrl` in `src/site.config.ts`), and
-`chess-trainer-<version>-offline.zip` with its `SHA256SUMS.txt` attached. A release that failed can
+`open-file-<version>-offline.zip` with its `SHA256SUMS.txt` attached. A release that failed can
 be published again from the **Actions** tab (_Release → Run workflow_, with the tag), from the tag's
 own code.
 
@@ -108,10 +108,10 @@ rooms' Durable Objects; until it has run, Play says live games are not set up on
 app may not know its newest games (one from before 0.28 takes only games of chess, one from before
 0.29 no Chess960, correspondence, race or analysis rooms), so when a release changes the relay, as 0.28 and
 0.29 do, deploy the relay first. Wrangler prints the Worker's address,
-`https://chess-trainer-sync.<your-subdomain>.workers.dev`. Put it in `syncRelay`, and the site's
+`https://open-file-sync.<your-subdomain>.workers.dev`. Put it in `syncRelay`, and the site's
 origin in `ALLOWED_ORIGINS` in `relay/wrangler.jsonc`. The page's Content-Security-Policy picks the
 relay's origin up from `syncRelay` at build time. To check it, run
-`curl https://chess-trainer-sync.<your-subdomain>.workers.dev/v1/health`. A fork that does not want
+`curl https://open-file-sync.<your-subdomain>.workers.dev/v1/health`. A fork that does not want
 sync sets `syncRelay` to `''`; one that hosts the relay itself runs `relay/src/server.mjs` behind
 HTTPS (see `relay/README.md`).
 
@@ -147,15 +147,15 @@ URLs at the top of `README.md` and the links in `.github/ISSUE_TEMPLATE/config.y
 
 ## The offline copy
 
-Each release carries the app for use without a connection: `chess-trainer-<version>-offline.zip`,
+Each release carries the app for use without a connection: `open-file-<version>-offline.zip`,
 which unpacks to
 
 ```text
-chess-trainer-<version>/
+open-file-<version>/
   README.txt                    how to start it, for Windows, macOS and Linux
-  Start Chess Trainer.exe       the launcher for Windows (x64)
-  Start Chess Trainer.command   macOS: starts the launcher for Apple silicon or Intel
-  start-chess-trainer.sh        Linux: starts the launcher for x64 or Arm64
+  Start Open File.exe       the launcher for Windows (x64)
+  Start Open File.command   macOS: starts the launcher for Apple silicon or Intel
+  start-open-file.sh        Linux: starts the launcher for x64 or Arm64
   app/                          the site, built for the root of a site, with every engine build
   bin/                          the macOS and Linux launchers
   licences/launcher.txt         the launchers' licence notice (they contain Go's standard library)
@@ -168,7 +168,7 @@ The browser keeps the app's data per address, so the port is fixed: a later copy
 progress. When another program holds 8064 the launcher takes the next free port up to 8073 and says
 so; `-port` picks one, `-no-browser` leaves the browser closed, `-app` serves another folder. A
 second start while a copy runs opens the running one, or asks for it to be closed if it is another
-version. The launcher answers `GET /__chess-trainer/launcher` with its name and version, which is how
+version. The launcher answers `GET /__open-file/launcher` with its name and version, which is how
 a second start recognises it.
 
 Sync between devices and live games work from the copy when the computer is online, as long as the
@@ -178,7 +178,7 @@ To make the copy yourself — Node, Go 1.24 or newer and `zip`:
 
 ```bash
 npm run build              # for the root of a site, with the full engine and the human-like opponent
-npm run release:offline    # release/chess-trainer-<version>/, its zip and SHA256SUMS.txt
+npm run release:offline    # release/open-file-<version>/, its zip and SHA256SUMS.txt
 npm run e2e:offline        # starts the unpacked copy with its launcher and tries it in Chromium
 ```
 
@@ -218,12 +218,12 @@ Optional headers:
 
 ## Environment variables
 
-| Variable            | Default                           | Purpose                                                                        |
-| ------------------- | --------------------------------- | ------------------------------------------------------------------------------ |
-| `VITE_BASE_PATH`    | `/`                               | URL prefix the site is served from (the end-to-end tests follow it too).       |
-| `SOURCE_DATE_EPOCH` | the commit date                   | Build date in seconds since 1970, for reproducible builds outside git.         |
-| `ALL_BROWSERS`      | unset                             | `1` runs the Firefox and WebKit projects in a local `npm run e2e`, as CI does. |
-| `OFFLINE_BUNDLE`    | `release/chess-trainer-<version>` | The unpacked offline copy `npm run e2e:offline` tries.                         |
+| Variable            | Default                       | Purpose                                                                        |
+| ------------------- | ----------------------------- | ------------------------------------------------------------------------------ |
+| `VITE_BASE_PATH`    | `/`                           | URL prefix the site is served from (the end-to-end tests follow it too).       |
+| `SOURCE_DATE_EPOCH` | the commit date               | Build date in seconds since 1970, for reproducible builds outside git.         |
+| `ALL_BROWSERS`      | unset                         | `1` runs the Firefox and WebKit projects in a local `npm run e2e`, as CI does. |
+| `OFFLINE_BUNDLE`    | `release/open-file-<version>` | The unpacked offline copy `npm run e2e:offline` tries.                         |
 
 ## Checking a deployment
 
@@ -239,7 +239,7 @@ Optional headers:
   from `ALLOWED_ORIGINS`).
 - _Play → Play the computer → New game → Opponent: A human-like opponent → Download_ fetches about
   25 MB and the game starts; after that, it plays offline too.
-- `curl https://chess-trainer-sync.<your-subdomain>.workers.dev/v1/health` answers with
+- `curl https://open-file-sync.<your-subdomain>.workers.dev/v1/health` answers with
   `"live":true` and `"push":true`, and _Play_ shows the open games connected ("Nobody else is here
   right now"). In a second browser, a game posted in one appears in the other's list, and joining it
   opens the board in both; a puzzle race posted from its tile opens the same puzzle on both boards.
@@ -254,14 +254,14 @@ Optional headers:
   migration has not run.
 - When a game between the two browsers is over, _Analyse together_ in both opens the same shared
   board with the game's moves; a move played in one appears in the other.
-- `curl https://chess-trainer-sync.<your-subdomain>.workers.dev/v1/push/key` answers with the
+- `curl https://open-file-sync.<your-subdomain>.workers.dev/v1/push/key` answers with the
   relay's public key. _Settings → App → Notifications → Daily reminder_ (in a browser that can show
   notifications; on an iPhone or iPad, the app on the Home Screen) asks for the permission and stays
   on, which means the relay kept the reminder. Set its time to the next quarter hour and close the
   app: the reminder comes at about that time, unless a training day was recorded today.
 - _Settings → Lichess account → Connect_ goes to lichess.org, asks for the puzzle and study
   permissions and comes back to Settings connected; the card then reads "Synced just now", and a
-  private study named _Chess Trainer · Repertoires_ appears on Lichess once there is a custom
+  private study named _Open File · Repertoires_ appears on Lichess once there is a custom
   repertoire. _Disconnect_ withdraws the permission (the app then disappears from the third-party apps in
   the Lichess account's settings).
 - `npm run lighthouse` against a preview of the same build passes its accessibility, best-practices

@@ -6,7 +6,7 @@ import { expectBoard } from './helpers';
  * on Learn, its row in a course or its own page — and marked not done again,
  * each with an Undo. A marked lesson counts as completed, not as training.
  */
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 async function seedProgress(page: Page, state: Record<string, unknown>) {
   await page.addInitScript(

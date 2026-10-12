@@ -10,7 +10,7 @@ import { useSettings } from '@/store/settings';
  * hands it over, so that a correspondence game's connection can give it to its
  * room at once (in its hello). The device's, like its notification settings.
  */
-export const PUSH_SUBSCRIPTION_KEY = 'chess-trainer:push-subscription';
+export const PUSH_SUBSCRIPTION_KEY = 'open-file:push-subscription';
 
 /** A subscription as `PushSubscription.toJSON()` gives it, the part the relay needs. */
 export interface PushDetails {

@@ -9,7 +9,7 @@ import { expectBoard } from './helpers';
  * a screen of its own rather than in a dialog.
  */
 
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 const DAY = 86_400_000;
 
 /** A returning learner (onboarded, the tour dismissed), with whatever else the test needs. */

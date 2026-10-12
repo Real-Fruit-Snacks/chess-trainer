@@ -18,14 +18,14 @@ const parts = (page: Page) => page.getByRole('group', { name: 'What syncs on thi
 /** The device's own settings as stored (the engine build, the install prompt). */
 const deviceSettings = (page: Page) =>
   page.evaluate(() => {
-    const raw = localStorage.getItem('chess-trainer:device-settings');
+    const raw = localStorage.getItem('open-file:device-settings');
     return raw ? (JSON.parse(raw) as { state: Record<string, unknown> }).state : null;
   });
 
 /** When the device last finished a sync, as stored. */
 const lastSyncAt = (page: Page) =>
   page.evaluate(() => {
-    const raw = localStorage.getItem('chess-trainer:device-sync');
+    const raw = localStorage.getItem('open-file:device-sync');
     return raw
       ? ((JSON.parse(raw) as { state: { lastSyncAt?: number } }).state.lastSyncAt ?? 0)
       : 0;

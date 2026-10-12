@@ -661,7 +661,7 @@ async function exclusively(task: () => Promise<void>, wait = false): Promise<voi
     return;
   }
   await locks.request(
-    `chess-trainer:device-sync:${ACTIVE_PROFILE_ID}`,
+    `open-file:device-sync:${ACTIVE_PROFILE_ID}`,
     { ifAvailable: !wait },
     async (lock) => {
       if (lock) await task();

@@ -1,6 +1,6 @@
 # Features
 
-The complete reference of what Chess Trainer does, section by section. For how it is built, see
+The complete reference of what Open File does, section by section. For how it is built, see
 [ARCHITECTURE.md](ARCHITECTURE.md); for the content formats, [CONTENT_GUIDE.md](CONTENT_GUIDE.md).
 
 ## Learn
@@ -793,12 +793,12 @@ Home Screen of an iPhone or iPad, which iOS sends to Safari for it. Each part ca
   recognised when they come back and never count twice.
 - **Games.** A game finished here (drill positions excepted) is imported to the account, where the
   Lichess analysis board can look at it; the game log links to it. The app's record of the game
-  travels with it in a `ChessTrainer` PGN tag, so another device reads the account's imported games
+  travels with it in a `OpenFile` PGN tag, so another device reads the account's imported games
   back and restores its game log, newest first. Lichess imports the same text once, so a retried
   upload never doubles a game.
 - **Repertoires and analyses.** Custom repertoires live as chapters of a private study (only you may
-  share or export it) named _Chess Trainer · Repertoires_, saved analyses in one study per
-  collection (_Chess Trainer · Analyses: Endgames_), continued in "(2)", "(3)" when a study reaches
+  share or export it) named _Open File · Repertoires_, saved analyses in one study per
+  collection (_Open File · Analyses: Endgames_), continued in "(2)", "(3)" when a study reaches
   Lichess's 64 chapters. Each side is compared with how it looked at the last sync (a hash of each
   side's own version, so the small rewrites Lichess makes to a PGN never look like edits): new
   moves, comments, glyphs and arrows, a new name or side, and deletions come across either way; when
@@ -877,9 +877,9 @@ notifications, window-controls overlay on desktop, a **badge with due reviews**
 on the app icon, **haptic feedback** on phones, and layouts for notches, small phones and phones held
 sideways.
 
-**An offline copy** comes with every release: `chess-trainer-<version>-offline.zip`, the whole app —
+**An offline copy** comes with every release: `open-file-<version>-offline.zip`, the whole app —
 every lesson and puzzle, the full engine and the human-like opponent — with a small launcher for
-Windows, macOS and Linux. Unzip it and double-click _Start Chess Trainer_: it serves the app on the
+Windows, macOS and Linux. Unzip it and double-click _Start Open File_: it serves the app on the
 computer itself, at `http://localhost:8064/`, and opens it in the browser, with no internet connection
 and nothing to install. The address never changes, so a later copy finds the same progress; sync
 and live games work from it whenever the computer is online.
@@ -992,7 +992,7 @@ suite on every run.
 - **Profiles** namespace the persisted stores, the settings included: the first profile keeps the
   plain `localStorage` keys, every other one gets `<key>:<profile id>`; switching reloads the app
   into the other namespace. The device's own settings (the engine build, the install prompt, the
-  notifications) are kept once, under `chess-trainer:device-settings`, for every profile.
+  notifications) are kept once, under `open-file:device-settings`, for every profile.
 - **Chess960.** The rules come from [chessops](https://github.com/niklasf/chessops)
   (GPL-3.0-or-later) in the app and in the relay, which referees online Chess960 games with it;
   standard chess keeps chess.js. Positions are numbered as is usual (Scharnagl's numbering: 518 is

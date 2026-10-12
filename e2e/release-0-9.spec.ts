@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 /** The cues of a sound set (sound.ts), each with a button in the lab. */
 const SOUND_CUES = 11;
 
@@ -105,7 +105,7 @@ test.describe('sound theme and volume', () => {
       page.getByRole('radiogroup', { name: 'Sound theme' }).getByRole('radio', { name: 'Retro' }),
     ).toBeChecked();
     const settings = await page.evaluate(() => {
-      const raw = localStorage.getItem('chess-trainer:settings');
+      const raw = localStorage.getItem('open-file:settings');
       return raw
         ? (JSON.parse(raw) as { state: { soundTheme: string; soundVolume: number } }).state
         : null;

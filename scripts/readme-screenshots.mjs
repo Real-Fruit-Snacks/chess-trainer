@@ -287,22 +287,30 @@ async function clickSquare(page, square) {
 
 /** Plays the move the trainer's arrow shows, then waits for its reply and the next arrow. */
 async function playArrow(page) {
+  // The arrow as it is before the move: read after it, a quick reply may already have replaced it.
+  const previous = await page.evaluate(() => {
+    const line = document.querySelector('cg-container svg.cg-shapes line');
+    return line ? `${line.getAttribute('x1')},${line.getAttribute('y1')}` : '';
+  });
   const [from, to] = await arrowSquares(page);
   await clickSquare(page, from);
   await clickSquare(page, to);
-  await page.waitForFunction(
-    ([previous]) => {
+  // A move with a note stops the line until Continue; the reply and the next arrow come after.
+  const next = page.waitForFunction(
+    (before) => {
       const line = document.querySelector('cg-container svg.cg-shapes line');
-      return line !== null && `${line.getAttribute('x1')},${line.getAttribute('y1')}` !== previous;
+      return line !== null && `${line.getAttribute('x1')},${line.getAttribute('y1')}` !== before;
     },
-    [
-      await page.evaluate(() => {
-        const line = document.querySelector('cg-container svg.cg-shapes line');
-        return line ? `${line.getAttribute('x1')},${line.getAttribute('y1')}` : '';
-      }),
-    ],
+    previous,
     { timeout: 10_000 },
   );
+  const proceed = page.getByRole('button', { name: /^Continue/ });
+  const paused = await Promise.race([
+    next.then(() => false),
+    proceed.waitFor({ timeout: 10_000 }).then(() => true),
+  ]);
+  if (paused) await proceed.click();
+  await next;
 }
 
 /** The tiles, each a function of a fresh page that leaves it ready to capture. */
@@ -364,7 +372,7 @@ async function open(browser, device, { settings = {}, progress, clock = false, s
   await context.addInitScript(seedLearner, { progress });
   await context.addInitScript((s) => {
     const state = { animations: false, ...s };
-    localStorage.setItem('chess-trainer:settings', JSON.stringify({ state, version: 5 }));
+    localStorage.setItem('open-file:settings', JSON.stringify({ state, version: 5 }));
   }, settings);
   const page = await context.newPage();
   await go(page);

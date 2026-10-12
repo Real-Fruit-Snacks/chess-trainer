@@ -4,7 +4,7 @@ const PORT = 4173;
 
 /**
  * The URL prefix the build under test was made with — `VITE_BASE_PATH` from the
- * environment, normalised as vite.config.ts does: "/" by default, "/chess-trainer/"
+ * environment, normalised as vite.config.ts does: "/" by default, "/open-file/"
  * in the CI job that checks the production path. Specs written with relative URLs
  * (`page.goto('play')`) follow it; specs that start from "/" assume the root.
  */

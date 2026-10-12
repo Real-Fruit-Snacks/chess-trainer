@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 import { completeOnboarding, expectBoard } from './helpers';
 
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 async function seedProgress(page: Page, state: Record<string, unknown>, version = 5) {
   await page.addInitScript(

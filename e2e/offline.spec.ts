@@ -19,9 +19,9 @@ test.describe('the offline copy', () => {
     await expect(page.locator('main h1').first()).toBeVisible();
     // The launcher isolates the very first visit: the threaded engine can run at once.
     expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
-    await expect(page.locator('.shell__footer')).toContainText(`Chess Trainer v${version}`);
-    const ping = await request.get('/__chess-trainer/launcher');
-    expect(await ping.json()).toEqual({ app: 'chess-trainer', version });
+    await expect(page.locator('.shell__footer')).toContainText(`Open File v${version}`);
+    const ping = await request.get('/__open-file/launcher');
+    expect(await ping.json()).toEqual({ app: 'open-file', version });
   });
 
   test('answers a deep link with the app, as the live site does', async ({ page }) => {

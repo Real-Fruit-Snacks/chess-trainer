@@ -6,8 +6,8 @@ and what we expect from a change.
 ## Development setup
 
 ```bash
-git clone https://github.com/Real-Fruit-Snacks/chess-trainer.git
-cd chess-trainer
+git clone https://github.com/Real-Fruit-Snacks/open-file.git
+cd open-file
 npm install
 npm run dev
 ```
@@ -41,7 +41,7 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
     (four shards for each Chromium project, three for Firefox and for WebKit), whose reports the
     _End-to-end report_ job merges into one HTML report (`playwright-report`, with the traces and
     screenshots of failures); then the visual snapshots and the Lighthouse audit;
-  - a second build under the production base path (`/chess-trainer/`), served the way GitHub Pages
+  - a second build under the production base path (`/open-file/`), served the way GitHub Pages
     serves it (`npm run preview:pages`), with a smoke test, a deep link and the 404 fallback;
   - the offline copy: the launcher's `gofmt` check, `go vet` and tests on Linux, Windows and macOS,
     then the copy packaged from the build (`npm run release:offline`), unzipped and tried in
@@ -74,10 +74,10 @@ them locally, install them (`npx playwright install --with-deps firefox webkit`)
 | `npm run bundle:check`       | Fail when a gzipped chunk, the start-up code or the service-worker precache outgrows its budget (runs in `check` and CI).                                                                                                                                                                                                   |
 | `npm run lighthouse`         | Lighthouse audit of five pages against a running preview (`npm run preview` first); fails on regressions.                                                                                                                                                                                                                   |
 | `npm run e2e:visual`         | Pixel snapshots of the static pages; add `-- --update-snapshots` after a deliberate design change.                                                                                                                                                                                                                          |
-| `npm run release:offline`    | Package the offline copy a release attaches from `dist/` (a build for the root of a site): the app, the launchers for Windows, macOS and Linux (built with Go 1.24 or newer), a README, as `release/chess-trainer-<version>-offline.zip` with `SHA256SUMS.txt`.                                                             |
+| `npm run release:offline`    | Package the offline copy a release attaches from `dist/` (a build for the root of a site): the app, the launchers for Windows, macOS and Linux (built with Go 1.24 or newer), a README, as `release/open-file-<version>-offline.zip` with `SHA256SUMS.txt`.                                                                 |
 | `npm run e2e:offline`        | Start the unpacked offline copy in `release/` with its own launcher and try it in Chromium (`OFFLINE_BUNDLE` names another unpacked copy).                                                                                                                                                                                  |
 | `npm run preview`            | Serve the production build locally.                                                                                                                                                                                                                                                                                         |
-| `npm run preview:pages`      | Serve `dist/` as GitHub Pages does (404.html for unknown paths); `-- --base /chess-trainer/` for a build made with that `VITE_BASE_PATH`.                                                                                                                                                                                   |
+| `npm run preview:pages`      | Serve `dist/` as GitHub Pages does (404.html for unknown paths); `-- --base /open-file/` for a build made with that `VITE_BASE_PATH`.                                                                                                                                                                                       |
 | `npm run engine:setup`       | (Re)download the pinned Stockfish builds into `public/engine/` and write its `version.json`; `-- --lite` for the two lite builds only.                                                                                                                                                                                      |
 | `npm run maia:setup`         | Install the human-like opponent's files into `public/maia/`: the pinned Maia-3 model (downloaded) and ONNX Runtime's WebAssembly build (copied from `node_modules`), both checksum-verified. A build needs them; `npm run dev` only warns when they cannot be installed.                                                    |
 | `npm run puzzles:import`     | Rebuild the puzzle set from the Lichess database.                                                                                                                                                                                                                                                                           |

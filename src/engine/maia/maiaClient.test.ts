@@ -133,10 +133,10 @@ describe('MaiaClient', () => {
   });
 
   it('finds the files under the app’s base path', () => {
-    const urls = maiaUrls('/chess-trainer/');
-    expect(new URL(urls.modelUrl).pathname).toBe('/chess-trainer/maia/maia3-5m.fp16.onnx');
+    const urls = maiaUrls('/open-file/');
+    expect(new URL(urls.modelUrl).pathname).toBe('/open-file/maia/maia3-5m.fp16.onnx');
     expect(new URL(urls.runtimeUrl).pathname).toMatch(
-      /^\/chess-trainer\/maia\/ort-[\d.]+-simd-threaded\.wasm$/,
+      /^\/open-file\/maia\/ort-[\d.]+-simd-threaded\.wasm$/,
     );
   });
 });

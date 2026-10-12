@@ -3,7 +3,7 @@ import { storageKeyFor } from '@/store/profiles';
 import { siteConfig } from '@/site.config';
 
 /** Where the device-sync state is kept, per profile (see `src/store/deviceSync.ts`). */
-export const DEVICE_SYNC_STORAGE_KEY = 'chess-trainer:device-sync';
+export const DEVICE_SYNC_STORAGE_KEY = 'open-file:device-sync';
 
 /** The active profile's device-sync storage key. */
 export const deviceSyncStorageKey = (): string => storageKeyFor(DEVICE_SYNC_STORAGE_KEY);

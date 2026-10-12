@@ -40,9 +40,9 @@ const GAME = {
 async function seed(page: Page) {
   await page.addInitScript(
     ([progress, games]) => {
-      if (localStorage.getItem('chess-trainer:progress')) return;
-      localStorage.setItem('chess-trainer:progress', progress);
-      localStorage.setItem('chess-trainer:games', games);
+      if (localStorage.getItem('open-file:progress')) return;
+      localStorage.setItem('open-file:progress', progress);
+      localStorage.setItem('open-file:games', games);
     },
     [
       JSON.stringify(PROGRESS),
@@ -54,7 +54,7 @@ async function seed(page: Page) {
 /** The stored puzzle rating, read straight from storage. */
 async function storedRating(page: Page): Promise<number> {
   return page.evaluate(() => {
-    const raw = localStorage.getItem('chess-trainer:progress') ?? '{}';
+    const raw = localStorage.getItem('open-file:progress') ?? '{}';
     return (JSON.parse(raw) as { state: { puzzleRating: number } }).state.puzzleRating;
   });
 }
@@ -93,9 +93,7 @@ test.describe('backup import', () => {
     await page.getByTestId('import-confirm').click();
     await expect(page.getByText(/Backup imported/)).toBeVisible();
     expect(await storedRating(page)).toBe(1212);
-    const stashed = await page.evaluate(() =>
-      localStorage.getItem('chess-trainer:pre-import-backup'),
-    );
+    const stashed = await page.evaluate(() => localStorage.getItem('open-file:pre-import-backup'));
     expect(stashed).toContain('"puzzleRating": 1800');
 
     // Undo from the toast puts the previous data back.
@@ -115,7 +113,7 @@ test.describe('backup import', () => {
     await pickBackup(
       page,
       JSON.stringify({
-        app: 'chess-trainer',
+        app: 'open-file',
         version: 6,
         progress: { onboarded: true, puzzleRating: 900, attempts: {}, puzzleReviews: null },
       }),
@@ -153,7 +151,7 @@ test.describe('reset and rating', () => {
     await page.goto('/games');
     await expect(page.getByTestId('games-table')).toHaveCount(0);
     await expect(page.getByText(/Nothing imported yet/)).toBeVisible();
-    const games = await page.evaluate(() => localStorage.getItem('chess-trainer:games'));
+    const games = await page.evaluate(() => localStorage.getItem('open-file:games'));
     expect(games).not.toContain('Club night');
   });
 
@@ -178,7 +176,7 @@ test.describe('reset and rating', () => {
     await expect(page.getByText(/Puzzle rating set to 1,200/)).toBeVisible();
     expect(await storedRating(page)).toBe(1200);
     const history = await page.evaluate(() => {
-      const raw = localStorage.getItem('chess-trainer:progress') ?? '{}';
+      const raw = localStorage.getItem('open-file:progress') ?? '{}';
       return (
         JSON.parse(raw) as { state: { ratingHistory: { rating: number }[] } }
       ).state.ratingHistory.map((p) => p.rating);
@@ -196,8 +194,7 @@ test.describe('the lab', () => {
     await expect(page.getByTestId('storage-clear')).toBeEnabled();
     const fillerKeys = () =>
       page.evaluate(
-        () =>
-          Object.keys(localStorage).filter((k) => k.startsWith('chess-trainer:lab-filler-')).length,
+        () => Object.keys(localStorage).filter((k) => k.startsWith('open-file:lab-filler-')).length,
       );
     expect(await fillerKeys()).toBeGreaterThan(0);
 
@@ -211,12 +208,12 @@ test.describe('the lab', () => {
       'true',
     );
     await expect.poll(fillerKeys).toBe(0);
-    expect(await page.evaluate(() => localStorage.getItem('chess-trainer:lab-probe'))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem('open-file:lab-probe'))).toBeNull();
 
     // … and a save works again straight away.
     await page.getByRole('tab', { name: 'Appearance' }).click();
     await page.getByRole('switch', { name: 'Show coordinates' }).click();
-    const stored = await page.evaluate(() => localStorage.getItem('chess-trainer:settings'));
+    const stored = await page.evaluate(() => localStorage.getItem('open-file:settings'));
     expect(stored).toContain('"showCoordinates":false');
     await page.getByRole('tab', { name: 'Sync & data' }).click();
     await expect(page.getByTestId('storage-usage')).not.toContainText('Storage is full');

@@ -50,8 +50,8 @@ export function arcadeHeaders({
 }): Record<string, string> {
   const pad = (n: number) => String(n).padStart(2, '0');
   return {
-    Event: `Chess Trainer — ${event}`,
-    Site: 'Chess Trainer',
+    Event: `Open File — ${event}`,
+    Site: 'Open File',
     Date: `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`,
     White: playerColor === 'white' ? 'You' : engine,
     Black: playerColor === 'black' ? 'You' : engine,

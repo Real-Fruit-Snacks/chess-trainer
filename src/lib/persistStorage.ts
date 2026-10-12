@@ -22,7 +22,7 @@ import { toast, useToasts } from '@/components/ui/toastStore';
 /** About how much a browser lets one site keep in localStorage (the lab's fill test refines it). */
 export const STORAGE_LIMIT_BYTES = 5 * 1024 * 1024;
 /** Where the lab's fill test records what this browser actually allowed, in bytes. */
-export const STORAGE_LIMIT_KEY = 'chess-trainer:storage-limit';
+export const STORAGE_LIMIT_KEY = 'open-file:storage-limit';
 
 export interface StorageHealth {
   /** A write failed for lack of space and at least one key has not fit since. */
@@ -319,7 +319,7 @@ export function keepCorruptBlob(name: string) {
     if (!error) return;
     const copy = salvageCorruptBlob(name);
     console.warn(
-      `[chess-trainer] The saved ${name} could not be read${copy ? ` — a copy was kept at ${copy}` : ''}.`,
+      `[open-file] The saved ${name} could not be read${copy ? ` — a copy was kept at ${copy}` : ''}.`,
       error,
     );
     if (corruptToastShown) return;
@@ -346,7 +346,7 @@ export function warnNewerSave(name: string, version: number, current: number): v
   if (newerWarned.has(name)) return;
   newerWarned.add(name);
   console.warn(
-    `[chess-trainer] ${name} was saved by a newer version (${version} > ${current}); its extra fields are kept untouched.`,
+    `[open-file] ${name} was saved by a newer version (${version} > ${current}); its extra fields are kept untouched.`,
   );
   if (newerToast) return;
   newerToast = true;
@@ -398,7 +398,7 @@ export function recordStorageLimit(bytes: number | null): void {
  * best estimate of what the browser allows: what the lab's fill test measured
  * on this device, or the typical 5 MB.
  */
-export function storageUsage(prefix = 'chess-trainer:', limit?: number): StorageUsage {
+export function storageUsage(prefix = 'open-file:', limit?: number): StorageUsage {
   const store = nativeStorage();
   const keys: { key: string; bytes: number }[] = [];
   if (store) {

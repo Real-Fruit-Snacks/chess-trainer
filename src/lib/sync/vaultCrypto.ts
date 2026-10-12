@@ -7,7 +7,7 @@
  * - the write token, which the relay checks (it keeps only its hash);
  * - an AES-256-GCM key, which never leaves the device.
  *
- * A sealed snapshot is "CTS1", a 12-byte random nonce and the AES-GCM
+ * A sealed snapshot is "OFS1", a 12-byte random nonce and the AES-GCM
  * ciphertext of the gzipped JSON, bound to its vault id (additional data), so
  * the relay can neither read nor alter it unnoticed.
  */
@@ -21,9 +21,9 @@ export interface VaultKeys {
   key: CryptoKey;
 }
 
-const MAGIC = new TextEncoder().encode('CTS1');
+const MAGIC = new TextEncoder().encode('OFS1');
 const NONCE_BYTES = 12;
-const SALT = new TextEncoder().encode('chess-trainer device sync v1');
+const SALT = new TextEncoder().encode('open-file device sync v1');
 
 /** Bytes as unpadded base64url. */
 export function toBase64Url(bytes: Uint8Array): string {
@@ -67,7 +67,7 @@ export async function deriveVaultKeys(secret: Uint8Array<ArrayBuffer>): Promise<
   return { id: toBase64Url(id), token: toBase64Url(token), key };
 }
 
-const additionalData = (id: string) => new TextEncoder().encode(`chess-trainer-sync:1:${id}`);
+const additionalData = (id: string) => new TextEncoder().encode(`open-file-sync:1:${id}`);
 
 /** Pipes a body through a (de)compression stream and collects what comes out. */
 function through(

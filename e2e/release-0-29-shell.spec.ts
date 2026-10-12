@@ -21,8 +21,8 @@ const VERSION = (
  */
 const LABEL = VERSION.replace(/\.\d+$/, '');
 
-const PROGRESS_KEY = 'chess-trainer:progress';
-const SEEN_KEY = 'chess-trainer:seen-version';
+const PROGRESS_KEY = 'open-file:progress';
+const SEEN_KEY = 'open-file:seen-version';
 
 /**
  * A returning learner (onboarded, the tour dismissed), with the version last seen: null for a
@@ -226,7 +226,7 @@ test.describe('in the dark and black schemes', () => {
       await seed(page, '0.0.1');
       await page.addInitScript(
         (value) => {
-          localStorage.setItem('chess-trainer:settings', value);
+          localStorage.setItem('open-file:settings', value);
         },
         JSON.stringify({ state: { colorScheme: scheme }, version: 3 }),
       );

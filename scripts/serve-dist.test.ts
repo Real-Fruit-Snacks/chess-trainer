@@ -15,7 +15,7 @@ writeFileSync(join(dist, 'assets', 'index-abc.js'), 'export {};');
 mkdirSync(join(dist, 'engine'));
 writeFileSync(join(dist, 'engine', 'stockfish.wasm'), 'wasm');
 
-const server = createDistServer({ dir: dist, base: '/chess-trainer/' });
+const server = createDistServer({ dir: dist, base: '/open-file/' });
 let origin = '';
 beforeAll(
   () =>
@@ -36,32 +36,32 @@ const get = (path: string, init?: RequestInit) =>
 
 describe('serve-dist (GitHub Pages behaviour)', () => {
   it('serves the app shell at the base path, and redirects the base without its slash', async () => {
-    const home = await get('/chess-trainer/');
+    const home = await get('/open-file/');
     expect(home.status).toBe(200);
     expect(await home.text()).toBe('<title>shell</title>');
-    const bare = await get('/chess-trainer');
+    const bare = await get('/open-file');
     expect(bare.status).toBe(301);
-    expect(bare.headers.get('location')).toBe('/chess-trainer/');
+    expect(bare.headers.get('location')).toBe('/open-file/');
   });
 
   it('answers a deep link with 404.html and a 404, as Pages does', async () => {
-    const deep = await get('/chess-trainer/puzzles/rush');
+    const deep = await get('/open-file/puzzles/rush');
     expect(deep.status).toBe(404);
     expect(deep.headers.get('content-type')).toMatch(/^text\/html/);
     expect(await deep.text()).toBe('<title>shell (404)</title>');
   });
 
   it('serves files with their types', async () => {
-    const script = await get('/chess-trainer/assets/index-abc.js');
+    const script = await get('/open-file/assets/index-abc.js');
     expect(script.status).toBe(200);
     expect(script.headers.get('content-type')).toMatch(/^text\/javascript/);
-    expect((await get('/chess-trainer/engine/stockfish.wasm')).headers.get('content-type')).toBe(
+    expect((await get('/open-file/engine/stockfish.wasm')).headers.get('content-type')).toBe(
       'application/wasm',
     );
-    const licence = await get('/chess-trainer/licence.txt');
+    const licence = await get('/open-file/licence.txt');
     expect(licence.headers.get('content-type')).toMatch(/^text\/plain/);
     expect(await licence.text()).toContain('GENERAL PUBLIC LICENSE');
-    const head = await get('/chess-trainer/licence.txt', { method: 'HEAD' });
+    const head = await get('/open-file/licence.txt', { method: 'HEAD' });
     expect(head.status).toBe(200);
     expect(await head.text()).toBe('');
   });
@@ -70,14 +70,14 @@ describe('serve-dist (GitHub Pages behaviour)', () => {
     const outside = await get('/puzzles');
     expect(outside.status).toBe(404);
     expect(await outside.text()).toBe('Not found');
-    const escape = await get('/chess-trainer/..%2f..%2fetc%2fpasswd');
+    const escape = await get('/open-file/..%2f..%2fetc%2fpasswd');
     expect(escape.status).toBe(404);
     expect(await escape.text()).not.toContain('root:');
   });
 
   it('normalises the base path', () => {
     expect(normalizeBase('/')).toBe('/');
-    expect(normalizeBase('chess-trainer')).toBe('/chess-trainer/');
-    expect(normalizeBase('/chess-trainer')).toBe('/chess-trainer/');
+    expect(normalizeBase('open-file')).toBe('/open-file/');
+    expect(normalizeBase('/open-file')).toBe('/open-file/');
   });
 });

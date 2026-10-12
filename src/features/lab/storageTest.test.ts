@@ -29,7 +29,7 @@ describe('storage filler', () => {
     expect(result.refused).toBe(true);
     // Three big chunks and one medium one fitted: that is the limit measured.
     expect(result.limitBytes).toBe((150_000 + 10_000) * 2 + 4 * `${FILLER_PREFIX}0`.length * 2);
-    expect(localStorage.getItem('chess-trainer:storage-limit')).toBe(String(result.limitBytes));
+    expect(localStorage.getItem('open-file:storage-limit')).toBe(String(result.limitBytes));
     // The last chunk made room for that number, and the slack was filled again with smaller
     // ones: less than the smallest chunk is left, so even a small save is refused.
     let used = 0;
@@ -40,7 +40,7 @@ describe('storage filler', () => {
     expect(result.bytes).toBe((used - String(result.limitBytes).length) * 2);
     expect(hasFiller()).toBe(true);
     expect(localStorage.getItem(`${FILLER_PREFIX}0`)?.length).toBe(50_000);
-    expect(() => localStorage.setItem('chess-trainer:save', 'x'.repeat(400))).toThrow('full');
+    expect(() => localStorage.setItem('open-file:save', 'x'.repeat(400))).toThrow('full');
 
     expect(clearFiller()).toBe(result.chunks);
     expect(hasFiller()).toBe(false);
@@ -53,10 +53,10 @@ describe('storage filler', () => {
     localStorage.setItem(`${FILLER_PREFIX}1`, 'x');
     probeStorage();
     // The last probe was refused (storage was full): clearing makes room and says so.
-    useStorageHealth.getState().markFull('chess-trainer:lab-probe');
+    useStorageHealth.getState().markFull('open-file:lab-probe');
     expect(clearLabStorage()).toBe(2);
     expect(hasFiller()).toBe(false);
-    expect(localStorage.getItem('chess-trainer:lab-probe')).toBeNull();
+    expect(localStorage.getItem('open-file:lab-probe')).toBeNull();
     expect(useStorageHealth.getState().full).toBe(false);
     expect(clearLabStorage()).toBe(0);
   });
@@ -78,9 +78,9 @@ describe('storage filler', () => {
   it('probes with a growing write so a full disk is noticed', () => {
     useStorageHealth.getState().markOk();
     probeStorage();
-    const first = localStorage.getItem('chess-trainer:lab-probe')?.length ?? 0;
+    const first = localStorage.getItem('open-file:lab-probe')?.length ?? 0;
     probeStorage();
-    expect(localStorage.getItem('chess-trainer:lab-probe')?.length).toBe(first + 400);
+    expect(localStorage.getItem('open-file:lab-probe')?.length).toBe(first + 400);
     expect(useStorageHealth.getState().full).toBe(false);
 
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
@@ -88,6 +88,6 @@ describe('storage filler', () => {
     });
     probeStorage();
     expect(useStorageHealth.getState().full).toBe(true);
-    expect(useStorageHealth.getState().failedKey).toBe('chess-trainer:lab-probe');
+    expect(useStorageHealth.getState().failedKey).toBe('open-file:lab-probe');
   });
 });

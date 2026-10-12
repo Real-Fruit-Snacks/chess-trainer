@@ -10,8 +10,8 @@ import { siteConfig } from '../src/site.config';
  * own browser storage.
  */
 
-const PROGRESS_KEY = 'chess-trainer:progress';
-export const REPERTOIRE_KEY = 'chess-trainer:repertoire';
+const PROGRESS_KEY = 'open-file:progress';
+export const REPERTOIRE_KEY = 'open-file:repertoire';
 
 /** The relay, in this process: every device's requests reach the same vaults. */
 export function startRelay() {

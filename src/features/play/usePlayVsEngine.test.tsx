@@ -336,7 +336,7 @@ describe('usePlayVsEngine', () => {
     const game = useProgress.getState().games[0];
     expect(game?.source).toBe('arcade');
     expect(game?.event).toBe('Odds Ladder · queen odds');
-    expect(game?.pgn).toContain('[Event "Chess Trainer — Odds Ladder · queen odds"]');
+    expect(game?.pgn).toContain('[Event "Open File — Odds Ladder · queen odds"]');
   });
 
   describe('opening practice', () => {

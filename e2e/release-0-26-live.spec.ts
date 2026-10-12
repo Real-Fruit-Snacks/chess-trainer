@@ -330,7 +330,7 @@ test.describe('live games', () => {
         if (!localStorage.getItem(key)) localStorage.setItem(key, blob);
       },
       [
-        'chess-trainer:lichess',
+        'open-file:lichess',
         JSON.stringify({
           state: {
             account: {

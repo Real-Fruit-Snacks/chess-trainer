@@ -21,8 +21,8 @@
       (function () {
         try {
           // The active profile's settings (a profile without its own has the main one's).
-          var key = 'chess-trainer:settings';
-          var profiles = JSON.parse(localStorage.getItem('chess-trainer:profiles') || 'null');
+          var key = 'open-file:settings';
+          var profiles = JSON.parse(localStorage.getItem('open-file:profiles') || 'null');
           var active = profiles && profiles.activeId;
           if (typeof active === 'string' && active !== 'default') {
             if (localStorage.getItem(key + ':' + active) !== null) key = key + ':' + active;

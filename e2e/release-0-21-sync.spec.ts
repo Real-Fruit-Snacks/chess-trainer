@@ -35,9 +35,9 @@ test.describe('sync between devices', () => {
     expect(relay.store.size()).toBe(1);
     const vault = await relay.store.get([...relay.ids][0] ?? '');
     const bytes = Buffer.from(vault?.data ?? []);
-    expect(bytes.subarray(0, 4).toString()).toBe('CTS1');
+    expect(bytes.subarray(0, 4).toString()).toBe('OFS1');
     expect(bytes.includes('Sicilian')).toBe(false);
-    expect(bytes.includes('chess-trainer')).toBe(false);
+    expect(bytes.includes('open-file')).toBe(false);
 
     await b.goto('/settings#sync');
     await b.getByTestId('sync-join').click();

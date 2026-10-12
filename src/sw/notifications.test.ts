@@ -42,12 +42,10 @@ describe('notices', () => {
 
   it('opens the app’s own page, under its base', () => {
     const origin = 'https://example.github.io';
-    expect(noticeTarget('/chess-trainer/', 'play/online/abc', origin)).toBe(
-      'https://example.github.io/chess-trainer/play/online/abc',
+    expect(noticeTarget('/open-file/', 'play/online/abc', origin)).toBe(
+      'https://example.github.io/open-file/play/online/abc',
     );
-    expect(noticeTarget('/chess-trainer/', '', origin)).toBe(
-      'https://example.github.io/chess-trainer/',
-    );
+    expect(noticeTarget('/open-file/', '', origin)).toBe('https://example.github.io/open-file/');
     expect(noticeTarget('/', '//evil.test/x', origin)).toBe('https://example.github.io/');
     expect(noticeTarget('/', undefined, origin)).toBe('https://example.github.io/');
   });

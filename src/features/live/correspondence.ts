@@ -15,7 +15,7 @@ import type { LiveGameView, Side } from './types';
  * and when the app starts (`checkOnCorrespondence`). Kept per profile, on this
  * device only: it is a copy of what the rooms know.
  */
-export const CORRESPONDENCE_STORAGE_KEY = 'chess-trainer:live-correspondence';
+export const CORRESPONDENCE_STORAGE_KEY = 'open-file:live-correspondence';
 
 export interface CorrespondenceGame {
   id: string;

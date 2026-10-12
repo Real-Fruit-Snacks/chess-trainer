@@ -51,7 +51,7 @@ function relayed(): string[] {
 /** The PGNs of the games kept in My games on this page's device. */
 async function keptPgns(page: Page): Promise<string[]> {
   return page.evaluate(() => {
-    const raw = localStorage.getItem('chess-trainer:games');
+    const raw = localStorage.getItem('open-file:games');
     const games = raw
       ? (JSON.parse(raw) as { state: { games: Record<string, { pgn: string }> } }).state.games
       : {};

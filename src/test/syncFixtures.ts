@@ -19,7 +19,7 @@ export function fixtureSnapshot(): SyncSnapshot {
 /** A profile with nothing in it. */
 export function emptySnapshot(): SyncSnapshot {
   const read = readSnapshotJson(
-    JSON.stringify({ app: 'chess-trainer', version: 10, progress: { onboarded: false } }),
+    JSON.stringify({ app: 'open-file', version: 10, progress: { onboarded: false } }),
   );
   if (!read.ok) throw new Error(read.reason);
   return read.snapshot;

@@ -63,7 +63,7 @@ export interface GamesState {
 }
 
 export const MAX_STORED_GAMES = 200;
-export const GAMES_STORAGE_KEY = 'chess-trainer:games';
+export const GAMES_STORAGE_KEY = 'open-file:games';
 export const GAMES_VERSION = 1;
 
 export interface PersistedGames {

@@ -6,21 +6,21 @@ import { expect, type Page, test } from '@playwright/test';
  * service worker's frame policy and the production base path.
  *
  * Every URL here is relative to the base URL, so the same tests run at "/" and,
- * in CI's production-path job, at "/chess-trainer/" behind a server that answers
+ * in CI's production-path job, at "/open-file/" behind a server that answers
  * deep links with 404.html, as GitHub Pages does (scripts/serve-dist.mjs).
  */
 async function seed(page: Page) {
   await page.addInitScript(
     (progress) => {
-      if (!localStorage.getItem('chess-trainer:progress')) {
-        localStorage.setItem('chess-trainer:progress', progress);
+      if (!localStorage.getItem('open-file:progress')) {
+        localStorage.setItem('open-file:progress', progress);
       }
     },
     JSON.stringify({ state: { onboarded: true, puzzleRating: 1200 }, version: 6 }),
   );
 }
 
-/** The path the site is served under ("/" or "/chess-trainer/"). */
+/** The path the site is served under ("/" or "/open-file/"). */
 function basePath(baseURL: string | undefined): string {
   return new URL(baseURL ?? 'http://127.0.0.1/').pathname;
 }

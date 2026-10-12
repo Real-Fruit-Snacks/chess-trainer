@@ -1,8 +1,8 @@
 {
-  "name": "chess-trainer-relay",
+  "name": "open-file-relay",
   "private": true,
   "type": "module",
-  "description": "Chess Trainer's relay: device sync and live games, as a Cloudflare Worker or a Node server.",
+  "description": "Open File's relay: device sync and live games, as a Cloudflare Worker or a Node server.",
   "license": "GPL-3.0-or-later",
   "dependencies": {
     "chess.js": "1.4.0",

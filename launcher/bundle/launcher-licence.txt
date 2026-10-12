@@ -1,6 +1,6 @@
-The launchers ("Start Chess Trainer.exe", and those in the bin/ folder that
-"Start Chess Trainer.command" and start-chess-trainer.sh start) are part of
-Chess Trainer: free software under the GNU General Public License, version 3
+The launchers ("Start Open File.exe", and those in the bin/ folder that
+"Start Open File.command" and start-open-file.sh start) are part of
+Open File: free software under the GNU General Public License, version 3
 or later (app/licence.txt). Their source code is in the launcher/ folder of
 {{REPOSITORY_URL}}
 

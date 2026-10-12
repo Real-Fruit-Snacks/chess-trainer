@@ -6,7 +6,7 @@ import { safeLocalStorage } from '@/lib/persistStorage';
  * bytes, base64url; the relay keeps only its hash). Kept while the reminder is
  * on, for this device rather than a profile: the reminder is the device's.
  */
-export const REMINDER_TOKEN_KEY = 'chess-trainer:reminder-token';
+export const REMINDER_TOKEN_KEY = 'open-file:reminder-token';
 
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 

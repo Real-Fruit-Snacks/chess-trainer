@@ -16,8 +16,8 @@ import { expectBoard, playMove, waitForBoardIdle } from './helpers';
  */
 test.use({ serviceWorkers: 'block' });
 
-const PROGRESS_KEY = 'chess-trainer:progress';
-const LICHESS_KEY = 'chess-trainer:lichess';
+const PROGRESS_KEY = 'open-file:progress';
+const LICHESS_KEY = 'open-file:lichess';
 const answers = JSON.parse(
   readFileSync(
     fileURLToPath(new URL('../src/lib/lichess/fixtures/puzzles.json', import.meta.url)),
@@ -236,10 +236,10 @@ test('another device’s repertoires, analyses, games and missed puzzles come in
   page,
 }) => {
   const fake = await standIn(page);
-  fake.addStudy('Chess Trainer · Repertoires', [
+  fake.addStudy('Open File · Repertoires', [
     { name: 'Caro-Kann', pgn: '1. e4 c6 2. d4 d5 3. Nc3 dxe4 *', orientation: 'black' },
   ]);
-  fake.addStudy('Chess Trainer · Analyses: Endgames', [
+  fake.addStudy('Open File · Analyses: Endgames', [
     {
       name: 'King and pawn',
       pgn: '[FEN "8/8/8/4k3/8/8/4P3/4K3 w - - 0 1"]\n[SetUp "1"]\n\n1. Kd2 Kd5 2. Kd3 *',
@@ -249,7 +249,7 @@ test('another device’s repertoires, analyses, games and missed puzzles come in
     id: 'gm000777',
     userId: 'learner',
     at: 1,
-    pgn: `[Event "Casual game"]\n[White "You"]\n[Black "Engine level 4"]\n[Result "0-1"]\n[ChessTrainer "v=1&id=g-elsewhere&at=1790000000000&level=4&color=white&result=0-1&reason=checkmate&plies=4&source=play"]\n\n1. f3 e5 2. g4 Qh4# 0-1`,
+    pgn: `[Event "Casual game"]\n[White "You"]\n[Black "Engine level 4"]\n[Result "0-1"]\n[OpenFile "v=1&id=g-elsewhere&at=1790000000000&level=4&color=white&result=0-1&reason=checkmate&plies=4&source=play"]\n\n1. f3 e5 2. g4 Qh4# 0-1`,
   });
   fake.puzzles.set('6Mhmf', answers['6Mhmf']);
   fake.addRounds([{ id: '6Mhmf', win: false, rating: 1369, themes: ['mateIn2'] }]);
@@ -287,7 +287,7 @@ test('an account 0.17.0 signed out by mistake carries on, its study read all the
   const fake = await standIn(page);
   // 0.17.0 made its studies with sharing set to nobody: Lichess refuses even the owner's export.
   fake.addStudy(
-    'Chess Trainer · Repertoires',
+    'Open File · Repertoires',
     [{ name: 'Caro-Kann', pgn: '1. e4 c6 2. d4 d5 3. Nc3 dxe4 *', orientation: 'black' }],
     'private',
     'nobody',

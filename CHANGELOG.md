@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-10-12
+
+Chess Trainer is now **Open File**: a name of its own, and an icon to go with it.
+
+### Changed
+
+- **A new name: Open File.** In chess, an open file is a column with no pawns on it, the road a rook
+  takes into the game; the app is open too, free, open source and run on your own device. The name
+  is in the header and the tab, on the home screen, on the offline copy (_Start Open File_), in
+  backups, in the games the app writes (_Open File — …_ as the event and the site) and in the
+  Lichess studies it keeps (_Open File · Repertoires_). Reference's questions say where it comes
+  from.
+- **A new icon.** A rook in an open file: a clear lane down a faint board, in the same greens as
+  before. The header draws it in the theme's accent, and the home-screen, maskable and monochrome
+  icons and the favicon are drawn from it.
+- **A new address.** The repository is `Real-Fruit-Snacks/open-file` and the site
+  `real-fruit-snacks.github.io/open-file/`. The relay is a Worker of its own, `open-file-sync`, with
+  a database of its own, made on its first deploy.
+- **Stored under the new name.** What the app keeps on a device (`open-file:` in local storage, the
+  `open-file-` caches), the PGN tag that records a game's details on Lichess (`OpenFile`) and the
+  synced vaults (an `OFS1` header, keys derived for Open File) all carry it. Nothing kept under the
+  old name is read.
+
 ### Fixed
 
 - **Setup screens.** _New game_ during or after a game brings the setup's title into view and
@@ -14,6 +37,10 @@ All notable changes to this project are documented here. The format follows
 - **Content checks.** The Stockfish checks of the lessons and studies run in a process of their
   own again: in the faster test pool 0.29 moved them to, the engine could not be shut down and
   every check failed at its end.
+- **The icon on iPhone and iPad.** The home-screen icon has square corners for iOS to round, so no
+  black shows in its corners.
+- **README screenshots.** The script that takes them clicks _Continue_ where the repertoire trainer
+  stops on a note, and reads the trainer's arrow before playing the move rather than after.
 
 ## [0.30.1] - 2026-10-12
 

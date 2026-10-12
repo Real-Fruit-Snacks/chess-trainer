@@ -112,7 +112,7 @@ registerRoute(
 registerRoute(
   ({ url, sameOrigin }) => sameOrigin && /\/puzzles\/b\d{4}-\d{2}\.json$/.test(url.pathname),
   new StaleWhileRevalidate({
-    cacheName: 'chess-trainer-puzzles',
+    cacheName: 'open-file-puzzles',
     plugins: [
       cacheable('application/json', 'text/json'),
       new ExpirationPlugin({ maxEntries: 400, maxAgeSeconds: 90 * DAY }),
@@ -127,7 +127,7 @@ registerRoute(
 registerRoute(
   ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith(`${BASE}boards/`),
   new StaleWhileRevalidate({
-    cacheName: 'chess-trainer-boards',
+    cacheName: 'open-file-boards',
     plugins: [
       cacheable('image/'),
       new ExpirationPlugin({ maxEntries: 60, maxAgeSeconds: 365 * DAY }),

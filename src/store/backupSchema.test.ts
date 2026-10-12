@@ -30,7 +30,7 @@ describe('the backup validator', () => {
       ['progress.lessons', { onboarded: true, lessons: [] }],
     ];
     for (const [path, progress] of cases) {
-      const result = validateBackupFile({ app: 'chess-trainer', version: 6, progress });
+      const result = validateBackupFile({ app: 'open-file', version: 6, progress });
       expect(result.ok, path).toBe(false);
       if (!result.ok) {
         expect(result.problem).toBe('damaged');

@@ -1,6 +1,6 @@
 # Third-party notices
 
-Chess Trainer is licensed under GPL-3.0-or-later (see `LICENSE`). It is built on the following
+Open File is licensed under GPL-3.0-or-later (see `LICENSE`). It is built on the following
 third-party work. The deployed site distributes the components marked **shipped**; the others are
 development-time tools only.
 
@@ -102,7 +102,7 @@ listed in [COPYING.md](https://github.com/lichess-org/lila/blob/master/COPYING.m
 the SVGs into one stylesheet per set. `src/components/board/pieces/README.md` lists them again.
 
 **California, Maestro, Staunty and Cardinal are licensed CC BY-NC-SA 4.0 and may not be used
-commercially.** The rest of Chess Trainer is GPL-3.0-or-later and may be, but these four sets may
+commercially.** The rest of Open File is GPL-3.0-or-later and may be, but these four sets may
 not: anyone who sells the app, charges for access or shows ads in it must remove them first (their
 folders and stylesheets in `src/components/board/pieces/`, and their ids in
 `src/store/settings.ts`, `src/components/board/pieceSets.ts`, `src/components/board/pieceStyles.ts`
@@ -157,7 +157,7 @@ them from their two colours. Ice, Walnut and High contrast are the app's own.
 
 Each release also offers an offline copy of the site (`scripts/package-offline.mjs`) with small
 launchers for Windows, macOS and Linux that serve it on the computer itself (`launcher/`, part of
-Chess Trainer, GPL-3.0-or-later). They are built with [Go](https://go.dev/) and contain its runtime
+Open File, GPL-3.0-or-later). They are built with [Go](https://go.dev/) and contain its runtime
 and standard library (BSD-3-Clause, © The Go Authors); every copy carries that licence in
 `licences/launcher.txt`. Nothing else is added to the site in the copy.
 

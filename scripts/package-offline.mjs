@@ -4,7 +4,7 @@
  * of a site, with every engine build and the human-like opponent), the
  * launchers for Windows, macOS and Linux (launcher/, built here with Go), the
  * scripts that start them, a README and the launchers' licence notice —
- * zipped as release/chess-trainer-<version>-offline.zip, with its checksum in
+ * zipped as release/open-file-<version>-offline.zip, with its checksum in
  * release/SHA256SUMS.txt. The unpacked folder stays in release/ too.
  *
  * The zip is reproducible: its entries are sorted and dated from the commit
@@ -167,7 +167,7 @@ rmSync(join(OUT, zipName), { force: true });
 rmSync(join(OUT, 'SHA256SUMS.txt'), { force: true });
 mkdirSync(folder, { recursive: true });
 
-console.log(`Packaging Chess Trainer ${version} for offline use, in release/${folderName}/`);
+console.log(`Packaging Open File ${version} for offline use, in release/${folderName}/`);
 
 // The app, as built (without GitHub Pages' marker file).
 cpSync(DIST, join(folder, 'app'), {

@@ -9,8 +9,8 @@ import { Chess } from 'chess.js';
  * Engine Says keeping the moves of a finished line in the score, and the Daily
  * Opening's tiles saying what they mean in words as well as colour.
  */
-const PROGRESS_KEY = 'chess-trainer:progress';
-const SETTINGS_KEY = 'chess-trainer:settings';
+const PROGRESS_KEY = 'open-file:progress';
+const SETTINGS_KEY = 'open-file:settings';
 
 // The routes below are mocked: nothing may come from a service worker's cache instead.
 test.use({ serviceWorkers: 'block' });

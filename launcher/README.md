@@ -1,7 +1,7 @@
 # The offline copy's launcher
 
 A small Go program, with nothing beyond Go's standard library, that every release's offline copy
-carries (`chess-trainer-<version>-offline.zip`; see
+carries (`open-file-<version>-offline.zip`; see
 [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md#the-offline-copy)). It serves the copy's `app/` folder on
 the computer itself and opens it in the browser:
 
@@ -16,11 +16,11 @@ the computer itself and opens it in the browser:
 - with `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` on every response, so even
   the first visit can run the threaded engine, `Cache-Control: no-cache` (the app's service worker
   keeps the app offline), and `frame-ancestors 'none'` on pages;
-- answering `GET /__chess-trainer/launcher` with its name and version: a second start finds the
+- answering `GET /__open-file/launcher` with its name and version: a second start finds the
   running one there and opens it (or, for another version, asks for that one to be closed first).
 
 ```text
-chess-trainer [-port N] [-app DIR] [-no-browser] [-version]
+open-file [-port N] [-app DIR] [-no-browser] [-version]
 ```
 
 On Windows a double-click gives the launcher a console window of its own; when it stops with an

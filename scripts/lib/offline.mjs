@@ -9,17 +9,17 @@ export const OFFLINE_PORT = 8064;
 
 /** The launchers Go builds for the copy: the target, and where the program goes in it. */
 export const LAUNCHERS = [
-  { goos: 'windows', goarch: 'amd64', path: 'Start Chess Trainer.exe' },
-  { goos: 'darwin', goarch: 'arm64', path: 'bin/chess-trainer-macos-arm64' },
-  { goos: 'darwin', goarch: 'amd64', path: 'bin/chess-trainer-macos-x64' },
-  { goos: 'linux', goarch: 'amd64', path: 'bin/chess-trainer-linux-x64' },
-  { goos: 'linux', goarch: 'arm64', path: 'bin/chess-trainer-linux-arm64' },
+  { goos: 'windows', goarch: 'amd64', path: 'Start Open File.exe' },
+  { goos: 'darwin', goarch: 'arm64', path: 'bin/open-file-macos-arm64' },
+  { goos: 'darwin', goarch: 'amd64', path: 'bin/open-file-macos-x64' },
+  { goos: 'linux', goarch: 'amd64', path: 'bin/open-file-linux-x64' },
+  { goos: 'linux', goarch: 'arm64', path: 'bin/open-file-linux-arm64' },
 ];
 
 /** The scripts that start a launcher (from launcher/bundle/), and their names in the copy. */
 export const START_SCRIPTS = [
-  { from: 'start.command', path: 'Start Chess Trainer.command' },
-  { from: 'start.sh', path: 'start-chess-trainer.sh' },
+  { from: 'start.command', path: 'Start Open File.command' },
+  { from: 'start.sh', path: 'start-open-file.sh' },
 ];
 
 /** The engine builds the copy carries: all four, the full engine's included. */
@@ -30,7 +30,7 @@ export const ENGINE_BUILDS = ['single', 'multi', 'full-single', 'full-multi'];
  * @param {string} version
  */
 export function offlineFolderName(version) {
-  return `chess-trainer-${version}`;
+  return `open-file-${version}`;
 }
 
 /**
@@ -38,7 +38,7 @@ export function offlineFolderName(version) {
  * @param {string} version
  */
 export function offlineZipName(version) {
-  return `chess-trainer-${version}-offline.zip`;
+  return `open-file-${version}-offline.zip`;
 }
 
 /**

@@ -32,7 +32,7 @@ import { storageKeyFor } from './profiles';
  * which repertoire or analysis. Never part of a backup: the token is a secret,
  * and the bookkeeping belongs to this device.
  */
-export const LICHESS_STORAGE_KEY = 'chess-trainer:lichess';
+export const LICHESS_STORAGE_KEY = 'open-file:lichess';
 export const LICHESS_VERSION = 1;
 
 /** Results waiting to go up are capped: the oldest go first past this. */

@@ -31,7 +31,7 @@ export function seedLearner(seed = {}) {
     tourDismissed: true,
     ...seed.progress,
   };
-  localStorage.setItem('chess-trainer:progress', JSON.stringify({ state, version: 8 }));
+  localStorage.setItem('open-file:progress', JSON.stringify({ state, version: 8 }));
 }
 
 /**

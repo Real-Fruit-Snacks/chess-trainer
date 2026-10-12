@@ -8,7 +8,7 @@ import { expectBoard, playMove } from './helpers';
  * entry focus, repeated deviations, refused hand-off positions, the ladder's
  * spoken rungs, analysis from the learner's side).
  */
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 async function seedProgress(page: Page, state: Record<string, unknown>, version = 7) {
   await page.addInitScript(
@@ -186,7 +186,7 @@ test.describe('opening practice', () => {
 
     // …but the card was lapsed only once.
     const lapses = await page.evaluate(() => {
-      const raw = localStorage.getItem('chess-trainer:repertoire');
+      const raw = localStorage.getItem('open-file:repertoire');
       const cards = raw
         ? (JSON.parse(raw) as { state: { cards: Record<string, { lapses: number }> } }).state.cards
         : {};

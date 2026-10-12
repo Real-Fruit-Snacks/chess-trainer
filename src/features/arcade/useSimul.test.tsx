@@ -152,7 +152,7 @@ describe('useSimul', () => {
     act(() => result.current.resignAll());
     const progress = useProgress.getState();
     expect(progress.games).toHaveLength(2);
-    expect(progress.games[1]?.pgn).toContain('[Event "Chess Trainer — simul on 2 boards"]');
+    expect(progress.games[1]?.pgn).toContain('[Event "Open File — simul on 2 boards"]');
     expect(progress.games[1]?.pgn).toContain('1. e4 Nc6');
     // Simul boards are kept apart from ordinary engine games (ladder, courses, Progress).
     expect(progress.games.map((g) => g.source)).toEqual(['simul', 'simul']);

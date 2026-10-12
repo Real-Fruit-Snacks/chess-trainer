@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 import { completeOnboarding, expectBoard, playMove, showAnswersToTheEnd } from './helpers';
 
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 async function seedProgress(page: Page, state: Record<string, unknown>, version = 5) {
   await page.addInitScript(
@@ -29,7 +29,7 @@ test.describe('puzzle library', () => {
     });
     await expect(page.getByRole('button', { name: 'Downloaded' })).toBeDisabled();
     const cached = await page.evaluate(async () => {
-      const store = await caches.open('chess-trainer-puzzles');
+      const store = await caches.open('open-file-puzzles');
       return (await store.keys()).length;
     });
     // 96 chunk files minus the 8 precached first chunks.
@@ -235,13 +235,13 @@ test.describe('opening explorer', () => {
     await mockExplorer(page);
     await page.addInitScript(() => {
       // Seed once; edits made by the test must survive reloads.
-      if (localStorage.getItem('chess-trainer:repertoire')) return;
+      if (localStorage.getItem('open-file:repertoire')) return;
       localStorage.setItem(
-        'chess-trainer:settings',
+        'open-file:settings',
         JSON.stringify({ state: { explorer: true }, version: 3 }),
       );
       localStorage.setItem(
-        'chess-trainer:repertoire',
+        'open-file:repertoire',
         JSON.stringify({
           state: {
             cards: {},
@@ -426,7 +426,7 @@ test.describe('platform', () => {
     const download = page.waitForEvent('download');
     await nudge.getByRole('button', { name: 'Export' }).click();
     expect((await download).suggestedFilename()).toMatch(
-      /^chess-trainer-progress-\d{4}-\d{2}-\d{2}\.json$/,
+      /^open-file-progress-\d{4}-\d{2}-\d{2}\.json$/,
     );
     await expect(nudge).toHaveCount(0);
     await page.reload();
@@ -480,7 +480,7 @@ test.describe('platform', () => {
       };
       if (!w.__consumer) return false;
       const state = {
-        app: 'chess-trainer',
+        app: 'open-file',
         version: 4,
         progress: {
           onboarded: true,

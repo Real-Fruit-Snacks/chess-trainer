@@ -37,6 +37,18 @@ export interface Release {
 /** Newest first. */
 export const RELEASES: readonly Release[] = [
   {
+    version: '0.31.0',
+    date: '2026-10-12',
+    highlights: [
+      {
+        icon: 'sparkle',
+        title: 'A new name: Open File',
+        text: 'Chess Trainer is now Open File, with a new icon: an open file is the road a rook takes into the game.',
+        to: '/reference#faq',
+      },
+    ],
+  },
+  {
     version: '0.30.0',
     date: '2026-10-12',
     highlights: [

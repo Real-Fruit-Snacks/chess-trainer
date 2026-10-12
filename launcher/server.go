@@ -14,7 +14,7 @@ import (
 
 // PingPath answers with the launcher's name and version, so a second start can
 // tell its own kind already holding the port from another program.
-const PingPath = "/__chess-trainer/launcher"
+const PingPath = "/__open-file/launcher"
 
 // contentTypes is every kind of file the app ships. The table is explicit, not
 // the system's: Windows reads MIME types from the registry, where .js is
@@ -62,7 +62,7 @@ func contentType(name string) string {
 // at the same address is picked up at once.
 func newHandler(dir, version string) http.Handler {
 	root := os.DirFS(dir)
-	ping := fmt.Appendf(nil, "{\"app\":\"chess-trainer\",\"version\":%q}\n", version)
+	ping := fmt.Appendf(nil, "{\"app\":\"open-file\",\"version\":%q}\n", version)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")

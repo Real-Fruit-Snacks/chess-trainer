@@ -89,7 +89,7 @@ function resolveBase(mode: string): string {
 function siteMetadataHtml(): Plugin {
   const values = sitePlaceholders(siteConfig);
   return {
-    name: 'chess-trainer:site-metadata',
+    name: 'open-file:site-metadata',
     transformIndexHtml: (html) => fillSitePlaceholders(html, values),
   };
 }
@@ -102,7 +102,7 @@ function siteMetadataHtml(): Plugin {
 function iconSpriteHtml(): Plugin {
   const sprite = iconSprite(ICONS);
   return {
-    name: 'chess-trainer:icon-sprite',
+    name: 'open-file:icon-sprite',
     transformIndexHtml: (html) => withIconSprite(html, sprite),
   };
 }
@@ -115,7 +115,7 @@ function iconSpriteHtml(): Plugin {
  */
 function contentSecurityPolicyHtml(): Plugin {
   return {
-    name: 'chess-trainer:content-security-policy',
+    name: 'open-file:content-security-policy',
     apply: 'build',
     transformIndexHtml: {
       order: 'post',
@@ -134,7 +134,7 @@ function contentSecurityPolicyHtml(): Plugin {
 function ortWasmReference(): Plugin {
   const literal = '"ort-wasm-simd-threaded.wasm",import.meta.url';
   return {
-    name: 'chess-trainer:ort-wasm-reference',
+    name: 'open-file:ort-wasm-reference',
     enforce: 'pre',
     transform(code, id) {
       if (

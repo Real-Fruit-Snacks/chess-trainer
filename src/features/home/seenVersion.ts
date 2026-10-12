@@ -5,7 +5,7 @@ import type { ProgressState } from '@/store/progress';
  * releases after it. Kept on the device, not in the learner's data (a backup or a sync carries
  * none of it), and small enough for the shell to load at start-up.
  */
-export const SEEN_VERSION_KEY = 'chess-trainer:seen-version';
+export const SEEN_VERSION_KEY = 'open-file:seen-version';
 
 type LearnerSlice = Pick<ProgressState, 'onboarded' | 'attempts' | 'lessons' | 'games'>;
 

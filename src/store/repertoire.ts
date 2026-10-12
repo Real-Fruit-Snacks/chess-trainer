@@ -58,7 +58,7 @@ const initialState = {
 
 export type PersistedRepertoire = typeof initialState;
 
-export const REPERTOIRE_STORAGE_KEY = 'chess-trainer:repertoire';
+export const REPERTOIRE_STORAGE_KEY = 'open-file:repertoire';
 export const REPERTOIRE_VERSION = 1;
 
 /** A stored blob checked field by field; damaged entries are dropped, unknown keys kept. */

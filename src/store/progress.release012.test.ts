@@ -251,20 +251,20 @@ describe('progress store (0.12)', () => {
     // Another key: nothing happens.
     blob.state.puzzleRating = 1888;
     localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(blob));
-    window.dispatchEvent(new StorageEvent('storage', { key: 'chess-trainer:settings' }));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'open-file:settings' }));
     await Promise.resolve();
     expect(useProgress.getState().puzzleRating).toBe(1777);
   });
 
   it('reset clears the imported games and the pre-import copy, and leaves the flag to settings', () => {
     useGames.getState().setPlayer('me');
-    localStorage.setItem('chess-trainer:pre-import-backup', '{}');
+    localStorage.setItem('open-file:pre-import-backup', '{}');
     useProgress.getState().completeOnboarding(1500);
     useProgress.getState().resetAll();
     expect(useGames.getState().player).toBe('');
     // The isolation flag follows the threads setting, which the settings reset restores.
     expect(writeFlag).not.toHaveBeenCalled();
-    expect(localStorage.getItem('chess-trainer:pre-import-backup')).toBeNull();
+    expect(localStorage.getItem('open-file:pre-import-backup')).toBeNull();
     expect(useProgress.getState().lifetime.attempts).toBe(0);
   });
 

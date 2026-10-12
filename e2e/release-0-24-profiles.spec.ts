@@ -7,9 +7,9 @@ import { expect, type Page, test } from '@playwright/test';
  */
 async function seed(page: Page) {
   await page.addInitScript(() => {
-    if (localStorage.getItem('chess-trainer:progress')) return;
+    if (localStorage.getItem('open-file:progress')) return;
     localStorage.setItem(
-      'chess-trainer:progress',
+      'open-file:progress',
       JSON.stringify({ state: { onboarded: true, puzzleRating: 1200 }, version: 8 }),
     );
   });

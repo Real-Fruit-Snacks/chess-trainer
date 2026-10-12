@@ -186,7 +186,7 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
         <>
           <Field
             label="Paste a FEN or a PGN"
-            hint="Games from Chess Trainer, Lichess or chess.com all work, including variations and comments. A file with several games opens a picker."
+            hint="Games from Open File, Lichess or chess.com all work, including variations and comments. A file with several games opens a picker."
           >
             {(id) => (
               <textarea

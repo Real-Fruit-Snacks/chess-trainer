@@ -71,7 +71,7 @@ export function fillStorage(): FillResult {
   };
   if (!fill()) return { chunks, bytes, refused: false, limitBytes: null };
   // Everything under the app's prefix (the filler included) is what fitted.
-  const limitBytes = storageUsage('chess-trainer:').bytes;
+  const limitBytes = storageUsage('open-file:').bytes;
   // Room for the number itself: the last chunk goes and the limit is stored. Then the slack
   // is filled again, smallest chunks last, so the next save — even a small one — is refused
   // like a learner's would be. (How much room the last chunk leaves depends on what else is

@@ -280,8 +280,8 @@ jobs:
       - name: Try the download
         run: |
           mkdir -p release/check
-          unzip -q release/chess-trainer-*-offline.zip -d release/check
-          OFFLINE_BUNDLE="$(ls -d release/check/chess-trainer-*)" npm run e2e:offline
+          unzip -q release/open-file-*-offline.zip -d release/check
+          OFFLINE_BUNDLE="$(ls -d release/check/open-file-*)" npm run e2e:offline
         env:
           CI: 'true'
 
@@ -302,7 +302,7 @@ jobs:
     env:
       # A project site's path on GitHub Pages; playwright.config.ts follows it and serves the
       # build with scripts/serve-dist.mjs, which answers deep links with 404.html as Pages does.
-      VITE_BASE_PATH: /chess-trainer/
+      VITE_BASE_PATH: /open-file/
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -312,7 +312,7 @@ jobs:
           maia: 'true'
           browser: chromium
 
-      - name: Build for /chess-trainer/
+      - name: Build for /open-file/
         run: npm run build
 
       - name: Smoke test, deep link and 404 fallback

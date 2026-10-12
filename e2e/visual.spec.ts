@@ -19,12 +19,12 @@ const PAGES: { path: string; name: string; mask?: string[] }[] = [
 async function seed(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem(
-      'chess-trainer:progress',
+      'open-file:progress',
       JSON.stringify({ state: { onboarded: true, puzzleRating: 1200 }, version: 6 }),
     );
     // Colour scheme pinned, animations off: a snapshot must not depend on the machine.
     localStorage.setItem(
-      'chess-trainer:settings',
+      'open-file:settings',
       JSON.stringify({ state: { colorScheme: 'light', animations: false }, version: 3 }),
     );
   });

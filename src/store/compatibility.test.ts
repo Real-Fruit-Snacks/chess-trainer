@@ -335,7 +335,7 @@ describe('stored state from earlier versions', () => {
   it('rehydrates the repertoire, library and games blobs of every version that had them', async () => {
     await rehydrate(
       useRepertoire,
-      'chess-trainer:repertoire',
+      'open-file:repertoire',
       {
         ...backupV4.repertoire,
         cards: {
@@ -345,13 +345,13 @@ describe('stored state from earlier versions', () => {
       1,
     );
     expect(useRepertoire.getState().cards['italian|e2e4']?.reps).toBe(1);
-    await rehydrate(useRepertoire, 'chess-trainer:repertoire', backupV7.repertoire, 1);
+    await rehydrate(useRepertoire, 'open-file:repertoire', backupV7.repertoire, 1);
     expect(useRepertoire.getState().custom[0]?.name).toBe('My London');
-    await rehydrate(useAnalyses, 'chess-trainer:analyses', backupV5.analyses, 1);
+    await rehydrate(useAnalyses, 'open-file:analyses', backupV5.analyses, 1);
     expect(useAnalyses.getState().items).toEqual({});
-    await rehydrate(useAnalyses, 'chess-trainer:analyses', backupV6.analyses, 1);
+    await rehydrate(useAnalyses, 'open-file:analyses', backupV6.analyses, 1);
     expect(Object.keys(useAnalyses.getState().items)).toHaveLength(1);
-    await rehydrate(useGames, 'chess-trainer:games', backupV7.games, 1);
+    await rehydrate(useGames, 'open-file:games', backupV7.games, 1);
     expect(useGames.getState().player).toBe('fixture_user');
     expect(Object.keys(useGames.getState().games)).toHaveLength(2);
   });

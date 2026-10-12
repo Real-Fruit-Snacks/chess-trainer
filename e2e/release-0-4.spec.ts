@@ -7,7 +7,7 @@ import {
   waitForBoardIdle,
 } from './helpers';
 
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 /** Seeds a persisted store once per browser context (init scripts re-run on every navigation). */
 async function seed(page: Page, key: string, state: Record<string, unknown>, version = 4) {
@@ -21,7 +21,7 @@ async function seed(page: Page, key: string, state: Record<string, unknown>, ver
 const seedProgress = (page: Page, state: Record<string, unknown>) =>
   seed(page, PROGRESS_KEY, state);
 const seedSettings = (page: Page, state: Record<string, unknown>) =>
-  seed(page, 'chess-trainer:settings', state, 3);
+  seed(page, 'open-file:settings', state, 3);
 
 const SCHOLAR =
   '[White "alice"]\n[Black "bob"]\n[Date "2026.09.29"]\n\n1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7# 1-0';
@@ -586,7 +586,7 @@ test.describe('settings: piece set, sound theme and engine diagnostics', () => {
       )
       .toContain('data:image/svg+xml,');
     const settings = await page.evaluate(() => {
-      const raw = localStorage.getItem('chess-trainer:settings');
+      const raw = localStorage.getItem('open-file:settings');
       return raw
         ? (JSON.parse(raw) as { state: { pieceSet: string; soundTheme: string } }).state
         : null;

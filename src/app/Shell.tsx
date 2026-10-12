@@ -200,15 +200,24 @@ function isSectionActive(to: string, pathname: string, end?: boolean): boolean {
   return navSection(pathname) === to;
 }
 
+/** The mark: a rook on an open file (the lane down the middle), in the theme's accent. */
 function Logo() {
   return (
     <svg viewBox="0 0 512 512" width="28" height="28" aria-hidden="true" focusable="false">
       <rect width="512" height="512" rx="110" fill="var(--accent)" />
+      <rect
+        x="192"
+        y="0"
+        width="128"
+        height="512"
+        fill="var(--accent-contrast)"
+        fillOpacity="0.2"
+      />
       <g fill="var(--accent-contrast)">
-        <circle cx="256" cy="150" r="54" />
-        <path d="M226 196h60c8 0 14 6 14 14s-6 14-14 14h-4c4 40 18 78 42 104h-136c24-26 38-64 42-104h-4c-8 0-14-6-14-14s6-14 14-14z" />
-        <path d="M160 340h192c14 0 24 10 24 24v6c0 6-4 10-10 10H146c-6 0-10-4-10-10v-6c0-14 10-24 24-24z" />
-        <path d="M132 392h248c10 0 16 8 16 16v6c0 8-6 14-14 14H130c-8 0-14-6-14-14v-6c0-8 6-16 16-16z" />
+        <path d="M176 156h36v28h22v-28h44v28h22v-28h36v64c0 8-6 14-14 14H190c-8 0-14-6-14-14z" />
+        <path d="M200 246h112l12 118H188z" />
+        <path d="M172 376h168c10 0 18 8 18 18v4c0 6-4 10-10 10H164c-6 0-10-4-10-10v-4c0-10 8-18 18-18z" />
+        <path d="M150 420h212c10 0 18 8 18 18v6c0 6-4 10-10 10H142c-6 0-10-4-10-10v-6c0-10 8-18 18-18z" />
       </g>
     </svg>
   );

@@ -9,9 +9,9 @@ import { dismissToasts, expectBoard, playMove, waitForBoardIdle } from './helper
  * pass through the learner's mistakes), and position search ("In your games").
  */
 
-const PROGRESS_KEY = 'chess-trainer:progress';
-const SETTINGS_KEY = 'chess-trainer:settings';
-const GAMES_KEY = 'chess-trainer:games';
+const PROGRESS_KEY = 'open-file:progress';
+const SETTINGS_KEY = 'open-file:settings';
+const GAMES_KEY = 'open-file:games';
 
 /** Onboarded, with the given settings and stored games; set once, so reloads keep what the page saved. */
 async function seed(

@@ -134,7 +134,7 @@ describe('LabPage', () => {
       key,
       value,
     ) {
-      if (key.startsWith('chess-trainer:lab-filler-')) {
+      if (key.startsWith('open-file:lab-filler-')) {
         fillerWrites += 1;
         if (fillerWrites > 4) throw new DOMException('full', 'QuotaExceededError');
         original.call(this, key, value);
@@ -142,7 +142,7 @@ describe('LabPage', () => {
       }
       // Once the filler is in place, the app's own writes no longer fit — except
       // the small measurement the fill makes room for.
-      if (fillerWrites > 4 && key !== 'chess-trainer:storage-limit') {
+      if (fillerWrites > 4 && key !== 'open-file:storage-limit') {
         throw new DOMException('full', 'QuotaExceededError');
       }
       original.call(this, key, value);
@@ -161,24 +161,24 @@ describe('LabPage', () => {
     // The storage-full message names the filler as the cause.
     expect(screen.getByText(/filler is taking the room/)).toBeInTheDocument();
     // The measured limit is remembered for the storage meter.
-    expect(localStorage.getItem('chess-trainer:storage-limit')).toMatch(/^\d+$/);
+    expect(localStorage.getItem('open-file:storage-limit')).toMatch(/^\d+$/);
 
     spy.mockRestore();
     fireEvent.click(screen.getByTestId('storage-clear'));
     expect(useStorageHealth.getState().full).toBe(false);
     expect(screen.getByTestId('storage-ok')).toBeInTheDocument();
-    expect(localStorage.getItem('chess-trainer:lab-filler-0')).toBeNull();
+    expect(localStorage.getItem('open-file:lab-filler-0')).toBeNull();
   });
 
   it('removes the filler and the probe when the lab closes, so saves work again elsewhere', () => {
     const { unmount } = renderLab();
-    localStorage.setItem('chess-trainer:lab-filler-0', 'x');
-    localStorage.setItem('chess-trainer:lab-filler-1', 'x');
-    localStorage.setItem('chess-trainer:lab-probe', 'p');
+    localStorage.setItem('open-file:lab-filler-0', 'x');
+    localStorage.setItem('open-file:lab-filler-1', 'x');
+    localStorage.setItem('open-file:lab-probe', 'p');
     unmount();
-    expect(localStorage.getItem('chess-trainer:lab-filler-0')).toBeNull();
-    expect(localStorage.getItem('chess-trainer:lab-filler-1')).toBeNull();
-    expect(localStorage.getItem('chess-trainer:lab-probe')).toBeNull();
+    expect(localStorage.getItem('open-file:lab-filler-0')).toBeNull();
+    expect(localStorage.getItem('open-file:lab-filler-1')).toBeNull();
+    expect(localStorage.getItem('open-file:lab-probe')).toBeNull();
   });
 
   it('colours a missing capability red and an unset preference grey, and can refresh the checks', () => {

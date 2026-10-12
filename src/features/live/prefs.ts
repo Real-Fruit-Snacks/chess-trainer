@@ -30,7 +30,7 @@ export interface LivePrefsState extends LivePrefs {
   update: (patch: Partial<LivePrefs>) => void;
 }
 
-export const LIVE_PREFS_STORAGE_KEY = 'chess-trainer:live';
+export const LIVE_PREFS_STORAGE_KEY = 'open-file:live';
 export const LIVE_PREFS_VERSION = 1;
 
 /** The choices of a device that has made none yet (with a name made up for it). */

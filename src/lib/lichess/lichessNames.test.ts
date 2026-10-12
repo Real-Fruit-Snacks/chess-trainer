@@ -6,7 +6,7 @@ describe('names as Lichess cleans them', () => {
   it('normalises as lila does, keeping its four exceptions (and writing ° as º)', () => {
     expect(fullCleanUp('Ellipsis…')).toBe('Ellipsis...');
     expect(softCleanUp('ﬁle ½ 90° ª')).toBe('file ½ 90º ª');
-    expect(fullCleanUp('Chess Trainer · Repertoires')).toBe('Chess Trainer · Repertoires');
+    expect(fullCleanUp('Open File · Repertoires')).toBe('Open File · Repertoires');
   });
 
   it('drops symbols and emoji from study names only', () => {

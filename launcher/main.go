@@ -1,11 +1,11 @@
-// Command chess-trainer runs the offline copy of Chess Trainer: it serves the
+// Command open-file runs the offline copy of Open File: it serves the
 // app folder beside it on this computer alone, at http://localhost:8064/, and
 // opens it in the browser. Nothing is sent anywhere: the app keeps its data in
 // the browser, and the launcher only hands it its own files.
 //
 // Usage:
 //
-//	chess-trainer [-port N] [-app DIR] [-no-browser] [-version]
+//	open-file [-port N] [-app DIR] [-no-browser] [-version]
 package main
 
 import (
@@ -54,7 +54,7 @@ func main() {
 // run is the launcher, from its arguments to its exit code. It serves until
 // stop delivers a signal (Ctrl+C, or the window closing).
 func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
-	flags := flag.NewFlagSet("chess-trainer", flag.ContinueOnError)
+	flags := flag.NewFlagSet("open-file", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	port := flags.Int("port", 0, fmt.Sprintf("serve on this port only (default %d, or the next free one)", DefaultPort))
 	appDir := flags.String("app", "", "the app folder (default: the one that came with the launcher)")
@@ -87,7 +87,7 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 		return alreadyRunning(running, *noBrowser, stdout, stderr)
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "Chess Trainer cannot start: %v.\n", err)
+		fmt.Fprintf(stderr, "Open File cannot start: %v.\n", err)
 		if *port == 0 {
 			fmt.Fprintf(stderr, "Close the program that uses port %d, or start the launcher with -port and a free port\n(your progress is kept per address, so use the same port each time).\n", DefaultPort)
 		}
@@ -108,9 +108,9 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 		}()
 	}
 
-	fmt.Fprintf(stdout, "Chess Trainer %s is running on this computer at\n\n    %s\n\n", version, url)
+	fmt.Fprintf(stdout, "Open File %s is running on this computer at\n\n    %s\n\n", version, url)
 	if *port == 0 && bound.Port != DefaultPort {
-		fmt.Fprintf(stdout, "(Port %d is in use by another program, so this time Chess Trainer is at port %d.\nYour browser keeps progress separately for each address: close that program and\nstart Chess Trainer again to get back to yours.)\n\n", DefaultPort, bound.Port)
+		fmt.Fprintf(stdout, "(Port %d is in use by another program, so this time Open File is at port %d.\nYour browser keeps progress separately for each address: close that program and\nstart Open File again to get back to yours.)\n\n", DefaultPort, bound.Port)
 	}
 	if !*noBrowser {
 		if err := openBrowser(url); err != nil {
@@ -124,14 +124,14 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 	select {
 	case <-stop:
 	case err := <-failed:
-		fmt.Fprintf(stderr, "Chess Trainer stopped: %v\n", err)
+		fmt.Fprintf(stderr, "Open File stopped: %v\n", err)
 		bound.Close()
 		return 1
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	_ = server.Shutdown(ctx)
-	fmt.Fprintln(stdout, "\nChess Trainer has stopped.")
+	fmt.Fprintln(stdout, "\nOpen File has stopped.")
 	return 0
 }
 
@@ -141,10 +141,10 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 func alreadyRunning(r *Running, noBrowser bool, stdout, stderr io.Writer) int {
 	url := address(r.Port)
 	if r.Version != version {
-		fmt.Fprintf(stderr, "Chess Trainer %s is already running at %s, from another copy.\nClose that copy's window, then start this one (%s) again.\n", r.Version, url, version)
+		fmt.Fprintf(stderr, "Open File %s is already running at %s, from another copy.\nClose that copy's window, then start this one (%s) again.\n", r.Version, url, version)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Chess Trainer is already running at %s.\n", url)
+	fmt.Fprintf(stdout, "Open File is already running at %s.\n", url)
 	if !noBrowser {
 		if err := openBrowser(url); err != nil {
 			fmt.Fprintln(stdout, "Open that address in your browser.")
@@ -167,7 +167,7 @@ func address(port int) string {
 func findApp(given, exe string) (string, error) {
 	if given != "" {
 		if !isAppFolder(given) {
-			return "", fmt.Errorf("%s is not Chess Trainer's app folder (it has no index.html)", given)
+			return "", fmt.Errorf("%s is not Open File's app folder (it has no index.html)", given)
 		}
 		return filepath.Clean(given), nil
 	}
@@ -180,7 +180,7 @@ func findApp(given, exe string) (string, error) {
 			return filepath.Clean(dir), nil
 		}
 	}
-	return "", fmt.Errorf("Chess Trainer's app folder is missing. Keep the launcher in the folder it came in,\nnext to the app folder (or name the folder with -app)")
+	return "", fmt.Errorf("Open File's app folder is missing. Keep the launcher in the folder it came in,\nnext to the app folder (or name the folder with -app)")
 }
 
 func isAppFolder(dir string) bool {

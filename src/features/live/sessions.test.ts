@@ -156,7 +156,7 @@ function fakeLichessSession(id: string) {
 
 /** The seats as storage holds them. */
 const storedSeats = () =>
-  JSON.parse(localStorage.getItem('chess-trainer:live-seats') ?? '{}') as Record<string, unknown>;
+  JSON.parse(localStorage.getItem('open-file:live-seats') ?? '{}') as Record<string, unknown>;
 
 const account = {
   id: 'learner',
@@ -193,7 +193,7 @@ describe('game pages and seats', () => {
     rememberSeat(randomId(16), 'short', 'white');
     expect(Object.keys(storedSeats())).toHaveLength(1);
     // A damaged store reads as empty.
-    localStorage.setItem('chess-trainer:live-seats', '[1, 2]');
+    localStorage.setItem('open-file:live-seats', '[1, 2]');
     expect(seatOf(later)).toBeNull();
   });
 });

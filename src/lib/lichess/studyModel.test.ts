@@ -33,27 +33,27 @@ const FEN_PGN = `[SetUp "1"]
 
 describe('study names', () => {
   it('names the repertoire study and each collection’s, part by part, and reads them back', () => {
-    expect(studyName('repertoire', 'Repertoires', 1)).toBe('Chess Trainer · Repertoires');
-    expect(studyName('repertoire', 'Repertoires', 2)).toBe('Chess Trainer · Repertoires (2)');
-    expect(studyName('analysis', 'Games', 1)).toBe('Chess Trainer · Analyses: Games');
-    expect(studyName('analysis', 'Games', 3)).toBe('Chess Trainer · Analyses: Games (3)');
-    expect(parseStudyName('Chess Trainer · Repertoires (2)')).toEqual({
+    expect(studyName('repertoire', 'Repertoires', 1)).toBe('Open File · Repertoires');
+    expect(studyName('repertoire', 'Repertoires', 2)).toBe('Open File · Repertoires (2)');
+    expect(studyName('analysis', 'Games', 1)).toBe('Open File · Analyses: Games');
+    expect(studyName('analysis', 'Games', 3)).toBe('Open File · Analyses: Games (3)');
+    expect(parseStudyName('Open File · Repertoires (2)')).toEqual({
       kind: 'repertoire',
       group: 'Repertoires',
       part: 2,
     });
-    expect(parseStudyName('Chess Trainer · Analyses: Games (3)')).toEqual({
+    expect(parseStudyName('Open File · Analyses: Games (3)')).toEqual({
       kind: 'analysis',
       group: 'Games',
       part: 3,
     });
     expect(parseStudyName('My own study')).toBeNull();
-    expect(parseStudyName('Chess Trainer · Analyses:  ')).toBeNull();
+    expect(parseStudyName('Open File · Analyses:  ')).toBeNull();
   });
 
   it('never reads a collection whose name ends like a part number as another’s part', () => {
     const name = studyName('analysis', 'Games (2)', 1);
-    expect(name).toBe('Chess Trainer · Analyses: Games (2) (1)');
+    expect(name).toBe('Open File · Analyses: Games (2) (1)');
     expect(parseStudyName(name)).toEqual({ kind: 'analysis', group: 'Games (2)', part: 1 });
     expect(parseStudyName(studyName('analysis', 'Games (2)', 4))).toEqual({
       kind: 'analysis',
@@ -134,7 +134,7 @@ describe('reading a study export', () => {
   it('reads every chapter with its id, name, side and content; skips what it cannot read', async () => {
     const fake = new FakeLichess();
     const token = fake.issueToken();
-    const study = fake.addStudy('Chess Trainer · Repertoires', [
+    const study = fake.addStudy('Open File · Repertoires', [
       { name: 'Italian', pgn: '1. e4 e5 2. Nf3 Nc6 3. Bc4 *', orientation: 'white' },
       { name: 'Caro', pgn: '1. e4 c6 2. d4 d5 *', orientation: 'black' },
       { name: 'Broken', pgn: '1. e4 e5 2. Ke3 Ke6 3. Qq9 *' },
@@ -161,7 +161,7 @@ describe('reading a study export', () => {
     expect(unreadable).toEqual([`${study.id}/${study.chapters[2]?.id}`]);
     expect(chapters[0]?.movesHash).toBe(treeContent('1. e4 e5 2. Nf3 Nc6 3. Bc4 *')?.movesHash);
     // The blank chapter of a new study is known as such.
-    const fresh = fake.addStudy('Chess Trainer · Analyses: X');
+    const fresh = fake.addStudy('Open File · Analyses: X');
     const blank = await fake.handle({
       method: 'GET',
       url: `https://lichess.org/api/study/${fresh.id}.pgn`,

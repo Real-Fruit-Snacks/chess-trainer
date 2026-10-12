@@ -1,6 +1,6 @@
 # Architecture
 
-Chess Trainer is a single-page application with **no backend**. Everything — lessons, puzzles, the
+Open File is a single-page application with **no backend**. Everything — lessons, puzzles, the
 engine and the user's progress — is either shipped as static files or lives in the browser; a
 learner who connects a Lichess account has the browser keep it in step with that account directly.
 This document explains the moving parts and the reasoning behind them.
@@ -135,7 +135,7 @@ This document explains the moving parts and the reasoning behind them.
 - **The offline copy.** A version tag's Release workflow packages `dist/` (built for `/`) with
   `launcher/` — a Go program with no dependencies, cross-compiled for Windows, macOS (Apple silicon
   and Intel) and Linux (x64 and Arm64) — and the scripts that start it, as
-  `chess-trainer-<version>-offline.zip` (`scripts/package-offline.mjs`; its tested parts are in
+  `open-file-<version>-offline.zip` (`scripts/package-offline.mjs`; its tested parts are in
   `scripts/lib/offline.mjs`). The packaging refuses a build for a sub-path, or one without every
   engine build and the human-like opponent's files at their pinned checksums. The launcher serves
   the folder as GitHub Pages serves the site, at the fixed address `http://localhost:8064/` (the
@@ -242,7 +242,7 @@ it off deletes the files, as do _Reset everything_ and a start-up that finds the
 files left over.
 
 Only the one-thread lite build is precached. The others are excluded from the precache manifest and
-served by a `CacheFirst` route on the engine cache (`chess-trainer-engine`), which also keeps the
+served by a `CacheFirst` route on the engine cache (`open-file-engine`), which also keeps the
 threaded lite build the first time it is fetched, and never expires them — a 99 MB file must not
 quietly need downloading again. Their names carry the engine version, and a new release's service
 worker deletes, when it activates, every engine file the release no longer names.
@@ -281,7 +281,7 @@ that predicts the move a player of a given rating makes, run by
 - **Getting the files** (`maiaDownload.ts`, `src/sw/maiaFiles.ts`): nothing is fetched until the
   learner asks — in the game setup or in Settings. The download streams both files (the runtime, then
   the model) through a byte counter for the progress bar, checks each one's size and SHA-256 before
-  it goes into the `chess-trainer-maia` cache (a captive portal's page or a cut-off transfer is
+  it goes into the `open-file-maia` cache (a captive portal's page or a cut-off transfer is
   refused, and nothing of it kept), and can be stopped; the task lives at module level, so it carries
   on while the learner moves around the app. `maiaFiles.ts` names the files for the page and the
   service worker, and a test keeps it equal to the setup script's pins. The service worker does not
@@ -591,7 +591,7 @@ filters in the address, replacing the history entry rather than adding one.
 - **What's new** (`src/features/home/whatsNew.ts`, `WhatsNew.tsx`). Each release's highlights (an
   icon, a title, a sentence, and a page or the quick search), newest first, and the version
   helpers: `releasesUpTo` (a build never tells of a later release) and `unseenRelease`. The version
-  last seen is the device's (`chess-trainer:seen-version` in `localStorage`, `seenVersion.ts`),
+  last seen is the device's (`open-file:seen-version` in `localStorage`, `seenVersion.ts`),
   outside backups and sync. The shell records a newcomer's first visit, whatever page it starts on,
   so a first visit announces nothing; a returning learner with nothing recorded comes from before
   the card, and is shown the news. A release adds its entry at the top; a test checks each link is
@@ -618,7 +618,7 @@ profile list:
   value is made of two (`settingsStorage`): the learner's settings under the profile's key, and the
   device's (`DEVICE_SETTING_KEYS`: threads, the full engine, the install prompt, the
   notifications) under
-  `chess-trainer:device-settings`, once for every profile and never synced. A profile with no
+  `open-file:device-settings`, once for every profile and never synced. A profile with no
   settings of its own yet reads the main profile's, a new profile is given a copy of the current
   one's, and a save from before the split gives the device's from the profile's. Backups (format 12) and sync carry the learner's (`learnerSettingsOf`, checked on the way in by
   `learnerSettingsFrom`). The page's inline script reads the active profile's colour scheme.
@@ -752,10 +752,10 @@ type-checked by `tsconfig.sw.json` against the WebWorker library). It precaches 
 single-threaded engine, the first puzzle chunk of every rating band and the opening table (~5.8 MB),
 serves `index.html` for navigations to the app's own routes so deep links work offline (the allowlist in
 `src/sw/appRoutes.ts` keeps a sibling site on the same origin out of it; a test checks it against
-`routes.tsx`), caches the remaining puzzle chunks (`chess-trainer-puzzles`, stale-while-revalidate — the
-chunk names carry no hash) and the threaded engine build on first use (`chess-trainer-engine`,
+`routes.tsx`), caches the remaining puzzle chunks (`open-file-puzzles`, stale-while-revalidate — the
+chunk names carry no hash) and the threaded engine build on first use (`open-file-engine`,
 cache-first, which also serves the full engine once the page has stored it) and the textured
-boards' pictures and previews as they are shown (`chess-trainer-boards`, stale-while-revalidate, at
+boards' pictures and previews as they are shown (`open-file-boards`, stale-while-revalidate, at
 most 60, so the chosen board works offline; they are not precached), applies the
 cross-origin-isolation headers described above unless threads are switched off, and adds
 `Content-Security-Policy: frame-ancestors 'none'` to every page it serves. The runtime caches keep
@@ -771,7 +771,7 @@ the flag again. `registerType: 'prompt'` means a new deploy does not silently re
 and reloads only the tab that asked (it listens for `controllerchange` itself, so a page that was not
 controlled at registration still reloads). `pwa.ts` captures `beforeinstallprompt` before React mounts
 and exposes an install button; iOS gets manual instructions because Safari has no install API. "Not
-now" on the install banner is remembered in `localStorage['chess-trainer:install-dismissed']` for 30
+now" on the install banner is remembered in `localStorage['open-file:install-dismissed']` for 30
 days; `detectStandalone` recognises every `display_override` mode, and `installUnavailableReason` tells
 Settings why there is nothing to offer. `index.html` runs a small inline script that applies the saved
 colour scheme and piece set before the first paint (the page's Content-Security-Policy allows it by
@@ -798,7 +798,7 @@ the page to open (anything else opens Home).
   `consumeLaunchFiles` reads the launch queue; a launch file goes through the same flow as the Settings
   import (`useImportBackup`): `readBackupFile` (size cap, PGN detection), `inspectBackup` (the
   validator, no store touched), a confirmation dialog with the summary, then `importWithUndo`, which
-  stashes the current export under `chess-trainer:pre-import-backup` for the toast's "Undo import".
+  stashes the current export under `open-file:pre-import-backup` for the toast's "Undo import".
   Nothing is ever imported without the confirmation. `backupStatus` decides when the reminder shows:
   once there is activity worth keeping (5 training days, 3 lessons, 10 repertoire cards or 3 games),
   then on the first backup, after 40 rated puzzles or after 14 days with activity; "Later" snoozes it
@@ -864,7 +864,7 @@ study:read study:write`. Disconnect and Reset everything revoke the token (`DELE
   in `progress.lichessPuzzles` while a review card points at them (300 at most), so reviews work
   offline; `findPuzzleById` looks there.
 - **Games** (`records.ts`, `games.ts`). A finished game is imported (`POST /api/import`), its record
-  in a `ChessTrainer` tag (form-encoded) after the other tags. Lichess keeps an imported PGN exactly
+  in a `OpenFile` tag (form-encoded) after the other tags. Lichess keeps an imported PGN exactly
   as sent and imports the same text once, so retries are harmless; the account's imports export
   (`/api/games/export/imports`, newest first, the original texts) brings records back on another
   device, read until the game log's 50 are found.
@@ -920,11 +920,11 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
   vectors and the word list's hash. Reading accepts any separators, numbering and case, and a word's
   first four letters; an unknown word is named, the checksum catches the rest.
 - **Keys and envelope** (`vaultCrypto.ts`, Web Crypto only). HKDF-SHA-256 over the secret (salt
-  `chess-trainer device sync v1`) derives three independent values: the vault id (`vault id`, 32
+  `open-file device sync v1`) derives three independent values: the vault id (`vault id`, 32
   bytes, the file's name on the relay), the write token (`write token`, 32 bytes, sent as a bearer
   token; the relay keeps its SHA-256) and an AES-256-GCM key (`encryption key`, not extractable). A
-  sealed snapshot is `CTS1`, a random 12-byte nonce and the ciphertext of the gzipped JSON, with
-  `chess-trainer-sync:1:<vault id>` as additional data, so a vault moved under another id fails to
+  sealed snapshot is `OFS1`, a random 12-byte nonce and the ciphertext of the gzipped JSON, with
+  `open-file-sync:1:<vault id>` as additional data, so a vault moved under another id fails to
   open.
 - **Snapshot** (`snapshot.ts`). The four per-profile stores — progress, repertoire, analyses, games —
   and the learner's settings, as a backup file (format 12, `validateBackupFile` reads it back), plus `sync.generation`, one more
@@ -1030,7 +1030,7 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
     change; any other storage error there puts back what it can and forgets the base; nothing is
     agreed or sent while a change of the learner's waits for room;
   - forgetting the base writes a new mark under a localStorage key of its own
-    (`chess-trainer:device-sync-base`), which every tab reads from storage before using a base: a
+    (`open-file:device-sync-base`), which every tab reads from storage before using a base: a
     base agreed under another mark is not used, even from a tab's memory.
 
   `integrity.test.ts` and `restart.test.ts` go through each of these, closing the page at each step.
@@ -1231,7 +1231,7 @@ who are away.
 - **Race rooms in the app.** `relayGroup.ts` is a generic group session over a kind's client
   (`createRelayGroup`), and `raceRoom.ts` the race's, whose host deals through `prepareDuel` as a
   duel's host does. `roomSessions.ts` keeps one connection per room and feeds the bar; `rooms.ts`
-  keeps the memberships (`chess-trainer:live-rooms`, which `src/app/liveBar.ts` reads at start-up)
+  keeps the memberships (`open-file:live-rooms`, which `src/app/liveBar.ts` reads at start-up)
   and makes rooms (`makeGroupRoom`). `RaceRoomPage.tsx` (`/play/race/:roomId`) is the room;
   `RaceRound` and `TimedRace` serve the duels and the rooms alike.
 - **Analysis rooms in the app.** `analysisRoom.ts` keeps the room's tree as a `GameTree`, in step
@@ -1255,7 +1255,7 @@ who are away.
   with the relay's key once a pushed kind is on (a subscription made with another key is
   replaced) and ends it once neither is; `relayGame.ts` gives a correspondence room the
   subscription in its `hello`, and again whenever it changes. `reminders.ts` keeps the device's
-  reminder on the relay under a token of its own (`chess-trainer:reminder-token`), and `trained.ts`
+  reminder on the relay under a token of its own (`open-file:reminder-token`), and `trained.ts`
   tells the relay of each training day the progress store records (`keepalive`, so it outlives a
   closing page). `sync.ts` runs once as the app opens (`PlatformHooks`, only when something is on):
   it deletes a reminder switched off meanwhile, ends a subscription nothing needs, and keeps the
@@ -1418,7 +1418,7 @@ warning gives way to a confirmation.
   failures' traces and screenshots included, whether the shards passed or not. A local
   `npm run e2e` runs the two Chromium projects; `ALL_BROWSERS=1` adds the other two. CI allows two
   retries; the nightly run sets `PLAYWRIGHT_FAIL_ON_FLAKY=1`, so a test that needed one fails it.
-- **Production path.** One CI job builds with `VITE_BASE_PATH=/chess-trainer/` and runs
+- **Production path.** One CI job builds with `VITE_BASE_PATH=/open-file/` and runs
   `e2e/release-0-12-meta.spec.ts` (every URL in it relative) behind `scripts/serve-dist.mjs`, which
   answers like GitHub Pages: `404.html` with a 404 for a deep link. The same spec checks the footer
   credits and licence files, that the app runs without a Content-Security-Policy violation (engine

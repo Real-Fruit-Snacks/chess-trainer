@@ -4,7 +4,7 @@ import { completeOnboarding, expectBoard, playMove, waitForBoardIdle } from './h
 test.describe('shell', () => {
   test('home page renders and navigation works', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveTitle(/Chess Trainer/);
+    await expect(page).toHaveTitle(/Open File/);
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Learn chess');
     // Desktop shows the header nav, phones the bottom bar — click whichever is visible.
     await page
@@ -34,7 +34,7 @@ test.describe('shell', () => {
     const manifest = await page.request.get(manifestHref as string);
     expect(manifest.ok()).toBeTruthy();
     const json = (await manifest.json()) as { name: string; display: string; icons: unknown[] };
-    expect(json.name).toBe('Chess Trainer');
+    expect(json.name).toBe('Open File');
     expect(json.display).toBe('standalone');
     expect(json.icons.length).toBeGreaterThanOrEqual(3);
 

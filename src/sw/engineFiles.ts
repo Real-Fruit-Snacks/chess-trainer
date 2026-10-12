@@ -56,7 +56,7 @@ export const ENGINE_FILE_NAMES: readonly string[] = Object.values(ENGINE_FILES).
 ]);
 
 /** The runtime cache that keeps the engine builds fetched on demand. */
-export const ENGINE_CACHE = 'chess-trainer-engine';
+export const ENGINE_CACHE = 'open-file-engine';
 
 /**
  * Marks the page's own download of the full engine. The service worker leaves

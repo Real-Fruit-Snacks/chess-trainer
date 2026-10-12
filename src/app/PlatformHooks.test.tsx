@@ -91,7 +91,7 @@ describe('PlatformHooks', () => {
     // The confirmation appears (lazily loaded); nothing was applied yet.
     expect(await screen.findByTestId('import-summary')).toBeInTheDocument();
     expect(screen.getByTestId('import-confirm')).toBeInTheDocument();
-    expect(localStorage.getItem('chess-trainer:pre-import-backup')).toBeNull();
+    expect(localStorage.getItem('open-file:pre-import-backup')).toBeNull();
   });
 
   it('runs the Lichess sync while an account is connected, and stops it after', async () => {

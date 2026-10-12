@@ -22,7 +22,7 @@ export type InstallUnavailableReason =
   | 'no-prompt';
 
 /** Where the banner's dismissal is remembered. */
-export const INSTALL_DISMISSED_KEY = 'chess-trainer:install-dismissed';
+export const INSTALL_DISMISSED_KEY = 'open-file:install-dismissed';
 /** How long "Not now" keeps the banner away. */
 export const INSTALL_DISMISS_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 

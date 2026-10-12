@@ -338,7 +338,7 @@ async function exclusively(task: () => Promise<void>): Promise<void> {
     return;
   }
   await locks.request(
-    `chess-trainer:lichess-sync:${ACTIVE_PROFILE_ID}`,
+    `open-file:lichess-sync:${ACTIVE_PROFILE_ID}`,
     { ifAvailable: true },
     async (lock) => {
       if (lock) await task();

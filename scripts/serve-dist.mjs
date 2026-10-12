@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Serves `dist/` the way GitHub Pages does, for the end-to-end run against the
- * production base path (`VITE_BASE_PATH=/chess-trainer/`):
+ * production base path (`VITE_BASE_PATH=/open-file/`):
  *
  * - the site lives under the base path; `/<base>` without the slash redirects;
  * - a directory serves its `index.html`;
@@ -10,7 +10,7 @@
  *   unknown path with `index.html` and a 200;
  * - nothing outside the base path belongs to the site (a plain 404).
  *
- * Usage:  node scripts/serve-dist.mjs [--port 4173] [--host 127.0.0.1] [--base /chess-trainer/] [--dir dist]
+ * Usage:  node scripts/serve-dist.mjs [--port 4173] [--host 127.0.0.1] [--base /open-file/] [--dir dist]
  */
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
@@ -36,7 +36,7 @@ const TYPES = {
   '.map': 'application/json; charset=utf-8',
 };
 
-/** "/chess-trainer" or "chess-trainer/" → "/chess-trainer/"; "" → "/". */
+/** "/open-file" or "open-file/" → "/open-file/"; "" → "/". */
 export function normalizeBase(base = '/') {
   const withLeading = base.startsWith('/') ? base : `/${base}`;
   return withLeading.endsWith('/') ? withLeading : `${withLeading}/`;

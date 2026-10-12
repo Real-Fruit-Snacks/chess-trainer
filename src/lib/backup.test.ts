@@ -88,13 +88,13 @@ describe('backup reminders', () => {
 
   it('names the file by profile and date', () => {
     expect(backupFilename(new Date('2026-09-30T12:00:00Z'))).toBe(
-      'chess-trainer-progress-2026-09-30.json',
+      'open-file-progress-2026-09-30.json',
     );
     expect(backupFilename(new Date('2026-09-30T12:00:00Z'), 'Anna Müller')).toBe(
-      'chess-trainer-progress-Anna-Muller-2026-09-30.json',
+      'open-file-progress-Anna-Muller-2026-09-30.json',
     );
     expect(backupFilename(new Date('2026-09-30T12:00:00Z'), '   ')).toBe(
-      'chess-trainer-progress-2026-09-30.json',
+      'open-file-progress-2026-09-30.json',
     );
   });
 });

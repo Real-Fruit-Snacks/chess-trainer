@@ -1,5 +1,5 @@
 {
-  "app": "chess-trainer",
+  "app": "open-file",
   "version": 12,
   "exportedAt": "2026-10-07T22:05:21.340Z",
   "progress": {
@@ -115,7 +115,7 @@
         "result": "1-0",
         "reason": "checkmate",
         "plies": 41,
-        "pgn": "[Event \"Chess Trainer — play a human-like opponent\"]\n[White \"You\"]\n[Black \"Maia 1500 (human-like)\"]\n[Result \"1-0\"]\n\n1. e4 e5 1-0",
+        "pgn": "[Event \"Open File — play a human-like opponent\"]\n[White \"You\"]\n[Black \"Maia 1500 (human-like)\"]\n[Result \"1-0\"]\n\n1. e4 e5 1-0",
         "id": "g-humanlike-1",
         "source": "humanlike",
         "opponentRating": 1500,

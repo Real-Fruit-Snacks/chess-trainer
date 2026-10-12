@@ -365,12 +365,17 @@ export const FAQ: { question: string; answer: string }[] = [
       'Play games at a slow enough pace to think, solve tactics every day, learn the basic endgames, and review your own games to find one lesson each time. Everything on this site is built around that loop.',
   },
   {
-    question: 'Does Chess Trainer need an internet connection?',
+    question: 'Why is it called Open File?',
+    answer:
+      'In chess, an open file is a column with no pawns on it: the road a rook takes into the game, and the first thing to look for when you have a rook to place. The app is open too: free, open source, nothing to sign up for, and everything runs on your own device.',
+  },
+  {
+    question: 'Does Open File need an internet connection?',
     answer:
       'Only for the first visit. The app, the engine, the lessons, the opening repertoires and a first set of puzzles at every level are then stored on your device and work offline; more puzzles are kept as you solve them, and Settings can download every puzzle before a trip. It can be installed like an app from your browser’s menu. A few optional features use the network: importing your games from Lichess or chess.com, the opening explorer and the endgame tablebase lookups (both off by default), sync between devices once you turn it on, and the Lichess account sync once you connect an account — both syncs wait while you are offline and catch up when you are back.',
   },
   {
-    question: 'What does Chess Trainer know about me?',
+    question: 'What does Open File know about me?',
     answer:
       'Nothing it can read. There is no sign-up and no tracking: the site is static files, and everything you do — your rating, progress, games and settings — stays in this browser on this device. The only requests that leave your device are the ones you choose: importing your games, the explorer and tablebase lookups and the sync with your Lichess account go straight to Lichess or chess.com, and sync between devices, if you turn it on, sends your data encrypted on this device with a key from your recovery phrase. The sync service keeps that under a random name — no account, email or device name — and cannot read it. Sharing a link puts the game inside the link itself.',
   },
@@ -387,7 +392,7 @@ export const FAQ: { question: string; answer: string }[] = [
   {
     question: 'What does connecting my Lichess account do?',
     answer:
-      'It keeps this device in step with your Lichess account, and through it with your other devices. **Puzzles:** every Lichess puzzle you solve here counts on Lichess too — rated when it was rated here, as a win only without a hint — and results from offline play wait on the device until it is back online. Your Lichess puzzle history comes here, the puzzles you missed join the review queue (kept whole, so they work offline), and your puzzle rating follows your Lichess one. **Games:** a game you finish here is imported to your account, where the analysis board can look at it, and it comes back to the game log on your other devices. **Repertoires and analyses:** your own repertoires and saved analyses are kept in private studies named *Chess Trainer · …*; edits and deletions on either side come across, and when the same item changed on both sides since the last sync, both versions are kept. Lessons, flashcards, review schedules and settings stay on the device — a backup, or sync between devices, moves those. You sign in on lichess.org, which asks you to allow the app to read and write your puzzle activity and your studies — or paste a personal token made there, which an app on the Home Screen of an iPhone or iPad needs; the permission stays on this device (never in a backup), and *Disconnect* in Settings withdraws it.',
+      'It keeps this device in step with your Lichess account, and through it with your other devices. **Puzzles:** every Lichess puzzle you solve here counts on Lichess too — rated when it was rated here, as a win only without a hint — and results from offline play wait on the device until it is back online. Your Lichess puzzle history comes here, the puzzles you missed join the review queue (kept whole, so they work offline), and your puzzle rating follows your Lichess one. **Games:** a game you finish here is imported to your account, where the analysis board can look at it, and it comes back to the game log on your other devices. **Repertoires and analyses:** your own repertoires and saved analyses are kept in private studies named *Open File · …*; edits and deletions on either side come across, and when the same item changed on both sides since the last sync, both versions are kept. Lessons, flashcards, review schedules and settings stay on the device — a backup, or sync between devices, moves those. You sign in on lichess.org, which asks you to allow the app to read and write your puzzle activity and your studies — or paste a personal token made there, which an app on the Home Screen of an iPhone or iPad needs; the permission stays on this device (never in a backup), and *Disconnect* in Settings withdraws it.',
   },
   {
     question: 'How much can the app store?',

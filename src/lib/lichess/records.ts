@@ -2,11 +2,11 @@ import type { GameRecord, GameRecordSource } from '@/store/progress';
 
 /**
  * A game record inside its own PGN, for the trip through Lichess: the record
- * travels in a `ChessTrainer` tag, which Lichess keeps (it stores an imported
+ * travels in a `OpenFile` tag, which Lichess keeps (it stores an imported
  * PGN exactly as sent). No network code here — the progress store uses this
  * when it queues a finished game.
  */
-export const RECORD_TAG = 'ChessTrainer';
+export const RECORD_TAG = 'OpenFile';
 const RECORD_VERSION = '1';
 
 const SOURCES: readonly GameRecordSource[] = [

@@ -121,7 +121,7 @@ func TestServesTheAppAndOpensTheBrowser(t *testing.T) {
 	s := start(t, "-app", app(t), "-port", fmt.Sprint(port))
 	url := fmt.Sprintf("http://localhost:%d/", port)
 	s.waitFor(t, "Close the window")
-	if !strings.Contains(s.stdout.String(), "Chess Trainer 1.2.3 is running on this computer at\n\n    "+url) {
+	if !strings.Contains(s.stdout.String(), "Open File 1.2.3 is running on this computer at\n\n    "+url) {
 		t.Errorf("banner = %q", s.stdout.String())
 	}
 
@@ -185,7 +185,7 @@ func TestAnotherVersionHasToBeClosedFirst(t *testing.T) {
 	if code := run([]string{"-app", app(t), "-port", fmt.Sprint(port), "-no-browser"}, &stdout, &stderr, nil); code != 1 {
 		t.Fatalf("second start = %d", code)
 	}
-	if !strings.Contains(stderr.String(), "Chess Trainer 1.2.3 is already running") || !strings.Contains(stderr.String(), "start this one (1.3.0)") {
+	if !strings.Contains(stderr.String(), "Open File 1.2.3 is already running") || !strings.Contains(stderr.String(), "start this one (1.3.0)") {
 		t.Errorf("said %q", stderr.String())
 	}
 	version = "1.2.3"
@@ -258,23 +258,23 @@ func TestLooksAtTheDefaultPortFirst(t *testing.T) {
 
 func TestFindsTheAppFolder(t *testing.T) {
 	root := t.TempDir()
-	appDir := filepath.Join(root, "chess-trainer", "app")
+	appDir := filepath.Join(root, "open-file", "app")
 	if err := os.MkdirAll(appDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(appDir, "index.html"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "chess-trainer", "bin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "open-file", "bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	// Windows: the launcher beside the app folder.
-	if dir, err := findApp("", filepath.Join(root, "chess-trainer", "Start Chess Trainer.exe")); err != nil || dir != appDir {
+	if dir, err := findApp("", filepath.Join(root, "open-file", "Start Open File.exe")); err != nil || dir != appDir {
 		t.Errorf("beside: %q, %v", dir, err)
 	}
 	// macOS and Linux: the launcher in bin/.
-	if dir, err := findApp("", filepath.Join(root, "chess-trainer", "bin", "chess-trainer-linux-x64")); err != nil || dir != appDir {
+	if dir, err := findApp("", filepath.Join(root, "open-file", "bin", "open-file-linux-x64")); err != nil || dir != appDir {
 		t.Errorf("in bin/: %q, %v", dir, err)
 	}
 	// Named.

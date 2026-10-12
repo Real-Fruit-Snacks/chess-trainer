@@ -1,6 +1,6 @@
 # Security policy
 
-Chess Trainer is a static, client-only application: there are no accounts, and everything you do is
+Open File is a static, client-only application: there are no accounts, and everything you do is
 stored in your browser, on your device. The app talks to the network only when you ask it to —
 importing your games from Lichess or chess.com, the opening explorer and tablebase lookups, which are
 off by default, the Lichess account sync, sync between devices, whose relay
@@ -15,7 +15,7 @@ players through the relay, receives pushed notices, and ships a service worker.
 
 Please **do not** open a public issue for security problems. Report them privately through GitHub's
 private vulnerability reporting:
-<https://github.com/Real-Fruit-Snacks/chess-trainer/security/advisories/new> (the repository's
+<https://github.com/Real-Fruit-Snacks/open-file/security/advisories/new> (the repository's
 **Security** tab → **Report a vulnerability**). Include steps to reproduce and the browser and
 operating system you used. You will get an acknowledgement within a few days.
 

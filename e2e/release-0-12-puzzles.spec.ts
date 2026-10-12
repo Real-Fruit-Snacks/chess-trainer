@@ -12,8 +12,8 @@ import { completeOnboarding, expectBoard, playMove } from './helpers';
  */
 test.use({ serviceWorkers: 'block' });
 
-const PROGRESS_KEY = 'chess-trainer:progress';
-const SETTINGS_KEY = 'chess-trainer:settings';
+const PROGRESS_KEY = 'open-file:progress';
+const SETTINGS_KEY = 'open-file:settings';
 
 /** An onboarded learner at `rating`, with optional settings, seeded once per page. */
 async function seed(page: Page, rating = 1250, settings: Record<string, unknown> = {}) {

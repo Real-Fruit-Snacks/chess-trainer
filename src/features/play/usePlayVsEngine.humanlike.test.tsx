@@ -216,7 +216,7 @@ describe('usePlayVsEngine against the human-like opponent', () => {
     expect(games).toHaveLength(2);
     expect(games[0]).toMatchObject({ source: 'humanlike', opponentRating: 1500, level: 0 });
     expect(games[0]?.pgn).toContain('[Black "Maia 1500 (human-like)"]');
-    expect(games[0]?.pgn).toContain('[Event "Chess Trainer — play a human-like opponent"]');
+    expect(games[0]?.pgn).toContain('[Event "Open File — play a human-like opponent"]');
     expect(result.current.suggestedRating).toBe(1600);
     expect(result.current.suggestedLevel).toBeNull();
     // Engine-level stats are not touched: no level suggestion from these games.

@@ -46,7 +46,7 @@ export const MAIA_TOTAL_BYTES = MAIA_FILES.model.bytes + MAIA_FILES.runtime.byte
 export const MAIA_DIR = 'maia/';
 
 /** The cache the page downloads the files into; the model's worker reads them from there. */
-export const MAIA_CACHE = 'chess-trainer-maia';
+export const MAIA_CACHE = 'open-file-maia';
 
 const MAIA_FILE_NAMES: readonly string[] = Object.values(MAIA_FILES).map((f) => f.name);
 

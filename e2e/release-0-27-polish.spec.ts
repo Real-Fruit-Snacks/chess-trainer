@@ -7,7 +7,7 @@ import { expectBoard, playMove } from './helpers';
  * share a phone's width two by two; the step on screen keeps its number when it
  * was done before; segmented controls wrap instead of running off the page.
  */
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 async function seedProgress(page: Page, state: Record<string, unknown>) {
   await page.addInitScript(

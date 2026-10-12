@@ -122,9 +122,9 @@ test('an analysis room keeps its board in view beside the long panel, and says w
 
 test('the simul’s setup shows its boards as they will start', async ({ page }) => {
   await page.addInitScript(() => {
-    if (!localStorage.getItem('chess-trainer:progress')) {
+    if (!localStorage.getItem('open-file:progress')) {
       localStorage.setItem(
-        'chess-trainer:progress',
+        'open-file:progress',
         JSON.stringify({ state: { onboarded: true, puzzleRating: 1500 }, version: 8 }),
       );
     }

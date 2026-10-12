@@ -34,10 +34,10 @@ function fileSlug(name: string): string {
     .slice(0, 32);
 }
 
-/** `chess-trainer-progress-Anna-2026-10-03.json` (with a profile name when one is given). */
+/** `open-file-progress-Anna-2026-10-03.json` (with a profile name when one is given). */
 export function backupFilename(now = new Date(), profileName?: string): string {
   const slug = profileName ? fileSlug(profileName) : '';
-  return `chess-trainer-progress-${slug ? `${slug}-` : ''}${now.toISOString().slice(0, 10)}.json`;
+  return `open-file-progress-${slug ? `${slug}-` : ''}${now.toISOString().slice(0, 10)}.json`;
 }
 
 /**
@@ -199,13 +199,13 @@ export function parseBackupText(text: string): BackupReadResult {
         ok: false,
         problem: 'looks-like-pgn',
         reason:
-          'That is not a Chess Trainer backup (it looks like a PGN). Games go in through My games or Analyze.',
+          'That is not an Open File backup (it looks like a PGN). Games go in through My games or Analyze.',
       };
     }
     return {
       ok: false,
       problem: 'unreadable',
-      reason: 'That file could not be read as a Chess Trainer backup.',
+      reason: 'That file could not be read as an Open File backup.',
     };
   }
 }
@@ -216,7 +216,7 @@ export async function readBackupFile(file: File): Promise<BackupReadResult> {
     return {
       ok: false,
       problem: 'too-large',
-      reason: `That file is ${Math.round(file.size / (1024 * 1024))} MB — far bigger than any Chess Trainer backup, so it was not opened.`,
+      reason: `That file is ${Math.round(file.size / (1024 * 1024))} MB — far bigger than any Open File backup, so it was not opened.`,
     };
   }
   try {

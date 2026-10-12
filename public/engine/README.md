@@ -40,7 +40,7 @@ Two settings and the browser decide (`chooseEngineBuild` in `src/engine/build.ts
   Until the download is complete, the lite engine runs.
 
 Only `stockfish-19-lite-single.*` is precached. The threaded lite build is cached the first time it
-runs and the full builds when they are downloaded (`src/sw.ts`, cache `chess-trainer-engine`, never
+runs and the full builds when they are downloaded (`src/sw.ts`, cache `open-file-engine`, never
 expiring); a new release's service worker deletes the engine files it no longer names. Whatever
 build fails to start hands over to a lighter one — full to lite, threads to one thread — so the
 engine always starts (`src/engine/EngineClient.ts`).

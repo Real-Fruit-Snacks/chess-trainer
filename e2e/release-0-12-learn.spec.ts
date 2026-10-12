@@ -7,7 +7,7 @@ import { expectBoard, showAnswersToTheEnd } from './helpers';
  * a course leads back to it, a returning learner's day comes first on Home,
  * the hero board's colours, glossary markup and the reference on a phone).
  */
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 async function seedProgress(page: Page, state: Record<string, unknown>, version = 7) {
   await page.addInitScript(

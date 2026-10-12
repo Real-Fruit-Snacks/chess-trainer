@@ -124,8 +124,8 @@ export function startLiveRelay({
   };
 }
 
-const PROGRESS_KEY = 'chess-trainer:progress';
-const LIVE_KEY = 'chess-trainer:live';
+const PROGRESS_KEY = 'open-file:progress';
+const LIVE_KEY = 'open-file:live';
 
 /**
  * A player on a device of their own: an onboarded learner with a puzzle

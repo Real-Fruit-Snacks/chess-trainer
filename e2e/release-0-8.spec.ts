@@ -2,7 +2,7 @@ import { expect, type Page, test } from '@playwright/test';
 import { Chess } from 'chess.js';
 import { expectBoard, playMove, revealBoard } from './helpers';
 
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 async function seedProgress(page: Page, state: Record<string, unknown>, version = 6) {
   await page.addInitScript(
@@ -344,7 +344,7 @@ test.describe('playing on from a position on a phone', () => {
     // No coach: a "mistake" would pause the game before the engine replies.
     await page.addInitScript(() => {
       localStorage.setItem(
-        'chess-trainer:settings',
+        'open-file:settings',
         JSON.stringify({ state: { playCoach: false }, version: 3 }),
       );
     });

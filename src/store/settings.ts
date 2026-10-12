@@ -283,7 +283,7 @@ export const DEFAULT_SETTINGS = {
 
 export type PersistedSettings = typeof DEFAULT_SETTINGS;
 
-export const SETTINGS_STORAGE_KEY = 'chess-trainer:settings';
+export const SETTINGS_STORAGE_KEY = 'open-file:settings';
 export const SETTINGS_VERSION = 5;
 
 /**
@@ -305,7 +305,7 @@ export const DEVICE_SETTING_KEYS = [
   'notifyReminderMinute',
 ] as const;
 export type DeviceSettingKey = (typeof DEVICE_SETTING_KEYS)[number];
-export const DEVICE_SETTINGS_STORAGE_KEY = 'chess-trainer:device-settings';
+export const DEVICE_SETTINGS_STORAGE_KEY = 'open-file:device-settings';
 
 /** The learner's settings: all but the device's. */
 export type LearnerSettings = Omit<PersistedSettings, DeviceSettingKey>;

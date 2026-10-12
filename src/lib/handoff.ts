@@ -5,7 +5,7 @@ import type { LongColor } from '@/chess/types';
  * `/analyze?from=game` picks it up. Kept apart from the pages that use it so
  * importing the key never pulls a whole page into another page's chunk.
  */
-export const HANDOFF_PGN_KEY = 'chess-trainer:handoff-pgn';
+export const HANDOFF_PGN_KEY = 'open-file:handoff-pgn';
 
 export interface HandoffOptions {
   /** The side the learner played: the board opens from that side. */

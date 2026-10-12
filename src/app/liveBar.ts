@@ -13,11 +13,7 @@ import { storageKeyFor } from '@/store/profiles';
 function mayBePlaying(): boolean {
   try {
     const now = Date.now();
-    const keys = [
-      'chess-trainer:live-seats',
-      'chess-trainer:live-lichess',
-      'chess-trainer:live-rooms',
-    ];
+    const keys = ['open-file:live-seats', 'open-file:live-lichess', 'open-file:live-rooms'];
     for (const key of keys) {
       const games = JSON.parse(localStorage.getItem(storageKeyFor(key)) ?? '{}') as Record<
         string,

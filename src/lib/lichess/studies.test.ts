@@ -11,7 +11,7 @@ const ITALIAN = '1. e4 e5 2. Nf3 Nc6 3. Bc4 {The Italian} Bc5 (3... Nf6 4. Ng5) 
 const CARO = '1. e4 c6 2. d4 d5 3. Nc3 dxe4 *';
 const LONDON = '1. d4 d5 2. Bf4 Nf6 3. e3 *';
 const ENDGAME = '[SetUp "1"]\n[FEN "8/8/8/4k3/8/8/4P3/4K3 w - - 0 1"]\n\n1. Kd2 Kd5 2. Kd3 *';
-const REPERTOIRES = 'Chess Trainer · Repertoires';
+const REPERTOIRES = 'Open File · Repertoires';
 
 let lichess: FakeLichessHandle;
 let token: string;
@@ -98,13 +98,13 @@ describe('repertoires and analyses in private studies', () => {
     expect(result).toMatchObject({ pushed: 4, pulled: 0, copies: 0, heldBack: [], skipped: false });
     expect(lichess.fake.studies.map((s) => [s.name, s.visibility])).toEqual([
       [REPERTOIRES, 'private'],
-      ['Chess Trainer · Analyses: My analyses', 'private'],
-      ['Chess Trainer · Analyses: Endgames', 'private'],
+      ['Open File · Analyses: My analyses', 'private'],
+      ['Open File · Analyses: Endgames', 'private'],
     ]);
     expect(chapterNames(REPERTOIRES)).toEqual(['Italian', 'Caro-Kann']);
     expect(study(REPERTOIRES).chapters.map((c) => c.orientation)).toEqual(['white', 'black']);
-    expect(chapterNames('Chess Trainer · Analyses: Endgames')).toEqual(['K+P']);
-    expect(study('Chess Trainer · Analyses: Endgames').chapters[0]?.fen).toBe(
+    expect(chapterNames('Open File · Analyses: Endgames')).toEqual(['K+P']);
+    expect(study('Open File · Analyses: Endgames').chapters[0]?.fen).toBe(
       '8/8/8/4k3/8/8/4P3/4K3 w - - 0 1',
     );
     expect(study(REPERTOIRES).chapters[0]?.movetext).toContain('{ The Italian }');
@@ -130,7 +130,7 @@ describe('repertoires and analyses in private studies', () => {
     addAnalysis(long, ITALIAN, 'Openings ♟ 🎯');
     addRep('Najdorf\u00a0"6.Bg5"', CARO);
     await sync();
-    const openings = study('Chess Trainer · Analyses: Openings');
+    const openings = study('Open File · Analyses: Openings');
     expect(openings.chapters[0]?.name).toHaveLength(80);
     expect(openings.chapters[0]?.name).toContain('chapter...');
     expect(chapterNames(REPERTOIRES)).toEqual(["Najdorf '6.Bg5'"]);
@@ -292,7 +292,7 @@ describe('repertoires and analyses in private studies', () => {
     addAnalysis('C', CARO);
     const result = await sync();
     expect(result.heldBack).toEqual(['B']);
-    expect(chapterNames('Chess Trainer · Analyses: My analyses')).toEqual(['A', 'C']);
+    expect(chapterNames('Open File · Analyses: My analyses')).toEqual(['A', 'C']);
     expect(useLichess.getState().refused[`ana:${london.id}`]).toBeDefined();
     await sync();
     expect(await sync()).toMatchObject({ skipped: true });
@@ -300,7 +300,7 @@ describe('repertoires and analyses in private studies', () => {
     lichess.fake.refusePgn = null;
     useAnalyses.getState().update(london.id, { pgn: `${LONDON.slice(0, -1)} 3... c5 *` });
     expect(await sync()).toMatchObject({ pushed: 1, heldBack: [] });
-    expect(chapterNames('Chess Trainer · Analyses: My analyses')).toEqual(['A', 'C', 'B']);
+    expect(chapterNames('Open File · Analyses: My analyses')).toEqual(['A', 'C', 'B']);
   });
 
   it('continues a full study in the next part', async () => {
@@ -310,8 +310,8 @@ describe('repertoires and analyses in private studies', () => {
     }
     await sync();
     // A new study's empty first chapter took one place until the import was done.
-    expect(study('Chess Trainer · Analyses: My analyses').chapters).toHaveLength(MAX_CHAPTERS - 1);
-    expect(chapterNames('Chess Trainer · Analyses: My analyses (2)')).toEqual([
+    expect(study('Open File · Analyses: My analyses').chapters).toHaveLength(MAX_CHAPTERS - 1);
+    expect(chapterNames('Open File · Analyses: My analyses (2)')).toEqual([
       'Line 63',
       'Line 64',
       'Line 65',
@@ -319,7 +319,7 @@ describe('repertoires and analyses in private studies', () => {
     // The place it left is used next.
     addAnalysis('Line 66', '1. d4 *');
     await sync();
-    expect(study('Chess Trainer · Analyses: My analyses').chapters).toHaveLength(MAX_CHAPTERS);
+    expect(study('Open File · Analyses: My analyses').chapters).toHaveLength(MAX_CHAPTERS);
   });
 
   it('leaves analyses on Lichess when the library here is full', async () => {

@@ -289,7 +289,7 @@ export function LichessCard() {
             description={
               deviceSync
                 ? 'Paused while sync between devices is on: your repertoires and analyses travel between your devices with it.'
-                : 'Your own repertoires and saved analyses are kept in private Lichess studies named “Chess Trainer · …”. Edits on either side come across; so do deletions.'
+                : 'Your own repertoires and saved analyses are kept in private Lichess studies named “Open File · …”. Edits on either side come across; so do deletions.'
             }
           />
           <p className="small faint" style={{ margin: 0 }}>

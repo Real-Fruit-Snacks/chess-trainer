@@ -14,22 +14,22 @@ export interface Profile {
   createdAt: number;
 }
 
-export const PROFILES_STORAGE_KEY = 'chess-trainer:profiles';
+export const PROFILES_STORAGE_KEY = 'open-file:profiles';
 export const DEFAULT_PROFILE_ID = 'default';
 /** Storage keys that belong to a profile (not shared device settings). */
 export const PROFILE_SCOPED_KEYS = [
-  'chess-trainer:settings',
-  'chess-trainer:progress',
-  'chess-trainer:repertoire',
-  'chess-trainer:games',
-  'chess-trainer:analyses',
-  'chess-trainer:lichess',
-  'chess-trainer:device-sync',
-  'chess-trainer:device-sync-base',
+  'open-file:settings',
+  'open-file:progress',
+  'open-file:repertoire',
+  'open-file:games',
+  'open-file:analyses',
+  'open-file:lichess',
+  'open-file:device-sync',
+  'open-file:device-sync-base',
   // Live games: the name played under and the switches, and the seats in games under way.
-  'chess-trainer:live',
-  'chess-trainer:live-seats',
-  'chess-trainer:live-lichess',
+  'open-file:live',
+  'open-file:live-seats',
+  'open-file:live-lichess',
 ] as const;
 
 export interface StoredProfiles {
@@ -132,7 +132,7 @@ export interface ProfilesState extends StoredProfiles {
 }
 
 /** The settings' storage key (see store/settings.ts, which imports this module). */
-const SETTINGS_KEY = 'chess-trainer:settings';
+const SETTINGS_KEY = 'open-file:settings';
 
 const newId = () => `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 

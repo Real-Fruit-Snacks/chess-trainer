@@ -34,7 +34,7 @@ const runnables = new Map();
 export function prepareRunnable(engineDir = ENGINE_DIR) {
   const known = runnables.get(engineDir);
   if (known) return known;
-  const dir = mkdtempSync(join(tmpdir(), 'chess-trainer-engine-'));
+  const dir = mkdtempSync(join(tmpdir(), 'open-file-engine-'));
   const script = join(dir, `${NAME}.cjs`);
   copyFileSync(join(engineDir, `${NAME}.js`), script);
   copyFileSync(join(engineDir, `${NAME}.wasm`), join(dir, `${NAME}.wasm`));

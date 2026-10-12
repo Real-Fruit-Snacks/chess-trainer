@@ -37,7 +37,7 @@ export function noticeOf(data: unknown): Notice | null {
 
 /**
  * The address a notice opens: its path under the app's base ("/" or
- * "/chess-trainer/") on `origin`. Anything but a plain path gives the home page.
+ * "/open-file/") on `origin`. Anything but a plain path gives the home page.
  */
 export function noticeTarget(base: string, path: unknown, origin: string): string {
   const safe = typeof path === 'string' && PATH.test(path) ? path : '';

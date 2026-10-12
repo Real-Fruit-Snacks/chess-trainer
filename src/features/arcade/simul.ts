@@ -457,8 +457,8 @@ export function boardHeaders(
   const control = timeControlOf(state.setup);
   const pad = (n: number) => String(n).padStart(2, '0');
   return {
-    Event: `Chess Trainer — simul on ${state.boards.length} boards`,
-    Site: 'Chess Trainer',
+    Event: `Open File — simul on ${state.boards.length} boards`,
+    Site: 'Open File',
     Date: `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`,
     Round: String(board.index + 1),
     White: board.color === 'white' ? 'You' : engine,

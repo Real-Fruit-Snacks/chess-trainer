@@ -19,8 +19,8 @@ describe('profiles', () => {
     const state = loadProfiles();
     expect(state.activeId).toBe(DEFAULT_PROFILE_ID);
     expect(state.profiles).toHaveLength(1);
-    expect(storageKeyFor('chess-trainer:progress')).toBe('chess-trainer:progress');
-    expect(storageKeyFor('chess-trainer:progress', 'p-abc')).toBe('chess-trainer:progress:p-abc');
+    expect(storageKeyFor('open-file:progress')).toBe('open-file:progress');
+    expect(storageKeyFor('open-file:progress', 'p-abc')).toBe('open-file:progress:p-abc');
   });
 
   it('adds, renames and persists profiles, refusing duplicate names', () => {
@@ -40,13 +40,13 @@ describe('profiles', () => {
   });
 
   it('starts a new profile with the settings of the one it was made from', () => {
-    localStorage.setItem('chess-trainer:settings', '{"state":{"boardTheme":"blue"},"version":5}');
+    localStorage.setItem('open-file:settings', '{"state":{"boardTheme":"blue"},"version":5}');
     const added = useProfiles.getState().add('Guest')!;
-    expect(localStorage.getItem(storageKeyFor('chess-trainer:settings', added.id))).toBe(
+    expect(localStorage.getItem(storageKeyFor('open-file:settings', added.id))).toBe(
       '{"state":{"boardTheme":"blue"},"version":5}',
     );
     // Its own from then on.
-    expect(PROFILE_SCOPED_KEYS).toContain('chess-trainer:settings');
+    expect(PROFILE_SCOPED_KEYS).toContain('open-file:settings');
   });
 
   it('removes an inactive profile together with its stores', () => {
@@ -68,15 +68,15 @@ describe('profiles', () => {
     localStorage.setItem(PROFILES_STORAGE_KEY, '{"profiles": "nope"}');
     expect(loadProfiles().activeId).toBe(DEFAULT_PROFILE_ID);
     // A second learner's stores exist: their profile comes back rather than being orphaned.
-    localStorage.setItem('chess-trainer:progress', '{"state":{}}');
-    localStorage.setItem('chess-trainer:progress:p-lost', '{"state":{}}');
-    localStorage.setItem('chess-trainer:progress:corrupt-1', '{');
+    localStorage.setItem('open-file:progress', '{"state":{}}');
+    localStorage.setItem('open-file:progress:p-lost', '{"state":{}}');
+    localStorage.setItem('open-file:progress:corrupt-1', '{');
     const rebuilt = loadProfiles();
     expect(rebuilt.profiles.map((p) => p.id)).toEqual([DEFAULT_PROFILE_ID, 'p-lost']);
     expect(rebuilt.profiles[1]?.name).toMatch(/Recovered/);
-    localStorage.removeItem('chess-trainer:progress');
-    localStorage.removeItem('chess-trainer:progress:p-lost');
-    localStorage.removeItem('chess-trainer:progress:corrupt-1');
+    localStorage.removeItem('open-file:progress');
+    localStorage.removeItem('open-file:progress:p-lost');
+    localStorage.removeItem('open-file:progress:corrupt-1');
     localStorage.setItem(
       PROFILES_STORAGE_KEY,
       JSON.stringify({ profiles: [{ id: 'x', name: 'X', createdAt: 1 }], activeId: 'missing' }),

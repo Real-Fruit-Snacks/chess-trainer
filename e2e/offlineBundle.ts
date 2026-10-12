@@ -9,12 +9,12 @@ import { join, resolve } from 'node:path';
  */
 export function offlineBundle() {
   const { version } = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
-  const dir = resolve(process.env.OFFLINE_BUNDLE ?? join('release', `chess-trainer-${version}`));
+  const dir = resolve(process.env.OFFLINE_BUNDLE ?? join('release', `open-file-${version}`));
   const launcher =
     process.platform === 'win32'
-      ? join(dir, 'Start Chess Trainer.exe')
+      ? join(dir, 'Start Open File.exe')
       : process.platform === 'darwin'
-        ? join(dir, 'Start Chess Trainer.command')
-        : join(dir, 'start-chess-trainer.sh');
+        ? join(dir, 'Start Open File.command')
+        : join(dir, 'start-open-file.sh');
   return { version, dir, launcher };
 }

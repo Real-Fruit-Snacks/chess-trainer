@@ -211,7 +211,7 @@ func TestSaysWhatItIs(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("ping = %d", resp.StatusCode)
 	}
-	if got := body(t, resp); got != "{\"app\":\"chess-trainer\",\"version\":\"1.2.3\"}\n" {
+	if got := body(t, resp); got != "{\"app\":\"open-file\",\"version\":\"1.2.3\"}\n" {
 		t.Errorf("ping = %q", got)
 	}
 }

@@ -146,7 +146,7 @@ describe('the list of correspondence games', () => {
     // A game at once kept from before the start: the bar comes on to check on it, and loading
     // the list (with nothing your move in it) must not take the bar away before it has.
     const seat = { seat: 'x'.repeat(43), color: 'white', at: Date.now() - 60_000 };
-    localStorage.setItem('chess-trainer:live-seats', JSON.stringify({ [randomId(16)]: seat }));
+    localStorage.setItem('open-file:live-seats', JSON.stringify({ [randomId(16)]: seat }));
     await fresh();
     const { useLiveBar } = await import('@/app/liveBar');
     expect(useLiveBar.getState().active).toBe(true);
@@ -164,7 +164,7 @@ describe('the list of correspondence games', () => {
 
     const id = randomId(16);
     const kept = { id, you: 'black', opponent: 'Calm Rook', tc: '2d', status: 'playing' };
-    localStorage.setItem('chess-trainer:live-correspondence', JSON.stringify([kept]));
+    localStorage.setItem('open-file:live-correspondence', JSON.stringify([kept]));
     expect((await fresh()).useCorrespondence.getState().games).toMatchObject([
       { id, chess960: false },
     ]);
@@ -182,11 +182,11 @@ describe('the list of correspondence games', () => {
 
   it('ignores what storage holds that is no game', async () => {
     localStorage.setItem(
-      'chess-trainer:live-correspondence',
+      'open-file:live-correspondence',
       JSON.stringify([{ id: 'short', tc: '3d' }, { id: randomId(16), tc: '5+3' }, 42]),
     );
     expect((await fresh()).useCorrespondence.getState().games).toEqual([]);
-    localStorage.setItem('chess-trainer:live-correspondence', 'not json');
+    localStorage.setItem('open-file:live-correspondence', 'not json');
     expect((await fresh()).useCorrespondence.getState().games).toEqual([]);
   });
 });

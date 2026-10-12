@@ -35,15 +35,15 @@ describe('the offline copy', () => {
   });
 
   it('is named after the version', () => {
-    expect(offlineFolderName('0.27.0')).toBe('chess-trainer-0.27.0');
-    expect(offlineZipName('0.27.0')).toBe('chess-trainer-0.27.0-offline.zip');
+    expect(offlineFolderName('0.27.0')).toBe('open-file-0.27.0');
+    expect(offlineZipName('0.27.0')).toBe('open-file-0.27.0-offline.zip');
   });
 
   it('needs a build for the root of a site', () => {
     expect(builtForRoot('<script type="module" src="/assets/index-abc.js"></script>')).toBe(true);
     expect(builtForRoot('<link rel="stylesheet" href="/assets/index-abc.css">')).toBe(true);
     expect(
-      builtForRoot('<script type="module" src="/chess-trainer/assets/index-abc.js"></script>'),
+      builtForRoot('<script type="module" src="/open-file/assets/index-abc.js"></script>'),
     ).toBe(false);
   });
 
@@ -67,15 +67,15 @@ describe('the offline copy', () => {
   });
 
   it('fills its texts, and refuses to leave a slot empty', () => {
-    expect(
-      fillTemplate('Chess Trainer {{VERSION}} at {{PORT}}', { VERSION: '1.0.0', PORT: 1 }),
-    ).toBe('Chess Trainer 1.0.0 at 1');
+    expect(fillTemplate('Open File {{VERSION}} at {{PORT}}', { VERSION: '1.0.0', PORT: 1 })).toBe(
+      'Open File 1.0.0 at 1',
+    );
     expect(() => fillTemplate('{{VERSION}} {{NOPE}}', { VERSION: '1' })).toThrow('{{NOPE}}');
   });
 
   it('writes the checksum file as sha256sum reads it', () => {
-    expect(sha256Sums([{ sha256: 'abc', name: 'chess-trainer-1.0.0-offline.zip' }])).toBe(
-      'abc  chess-trainer-1.0.0-offline.zip\n',
+    expect(sha256Sums([{ sha256: 'abc', name: 'open-file-1.0.0-offline.zip' }])).toBe(
+      'abc  open-file-1.0.0-offline.zip\n',
     );
   });
 

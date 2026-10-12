@@ -14,9 +14,9 @@ const SECRET = Uint8Array.from({ length: 16 }, (_, i) => i);
 
 /** HKDF-SHA-256 of SECRET, worked out apart from WebCrypto (RFC 5869 over HMAC). */
 const EXPECTED = {
-  id: 'YVUmr3Gz6jT-CGqdYZE8PMvaji_j1XYlm2xTQYWr9dk',
-  token: 'iSDKqKZsZk-fCQbLyZ4Z5AazNDtFjIERCf8gVdWN7JI',
-  key: 'b14ef7f62aedc9cd6229308e117afa86635dd9049e93357a39d01d77c84e3849',
+  id: 'wUz-37oW5XTmLCkh7cKUybLV6zUOrnHPbGkTXwdhHY8',
+  token: '3SBXNTji5I6RUaDwjuoPrLDxB5iE3Rc-k2CyjzBUHwE',
+  key: 'd9f347d2053c7105ec5438ace4a5d9b65751fda9a3a33761a33cd10c9bd38604',
 };
 
 const hexBytes = (text: string) => Uint8Array.from(text.match(/../g) ?? [], (b) => parseInt(b, 16));
@@ -41,7 +41,7 @@ describe('deriveVaultKeys', () => {
       {
         name: 'AES-GCM',
         iv: sealed.slice(4, 16),
-        additionalData: new TextEncoder().encode(`chess-trainer-sync:1:${EXPECTED.id}`),
+        additionalData: new TextEncoder().encode(`open-file-sync:1:${EXPECTED.id}`),
       },
       key,
       sealed.slice(16),
@@ -64,7 +64,7 @@ describe('sealSnapshot and openSnapshot', () => {
     const keys = await deriveVaultKeys(SECRET);
     const a = await sealSnapshot(keys, json);
     const b = await sealSnapshot(keys, json);
-    expect(new TextDecoder().decode(a.slice(0, 4))).toBe('CTS1');
+    expect(new TextDecoder().decode(a.slice(0, 4))).toBe('OFS1');
     expect(toBase64Url(a)).not.toBe(toBase64Url(b));
     expect(await openSnapshot(keys, a)).toBe(json);
     expect(await openSnapshot(keys, b)).toBe(json);

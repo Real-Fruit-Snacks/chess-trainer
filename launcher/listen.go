@@ -82,7 +82,7 @@ func (e *PortsTakenError) Error() string {
 	}
 }
 
-// probe asks whatever holds a port whether it is a Chess Trainer launcher, and its version.
+// probe asks whatever holds a port whether it is an Open File launcher, and its version.
 func probe(port int) (version string, ok bool) {
 	client := http.Client{
 		Timeout: 2 * time.Second,
@@ -105,7 +105,7 @@ func probe(port int) (version string, ok bool) {
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&body); err != nil {
 		return "", false
 	}
-	if body.App != "chess-trainer" {
+	if body.App != "open-file" {
 		return "", false
 	}
 	return body.Version, true

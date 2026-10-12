@@ -18,7 +18,7 @@ import { expectBoard, playMove } from './helpers';
  */
 test.use({ serviceWorkers: 'block' });
 
-const REPERTOIRE_KEY = 'chess-trainer:repertoire';
+const REPERTOIRE_KEY = 'open-file:repertoire';
 
 /** The position as the explorer is asked about it: the FEN without its move counters. */
 function keyAfter(line: string): string {
@@ -325,7 +325,7 @@ test.describe('repertoire gap finder', () => {
       page,
     }) => {
       await page.addInitScript(
-        (settings) => localStorage.setItem('chess-trainer:settings', settings),
+        (settings) => localStorage.setItem('open-file:settings', settings),
         JSON.stringify({ state: { colorScheme: scheme }, version: 3 }),
       );
       await seedRepertoires(page, [

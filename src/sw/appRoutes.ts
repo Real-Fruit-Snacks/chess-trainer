@@ -28,7 +28,7 @@ export const APP_ROUTE_PREFIXES = [
 /**
  * Matches navigations the app shell should answer: the root itself, or the
  * root followed by one of the prefixes (as a whole segment). `base` is the
- * deployment prefix with a trailing slash ("/" or "/chess-trainer/").
+ * deployment prefix with a trailing slash ("/" or "/open-file/").
  */
 export function appNavigationPattern(base: string): RegExp {
   const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -746,10 +746,10 @@ export const RECALL_CARD_RATING = 0;
 /** Lesson positions come back for the first time after three days (step 1 of the schedule). */
 export const RECALL_FIRST_STEP = 1;
 
-export const PROGRESS_STORAGE_KEY = 'chess-trainer:progress';
+export const PROGRESS_STORAGE_KEY = 'open-file:progress';
 export const PROGRESS_VERSION = 8;
 /** Where the data an import is about to replace is kept, for "Undo import". */
-export const PRE_IMPORT_BACKUP_KEY = 'chess-trainer:pre-import-backup';
+export const PRE_IMPORT_BACKUP_KEY = 'open-file:pre-import-backup';
 
 function nextStreak(streak: Streak, today: string): Streak {
   if (streak.lastDate === today) return streak;
@@ -1679,7 +1679,7 @@ export const useProgress = create<ProgressState>()(
           const { games, player } = useGames.getState();
           return JSON.stringify(
             {
-              app: 'chess-trainer',
+              app: 'open-file',
               version: EXPORT_VERSION,
               exportedAt: new Date().toISOString(),
               progress: persisted(get()),

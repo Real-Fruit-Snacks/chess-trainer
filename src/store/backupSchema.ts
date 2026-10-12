@@ -585,16 +585,16 @@ export function validateBackupFile(raw: unknown, current = EXPORT_VERSION): Back
     return {
       ok: false,
       problem: 'not-a-backup',
-      reason: 'The file is not a Chess Trainer backup.',
+      reason: 'The file is not an Open File backup.',
     };
   }
   const file = raw as Record<string, unknown>;
   const enveloped = 'progress' in file;
-  if (enveloped && file.app !== undefined && file.app !== 'chess-trainer') {
+  if (enveloped && file.app !== undefined && file.app !== 'open-file') {
     return {
       ok: false,
       problem: 'not-a-backup',
-      reason: 'The file is not a Chess Trainer backup.',
+      reason: 'The file is not an Open File backup.',
     };
   }
   const progressPart = enveloped ? file.progress : file;
@@ -602,7 +602,7 @@ export function validateBackupFile(raw: unknown, current = EXPORT_VERSION): Back
     return {
       ok: false,
       problem: 'not-a-backup',
-      reason: 'The file is not a Chess Trainer backup.',
+      reason: 'The file is not an Open File backup.',
     };
   }
   const version = enveloped && typeof file.version === 'number' ? file.version : 1;

@@ -1357,13 +1357,13 @@ function pgnHeaders(
   const hotSeat = opponent === 'human';
   const headers: Record<string, string> = {
     Event: event
-      ? `Chess Trainer — ${event}`
+      ? `Open File — ${event}`
       : hotSeat
-        ? `Chess Trainer — ${chess960 ? 'Chess960, ' : ''}two players`
+        ? `Open File — ${chess960 ? 'Chess960, ' : ''}two players`
         : opponent === 'humanlike'
-          ? 'Chess Trainer — play a human-like opponent'
-          : `Chess Trainer — ${chess960 ? 'Chess960' : 'play'} vs engine`,
-    Site: 'Chess Trainer',
+          ? 'Open File — play a human-like opponent'
+          : `Open File — ${chess960 ? 'Chess960' : 'play'} vs engine`,
+    Site: 'Open File',
     Date: `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`,
     White: hotSeat ? 'White' : playerColor === 'white' ? 'You' : engineName,
     Black: hotSeat ? 'Black' : playerColor === 'black' ? 'You' : engineName,

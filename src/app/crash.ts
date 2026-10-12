@@ -36,7 +36,7 @@ export function isChunkLoadError(thrown: unknown): boolean {
   );
 }
 
-const STORAGE_PREFIX = 'chess-trainer:';
+const STORAGE_PREFIX = 'open-file:';
 
 /**
  * Removes every key the app stores, without going through the stores (one of

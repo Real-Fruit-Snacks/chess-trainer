@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { isPlayerName } from '../../../relay/src/live/shared.mjs';
 
-const KEY = 'chess-trainer:live';
+const KEY = 'open-file:live';
 
 /** The store as a fresh start of the app finds it (the module loaded anew over today's storage). */
 async function start() {

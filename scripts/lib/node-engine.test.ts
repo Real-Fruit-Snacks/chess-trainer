@@ -76,8 +76,8 @@ describe('prepareRunnable', () => {
     const script = prepareRunnable(source);
     expect(basename(script)).toBe('stockfish-19-lite-single.cjs');
     // Not the old shared directory every run wrote into.
-    expect(dirname(script)).not.toBe(join(tmpdir(), 'chess-trainer-engine'));
-    expect(basename(dirname(script))).toMatch(/^chess-trainer-engine-.+/);
+    expect(dirname(script)).not.toBe(join(tmpdir(), 'open-file-engine'));
+    expect(basename(dirname(script))).toMatch(/^open-file-engine-.+/);
     expect(existsSync(join(dirname(script), 'stockfish-19-lite-single.wasm'))).toBe(true);
     expect(prepareRunnable(source)).toBe(script);
     // A test worker may be stopped without its exit hooks running: clean up here.

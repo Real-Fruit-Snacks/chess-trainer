@@ -9,8 +9,8 @@ import { expectBoard, playMove, waitForBoardIdle } from './helpers';
  */
 test.describe.configure({ timeout: 120_000 });
 
-const PROGRESS_KEY = 'chess-trainer:progress';
-const SETTINGS_KEY = 'chess-trainer:settings';
+const PROGRESS_KEY = 'open-file:progress';
+const SETTINGS_KEY = 'open-file:settings';
 
 /** Position 274, BNRKNBRQ: the king on d1 between rooks on c1 and g1; O-O-O swaps d1 and c1. */
 const P274 = 'bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1';

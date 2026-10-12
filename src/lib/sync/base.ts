@@ -48,11 +48,11 @@ export interface SyncCopy {
  */
 export type SyncWrites = Record<string, number>;
 
-const CACHE = 'chess-trainer-device-sync';
+const CACHE = 'open-file-device-sync';
 /** A Cache API call that takes longer than this counts as failed (the memory copy serves). */
 const CACHE_TIMEOUT_MS = 10_000;
 /** The base mark's storage key, per profile. */
-export const BASE_MARK_KEY = 'chess-trainer:device-sync-base';
+export const BASE_MARK_KEY = 'open-file:device-sync-base';
 
 const memory = new Map<string, SyncCopy>();
 let queue: Promise<unknown> = Promise.resolve();

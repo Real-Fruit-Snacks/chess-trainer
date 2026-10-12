@@ -7,7 +7,7 @@ import { clickSquare } from './helpers';
  * illegal move in a replayed classic) and Ghost Knight (hunt a knight you
  * only see every third move).
  */
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 // No service worker: its "ready to work offline" toast must not land on a board mid-test.
 test.use({ serviceWorkers: 'block' });

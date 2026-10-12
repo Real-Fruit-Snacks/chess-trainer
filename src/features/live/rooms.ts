@@ -20,7 +20,7 @@ import type { GroupKind, GroupOptions } from './types';
  * after a restart, finds the room again. A room lives some hours at most, and
  * so does a membership kept here.
  */
-export const ROOMS_STORAGE_KEY = 'chess-trainer:live-rooms';
+export const ROOMS_STORAGE_KEY = 'open-file:live-rooms';
 
 /** How long the relay may take to make a room before this side gives up. */
 const CREATE_TIMEOUT_MS = 15_000;

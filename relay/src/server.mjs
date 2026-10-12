@@ -199,7 +199,7 @@ if (invokedDirectly) {
   const hub = createLiveHub({ notify: pushSender({ store: pushStore, contact }) });
   attachLive(server, { hub, allowedOrigins });
   server.listen(port, host, () => {
-    console.log(`Chess Trainer relay (sync, live games and push) on http://${host}:${port}`);
+    console.log(`Open File relay (sync, live games and push) on http://${host}:${port}`);
   });
   const sweep = () =>
     void Promise.all([expireVaults(store), expireReminders(pushStore)]).catch(() => undefined);

@@ -7,8 +7,8 @@ import {
   waitForBoardIdle,
 } from './helpers';
 
-const PROGRESS_KEY = 'chess-trainer:progress';
-const SETTINGS_KEY = 'chess-trainer:settings';
+const PROGRESS_KEY = 'open-file:progress';
+const SETTINGS_KEY = 'open-file:settings';
 
 /**
  * Writes a persisted store state (version 3) before the app boots. Init scripts

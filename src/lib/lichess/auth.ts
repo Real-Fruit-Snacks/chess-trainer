@@ -30,7 +30,7 @@ export const LICHESS_REQUESTED_SCOPES = [...LICHESS_SCOPES, LICHESS_PLAY_SCOPE] 
  * storage, not this tab's: an installed app on Android finishes the sign-in
  * in a browser tab of its own, which shares local storage with it.
  */
-export const PENDING_LOGIN_KEY = 'chess-trainer:lichess-login';
+export const PENDING_LOGIN_KEY = 'open-file:lichess-login';
 /** A login started longer ago than this is not finished. */
 const LOGIN_TTL_MS = 30 * 60 * 1000;
 
@@ -327,7 +327,7 @@ export async function finishLichessLogin(
 export function personalTokenUrl(): string {
   const url = new URL('/account/oauth/token/create', LICHESS_ORIGIN);
   for (const scope of LICHESS_REQUESTED_SCOPES) url.searchParams.append('scopes[]', scope);
-  url.searchParams.set('description', `Chess Trainer (${location.host})`);
+  url.searchParams.set('description', `Open File (${location.host})`);
   return url.href;
 }
 

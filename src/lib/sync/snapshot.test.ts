@@ -50,7 +50,7 @@ describe('snapshotJson and readSnapshotJson', () => {
     const json = snapshotJson(fixtureSnapshot(), 7, {}, new Date('2026-10-07T10:00:00Z'));
     const file = JSON.parse(json) as Record<string, unknown>;
     expect(file).toMatchObject({
-      app: 'chess-trainer',
+      app: 'open-file',
       version: EXPORT_VERSION,
       exportedAt: '2026-10-07T10:00:00.000Z',
       sync: { generation: 7 },

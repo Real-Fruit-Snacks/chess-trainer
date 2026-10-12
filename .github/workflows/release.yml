@@ -71,8 +71,8 @@ jobs:
       - name: Try the download
         run: |
           mkdir -p release/check
-          unzip -q release/chess-trainer-*-offline.zip -d release/check
-          OFFLINE_BUNDLE="$(ls -d release/check/chess-trainer-*)" npm run e2e:offline
+          unzip -q release/open-file-*-offline.zip -d release/check
+          OFFLINE_BUNDLE="$(ls -d release/check/open-file-*)" npm run e2e:offline
         env:
           CI: 'true'
 
@@ -80,7 +80,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          zip=$(ls release/chess-trainer-*-offline.zip)
+          zip=$(ls release/open-file-*-offline.zip)
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TAG" --notes-file release-notes.md
             gh release upload "$TAG" "$zip" release/SHA256SUMS.txt --clobber

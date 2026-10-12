@@ -10,7 +10,7 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
  * a key chip shows only while its key works.
  */
 
-const PROGRESS_KEY = 'chess-trainer:progress';
+const PROGRESS_KEY = 'open-file:progress';
 
 /** A returning learner (onboarded, the tour dismissed). */
 async function seed(page: Page) {

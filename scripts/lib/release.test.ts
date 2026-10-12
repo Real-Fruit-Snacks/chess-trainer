@@ -54,11 +54,11 @@ describe('release checks', () => {
     const withCopy = releaseNotes(
       '- Something.',
       siteConfig.siteUrl,
-      'chess-trainer-1.0.0-offline.zip',
+      'open-file-1.0.0-offline.zip',
     );
     expect(withCopy).toMatch(
       new RegExp(
-        `^- Something\\.\\n\\nLive app: ${siteConfig.siteUrl}\\n\\nOffline copy: download \`chess-trainer-1\\.0\\.0-offline\\.zip\` below`,
+        `^- Something\\.\\n\\nLive app: ${siteConfig.siteUrl}\\n\\nOffline copy: download \`open-file-1\\.0\\.0-offline\\.zip\` below`,
       ),
     );
     expect(withCopy).toContain('SHA256SUMS.txt');

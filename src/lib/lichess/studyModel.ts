@@ -8,8 +8,8 @@ import { cutUnits, fullCleanUp, softCleanUp } from './lichessNames';
  * Repertoires and saved analyses kept in private Lichess studies: the model
  * and the rules, with no network code (see `studies.ts` for the requests).
  *
- * Each custom repertoire is a chapter of the study "Chess Trainer ·
- * Repertoires"; each saved analysis a chapter of "Chess Trainer · Analyses:
+ * Each custom repertoire is a chapter of the study "Open File ·
+ * Repertoires"; each saved analysis a chapter of "Open File · Analyses:
  * <collection>". A study holds at most 64 chapters, so a list that outgrows
  * one continues in "… (2)", "… (3)".
  *
@@ -17,7 +17,7 @@ import { cutUnits, fullCleanUp, softCleanUp } from './lichessNames';
  * last agreed (a link remembers a hash of each side's content), so the
  * small rewrites Lichess makes to a PGN never look like edits.
  */
-export const STUDY_PREFIX = 'Chess Trainer · ';
+export const STUDY_PREFIX = 'Open File · ';
 export const REPERTOIRE_GROUP = 'Repertoires';
 const REPERTOIRE_STUDY = `${STUDY_PREFIX}${REPERTOIRE_GROUP}`;
 const ANALYSIS_STUDY = `${STUDY_PREFIX}Analyses: `;
@@ -113,11 +113,11 @@ export function studyName(kind: StudyKind, group: string, part: number): string 
 export function parseStudyName(
   name: string,
 ): { kind: StudyKind; group: string; part: number } | null {
-  const repertoire = /^Chess Trainer · Repertoires(?: \((\d+)\))?$/.exec(name);
+  const repertoire = /^Open File · Repertoires(?: \((\d+)\))?$/.exec(name);
   if (repertoire) {
     return { kind: 'repertoire', group: REPERTOIRE_GROUP, part: Number(repertoire[1] ?? 1) };
   }
-  const analysis = /^Chess Trainer · Analyses: (.+?)(?: \((\d+)\))?$/.exec(name);
+  const analysis = /^Open File · Analyses: (.+?)(?: \((\d+)\))?$/.exec(name);
   const group = analysis?.[1]?.trim();
   if (group) {
     return { kind: 'analysis', group: fitGroup(group), part: Number(analysis?.[2] ?? 1) };

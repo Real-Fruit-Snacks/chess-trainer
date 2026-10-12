@@ -93,8 +93,14 @@ describe('the highlights', () => {
     }
   });
 
-  it('give 0.30 the polish pass: the setup screens, the searchable lists and the hidden themes', () => {
+  it('give 0.31 the new name', () => {
     const release = RELEASES[0];
+    expect(release?.version).toBe('0.31.0');
+    expect(release?.highlights.map((h) => h.title)).toEqual(['A new name: Open File']);
+  });
+
+  it('give 0.30 the polish pass: the setup screens, the searchable lists and the hidden themes', () => {
+    const release = RELEASES.find((r) => r.version === '0.30.0');
     expect(release?.version).toBe('0.30.0');
     expect(release?.date).toBe('2026-10-12');
     expect(release?.highlights.map((h) => h.title)).toEqual([

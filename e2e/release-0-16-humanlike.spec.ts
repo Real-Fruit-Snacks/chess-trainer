@@ -7,8 +7,8 @@ import { dismissToasts, expectBoard, playMove, waitForBoardIdle } from './helper
  * playing at a chosen rating. Downloaded on request (the model and the runtime
  * that plays it), kept on the device, run in a worker.
  */
-const PROGRESS_KEY = 'chess-trainer:progress';
-const SETTINGS_KEY = 'chess-trainer:settings';
+const PROGRESS_KEY = 'open-file:progress';
+const SETTINGS_KEY = 'open-file:settings';
 
 async function seed(page: Page, settings: object = {}) {
   await page.addInitScript(

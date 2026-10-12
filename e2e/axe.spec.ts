@@ -78,10 +78,10 @@ type Scheme = 'light' | 'dark' | 'black';
 async function seed(page: Page, scheme: Scheme) {
   await page.addInitScript(
     ([progress, settings]) => {
-      if (!localStorage.getItem('chess-trainer:progress')) {
-        localStorage.setItem('chess-trainer:progress', progress);
+      if (!localStorage.getItem('open-file:progress')) {
+        localStorage.setItem('open-file:progress', progress);
       }
-      localStorage.setItem('chess-trainer:settings', settings);
+      localStorage.setItem('open-file:settings', settings);
     },
     [
       JSON.stringify({ state: { onboarded: true, puzzleRating: 1200 }, version: 6 }),

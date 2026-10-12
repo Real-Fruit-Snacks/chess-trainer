@@ -148,6 +148,6 @@ describe('useFortress: the last move is graded before it counts', () => {
     expect(result.current.lives).toBe(3);
     // The game so far can go to the analysis board, with its starting position.
     expect(result.current.pgn()).toContain('[FEN "');
-    expect(result.current.pgn()).toContain('[Event "Chess Trainer — Fortress"]');
+    expect(result.current.pgn()).toContain('[Event "Open File — Fortress"]');
   });
 });

@@ -31,11 +31,11 @@ import type { SyncSnapshot } from './merge';
 
 /** The storage keys (before the profile's suffix) of the synced stores, and of the sync's own. */
 const SYNCED_STORAGE_KEYS = [
-  'chess-trainer:settings',
-  'chess-trainer:progress',
-  'chess-trainer:repertoire',
-  'chess-trainer:analyses',
-  'chess-trainer:games',
+  'open-file:settings',
+  'open-file:progress',
+  'open-file:repertoire',
+  'open-file:analyses',
+  'open-file:games',
   DEVICE_SYNC_STORAGE_KEY,
 ] as const;
 
@@ -105,7 +105,7 @@ export function snapshotJson(
   now = new Date(),
 ): string {
   return JSON.stringify({
-    app: 'chess-trainer',
+    app: 'open-file',
     version: EXPORT_VERSION,
     exportedAt: now.toISOString(),
     sync: { generation, writes },

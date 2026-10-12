@@ -68,7 +68,7 @@ describe('lesson progress by step key', () => {
   it('keeps step ids in a backup', () => {
     const lessons = { demo: { stepsDone: [0, 'pin'], completedAt: null, lastVisitedAt: 1 } };
     const result = validateBackupFile({
-      app: 'chess-trainer',
+      app: 'open-file',
       version: 7,
       progress: { onboarded: true, lessons },
     });

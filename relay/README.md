@@ -1,6 +1,6 @@
 # Device-sync relay
 
-A tiny service that lets Chess Trainer keep a learner's data in step across
+A tiny service that lets Open File keep a learner's data in step across
 their devices without accounts. Each learner's data is one encrypted file, a
 **vault**, which only their devices can open. The relay stores those files and
 cannot read them. The relay also lets two people play each other live, or by
@@ -39,7 +39,7 @@ reads for a year is deleted.
 
 The data is a backup file, sealed:
 
-- the header `CTS1`;
+- the header `OFS1`;
 - a random 12-byte nonce;
 - the AES-GCM ciphertext of the gzipped JSON.
 
@@ -512,7 +512,7 @@ without that binding refuses `/v1/rooms/:id` with `404`. Race rooms in progress
 carry on through a deploy as games do: their members' devices reconnect with
 their tokens.
 
-Wrangler prints the Worker's address, `https://chess-trainer-sync.<your-subdomain>.workers.dev`.
+Wrangler prints the Worker's address, `https://open-file-sync.<your-subdomain>.workers.dev`.
 Put it in `syncRelay` in `src/site.config.ts`, and put the app's origin in
 `ALLOWED_ORIGINS` in `wrangler.jsonc`. Pages on other origins then cannot read
 the relay's answers. The page's Content Security Policy takes the relay's origin
@@ -554,7 +554,7 @@ reached" or server error and try again later; Workers Paid lifts the limits.
 To check it works:
 
 ```sh
-curl https://chess-trainer-sync.<your-subdomain>.workers.dev/v1/health
+curl https://open-file-sync.<your-subdomain>.workers.dev/v1/health
 ```
 
 ### Optional: fewer new vaults per address

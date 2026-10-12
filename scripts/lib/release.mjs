@@ -49,7 +49,7 @@ export function siteUrlFrom(siteConfigSource) {
  */
 export function releaseNotes(section, siteUrl, offlineZip = null) {
   const offline = offlineZip
-    ? `\n\nOffline copy: download \`${offlineZip}\` below, unzip it and start Chess Trainer, with no internet connection and nothing to install (its README.txt says how, for Windows, macOS and Linux). SHA256SUMS.txt holds its checksum.`
+    ? `\n\nOffline copy: download \`${offlineZip}\` below, unzip it and start Open File, with no internet connection and nothing to install (its README.txt says how, for Windows, macOS and Linux). SHA256SUMS.txt holds its checksum.`
     : '';
   return `${section}\n\nLive app: ${siteUrl}${offline}\n`;
 }

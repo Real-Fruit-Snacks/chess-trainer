@@ -12,12 +12,12 @@ const SCHOLAR = '1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7# 1-0';
 async function seed(page: Page, settings: Record<string, unknown> = {}) {
   await page.addInitScript(
     ([settingsJson]) => {
-      if (localStorage.getItem('chess-trainer:progress')) return;
+      if (localStorage.getItem('open-file:progress')) return;
       localStorage.setItem(
-        'chess-trainer:progress',
+        'open-file:progress',
         JSON.stringify({ state: { onboarded: true, puzzleRating: 1200 }, version: 6 }),
       );
-      if (settingsJson) localStorage.setItem('chess-trainer:settings', settingsJson);
+      if (settingsJson) localStorage.setItem('open-file:settings', settingsJson);
     },
     [Object.keys(settings).length ? JSON.stringify({ state: settings, version: 4 }) : ''] as const,
   );
@@ -169,7 +169,7 @@ test.describe('analyze: hand-off', () => {
     await seed(page);
     await page.addInitScript(() => {
       sessionStorage.setItem(
-        'chess-trainer:handoff-pgn',
+        'open-file:handoff-pgn',
         JSON.stringify({
           pgn: '[White "Stockfish"]\n[Black "You"]\n\n1. e4 e5 2. Nf3 Nc6 *',
           orientation: 'black',
@@ -182,7 +182,7 @@ test.describe('analyze: hand-off', () => {
     await expect(page.locator('.cg-wrap.orientation-black').first()).toBeVisible();
     // The hand-off is consumed once the game is on the board, and the URL is clean.
     await expect(page).toHaveURL(/\/analyze$/);
-    const left = await page.evaluate(() => sessionStorage.getItem('chess-trainer:handoff-pgn'));
+    const left = await page.evaluate(() => sessionStorage.getItem('open-file:handoff-pgn'));
     expect(left).toBeNull();
   });
 });

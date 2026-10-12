@@ -28,8 +28,8 @@ export const ISOLATION_HEADERS: Readonly<Record<string, string>> = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
 };
 
-export const ISOLATION_CACHE = 'chess-trainer-config';
-export const ISOLATION_FLAG_URL = '/__chess-trainer/cross-origin-isolation';
+export const ISOLATION_CACHE = 'open-file-config';
+export const ISOLATION_FLAG_URL = '/__open-file/cross-origin-isolation';
 /** The page tells the worker the flag changed, so it drops its in-memory copy. */
 export const ISOLATION_CHANGED_MESSAGE = 'ISOLATION_FLAG_CHANGED';
 

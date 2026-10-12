@@ -9,7 +9,7 @@
  *   public/icons/icon-512.png       – standard launcher icon / splash
  *   public/icons/icon-maskable-512.png – full-bleed icon for adaptive masks
  *   public/icons/icon-monochrome-512.png – one-colour silhouette for themed launcher icons
- *   public/icons/apple-touch-icon.png  – 180×180, iOS home screen
+ *   public/icons/apple-touch-icon.png  – 180×180, iOS home screen (square: iOS rounds it)
  *   public/icons/shortcut-*.png     – 96×96 manifest shortcut icons
  *
  * Usage: node scripts/generate-icons.mjs
@@ -55,15 +55,23 @@ function maskableSvg(logoSvg) {
 }
 
 /**
+ * iOS rounds the home-screen icon itself and paints any transparent corner black, so the Apple
+ * icon is the logo with square corners.
+ */
+function squareSvg(logoSvg) {
+  return logoSvg.replace(/ rx="\d+"/g, '');
+}
+
+/**
  * Themed launcher icons (Android 13 and later) use only the alpha channel of a
- * `monochrome` icon and paint it in the system colour: the pawn alone, in the
+ * `monochrome` icon and paint it in the system colour: the rook alone, in the
  * same safe zone as the maskable icon, on a transparent canvas.
  */
 function monochromeSvg(logoSvg) {
-  const pawn = /<g fill="#f4efe2">([\s\S]*?)<\/g>/.exec(logoSvg)?.[1];
-  if (!pawn) throw new Error('logo.svg: the pawn group (fill="#f4efe2") was not found');
+  const rook = /<g fill="#f4efe2">([\s\S]*?)<\/g>/.exec(logoSvg)?.[1];
+  if (!rook) throw new Error('logo.svg: the rook group (fill="#f4efe2") was not found');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <g fill="#ffffff" transform="translate(64 64) scale(0.75)">${pawn}</g>
+  <g fill="#ffffff" transform="translate(64 64) scale(0.75)">${rook}</g>
 </svg>`;
 }
 
@@ -92,7 +100,7 @@ async function main() {
 
   await render(page, logo, 192, 'icon-192.png');
   await render(page, logo, 512, 'icon-512.png');
-  await render(page, logo, 180, 'apple-touch-icon.png');
+  await render(page, squareSvg(logo), 180, 'apple-touch-icon.png');
   await render(page, maskableSvg(logo), 512, 'icon-maskable-512.png');
   await render(page, monochromeSvg(logo), 512, 'icon-monochrome-512.png');
   for (const [name, glyph] of Object.entries(shortcutGlyphs)) {

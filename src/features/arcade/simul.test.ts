@@ -368,7 +368,7 @@ describe('results', () => {
     state = playerMove(state, 1, 'e7e5', T0).state;
     state = resignBoard(state, 1, T0);
     const pgn = boardPgn(state, state.boards[1]!, new Date(2026, 9, 2));
-    expect(pgn).toContain('[Event "Chess Trainer — simul on 3 boards"]');
+    expect(pgn).toContain('[Event "Open File — simul on 3 boards"]');
     expect(pgn).toContain('[Round "2"]');
     expect(pgn).toContain('[White "Stockfish (level 2 · Beginner)"]');
     expect(pgn).toContain('[Black "You"]');
