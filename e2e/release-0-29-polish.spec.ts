@@ -235,7 +235,28 @@ test.describe('the new game screen', () => {
     await page.getByRole('button', { name: 'New game' }).first().click();
     await expect(setup).toBeVisible();
     await expect(setup.getByRole('heading', { name: 'New game' })).toBeFocused();
-    await expect(setup.getByRole('heading', { name: 'New game' })).toBeInViewport();
+    try {
+      await expect(setup.getByRole('heading', { name: 'New game' })).toBeInViewport();
+    } catch (error) {
+      // Where everything was, for a failure that only CI has shown: scroll, the card, the title.
+      const where = await page.evaluate(() => {
+        const box = (selector: string) => {
+          const b = document.querySelector(selector)?.getBoundingClientRect();
+          return b ? `${Math.round(b.top)}..${Math.round(b.bottom)}` : 'none';
+        };
+        return [
+          `scrollY ${Math.round(window.scrollY)} of ${document.documentElement.scrollHeight}`,
+          `viewport ${window.innerHeight}`,
+          `header ${box('.shell__header')}`,
+          `panel ${box('.trainer__panel')}`,
+          `card ${box('section.setup')}`,
+          `title ${box('.setup__title')}`,
+          `board column ${box('.play__boardcol')}`,
+          `focus ${document.activeElement?.className ?? 'none'}`,
+        ].join(' · ');
+      });
+      throw new Error(`${(error as Error).message}\n\nOn the page: ${where}`, { cause: error });
+    }
     await setup.getByRole('button', { name: 'Back to the game' }).click();
     await expect(setup).toBeHidden();
     await expect(page.getByTestId('play-variant')).toHaveText(`Chess960 · position ${number}`);

@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useId, useRef } from 'react';
 import { Button, Card, Icon, type IconName, Segmented } from '@/components/ui';
 import type { LongColor } from '@/chess/types';
-import { scrollBackTo } from '@/lib/scroll';
+import { bringIntoView } from '@/lib/scroll';
 import './setup.css';
 
 /*
@@ -51,9 +51,27 @@ export function SetupScreen({
   // Mount only: the card is shown afresh for each new setup.
   const focusRef = useRef(focusOnMount);
   useEffect(() => {
-    if (!focusRef.current) return;
-    titleRef.current?.focus({ preventScroll: true });
-    scrollBackTo(titleRef.current?.closest('.setup') ?? null);
+    const title = titleRef.current;
+    if (!focusRef.current || !title) return;
+    title.focus({ preventScroll: true });
+    const card = title.closest<HTMLElement>('.setup');
+    // In view at once, and again as the page settles around the card: the preview board takes its
+    // size a frame or two later, and a scroll already under way can carry the page on. The title
+    // has the focus, so it is where the eye should be.
+    const bring = () => bringIntoView(title, card);
+    bring();
+    const frames: number[] = [];
+    frames.push(
+      requestAnimationFrame(() => {
+        bring();
+        frames.push(requestAnimationFrame(bring));
+      }),
+    );
+    const timer = window.setTimeout(bring, 300);
+    return () => {
+      frames.forEach(cancelAnimationFrame);
+      window.clearTimeout(timer);
+    };
   }, []);
 
   return (

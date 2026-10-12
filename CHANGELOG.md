@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Setup screens.** _New game_ during or after a game brings the setup's title into view and
+  keeps it there while the page settles around it (the preview board taking its size, a scroll
+  still under way), rather than only when the page was scrolled past it.
+- **Content checks.** The Stockfish checks of the lessons and studies run in a process of their
+  own again: in the faster test pool 0.29 moved them to, the engine could not be shut down and
+  every check failed at its end.
+
 ## [0.30.1] - 2026-10-12
 
 The online pages get the polish the rest of the app had in 0.30, and its last loose ends are tied

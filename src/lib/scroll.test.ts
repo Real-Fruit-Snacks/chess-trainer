@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { scrollIntoContainer } from './scroll';
+import { bringIntoView, scrollIntoContainer } from './scroll';
 
 /** A container 200px tall at y=100 that has already scrolled 50px, with an item at a given y. */
 function setup(itemTop: number, itemHeight = 20) {
@@ -49,5 +49,42 @@ describe('scrollIntoContainer', () => {
     scrollIntoContainer(container, item);
     expect(window.scrollY).toBe(before);
     expect(page).not.toHaveBeenCalled();
+  });
+});
+
+describe('bringIntoView', () => {
+  /** A title at `top` (20px tall) in a card, in a window 700px tall with nothing sticky. */
+  function place(top: number) {
+    const card = document.createElement('section');
+    const title = document.createElement('h2');
+    card.append(title);
+    document.body.append(card);
+    vi.spyOn(title, 'getBoundingClientRect').mockReturnValue({
+      top,
+      bottom: top + 20,
+      height: 20,
+    } as DOMRect);
+    const scrolled = vi.fn();
+    card.scrollIntoView = scrolled;
+    Object.defineProperty(window, 'innerHeight', { value: 700, configurable: true });
+    return { card, title, scrolled };
+  }
+
+  it('leaves a title in sight alone', () => {
+    const { card, title, scrolled } = place(200);
+    bringIntoView(title, card);
+    expect(scrolled).not.toHaveBeenCalled();
+  });
+
+  it('brings the card to the top when the title is above the screen', () => {
+    const { card, title, scrolled } = place(-300);
+    bringIntoView(title, card);
+    expect(scrolled).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' });
+  });
+
+  it('brings the card to the top when the title is below the screen', () => {
+    const { card, title, scrolled } = place(900);
+    bringIntoView(title, card);
+    expect(scrolled).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' });
   });
 });

@@ -29,3 +29,22 @@ export function scrollBackTo(el: HTMLElement | null): void {
     el.scrollIntoView?.({ block: 'start', behavior: 'instant' });
   }
 }
+
+/**
+ * Brings `anchor` to the top of the screen (under the sticky header) when `target` is out of
+ * sight in either direction: above the screen or under the header, or below the screen (or the
+ * bottom bar). At once, as `scrollBackTo`.
+ */
+export function bringIntoView(
+  target: HTMLElement | null,
+  anchor: HTMLElement | null = target,
+): void {
+  if (!target || !anchor) return;
+  const header = document.querySelector('.shell__header')?.getBoundingClientRect().bottom ?? 0;
+  const footer = document.querySelector('.shell__bottomnav')?.getBoundingClientRect().top;
+  const bottom = Math.min(window.innerHeight, footer && footer > 0 ? footer : window.innerHeight);
+  const box = target.getBoundingClientRect();
+  if (box.top < Math.max(0, header) - 1 || box.bottom > bottom + 1) {
+    anchor.scrollIntoView?.({ block: 'start', behavior: 'instant' });
+  }
+}
