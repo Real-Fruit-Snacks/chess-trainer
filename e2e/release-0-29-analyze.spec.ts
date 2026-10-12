@@ -419,6 +419,10 @@ const MY_GAMES = {
 const TWO_KNIGHTS = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3';
 
 test.describe('position search', () => {
+  // No service worker: its "ready to work offline" toast comes up in the corner where the card's
+  // link is, and on a slow WebKit runner the link's click went nowhere (as in "human moves").
+  test.use({ serviceWorkers: 'block' });
+
   test('finds the games that reached the position and opens one at the move played', async ({
     page,
   }) => {

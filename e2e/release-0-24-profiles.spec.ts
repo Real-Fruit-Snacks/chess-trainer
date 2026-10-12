@@ -18,10 +18,16 @@ async function seed(page: Page) {
 const coordinates = (page: Page) => page.getByRole('switch', { name: 'Show coordinates' });
 const threads = (page: Page) => page.getByRole('switch', { name: /^Multi-threaded engine/ });
 
-/** Switches to the other profile (of two: only the inactive one offers Switch). */
+/**
+ * Switches to the other profile (of two: only the inactive one offers Switch). The switch reloads
+ * the page, and the badge shows the new name a moment before it does: the reload is waited for
+ * too, or the next navigation can race it and lose (WebKit, on a busy machine).
+ */
 async function switchProfile(page: Page, name: string) {
   await page.goto('/settings#profiles');
+  const reloaded = page.waitForEvent('load');
   await page.getByTestId('profiles').getByRole('button', { name: 'Switch' }).click();
+  await reloaded;
   await expect(page.getByTestId('profile-badge')).toHaveText(name, { timeout: 15_000 });
 }
 

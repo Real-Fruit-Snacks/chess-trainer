@@ -23,12 +23,14 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
  * Unit tests that run in a process of their own (forks) rather than in a vm context: the build
  * scripts' and the relay's, which run under Node (`@vitest-environment node`), need no DOM and
  * run Node code at full speed outside one; two that replace `window.location`, which jsdom's
- * own context keeps fixed; and one that tells errors apart with `instanceof Error`, which Node's
- * abort reasons fail in a vm context (they come from another realm).
+ * own context keeps fixed; one that tells errors apart with `instanceof Error`, which Node's
+ * abort reasons fail in a vm context (they come from another realm); and the engine checks of
+ * the content (run on request), which drive Stockfish in a child process with Node's own timers.
  */
 const FORKED_TEST_FILES = [
   'scripts/**/*.test.ts',
   'relay/**/*.test.ts',
+  'src/**/*.engine.test.ts',
   'src/app/UpdatePrompt.test.tsx',
   'src/lib/fetchWithTimeout.test.ts',
   'src/store/profiles.test.ts',

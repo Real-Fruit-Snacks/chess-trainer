@@ -165,6 +165,9 @@ export class NodeEngine {
 
   quit() {
     this.send('quit');
-    setTimeout(() => this.proc.kill(), 500).unref();
+    // Under Node a timer can be unref'd so it never holds the process open; a test runner's
+    // DOM-like context hands out plain numbers instead.
+    const timer = setTimeout(() => this.proc.kill(), 500);
+    if (typeof timer === 'object') timer.unref?.();
   }
 }
