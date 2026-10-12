@@ -83,11 +83,13 @@ devices already connected keep their tokens. The Content-Security-Policy already
 
 ### The sync relay
 
-Sync between devices and live games need a small relay of your own; the site works without it, and
-Settings offers sync (and Play live games) only when `syncRelay` in
-[`src/site.config.ts`](../src/site.config.ts) names one. The relay in
-[`relay/`](../relay/README.md) runs on Cloudflare Workers with a D1 database for the vaults and two
-Durable Objects for live games, all of which the free plan covers:
+Sync between devices, live games and the notifications that come while the app is closed need a
+small relay of your own; the site works without it. Settings offers sync, Play live games, and the
+notifications card its correspondence and reminder switches only when `syncRelay` in
+[`src/site.config.ts`](../src/site.config.ts) names one.
+The relay in [`relay/`](../relay/README.md) runs on Cloudflare Workers with a D1 database for the
+vaults and the push reminders, and three Durable Object classes for live games (the waiting room,
+the game rooms, and the race and analysis rooms), all of which the free plan covers:
 
 ```bash
 npm ci --prefix relay
@@ -96,13 +98,16 @@ npx wrangler@latest login
 npx wrangler@latest deploy
 ```
 
-`npm run relay:deploy` does the same from the repository's root. The relay's one dependency is
-chess.js, which referees live games. The first deploy creates the D1 database (Wrangler 4.45 or
-later) and writes its id into `relay/wrangler.jsonc`: commit that change. A deploy that brings the
-`live-v1` migration (0.26 and later) creates the Durable Objects; until it has run, Play says live
-games are not set up on the relay. A relay older than the app may not know its newest games (one
-from before 0.28 takes only games of chess), so when a release changes the relay, as 0.28 does,
-deploy the relay first. Wrangler prints the Worker's address,
+`npm run relay:deploy` does the same from the repository's root. The relay has two packages, which
+referee live games: chess.js, and chessops for Chess960. The first deploy creates the D1 database
+(Wrangler 4.45 or later) and writes its id into `relay/wrangler.jsonc`: commit that change. A
+deploy that brings the `live-v1` migration (0.26 and later) creates the waiting room's and the game
+rooms' Durable Objects; until it has run, Play says live games are not set up on the relay. The
+`live-v2` migration (0.29) creates the class of race and analysis rooms, `LiveGroup` (bound as
+`LIVE_GROUPS`); without it the relay refuses those rooms (`404`) and everything else goes on. A relay older than the
+app may not know its newest games (one from before 0.28 takes only games of chess, one from before
+0.29 no Chess960, correspondence, race or analysis rooms), so when a release changes the relay, as 0.28 and
+0.29 do, deploy the relay first. Wrangler prints the Worker's address,
 `https://chess-trainer-sync.<your-subdomain>.workers.dev`. Put it in `syncRelay`, and the site's
 origin in `ALLOWED_ORIGINS` in `relay/wrangler.jsonc`. The page's Content-Security-Policy picks the
 relay's origin up from `syncRelay` at build time. To check it, run
@@ -110,10 +115,20 @@ relay's origin up from `syncRelay` at build time. To check it, run
 sync sets `syncRelay` to `''`; one that hosts the relay itself runs `relay/src/server.mjs` behind
 HTTPS (see `relay/README.md`).
 
+Deploying the 0.29 relay also sets its two crons (`triggers` in `relay/wrangler.jsonc`): the daily
+one, which deletes vaults unused for a year and reminders unheard of for 60 days, and one every 15
+minutes, which sends the daily reminders due (at most 25 a run, within the free plan's requests of
+its own). Push needs nothing to configure: the Worker makes its push tables in the same D1 database
+and its own key pair for Web Push (VAPID) the first time they are needed, and keeps the pair there.
+Push messages name a contact for the push services; set `PUSH_CONTACT` in `vars` (`mailto:` or
+`https:`) to one you read, or they name the first `https` origin in `ALLOWED_ORIGINS`. The Node
+server keeps the same in its SQLite file and sends the reminders every minute; it keeps live games
+in memory, so a restart ends them, correspondence games included.
+
 The relay stores only sealed vaults under random names, keeps no logs, and deletes vaults unused for
-a year; `relay/README.md` shows how to cap the vaults each address can create. Moving the site to
-another address only needs the new origin in `ALLOWED_ORIGINS`: synced data is tied to the recovery
-phrase, not to the site. A new relay starts empty, though: after `syncRelay` changes, each device
+a year; `relay/README.md` shows how to cap the vaults each address can create (and the reminders,
+with `NEW_REMINDERS`). Moving the site to another address only needs the new origin in
+`ALLOWED_ORIGINS`: synced data is tied to the recovery phrase, not to the site. A new relay starts empty, though: after `syncRelay` changes, each device
 says its synced copy is gone and keeps its data, and turning sync on again starts a new phrase.
 
 ### Crash reports
@@ -225,9 +240,25 @@ Optional headers:
 - _Play → Play the computer → New game → Opponent: A human-like opponent → Download_ fetches about
   25 MB and the game starts; after that, it plays offline too.
 - `curl https://chess-trainer-sync.<your-subdomain>.workers.dev/v1/health` answers with
-  `"live":true`, and _Play_ shows the open games connected ("Nobody else is here right now"). In a
-  second browser, a game posted in one appears in the other's list, and joining it opens the board
-  in both; a puzzle race posted from its tile opens the same puzzle on both boards.
+  `"live":true` and `"push":true`, and _Play_ shows the open games connected ("Nobody else is here
+  right now"). In a second browser, a game posted in one appears in the other's list, and joining it
+  opens the board in both; a puzzle race posted from its tile opens the same puzzle on both boards.
+- During that game, _Copy watch link_ gives a `/play/watch/<id>` link; opened in a third browser it
+  follows the moves, and the players see "1 watching".
+- _Play → Invite a friend_ with a time control from the _Correspondence_ group and _Create the link_
+  opens the board waiting for your friend; the link opened in a second browser offers _Join this
+  game_, and after a move each, both list the game under _Your correspondence games_ on Play.
+- On Play, the puzzle race's _A room for up to eight → Make the room_ opens a room with its link;
+  opened in a second browser, _Join the room_ adds that player, and the host's _Start with 2
+  players_ starts the race on both. A `404` for `/v1/rooms/…` in the console means the `live-v2`
+  migration has not run.
+- When a game between the two browsers is over, _Analyse together_ in both opens the same shared
+  board with the game's moves; a move played in one appears in the other.
+- `curl https://chess-trainer-sync.<your-subdomain>.workers.dev/v1/push/key` answers with the
+  relay's public key. _Settings → App → Notifications → Daily reminder_ (in a browser that can show
+  notifications; on an iPhone or iPad, the app on the Home Screen) asks for the permission and stays
+  on, which means the relay kept the reminder. Set its time to the next quarter hour and close the
+  app: the reminder comes at about that time, unless a training day was recorded today.
 - _Settings → Lichess account → Connect_ goes to lichess.org, asks for the puzzle and study
   permissions and comes back to Settings connected; the card then reads "Synced just now", and a
   private study named _Chess Trainer · Repertoires_ appears on Lichess once there is a custom

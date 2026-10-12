@@ -1,4 +1,3 @@
-import type { Move } from 'chess.js';
 import { memo, useEffect, useRef } from 'react';
 import './chess-components.css';
 import { scrollIntoContainer } from '@/lib/scroll';
@@ -14,8 +13,13 @@ const GLYPH: Record<NonNullable<MoveJudgement>, string> = {
   good: '',
 };
 
+/** A move as the list shows it: its SAN (a chess.js move, or a Chess960 one). */
+interface ListedMove {
+  san: string;
+}
+
 export interface MoveListProps {
-  moves: Move[];
+  moves: readonly ListedMove[];
   /** Index of the currently displayed ply (0 = starting position, moves.length = latest). */
   currentPly: number;
   /** Jump to a ply. Omit for a read-only list: the moves are then plain text, not buttons. */
@@ -52,8 +56,8 @@ export const MoveList = memo(function MoveList({
 
   const rows: {
     number: number;
-    white?: { move: Move; ply: number };
-    black?: { move: Move; ply: number };
+    white?: { move: ListedMove; ply: number };
+    black?: { move: ListedMove; ply: number };
   }[] = [];
   moves.forEach((move, i) => {
     const ply = i + 1;
@@ -68,7 +72,7 @@ export const MoveList = memo(function MoveList({
     else row.white = { move, ply };
   });
 
-  const renderMove = (entry: { move: Move; ply: number } | undefined) => {
+  const renderMove = (entry: { move: ListedMove; ply: number } | undefined) => {
     if (!entry) return <span />;
     const judgement = judgements?.[entry.ply - 1] ?? null;
     const className = [

@@ -19,6 +19,7 @@ import {
 import { toast } from '@/components/ui/toastStore';
 import { useEngine } from '@/engine/useEngine';
 import { reviewGame } from '@/features/analyze/gameReview';
+import { gameTimesOfPgn } from '@/features/analyze/timeUse';
 import { digestReview } from './insights';
 import { InsightsCard } from './InsightsCard';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
@@ -41,8 +42,10 @@ import { useProgress } from '@/store/progress';
 import { cardsFor, useRepertoire } from '@/store/repertoire';
 import { REVIEW_DEPTHS, useSettings } from '@/store/settings';
 import { groupDeviations, repertoireDeviations } from './deviations';
+import { hasCastlingRights } from '@/chess/chess960';
 import {
   guessPlayer,
+  isChess960Pgn,
   learnerColor,
   mainLineOfPgn,
   movesOfLine,
@@ -448,8 +451,14 @@ function RepertoireCard({ list, player }: { list: StoredGame[]; player: string }
       ? { repertoires: studied, started: true }
       : { repertoires: all, started: false };
   }, [custom, cards]);
+  // Repertoires are standard chess: Chess960 games never follow them.
   const report = useMemo(
-    () => repertoireDeviations(list, player, repertoires),
+    () =>
+      repertoireDeviations(
+        list.filter((g) => !isChess960Pgn(g.pgn)),
+        player,
+        repertoires,
+      ),
     [list, player, repertoires],
   );
   const grouped = useMemo(() => groupDeviations(report.deviations), [report]);
@@ -545,18 +554,20 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
     async (game: StoredGame, signal: AbortSignal) => {
       const line = mainLineOfPgn(game.pgn);
       if (!line || line.sans.length === 0) return;
-      const moves = movesOfLine(line.startFen, line.sans);
+      const moves = movesOfLine(line.startFen, line.sans, line.chess960);
       const summary = await reviewGame(engine(), line.startFen, moves, {
         depth: REVIEW_DEPTHS[reviewDepth],
         signal,
         onProgress: (done, total) => setCurrent({ id: game.id, done, total }),
+        ...(line.chess960 ? { chess960: true } : {}),
       });
       setReview(game.id, {
         accuracy: summary.accuracy,
         counts: summary.counts,
         depth: summary.depth,
         at: Date.now(),
-        digest: digestReview(summary),
+        // Games with clock times also record how the time was used (Insights → Time).
+        digest: digestReview(summary, gameTimesOfPgn(game.pgn)),
       });
       const side = learnerColor(game, player);
       const meta = {
@@ -564,7 +575,17 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
         url: game.url ?? undefined,
         rating: puzzleRating,
       };
-      const puzzles = ownPuzzlesFromReview({ fens: line.fens, sans: line.sans }, summary, meta, {
+      // The puzzles and the threat drill play by standard chess: from a Chess960 game they take
+      // the moments where nobody can castle any more (from the move before on), when it agrees.
+      const drillable = line.chess960
+        ? {
+            ...summary,
+            moves: summary.moves.filter(
+              (m) => !hasCastlingRights(line.fens[Math.max(0, m.ply - 2)] ?? m.fen),
+            ),
+          }
+        : summary;
+      const puzzles = ownPuzzlesFromReview({ fens: line.fens, sans: line.sans }, drillable, meta, {
         side: side ?? 'both',
         includeInaccuracies: false,
       });
@@ -574,7 +595,7 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
         return next;
       });
       // The threats the learner missed (their own moves only, when it is known which side is theirs).
-      const threats = ownThreatsFromReview(summary, meta, side ?? 'both');
+      const threats = ownThreatsFromReview(drillable, meta, side ?? 'both');
       setPendingThreats((prev) => {
         const next = { ...prev };
         for (const t of threats) if (!ownThreats[t.id]) next[t.id] = t;
@@ -809,6 +830,12 @@ function GamesListCard({ list, player }: { list: StoredGame[]; player: string })
                   {game.timestamp
                     ? formatDate(game.timestamp, siteConfig.locale)
                     : (formatPgnDate(game.date, siteConfig.locale) ?? 'Date unknown')}
+                  {isChess960Pgn(game.pgn) ? (
+                    <>
+                      {' · '}
+                      <span data-testid="game-variant">Chess960</span>
+                    </>
+                  ) : null}
                   {game.speed ? ` · ${game.speed}` : ''}
                   {game.source === 'online' ? ' · played online' : ''}
                   {' · '}

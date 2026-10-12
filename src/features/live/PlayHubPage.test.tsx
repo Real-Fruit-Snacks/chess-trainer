@@ -17,6 +17,8 @@ const actions = vi.hoisted(() => ({
   join: vi.fn(),
   clearPairing: vi.fn(),
   clearNotice: vi.fn(),
+  invite: vi.fn(),
+  clearInvited: vi.fn(),
 }));
 
 vi.mock('./lobby', async () => {
@@ -39,6 +41,7 @@ vi.mock('./lichessLive', () => ({
   reconnectLichessForLive: (returnTo: string) => lichessLive.reconnect(returnTo),
 }));
 
+import { type CorrespondenceGame, useCorrespondence } from './correspondence';
 import PlayHubPage from './PlayHubPage';
 import { useLobby } from './lobby';
 import { useLivePrefs } from './prefs';
@@ -77,6 +80,12 @@ function resetLobby(patch: Partial<LobbyState> = {}) {
       clearNotice: () => {
         actions.clearNotice();
         useLobby.setState({ notice: null });
+      },
+      invite: actions.invite,
+      invited: null,
+      clearInvited: () => {
+        actions.clearInvited();
+        useLobby.setState({ invited: null });
       },
       ...patch,
     },
@@ -625,10 +634,15 @@ describe('PlayHubPage', () => {
       'Who Stands Better? duel',
       'Army Draft',
       'Blindfold',
+      'Chess960',
     ]);
     expect(
       within(screen.getByTestId('hub-game-arbiter')).getByRole('link', { name: 'Practise alone' }),
     ).toHaveAttribute('href', '/arcade/arbiter');
+    // Chess960 is practised against the computer.
+    expect(
+      within(screen.getByTestId('hub-game-chess960')).getByRole('link', { name: 'Practise alone' }),
+    ).toHaveAttribute('href', '/play/computer?variant=chess960');
   });
 
   it('posts a game for two with the options chosen', async () => {
@@ -693,6 +707,147 @@ describe('PlayHubPage', () => {
       private: true,
       lichess: null,
     });
+  });
+
+  it('invites a friend to a correspondence game of chess, and goes to its board', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Invite a friend' }));
+    const dialog = openDialog('Invite a friend')!;
+    const tc = within(dialog).getByLabelText('Time control');
+    expect(within(tc).getByRole('group', { name: 'Correspondence' })).toBeInTheDocument();
+    expect(within(tc).getByRole('option', { name: '3 days a move' })).toBeInTheDocument();
+    fireEvent.change(tc, { target: { value: '3d' } });
+    expect(dialog).toHaveTextContent('Each of you has these days for every move');
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Black' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create the link' }));
+    await nextTask();
+    expect(actions.invite).toHaveBeenCalledWith({ game: 'chess', tc: '3d', color: 'black' });
+    expect(actions.post).not.toHaveBeenCalled();
+
+    // The game is made: its board opens, where the link to send is.
+    act(() =>
+      useLobby.setState({
+        invited: { game: 'EEEEEEEEEEEEEEEEEEEEEE', path: '/play/online/EEEEEEEEEEEEEEEEEEEEEE' },
+      }),
+    );
+    expect(screen.getByText('The board')).toBeInTheDocument();
+    expect(actions.clearInvited).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers days a move only for a game of chess with a friend', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Invite a friend' }));
+    const dialog = openDialog('Invite a friend')!;
+    fireEvent.change(within(dialog).getByLabelText('Time control'), { target: { value: '7d' } });
+    fireEvent.change(within(dialog).getByLabelText('Game'), { target: { value: 'blindfold' } });
+    const tc = within(dialog).getByLabelText<HTMLSelectElement>('Time control');
+    expect(within(tc).queryByRole('group', { name: 'Correspondence' })).toBeNull();
+    expect(tc.value).toBe('5+3');
+  });
+
+  it('posts a Chess960 game with a clock and a colour, on the relay only', async () => {
+    connectLichess();
+    useLivePrefs.setState({ lichess: true });
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Play Chess960' }));
+    const dialog = openDialog('Chess960')!;
+    expect(dialog).toHaveTextContent('one of 960 orders');
+    // Looking on Lichess too is for standard chess: the dialog says why this one waits here.
+    expect(within(dialog).getByTestId('game-dialog-lichess')).toHaveTextContent(
+      'Lichess takes games of standard chess only: this one waits here.',
+    );
+    fireEvent.change(within(dialog).getByLabelText('Time control'), { target: { value: '10+5' } });
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'White' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Post' }));
+    await nextTask();
+    expect(actions.post).toHaveBeenCalledWith({
+      game: 'chess960',
+      opts: {},
+      tc: '10+5',
+      color: 'white',
+      private: false,
+      lichess: null,
+    });
+  });
+
+  it('invites a friend to a Chess960 game by correspondence', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Invite a friend' }));
+    const dialog = openDialog('Invite a friend')!;
+    fireEvent.change(within(dialog).getByLabelText('Game'), { target: { value: 'chess960' } });
+    const tc = within(dialog).getByLabelText('Time control');
+    expect(within(tc).getByRole('group', { name: 'Correspondence' })).toBeInTheDocument();
+    fireEvent.change(tc, { target: { value: '5d' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create the link' }));
+    await nextTask();
+    expect(actions.invite).toHaveBeenCalledWith({ game: 'chess960', tc: '5d', color: 'random' });
+    expect(actions.post).not.toHaveBeenCalled();
+  });
+
+  it('marks a Chess960 game among the correspondence games', () => {
+    useCorrespondence.setState({
+      games: [
+        {
+          id: 'F'.repeat(22),
+          you: 'black',
+          opponent: 'Calm Rook',
+          tc: '2d',
+          chess960: true,
+          status: 'playing',
+          turn: 'white',
+          deadline: Date.now() + 3_600_000,
+          verdict: null,
+          moves: 3,
+        },
+      ],
+    });
+    renderPage();
+    expect(screen.getByTestId('live-corr-game')).toHaveTextContent(
+      'Calm RookTheir move · 59 min left · Chess960 · 2 days a moveOpen',
+    );
+    useCorrespondence.setState({ games: [] });
+  });
+
+  it('lists the correspondence games: whose move, the time left, how they ended', () => {
+    const game = (id: string, patch: Partial<CorrespondenceGame>): CorrespondenceGame => ({
+      id: id.repeat(22),
+      you: 'white',
+      opponent: 'Swift Knight',
+      tc: '3d',
+      chess960: false,
+      status: 'playing',
+      turn: 'white',
+      deadline: Date.now() + 2 * 86_400_000 + 5 * 3_600_000 + 60_000,
+      verdict: null,
+      moves: 6,
+      ...patch,
+    });
+    const { unmount } = renderPage();
+    expect(screen.queryByRole('heading', { name: 'Your correspondence games' })).toBeNull();
+    unmount();
+
+    useCorrespondence.setState({
+      games: [
+        game('A', {}),
+        game('B', { opponent: 'Calm Rook', turn: 'black', deadline: Date.now() + 3_600_000 }),
+        game('C', { opponent: '', status: 'waiting', turn: null, deadline: null }),
+        game('D', { opponent: 'Bold Pawn', status: 'over', turn: null, verdict: 'win' }),
+      ],
+    });
+    renderPage();
+    const card = screen.getByTestId('live-corr');
+    const lines = within(card).getAllByTestId('live-corr-game');
+    expect(lines.map((line) => line.textContent)).toEqual([
+      'Swift KnightYour move · 2 days 5 h left · 3 days a movePlay',
+      'Calm RookTheir move · 59 min left · 3 days a moveOpen',
+      'Your invitationWaiting for your friend to take the other seat · 3 days a moveOpen',
+      'Bold PawnYou won!Open',
+    ]);
+    fireEvent.click(
+      within(card).getByRole('link', { name: 'Play your move against Swift Knight' }),
+    );
+    expect(screen.getByText('The board')).toBeInTheDocument();
+    useCorrespondence.setState({ games: [] });
   });
 
   it('opens the game an arcade page links to, and leaves the address bar clean', () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { rulesFor } from '@/chess/rules';
 import type { MoveJudgement } from '@/components/chess/MoveList';
 import type { SearchInfo } from '@/engine/uci';
 import type { ReviewedMove, ReviewSummary } from './gameReview';
@@ -180,5 +181,15 @@ describe('suggestions', () => {
     expect(engineMoveOf({ ...move, judgement: 'mistake', bestUci: 'e7e5' })).toBe('e7e5');
     // No engine move and not the engine's choice: nothing to compare with.
     expect(engineMoveOf({ ...move, judgement: 'good' })).toBeNull();
+  });
+
+  it('writes and searches a Chess960 game’s moves its way: castling as king takes rook', async () => {
+    // Position 274 after 1.e4: Black castles long by taking its rook on c8.
+    const fen = 'bnrknbrq/pppppppp/8/8/4P3/8/PPPP1PPP/BNRKNBRQ b KQkq - 0 1';
+    const castle = { fen, san: 'O-O-O', judgement: 'best' as const, bestUci: null };
+    expect(engineMoveOf(castle, rulesFor('chess960'))).toBe('d8c8');
+    const { engine, calls } = engineAnswering({ d8c8: 10, e7e5: 0 });
+    await judgeSuggestion(engine, fen, 'e7e5', 'd8c8', true);
+    expect(calls[0]).toMatchObject({ fen, searchmoves: ['d8c8', 'e7e5'], chess960: true });
   });
 });

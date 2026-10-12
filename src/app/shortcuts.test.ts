@@ -35,6 +35,10 @@ describe('shortcut reference', () => {
     expect(keysIn('Mating patterns')).toEqual(['Enter']);
     expect(keysIn('Classic games')).toEqual(['Space', 'Enter', '→']);
     expect(keysIn('Arcade')).toEqual(expect.arrayContaining(['Enter', 'N']));
+    // Quick search works on every page.
+    expect(
+      flat.find((s) => s.group === 'Everywhere' && s.keys.join('+') === 'Ctrl+K')?.action,
+    ).toMatch(/^Search/);
     // F is Analyze-only.
     expect(flat.filter((s) => s.keys.includes('F')).map((s) => s.group)).toEqual(['Analyze']);
   });

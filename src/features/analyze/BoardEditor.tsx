@@ -21,21 +21,28 @@ const PALETTE_ORDER: PieceSymbol[] = ['k', 'q', 'r', 'b', 'n', 'p'];
 
 export function BoardEditor({
   initialFen,
+  chess960: initialChess960 = false,
   onApply,
   onCancel,
 }: {
   initialFen: Fen;
-  onApply: (fen: Fen) => void;
+  /** The position is a Chess960 one: its castling follows those rules. */
+  chess960?: boolean;
+  onApply: (fen: Fen, options: { chess960: boolean }) => void;
   onCancel: () => void;
 }) {
   const [position, setPosition] = useState<EditorPosition>(() => parseBoard(initialFen));
+  const [chess960, setChess960] = useState(initialChess960);
   const [tool, setTool] = useState<Tool>({ kind: 'move' });
   const [selected, setSelected] = useState<Square | null>(null);
   const [orientation, setOrientation] = useState<LongColor>('white');
 
-  const fen = useMemo(() => toFen(position), [position]);
+  const fen = useMemo(() => toFen(position, chess960), [position, chess960]);
   const error = useMemo(() => validatePosition(fen), [fen]);
-  const allowed = useMemo(() => availableCastling(position.pieces), [position.pieces]);
+  const allowed = useMemo(
+    () => availableCastling(position.pieces, chess960),
+    [position.pieces, chess960],
+  );
   const enPassantSquares = useMemo(
     () => availableEnPassant(position.pieces, position.turn),
     [position.pieces, position.turn],
@@ -198,6 +205,14 @@ export function BoardEditor({
               {label}
             </label>
           ))}
+          <label className="small">
+            <input
+              type="checkbox"
+              checked={chess960}
+              onChange={(e) => setChess960(e.target.checked)}
+            />{' '}
+            Chess960: the king castles from anywhere between its rooks
+          </label>
         </fieldset>
         {enPassantSquares.length > 0 ? (
           <label className="small row" style={{ gap: 6 }}>
@@ -246,7 +261,7 @@ export function BoardEditor({
         <code className="editor__fen small">{fen}</code>
         {error ? <Alert tone="warning">{error}</Alert> : null}
         <div className="row">
-          <Button variant="primary" onClick={() => onApply(fen)} disabled={!!error}>
+          <Button variant="primary" onClick={() => onApply(fen, { chess960 })} disabled={!!error}>
             Analyze this position
           </Button>
           <Button variant="ghost" onClick={onCancel}>

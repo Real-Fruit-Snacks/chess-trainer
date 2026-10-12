@@ -35,6 +35,13 @@ export interface DurableNamespace {
 export interface LiveEnv {
   LIVE_LOBBY?: DurableNamespace;
   LIVE_ROOMS?: DurableNamespace;
+  /** The group rooms (up to eight by link), one object each. */
+  LIVE_GROUPS?: DurableNamespace;
+  /** The relay's D1 database: where its push keys are (none: nobody is pushed). */
+  DB?: { prepare(sql: string): unknown };
+  ALLOWED_ORIGINS?: unknown;
+  /** The contact in the relay's push messages (mailto: or https:). */
+  PUSH_CONTACT?: unknown;
 }
 
 /** The waiting room: one object (named 'lobby') for every socket of `GET /v1/lobby`. */
@@ -68,5 +75,27 @@ export class LiveRoom {
   ): Promise<void>;
   webSocketError(ws: DurableSocket, error?: unknown): Promise<void>;
   /** Something is due: a flag, a first move, a hello, or the room's end. */
+  alarm(): Promise<void>;
+}
+
+/** One group room (up to eight by link): an object per room, named by its id. */
+export class LiveGroup {
+  constructor(state: DurableState, env: LiveEnv);
+  /**
+   * POST https://live.internal/create with a room's spec: 201 made, 409 when it
+   * exists, 400 when it is not one. A WebSocket upgrade: 101. Anything else: 426.
+   */
+  fetch(request: Request): Promise<Response>;
+  /** Takes the object's end of a new socket: what `fetch` does, apart from the 101 response. */
+  accept(ws: DurableSocket): Promise<void>;
+  webSocketMessage(ws: DurableSocket, message: string | ArrayBuffer): Promise<void>;
+  webSocketClose(
+    ws: DurableSocket,
+    code?: number,
+    reason?: string,
+    wasClean?: boolean,
+  ): Promise<void>;
+  webSocketError(ws: DurableSocket, error?: unknown): Promise<void>;
+  /** Something is due: a hello, a host's hand-over, the race's next step, or the room's end. */
   alarm(): Promise<void>;
 }

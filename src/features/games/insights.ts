@@ -1,7 +1,8 @@
-import { Chess } from 'chess.js';
+import { parsePlacement } from '@/chess/geometry';
 import type { Fen, LongColor } from '@/chess/types';
 import { explainReviewedMove, type Motif, MOTIF_HELP } from '@/features/analyze/commentary';
 import type { ReviewSummary } from '@/features/analyze/gameReview';
+import type { GameTimes } from '@/features/analyze/timeUse';
 import { getLessonMeta } from '@/features/learn/lessonMeta';
 import { themeName } from '@/features/puzzles/themes';
 import type { GameRecord } from '@/store/progress';
@@ -24,24 +25,43 @@ export interface PhaseDigest {
   errors: number;
 }
 
+/** One side's moves in a game with clock times. */
+export interface TimeSideDigest {
+  /** Seconds used in each phase, and the moves they went on (moves with a known time). */
+  phases: Record<Phase, { seconds: number; moves: number }>;
+  /** Moves begun short of time (under the game's margin), and the mistakes and blunders among them. */
+  trouble: { moves: number; errors: number };
+  /** Moves begun with more time than that, and their mistakes and blunders. */
+  calm: { moves: number; errors: number };
+  /** Whether the side's clock went under the margin at all. */
+  short: boolean;
+}
+
+/** How the clock was used, for games with clock times (added in 0.29.0). */
+export interface TimeDigest {
+  /** The game's time-trouble margin in seconds (see `timeTroubleSeconds`). */
+  trouble: number;
+  white: TimeSideDigest;
+  black: TimeSideDigest;
+}
+
 export interface ReviewDigest {
   phases: Record<Phase, Record<LongColor, PhaseDigest>>;
   motifs: Record<LongColor, Partial<Record<Motif, number>>>;
+  /** Present when the game had clock times (reviews from 0.29.0 on). */
+  time?: TimeDigest;
 }
 
 const PIECE_VALUE: Record<string, number> = { q: 9, r: 5, b: 3, n: 3, p: 0, k: 0 };
 
 /** Opening for the first ten moves, endgame once the board has thinned out. */
 export function phaseOf(fen: Fen, ply: number): Phase {
-  const chess = new Chess(fen);
   let material = 0;
   let queens = 0;
-  for (const row of chess.board()) {
-    for (const piece of row) {
-      if (!piece) continue;
-      material += PIECE_VALUE[piece.type] ?? 0;
-      if (piece.type === 'q') queens++;
-    }
+  // The pieces alone, so any position reads (a Chess960 one's castling rights by file too).
+  for (const piece of parsePlacement(fen).values()) {
+    material += PIECE_VALUE[piece.type] ?? 0;
+    if (piece.type === 'q') queens++;
   }
   if (material <= 18 || (queens === 0 && material <= 26)) return 'endgame';
   return ply <= 20 ? 'opening' : 'middlegame';
@@ -56,26 +76,61 @@ function emptyPhases(): Record<Phase, Record<LongColor, PhaseDigest>> {
   };
 }
 
-/** Summarises a review for storage: where the errors happened and what kind they were. */
-export function digestReview(summary: ReviewSummary): ReviewDigest {
+function emptyTimeSide(): TimeSideDigest {
+  const blank = () => ({ seconds: 0, moves: 0 });
+  return {
+    phases: { opening: blank(), middlegame: blank(), endgame: blank() },
+    trouble: { moves: 0, errors: 0 },
+    calm: { moves: 0, errors: 0 },
+    short: false,
+  };
+}
+
+const isError = (judgement: ReviewSummary['moves'][number]['judgement']) =>
+  judgement === 'mistake' || judgement === 'blunder';
+
+/**
+ * Summarises a review for storage: where the errors happened and what kind
+ * they were, and — for a game with clock times — where the time went and how
+ * the moves made short of time turned out.
+ */
+export function digestReview(summary: ReviewSummary, times?: GameTimes | null): ReviewDigest {
   const digest: ReviewDigest = { phases: emptyPhases(), motifs: { white: {}, black: {} } };
+  const time: TimeDigest | null = times
+    ? { trouble: times.trouble, white: emptyTimeSide(), black: emptyTimeSide() }
+    : null;
   for (const move of summary.moves) {
     const phase = phaseOf(move.fen, move.ply);
     const bucket = digest.phases[phase][move.mover];
     bucket.moves += 1;
     bucket.loss += move.loss;
-    if (move.judgement === 'mistake' || move.judgement === 'blunder') bucket.errors += 1;
-    if (
-      move.judgement === 'mistake' ||
-      move.judgement === 'blunder' ||
-      move.judgement === 'inaccuracy'
-    ) {
+    if (isError(move.judgement)) bucket.errors += 1;
+    if (isError(move.judgement) || move.judgement === 'inaccuracy') {
       const explanation = explainReviewedMove(move);
       const motif: Motif = explanation?.motif ?? 'generic';
       const side = digest.motifs[move.mover];
       side[motif] = (side[motif] ?? 0) + 1;
     }
+    const clock = times?.moves[move.ply - 1];
+    if (!time || !times || clock?.san !== move.san) continue;
+    const side = time[move.mover];
+    if (clock.spent !== null) {
+      side.phases[phase].seconds += clock.spent;
+      side.phases[phase].moves += 1;
+    }
+    if (clock.before !== null) {
+      const kind = clock.before < times.trouble ? side.trouble : side.calm;
+      kind.moves += 1;
+      if (isError(move.judgement)) kind.errors += 1;
+    }
+    if (
+      (clock.before !== null && clock.before < times.trouble) ||
+      (clock.after !== null && clock.after < times.trouble)
+    ) {
+      side.short = true;
+    }
   }
+  if (time) digest.time = time;
   return digest;
 }
 
@@ -153,6 +208,32 @@ export interface RatingInsight {
   losses: number;
 }
 
+/** How the learner uses the clock, over reviewed games with clock times. */
+export interface TimeInsight {
+  /** Reviewed games with clock times. */
+  games: number;
+  /** Of those, the games in which the learner's clock ran short. */
+  shortGames: number;
+  phases: {
+    phase: Phase;
+    seconds: number;
+    moves: number;
+    /** Average seconds per move. */
+    perMove: number | null;
+    /** Share of all the time used, 0–1. */
+    share: number | null;
+  }[];
+  /** Moves made short of time, their mistakes and blunders, and those per 10 moves. */
+  trouble: { moves: number; errors: number; rate: number | null; reliable: boolean };
+  /** The same for the moves made with time in hand. */
+  calm: { moves: number; errors: number; rate: number | null; reliable: boolean };
+  /** Enough games to mean something (`MIN_GAMES_FOR_INSIGHT`). */
+  reliable: boolean;
+}
+
+/** The lesson on the clock, for the time findings. */
+export const TIME_LESSON = 'practical-play-and-time';
+
 export interface WorkItem {
   id: string;
   title: string;
@@ -172,6 +253,7 @@ export interface Insights {
   ratings: RatingInsight[];
   /** Games where the book was followed vs left early. */
   book: { games: number; deviated: number; averageBookMoves: number | null };
+  time: TimeInsight;
   workOn: WorkItem[];
 }
 
@@ -241,6 +323,7 @@ export function buildInsights(
     { games: number; points: number; decided: number; loss: number; moves: number }
   >();
   let reviewedGames = 0;
+  const time = { games: 0, shortGames: 0, side: emptyTimeSide() };
 
   for (const game of games) {
     const color = learnerColor(game, player);
@@ -283,6 +366,19 @@ export function buildInsights(
     for (const [motif, count] of Object.entries(digest.motifs[color])) {
       const key = motif as Motif;
       motifs[key] = (motifs[key] ?? 0) + (count ?? 0);
+    }
+    const clock = digest.time?.[color];
+    if (clock) {
+      time.games += 1;
+      if (clock.short) time.shortGames += 1;
+      for (const phase of PHASES) {
+        time.side.phases[phase].seconds += clock.phases[phase].seconds;
+        time.side.phases[phase].moves += clock.phases[phase].moves;
+      }
+      time.side.trouble.moves += clock.trouble.moves;
+      time.side.trouble.errors += clock.trouble.errors;
+      time.side.calm.moves += clock.calm.moves;
+      time.side.calm.errors += clock.calm.errors;
     }
   }
 
@@ -367,6 +463,30 @@ export function buildInsights(
     }
   }
 
+  const totalSeconds = PHASES.reduce((sum, p) => sum + time.side.phases[p].seconds, 0);
+  const rateOf = (part: { moves: number; errors: number }) => ({
+    ...part,
+    rate: part.moves ? Math.round((part.errors / part.moves) * 100) / 10 : null,
+    reliable: part.moves >= MIN_MOVES_FOR_INSIGHT,
+  });
+  const timeInsight: TimeInsight = {
+    games: time.games,
+    shortGames: time.shortGames,
+    phases: PHASES.map((phase) => {
+      const { seconds, moves } = time.side.phases[phase];
+      return {
+        phase,
+        seconds,
+        moves,
+        perMove: moves ? Math.round((seconds / moves) * 10) / 10 : null,
+        share: totalSeconds > 0 && moves > 0 ? seconds / totalSeconds : null,
+      };
+    }),
+    trouble: rateOf(time.side.trouble),
+    calm: rateOf(time.side.calm),
+    reliable: time.games >= MIN_GAMES_FOR_INSIGHT,
+  };
+
   const workOn: WorkItem[] = [];
   for (const motif of motifInsights.slice(0, 2)) {
     if (!motif.reliable) continue;
@@ -378,6 +498,23 @@ export function buildInsights(
       theme: motif.theme,
     });
   }
+  // Mistakes piling up when short of time: the clock, not the chess, is the problem.
+  const { trouble, calm } = timeInsight;
+  if (
+    trouble.reliable &&
+    calm.reliable &&
+    trouble.errors >= MIN_MOTIF_COUNT &&
+    (trouble.rate ?? 0) >= 2 * (calm.rate ?? 0)
+  ) {
+    workOn.push({
+      id: 'time:trouble',
+      title: 'Time trouble',
+      detail: `${trouble.rate?.toFixed(1) ?? '—'} mistakes per 10 moves when short of time, against ${calm.rate?.toFixed(1) ?? '—'} otherwise`,
+      lessonId: TIME_LESSON,
+      theme: null,
+    });
+  }
+
   const weakest = phaseInsights
     .filter((p) => p.reliable && p.accuracy !== null)
     .sort((a, b) => (a.accuracy ?? 100) - (b.accuracy ?? 100))[0];
@@ -410,6 +547,7 @@ export function buildInsights(
       deviated: bookDeviated,
       averageBookMoves: bookGames ? Math.round((bookMoves / bookGames) * 10) / 10 : null,
     },
+    time: timeInsight,
     workOn: workOn.slice(0, 3),
   };
 }

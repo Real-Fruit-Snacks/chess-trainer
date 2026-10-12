@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePgn, PgnParseError, splitPgnGames } from './pgn';
+import { clockOf, elapsedOf, parseClock, parsePgn, PgnParseError, splitPgnGames } from './pgn';
 import { GameTree } from './tree';
 
 const sans = (game: ReturnType<typeof parsePgn>) => game.moves.map((m) => m.san);
@@ -126,5 +126,30 @@ describe('splitPgnGames', () => {
 
   it('ignores blank text', () => {
     expect(splitPgnGames('\n\n  \n')).toEqual([]);
+  });
+});
+
+describe('clock readings', () => {
+  it('reads the clock forms PGN comments use', () => {
+    expect(parseClock('0:09:58.7')).toBeCloseTo(598.7);
+    expect(parseClock('0:09:58')).toBe(598);
+    expect(parseClock('1:02:03')).toBe(3723);
+    expect(parseClock('9:58')).toBe(598);
+    expect(parseClock(' 0:00:04.25 ')).toBeCloseTo(4.25);
+    expect(parseClock('12:61')).toBeNull();
+    expect(parseClock('soon')).toBeNull();
+    expect(parseClock('')).toBeNull();
+  });
+
+  it('finds the clock and the elapsed time among a move’s commands', () => {
+    const game = parsePgn(
+      '1. e4 {[%clk 0:03:00] [%eval 0.2]} e5 {[%emt 0:00:07] [%clk 0:02:55]} 2. Nf3 {[%cal Ge2e4]}',
+    );
+    expect(clockOf(game.moves[0]?.commands)).toBe(180);
+    expect(elapsedOf(game.moves[0]?.commands)).toBeNull();
+    expect(clockOf(game.moves[1]?.commands)).toBe(175);
+    expect(elapsedOf(game.moves[1]?.commands)).toBe(7);
+    expect(clockOf(game.moves[2]?.commands)).toBeNull();
+    expect(clockOf(undefined)).toBeNull();
   });
 });

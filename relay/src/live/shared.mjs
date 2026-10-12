@@ -27,28 +27,59 @@ export const MAX_MINUTES = 180;
 export const MAX_INCREMENT_SECONDS = 180;
 
 /**
- * A time control from its id ("5+3": five minutes, three seconds a move); null
- * for anything else. Ids are normalised ("05+3" is not one).
+ * Correspondence: the days each player has for every move ("3d": three days a
+ * move), Lichess's choices. Games played by invitation only, over days.
+ */
+export const CORRESPONDENCE_DAYS = Object.freeze([1, 2, 3, 5, 7, 14]);
+export const DAY_MS = 24 * 60 * 60_000;
+
+/**
+ * A time control from its id; null for anything else. Ids are normalised
+ * ("05+3" is not one):
+ *
+ *   "5+3"  realtime: five minutes each, three seconds added a move
+ *   "3d"   correspondence: three days for every move (`perMoveMs`), no clock to manage
+ *
  * @param {unknown} id
- * @returns {{ id: string, initialMs: number, incrementMs: number } | null}
+ * @returns {{ id: string, kind: 'realtime' | 'correspondence', initialMs: number, incrementMs: number, perMoveMs: number | null } | null}
  */
 export function parseTimeControl(id) {
   if (typeof id !== 'string') return null;
+  const days = /^([1-9]\d?)d$/.exec(id);
+  if (days) {
+    const count = Number(days[1]);
+    if (!CORRESPONDENCE_DAYS.includes(count)) return null;
+    const perMoveMs = count * DAY_MS;
+    return { id, kind: 'correspondence', initialMs: perMoveMs, incrementMs: 0, perMoveMs };
+  }
   const match = /^([1-9]\d{0,2})\+(0|[1-9]\d{0,2})$/.exec(id);
   if (!match) return null;
   const minutes = Number(match[1]);
   const seconds = Number(match[2]);
   if (minutes > MAX_MINUTES || seconds > MAX_INCREMENT_SECONDS) return null;
-  return { id, initialMs: minutes * 60_000, incrementMs: seconds * 1000 };
+  return {
+    id,
+    kind: 'realtime',
+    initialMs: minutes * 60_000,
+    incrementMs: seconds * 1000,
+    perMoveMs: null,
+  };
+}
+
+/** Whether a time control's id is a correspondence one ("3d"). @param {unknown} id */
+export function isCorrespondence(id) {
+  return parseTimeControl(id)?.kind === 'correspondence';
 }
 
 /**
  * Lichess's speed of a time control, from its estimated length (the initial
  * time plus forty increments): the Board API posts rapid and slower games only.
- * @param {{ initialMs: number, incrementMs: number }} tc
- * @returns {'ultraBullet' | 'bullet' | 'blitz' | 'rapid' | 'classical'}
+ * Days a move are correspondence.
+ * @param {{ initialMs: number, incrementMs: number, perMoveMs?: number | null }} tc
+ * @returns {'ultraBullet' | 'bullet' | 'blitz' | 'rapid' | 'classical' | 'correspondence'}
  */
 export function speedOf(tc) {
+  if (tc.perMoveMs) return 'correspondence';
   const seconds = (tc.initialMs + 40 * tc.incrementMs) / 1000;
   if (seconds < 30) return 'ultraBullet';
   if (seconds < 180) return 'bullet';
@@ -195,17 +226,28 @@ export const COLOR_CHOICES = Object.freeze(['random', 'white', 'black']);
 /* ------------------------------------------------------------------ */
 
 /**
- * What two people can play. Chess and two variants of it are played by the
+ * What two people can play. Chess and three variants of it are played by the
  * rules of chess in a game room (room.mjs): blindfold, where neither player
- * sees the pieces (each may peek a few times), and Army Draft, where each buys
- * an army in secret before the game starts from the two armies. The other three
- * are duels the room times and scores round by round (duel.mjs): a puzzle race,
- * Arbiter (call the illegal move first) and Who Stands Better? (judge a position
- * closer to the engine than the other player).
+ * sees the pieces (each may peek a few times), Army Draft, where each buys
+ * an army in secret before the game starts from the two armies, and Chess960,
+ * from one of the 960 start positions, which the room draws (chess960.mjs).
+ * The other three are duels the room times and scores round by round
+ * (duel.mjs): a puzzle race, Arbiter (call the illegal move first) and Who
+ * Stands Better? (judge a position closer to the engine than the other player).
  */
-export const GAMES = Object.freeze(['chess', 'blindfold', 'army', 'race', 'arbiter', 'judge']);
+export const GAMES = Object.freeze([
+  'chess',
+  'blindfold',
+  'army',
+  'race',
+  'arbiter',
+  'judge',
+  'chess960',
+]);
 /** The duels: rounds, not a game of chess. */
 export const DUELS = Object.freeze(['race', 'arbiter', 'judge']);
+/** The games that may be played over days (correspondence, by invitation). */
+export const CORRESPONDENCE_GAMES = Object.freeze(['chess', 'chess960']);
 
 /** @param {unknown} game */
 export function isGame(game) {
@@ -255,7 +297,7 @@ export const ARBITER_KINDS = Object.freeze([
 
 /**
  * A game's options, checked, with nothing else in them; null when they are not
- * valid for the game. Chess, blindfold and Who Stands Better? have none.
+ * valid for the game. Chess, blindfold, Chess960 and Who Stands Better? have none.
  * @param {unknown} game
  * @param {unknown} opts
  * @returns {Record<string, string | number> | null}
@@ -268,6 +310,7 @@ export function gameOptions(game, opts) {
     case 'chess':
     case 'blindfold':
     case 'judge':
+    case 'chess960':
       return {};
     case 'army':
       return ARMY_BUDGETS.includes(/** @type {number} */ (o.budget))
@@ -368,6 +411,17 @@ export const LIMITS = Object.freeze({
   contentBytes: 16_384,
   /** Army Draft: the time to choose an army; whoever has not, gets a random one. */
   draftMs: 120_000,
+  /** Sockets watching one game at most. */
+  watchers: 20,
+  /** A correspondence game's invitation waits this long for someone to take its open seat. */
+  inviteMs: 7 * DAY_MS,
+  /** Invitations one socket may make in `invitesWindowMs`. */
+  invites: 5,
+  invitesWindowMs: 60 * 60_000,
+  /** A correspondence game's room is kept this long after the end… */
+  correspondenceKeepMs: 7 * DAY_MS,
+  /** …and lives this long at most. */
+  correspondenceAgeMs: 365 * DAY_MS,
 });
 
 /** WebSocket close codes the relay uses (4000–4999 are free for applications). */
@@ -400,3 +454,157 @@ export function randomId(bytes) {
 export const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 /** Seat tokens: 32 random bytes (43 characters). */
 export const SEAT_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+/* ------------------------------------------------------------------ */
+/* Group rooms                                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Rooms for a group that came by a link (group.mjs), each of one kind whose
+ * own module runs what the group does there: a puzzle race for up to eight
+ * (raceRoom.mjs), or a game analysed together (analysisRoom.mjs).
+ */
+export const GROUP_KINDS = Object.freeze(['race', 'analysis']);
+
+/** @param {unknown} kind */
+export function isGroupKind(kind) {
+  return typeof kind === 'string' && GROUP_KINDS.includes(kind);
+}
+
+/** A group room's limits (its messages and sockets are limited as a game's: LIMITS). */
+export const GROUP_LIMITS = Object.freeze({
+  /** Members at most. */
+  members: 8,
+  /** Sockets of people looking at a room before they join it, at once. */
+  visitors: 20,
+  /** A host gone this long hands the room to the member who has been here longest. */
+  hostGoneMs: 30_000,
+  /** In a full room, a member gone this long gives their place to someone who joins. */
+  awayMs: 5 * 60_000,
+  /** A room nobody is in is deleted this long after the last member left… */
+  emptyKeepMs: 10 * 60_000,
+  /** …and any room this long after it was made. */
+  ageMs: 6 * 60 * 60_000,
+  /** Rooms the sockets of one address may make in `roomsWindowMs`. */
+  rooms: 10,
+  roomsWindowMs: 60 * 60_000,
+});
+
+/** Member ids: 6 random bytes (8 characters), shown to everyone in the room. */
+export const MEMBER_PATTERN = /^[A-Za-z0-9_-]{8}$/;
+
+/**
+ * A race room's rules (raceRoom.mjs): `rounds`, five puzzles each scored by
+ * the order of the clean solves, or `timed`, the three-minute race as in a
+ * duel. Countdowns, round times and strikes are the duels' (DUEL_RULES).
+ */
+export const RACE_ROOM = Object.freeze({
+  formats: Object.freeze(['rounds', 'timed']),
+  /** Puzzles in a race of rounds, one a round. */
+  rounds: 5,
+  /** Points for the first clean solves of a round, fastest first; any other clean solve scores `others`. */
+  points: Object.freeze([5, 4, 3, 2]),
+  others: 1,
+  /** Members here it takes to start a race. */
+  minRacers: 2,
+});
+
+/**
+ * An analysis room's rules (analysisRoom.mjs): the tree of moves it keeps, and
+ * what is drawn on it.
+ */
+export const ANALYSIS_ROOM = Object.freeze({
+  /** Standard chess, or Chess960 (castling as the king taking its own rook). */
+  variants: Object.freeze(['standard', 'chess960']),
+  /** Moves the tree holds at most, every variation's counted. */
+  nodes: 1000,
+  /** The longest line, in half-moves from the start. */
+  depth: 600,
+  /** Arrows and circles on one position at most… */
+  shapes: 16,
+  /** …and in the whole tree. */
+  allShapes: 256,
+  /** The colours they are drawn in: the board's own brushes. */
+  brushes: Object.freeze(['green', 'red', 'blue', 'yellow']),
+  /** The longest moves a room is made with: UCI moves, variations in brackets. */
+  movesChars: 12_000,
+  /** How a game ended, as PGN writes it. */
+  results: Object.freeze(['1-0', '0-1', '1/2-1/2', '*']),
+});
+
+/** A FEN's shape (the analysis room checks the position itself). */
+const FEN_SHAPE =
+  /^[pnbrqkPNBRQK1-8]{1,8}(\/[pnbrqkPNBRQK1-8]{1,8}){7} [wb] (-|[KQkqA-Ha-h]{1,4}) (-|[a-h][36]) \d{1,3} \d{1,4}$/;
+/** Moves as an analysis room is made with them: UCI moves, variations in brackets. */
+const MOVES_SHAPE = /^[a-h1-8qrbn() ]*$/;
+
+/**
+ * A group room's options, checked, with nothing else in them; null when they
+ * are not valid for the kind. A race: its format and puzzle rating. An
+ * analysis: the variant, the start position, the moves (UCI, variations in
+ * brackets, as a PGN's: "e2e4 e7e5 ( c7c5 ) g1f3") and the game's result,
+ * with the players' names when they are names the app gives (nothing typed by
+ * a stranger reaches the others). Only their shape is checked here: the
+ * analysis room plays the moves through (analysisRoom.mjs).
+ * @param {unknown} kind
+ * @param {unknown} opts
+ * @returns {Record<string, string | number> | null}
+ */
+export function groupOptions(kind, opts) {
+  const o = /** @type {Record<string, unknown>} */ (
+    typeof opts === 'object' && opts !== null && !Array.isArray(opts) ? opts : {}
+  );
+  switch (kind) {
+    case 'race':
+      return RACE_ROOM.formats.includes(/** @type {string} */ (o.format)) &&
+        RACE_LEVELS.includes(/** @type {number} */ (o.level))
+        ? { format: /** @type {string} */ (o.format), level: /** @type {number} */ (o.level) }
+        : null;
+    case 'analysis': {
+      const variant = o.variant ?? 'standard';
+      const fen = typeof o.fen === 'string' ? o.fen.trim().replace(/\s+/g, ' ') : null;
+      const moves = typeof o.moves === 'string' ? o.moves.trim().replace(/\s+/g, ' ') : '';
+      const result = o.result ?? '*';
+      if (!ANALYSIS_ROOM.variants.includes(/** @type {string} */ (variant))) return null;
+      if (!fen || fen.length > 100 || !FEN_SHAPE.test(fen)) return null;
+      if (o.moves !== undefined && typeof o.moves !== 'string') return null;
+      if (moves.length > ANALYSIS_ROOM.movesChars || !MOVES_SHAPE.test(moves)) return null;
+      if (!ANALYSIS_ROOM.results.includes(/** @type {string} */ (result))) return null;
+      /** @type {Record<string, string>} */
+      const checked = {
+        variant: /** @type {string} */ (variant),
+        fen,
+        moves,
+        result: /** @type {string} */ (result),
+      };
+      for (const side of ['white', 'black']) {
+        const name = o[side];
+        if (name === undefined || name === null || name === '') continue;
+        if (!isPlayerName(name)) return null;
+        checked[side] = /** @type {string} */ (name);
+      }
+      return checked;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * The id of a game's analysis room: derived from the game's (the first 16
+ * bytes of a SHA-256 of it, as an id), so both players, and anyone watching,
+ * reach the same room, and a device that knows the game finds it again. Only
+ * the game's own room makes a room under this id, with the game's moves
+ * (room.mjs): the waiting room gives every room it makes a random one.
+ * @param {string} game
+ * @returns {Promise<string>}
+ */
+export async function analysisRoomId(game) {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(`analysis-room:${game}`),
+  );
+  let text = '';
+  for (const byte of new Uint8Array(digest).slice(0, 16)) text += String.fromCharCode(byte);
+  return btoa(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}

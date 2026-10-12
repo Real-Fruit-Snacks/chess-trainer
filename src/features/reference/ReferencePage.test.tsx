@@ -1,6 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { faqAnchor, glossaryAnchor } from './anchors';
+import { FAQ } from './content';
 import ReferencePage from './ReferencePage';
 
 function renderAt(url = '/reference') {
@@ -64,5 +66,24 @@ describe('ReferencePage', () => {
     vi.stubGlobal('matchMedia', media(false));
     renderAt('/reference#glossary');
     expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth' });
+  });
+
+  it('lands a link (from quick search) on its glossary term', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    renderAt(`/reference#${glossaryAnchor('Zugzwang')}`);
+    const term = document.getElementById('glossary-zugzwang');
+    expect(term).toHaveTextContent(/^Zugzwang/);
+    expect(scroll.mock.instances.at(-1)).toBe(term);
+  });
+
+  it('opens a linked question to its answer, and only that one', () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const question = FAQ[1]?.question ?? '';
+    renderAt(`/reference#${faqAnchor(question)}`);
+    const details = screen.getByText(question).closest('details');
+    expect(details).toHaveAttribute('id', faqAnchor(question));
+    expect(details).toHaveProperty('open', true);
+    expect(document.querySelectorAll('details[open]')).toHaveLength(1);
   });
 });

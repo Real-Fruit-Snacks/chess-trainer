@@ -90,8 +90,28 @@ function has(pieces: Map<Square, Piece>, square: Square, color: Color, type: Pie
   return !!p && p.color === color && p.type === type;
 }
 
-/** Which castling rights are even possible given the king and rook placement. */
-export function availableCastling(pieces: Map<Square, Piece>) {
+/**
+ * Which castling rights are even possible given the king and rook placement.
+ * In Chess960 the king may stand anywhere on its back rank: a right needs a
+ * rook on that rank on its side of the king (the outermost one castles, as
+ * X-FEN's KQkq says).
+ */
+export function availableCastling(pieces: Map<Square, Piece>, chess960 = false) {
+  if (chess960) {
+    const sides = (color: Color, rank: string) => {
+      const king = FILES.findIndex((file) => has(pieces, `${file}${rank}` as Square, color, 'k'));
+      const rooks = FILES.flatMap((file, i) =>
+        has(pieces, `${file}${rank}` as Square, color, 'r') ? [i] : [],
+      );
+      return {
+        h: king >= 0 && rooks.some((file) => file > king),
+        a: king >= 0 && rooks.some((file) => file < king),
+      };
+    };
+    const white = sides('w', '1');
+    const black = sides('b', '8');
+    return { K: white.h, Q: white.a, k: black.h, q: black.a };
+  }
   return {
     K: has(pieces, 'e1', 'w', 'k') && has(pieces, 'h1', 'w', 'r'),
     Q: has(pieces, 'e1', 'w', 'k') && has(pieces, 'a1', 'w', 'r'),
@@ -100,7 +120,8 @@ export function availableCastling(pieces: Map<Square, Piece>) {
   };
 }
 
-export function toFen(position: EditorPosition): Fen {
+/** The position's FEN; with `chess960`, castling rights in X-FEN (the outermost rooks). */
+export function toFen(position: EditorPosition, chess960 = false): Fen {
   const rows: string[] = [];
   for (let rank = 8; rank >= 1; rank--) {
     let row = '';
@@ -120,7 +141,7 @@ export function toFen(position: EditorPosition): Fen {
     if (empty) row += String(empty);
     rows.push(row);
   }
-  const allowed = availableCastling(position.pieces);
+  const allowed = availableCastling(position.pieces, chess960);
   const castling =
     (['K', 'Q', 'k', 'q'] as const)
       .filter((right) => position.castling[right] && allowed[right])

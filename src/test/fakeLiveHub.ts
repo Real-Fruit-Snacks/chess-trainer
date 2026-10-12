@@ -28,6 +28,7 @@ const realTick = () => new Promise<void>((resolve) => realSetTimeout(resolve, 0)
 export type Message = Record<string, unknown> & { t?: string };
 
 const GAME_PATH = /^\/v1\/games\/([A-Za-z0-9_-]{22})$/;
+const GROUP_PATH = /^\/v1\/rooms\/([A-Za-z0-9_-]{22})$/;
 
 function closeEvent(code: number, reason: string, wasClean: boolean): CloseEvent {
   if (typeof CloseEvent === 'function') return new CloseEvent('close', { code, reason, wasClean });
@@ -106,6 +107,8 @@ export interface FakeLiveRelay {
   lobbyClient(): RelayClient;
   /** The other player, in a game room. */
   roomClient(game: string): RelayClient;
+  /** Someone else, in a group room (a race room). */
+  groupClient(room: string): RelayClient;
 }
 
 export interface FakeWebSocket extends WebSocket {
@@ -122,13 +125,17 @@ export interface FakeWebSocket extends WebSocket {
 
 /**
  * Installs the stand-in `WebSocket` over a fresh relay. Undo it with
- * `vi.unstubAllGlobals()`.
+ * `vi.unstubAllGlobals()`. `chess960Position`, when given, draws every new
+ * Chess960 game's start (one of the 960 at random otherwise).
  */
-export function installFakeLiveRelay(): FakeLiveRelay {
+export function installFakeLiveRelay({
+  chess960Position,
+}: { chess960Position?: () => number } = {}): FakeLiveRelay {
   let time = 1_000_000;
   let timers: { at: number; run: () => void }[] = [];
   const hub = createLiveHub({
     now: () => time,
+    chess960Position,
     timers: {
       set: (at, run) => {
         const handle = { at, run };
@@ -219,7 +226,8 @@ export function installFakeLiveRelay(): FakeLiveRelay {
     private reachRelay(): void {
       if (this.readyState !== 0) return;
       const game = GAME_PATH.exec(this.path)?.[1];
-      if (relay.offline || (this.path !== '/v1/lobby' && !game)) {
+      const group = GROUP_PATH.exec(this.path)?.[1];
+      if (relay.offline || (this.path !== '/v1/lobby' && !game && !group)) {
         this.readyState = 3;
         this.closedBy = 'network';
         this.closeCode = 1006;
@@ -246,7 +254,11 @@ export function installFakeLiveRelay(): FakeLiveRelay {
           });
         },
       };
-      this.events = game ? hub.openRoom(game, server) : hub.openLobby(server);
+      this.events = group
+        ? hub.openGroup(group, server)
+        : game
+          ? hub.openRoom(game, server)
+          : hub.openLobby(server);
       this.fire('open', new Event('open'));
     }
 
@@ -323,6 +335,7 @@ export function installFakeLiveRelay(): FakeLiveRelay {
     },
     lobbyClient: () => new RelayClient((socket) => hub.openLobby(socket), track),
     roomClient: (game) => new RelayClient((socket) => hub.openRoom(game, socket), track),
+    groupClient: (room) => new RelayClient((socket) => hub.openGroup(room, socket), track),
   };
 
   vi.stubGlobal('WebSocket', StandInWebSocket);

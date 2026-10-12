@@ -17,15 +17,19 @@
 			"database_id": "675bcc92-e6df-4306-aa33-c7fab45e8dc9"
 		}
 	],
-	// Once a day, vaults nobody has written or read for a year are deleted.
+	// Once a day, vaults nobody has written or read for a year are deleted, and
+	// reminders nothing has been heard of for 60 days. Every 15 minutes, the
+	// reminders due are sent. src/worker.mjs tells them apart by the first.
 	"triggers": {
 		"crons": [
-			"17 3 * * *"
+			"17 3 * * *",
+			"*/15 * * * *"
 		]
 	},
-	// Live games: the waiting room is one Durable Object, and each game another
-	// (see src/live/cloudflare.mjs). They keep their data in SQLite, the kind the
-	// free plan has, and hibernate while their sockets are quiet.
+	// Live games: the waiting room is one Durable Object, each game another, and
+	// each group room (a puzzle race for up to eight) another (see
+	// src/live/cloudflare.mjs). They keep their data in SQLite, the kind the free
+	// plan has, and hibernate while their sockets are quiet.
 	"durable_objects": {
 		"bindings": [
 			{
@@ -35,16 +39,27 @@
 			{
 				"name": "LIVE_ROOMS",
 				"class_name": "LiveRoom"
+			},
+			{
+				"name": "LIVE_GROUPS",
+				"class_name": "LiveGroup"
 			}
 		]
 	},
-	// The first deploy with this migration creates the two classes.
+	// The first deploy with each migration creates its classes: live-v1 the waiting
+	// room's and the games', live-v2 the group rooms'.
 	"migrations": [
 		{
 			"tag": "live-v1",
 			"new_sqlite_classes": [
 				"LiveLobby",
 				"LiveRoom"
+			]
+		},
+		{
+			"tag": "live-v2",
+			"new_sqlite_classes": [
+				"LiveGroup"
 			]
 		}
 	],

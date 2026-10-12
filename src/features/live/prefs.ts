@@ -7,7 +7,14 @@ import {
   warnNewerSave,
 } from '@/lib/persistStorage';
 import { storageKeyFor } from '@/store/profiles';
-import { COLOR_CHOICES, isPlayerName, parseTimeControl } from '../../../relay/src/live/shared.mjs';
+import { useProgress } from '@/store/progress';
+import {
+  COLOR_CHOICES,
+  isPlayerName,
+  MAX_RATING,
+  MIN_RATING,
+  parseTimeControl,
+} from '../../../relay/src/live/shared.mjs';
 import { differentName, randomName } from './names';
 import type { LivePrefs } from './types';
 
@@ -48,7 +55,8 @@ const CHECKS: { [K in keyof LivePrefs]: (value: unknown) => boolean } = {
   lichessRated: isBoolean,
   color: (value) =>
     typeof value === 'string' && (COLOR_CHOICES as readonly string[]).includes(value),
-  tc: (value) => parseTimeControl(value) !== null,
+  // A game at once: a correspondence game's days are chosen in its invitation, never kept here.
+  tc: (value) => parseTimeControl(value)?.kind === 'realtime',
 };
 
 const isPrefKey = (key: string): key is keyof LivePrefs => Object.hasOwn(CHECKS, key);
@@ -131,3 +139,11 @@ function storedName(): string | null {
 // A name made up at this start is saved at once: otherwise every start would
 // make up another, and the player would never keep the name they were shown.
 if (storedName() !== useLivePrefs.getState().name) useLivePrefs.setState({});
+
+/** The rating shown beside the player's name: the puzzle rating, when the player shows it. */
+export function shownRating(): number | null {
+  if (!useLivePrefs.getState().showRating) return null;
+  const rating = useProgress.getState().puzzleRating;
+  if (typeof rating !== 'number' || !Number.isFinite(rating)) return null;
+  return Math.min(MAX_RATING, Math.max(MIN_RATING, Math.round(rating)));
+}

@@ -325,6 +325,35 @@ export function parsePgn(pgn: string): PgnGame {
   return game;
 }
 
+/** `h:mm:ss`, `mm:ss` or `h:mm:ss.f`: the forms `[%clk]` and `[%emt]` are written in. */
+const CLOCK_TEXT = /^(?:(\d+):)?(\d{1,2}):(\d{1,2}(?:\.\d+)?)$/;
+
+/**
+ * Seconds from a clock as PGN commands write it — `0:09:58.7` (chess.com),
+ * `0:09:58` (Lichess), `9:58` — or null when the text is no clock.
+ */
+export function parseClock(args: string): number | null {
+  const match = CLOCK_TEXT.exec(args.trim());
+  if (!match) return null;
+  const hours = Number(match[1] ?? 0);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+  if (minutes >= 60 || seconds >= 60) return null;
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+/** The clock after a move, in seconds: what its `[%clk]` command says, or null without one. */
+export function clockOf(commands: readonly PgnCommand[] | undefined): number | null {
+  const command = commands?.find((c) => c.name === 'clk');
+  return command ? parseClock(command.args) : null;
+}
+
+/** The time a move took, in seconds, when the PGN says so itself (`[%emt 0:00:12]`). */
+export function elapsedOf(commands: readonly PgnCommand[] | undefined): number | null {
+  const command = commands?.find((c) => c.name === 'emt');
+  return command ? parseClock(command.args) : null;
+}
+
 const HEADER_LINE = /^\[\w+\s+"/;
 const ENDS_WITH_RESULT = /(?:^|\s)(?:1-0|0-1|1\/2-1\/2|½-½|\*)\s*$/;
 const FIRST_MOVE = /^1\.(?![.…])/;

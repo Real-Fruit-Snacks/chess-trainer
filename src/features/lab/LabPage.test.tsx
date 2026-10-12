@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ICON_NAMES } from '@/components/ui';
+import { ICON_NAMES } from '@/components/ui/iconData';
 import { useToasts } from '@/components/ui/toastStore';
 import { useStorageHealth } from '@/lib/persistStorage';
 import { SOUND_NAMES } from '@/lib/sound';

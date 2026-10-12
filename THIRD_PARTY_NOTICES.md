@@ -21,6 +21,8 @@ development-time tools only.
 | Maestro, Staunty and Cardinal piece sets by sadsnake1 (from the Lichess repository, `src/components/board/pieces/{maestro,staunty,cardinal}/`)                                                                                                      | [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) | The "Maestro", "Staunty" and "Cardinal" pieces — **non-commercial use only**        |
 | Board pictures by the lila authors and [pirouetti](https://lichess.org/@/pirouetti) (from the Lichess repository, `public/images/board/`; in `public/boards/`, with previews scaled down from them in `public/boards/thumbs/`)                      | AGPL-3.0-or-later                                                     | The textured board themes (Wood, Maple, Marble, Newspaper and the rest)             |
 | [chess.js](https://github.com/jhlywa/chess.js)                                                                                                                                                                                                      | BSD-2-Clause                                                          | Move generation, legality, PGN/FEN; the relay referees live games with it           |
+| [chessops](https://github.com/niklasf/chessops) by Niklas Fiekas                                                                                                                                                                                    | GPL-3.0-or-later                                                      | Chess960 rules; the relay referees online Chess960 games with it                    |
+| [@badrap/result](https://github.com/badrap/result) (a dependency of chessops)                                                                                                                                                                       | MIT (notice below)                                                    | A result type, used by chessops                                                     |
 | [React](https://react.dev/) / react-dom                                                                                                                                                                                                             | MIT                                                                   | UI                                                                                  |
 | [React Router](https://reactrouter.com/)                                                                                                                                                                                                            | MIT                                                                   | Routing                                                                             |
 | [Zustand](https://github.com/pmndrs/zustand)                                                                                                                                                                                                        | MIT                                                                   | State and localStorage persistence                                                  |
@@ -66,8 +68,9 @@ listed in ONNX Runtime's
 
 The rules by which Lichess cleans study and chapter names come from scalalib (MIT); the recovery
 phrase's word list is BIP-39's (MIT, Copyright (c) 2013 Marek Palatinus, Pavol Rusnak, Aaron Voisine
-and Sean Bowe); and uqr, which draws the QR code, is MIT too (Copyright (c) Project Nayuki, Copyright
-(c) 2023 Anthony Fu). Each is under the same permission notice, here with scalalib's copyright line:
+and Sean Bowe); uqr, which draws the QR code, is MIT too (Copyright (c) Project Nayuki, Copyright
+(c) 2023 Anthony Fu); and so is @badrap/result, which chessops uses (Copyright (c) 2018 Badrap Oy).
+Each is under the same permission notice, here with scalalib's copyright line:
 
 > Copyright (c) Thibault Duplessis
 >

@@ -168,6 +168,8 @@ export function useSelfReview(analysis: UseAnalysis): UseSelfReview {
     judging.current = true;
     const run = runRef.current;
     const engine = analysis.engine;
+    // The game's rules: a Chess960 game's moves are written and searched its way.
+    const { rules, chess960 } = analysis.tree;
     const scored = scoreSelfReview(review, marks);
     const pending = marks.filter((m) => m.suggestion);
     void (async () => {
@@ -179,7 +181,13 @@ export function useSelfReview(analysis: UseAnalysis): UseSelfReview {
         try {
           verdicts.set(
             mark.ply,
-            await judgeSuggestion(engine(), reviewed.fen, suggestion.uci, engineMoveOf(reviewed)),
+            await judgeSuggestion(
+              engine(),
+              reviewed.fen,
+              suggestion.uci,
+              engineMoveOf(reviewed, rules),
+              chess960,
+            ),
           );
         } catch {
           verdicts.set(mark.ply, null);
@@ -200,7 +208,7 @@ export function useSelfReview(analysis: UseAnalysis): UseSelfReview {
       setPhase('done');
       setEngineOn(engineWasOn.current);
     })();
-  }, [phase, review, reviewProgress, marks, analysis.engine, setEngineOn]);
+  }, [phase, review, reviewProgress, marks, analysis.engine, analysis.tree, setEngineOn]);
 
   const finish = useCallback(() => {
     setPhase('off');

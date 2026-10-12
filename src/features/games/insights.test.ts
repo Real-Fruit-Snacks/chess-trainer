@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { ReviewSummary } from '@/features/analyze/gameReview';
-import type { StoredGame } from '@/store/games';
+import type { GameTimes } from '@/features/analyze/timeUse';
+import { repairGames, type StoredGame } from '@/store/games';
 import type { GameRecord } from '@/store/progress';
-import { accuracyFromLoss, buildInsights, digestReview, phaseOf } from './insights';
+import {
+  accuracyFromLoss,
+  buildInsights,
+  digestReview,
+  phaseOf,
+  type TimeSideDigest,
+} from './insights';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
@@ -19,6 +26,8 @@ describe('phases', () => {
     );
     // A queen and a rook each with nothing else: material 28 but that is an ending.
     expect(phaseOf('4k3/8/8/8/8/8/8/R2QK3 w - - 0 50', 50)).toBe('endgame');
+    // A Chess960 position with castling rights by file reads as well.
+    expect(phaseOf('bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w GCgc - 0 1', 1)).toBe('opening');
   });
 
   it('maps loss to accuracy like game review', () => {
@@ -279,5 +288,136 @@ describe('buildInsights', () => {
     expect(insights.reviewedGames).toBe(0);
     expect(insights.workOn).toEqual([]);
     expect(insights.phases.every((p) => p.accuracy === null)).toBe(true);
+  });
+});
+
+describe('time findings', () => {
+  const times: GameTimes = {
+    base: 300,
+    increment: 0,
+    trouble: 30,
+    moves: [
+      { ply: 1, san: 'e4', mover: 'white', before: 300, after: 290, spent: 10 },
+      { ply: 2, san: 'e5', mover: 'black', before: 300, after: 280, spent: 20 },
+      { ply: 3, san: 'Nf3', mover: 'white', before: 25, after: 20, spent: 5 },
+      { ply: 4, san: 'Nc6', mover: 'black', before: 280, after: 270, spent: 10 },
+      // Not the move the review describes (the main line changed): left out.
+      { ply: 5, san: 'Bb5', mover: 'white', before: 20, after: 10, spent: 10 },
+    ],
+  };
+  const summary: ReviewSummary = {
+    moves: [
+      move(1, 'e4', START, 0, 'best'),
+      move(2, 'e5', START, 0, 'good'),
+      move(3, 'Nf3', START, 0.35, 'blunder'),
+      move(4, 'Nc6', START, 0, 'good'),
+      move(5, 'Bc4', START, 0.1, 'inaccuracy'),
+    ],
+    counts: {
+      white: { inaccuracy: 1, mistake: 0, blunder: 1 },
+      black: { inaccuracy: 0, mistake: 0, blunder: 0 },
+    },
+    accuracy: { white: 60, black: 100 },
+    wins: [],
+    depth: 12,
+  };
+
+  it('digests where the time went and how the moves made short of time turned out', () => {
+    const digest = digestReview(summary, times);
+    expect(digest.time?.trouble).toBe(30);
+    expect(digest.time?.white).toEqual({
+      phases: {
+        opening: { seconds: 15, moves: 2 },
+        middlegame: { seconds: 0, moves: 0 },
+        endgame: { seconds: 0, moves: 0 },
+      },
+      trouble: { moves: 1, errors: 1 },
+      calm: { moves: 1, errors: 0 },
+      short: true,
+    });
+    expect(digest.time?.black).toMatchObject({
+      phases: { opening: { seconds: 30, moves: 2 } },
+      trouble: { moves: 0, errors: 0 },
+      calm: { moves: 2, errors: 0 },
+      short: false,
+    });
+    // No clocks, no time digest.
+    expect(digestReview(summary).time).toBeUndefined();
+    expect(digestReview(summary, null).time).toBeUndefined();
+  });
+
+  const side = (
+    overrides: Partial<TimeSideDigest> & { opening?: number; endgame?: number },
+  ): TimeSideDigest => ({
+    phases: {
+      opening: { seconds: overrides.opening ?? 60, moves: 10 },
+      middlegame: { seconds: 300, moves: 20 },
+      endgame: { seconds: overrides.endgame ?? 40, moves: 10 },
+    },
+    trouble: overrides.trouble ?? { moves: 10, errors: 3 },
+    calm: overrides.calm ?? { moves: 30, errors: 1 },
+    short: overrides.short ?? true,
+  });
+  const quiet = side({ trouble: { moves: 0, errors: 0 }, short: false });
+  const phases = {
+    opening: { white: blank, black: blank },
+    middlegame: { white: blank, black: blank },
+    endgame: { white: blank, black: blank },
+  };
+
+  it('adds up the learner’s clock over the reviewed games that had one', () => {
+    const games = [
+      game('t1', 'white', '0-1', {
+        phases,
+        motifs: { white: {}, black: {} },
+        time: { trouble: 30, white: side({}), black: quiet },
+      }),
+      game('t2', 'black', '1-0', {
+        phases,
+        motifs: { white: {}, black: {} },
+        time: { trouble: 30, white: quiet, black: side({ opening: 100 }) },
+      }),
+      game('t3', 'white', '1-0', {
+        phases,
+        motifs: { white: {}, black: {} },
+        time: { trouble: 15, white: quiet, black: side({}) },
+      }),
+      // Reviewed before clocks were digested: counts for everything else, not for time.
+      game('t4', 'white', '1-0', { phases, motifs: { white: {}, black: {} } }),
+    ];
+    const { time, workOn } = buildInsights(games, 'alice', []);
+    expect(time.games).toBe(3);
+    expect(time.shortGames).toBe(2);
+    expect(time.reliable).toBe(true);
+    const opening = time.phases.find((p) => p.phase === 'opening');
+    expect(opening).toMatchObject({ seconds: 220, moves: 30, perMove: 7.3 });
+    expect(opening?.share).toBeCloseTo(220 / (220 + 900 + 120));
+    expect(time.trouble).toEqual({ moves: 20, errors: 6, rate: 3, reliable: true });
+    expect(time.calm).toEqual({ moves: 90, errors: 3, rate: 0.3, reliable: true });
+    // Three times the mistakes when short of time: worth working on, with the lesson on the clock.
+    expect(workOn.find((w) => w.id === 'time:trouble')).toMatchObject({
+      title: 'Time trouble',
+      detail: '3.0 mistakes per 10 moves when short of time, against 0.3 otherwise',
+      lessonId: 'practical-play-and-time',
+    });
+  });
+
+  it('stays quiet without clocks, and keeps a stored time digest through a reload', () => {
+    const none = buildInsights(
+      [game('n1', 'white', '1-0', { phases, motifs: { white: {}, black: {} } })],
+      'alice',
+      [],
+    );
+    expect(none.time).toMatchObject({ games: 0, shortGames: 0, reliable: false });
+    expect(none.time.trouble.rate).toBeNull();
+    expect(none.workOn.some((w) => w.id === 'time:trouble')).toBe(false);
+
+    const stored = game('s1', 'white', '1-0', {
+      phases,
+      motifs: { white: {}, black: {} },
+      time: { trouble: 30, white: side({}), black: quiet },
+    });
+    const repaired = repairGames({ games: { s1: stored }, player: 'alice' });
+    expect(repaired.games.s1?.review?.digest?.time).toEqual(stored.review?.digest?.time);
   });
 });

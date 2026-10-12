@@ -15,6 +15,9 @@
  *   default, unless the learner has switched threads off; see `sw/isolation.ts`.
  * - Adds `Content-Security-Policy: frame-ancestors 'none'` to the pages it
  *   serves, the one directive the page's meta policy cannot set — see `sw/framing.ts`.
+ * - Shows the notices the relay pushes (a correspondence game's move, the
+ *   daily reminder), and opens the app's page a notice names when it is
+ *   clicked — see `sw/notifications.ts`.
  */
 import { clientsClaim, type WorkboxPlugin } from 'workbox-core';
 import { ExpirationPlugin } from 'workbox-expiration';
@@ -37,6 +40,7 @@ import {
 import { isNavigation, withFramePolicy } from './sw/framing';
 import { ISOLATION_CHANGED_MESSAGE, readIsolationFlag, withIsolationHeaders } from './sw/isolation';
 import { isCurrentMaiaFile, MAIA_CACHE } from './sw/maiaFiles';
+import { noticeOf, noticeTarget, notificationOptions } from './sw/notifications';
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: (PrecacheEntry | string)[];
@@ -183,4 +187,53 @@ async function pruneOldMaiaFiles(): Promise<void> {
 
 self.addEventListener('activate', (event: ExtendableEvent) => {
   event.waitUntil(Promise.all([pruneOldEngineFiles(), pruneOldMaiaFiles()]));
+});
+
+/** A push message's JSON, or null when it carries none. */
+function pushData(event: PushEvent): unknown {
+  try {
+    return event.data?.json() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// What the relay pushes is shown as it comes: a browser expects every push to show something.
+self.addEventListener('push', (event: PushEvent) => {
+  const notice = noticeOf(pushData(event));
+  if (!notice) return;
+  event.waitUntil(
+    self.registration.showNotification(notice.title, notificationOptions(notice, BASE)),
+  );
+});
+
+/**
+ * A notice clicked: the window already on its page comes to the front; else a
+ * window of the app goes there; else a new one opens.
+ */
+async function openNotice(target: string): Promise<void> {
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const there = windows.find((client) => client.url === target);
+  if (there) {
+    await there.focus();
+    return;
+  }
+  const app = windows.find((client) => new URL(client.url).pathname.startsWith(BASE));
+  if (app) {
+    try {
+      await app.focus();
+      await app.navigate(target);
+      return;
+    } catch {
+      // A window this worker does not control cannot be sent anywhere: a new one opens.
+    }
+  }
+  await self.clients.openWindow(target);
+}
+
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+  event.notification.close();
+  const data: unknown = event.notification.data;
+  const path = typeof data === 'object' && data !== null ? (data as { url?: unknown }).url : '';
+  event.waitUntil(openNotice(noticeTarget(BASE, path, self.location.origin)));
 });

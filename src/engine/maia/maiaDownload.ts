@@ -165,9 +165,10 @@ export function startMaiaDownload(onDone?: (stored: boolean) => void): void {
         notify();
       }, controller.signal);
       onDone?.(true);
-      toast('The human-like opponent is ready, and kept on this device for offline play.', {
-        tone: 'success',
-      });
+      toast(
+        'Maia is ready, and kept on this device for offline use: play the human-like opponent, or see human moves in Analyze.',
+        { tone: 'success' },
+      );
     } catch (err) {
       onDone?.(false);
       if (!controller.signal.aborted) {

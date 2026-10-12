@@ -2,16 +2,15 @@ import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import { playSound } from '@/lib/sound';
 import { useLichess } from '@/store/lichess';
-import { useProgress } from '@/store/progress';
 import {
   COLOR_CHOICES,
+  CORRESPONDENCE_GAMES,
   gameOptions,
   ID_PATTERN,
+  isCorrespondence,
   isDuel,
   isGame,
   isRating,
-  MAX_RATING,
-  MIN_RATING,
   parseTimeControl,
   randomId,
   SEAT_PATTERN,
@@ -27,7 +26,8 @@ import {
   lichessSeekAllowed,
   startLichessSeek,
 } from './lichessLive';
-import { useLivePrefs } from './prefs';
+import { pairingNotice } from './notify';
+import { shownRating, useLivePrefs } from './prefs';
 import { liveSocketUrl, relayHealthUrl } from './relayUrls';
 import { liveGamePath, rememberSeat } from './seats';
 import { LiveSocket } from './socket';
@@ -54,6 +54,10 @@ import type {
  * acceptance wins and the other post is withdrawn; a game that slips through
  * the race on the other side (both accepted within a moment) is aborted at
  * once, so there is never more than one game.
+ *
+ * A correspondence game is no post: `invite` has the waiting room make its
+ * room at once (`create`), with this device's seat and one open for the friend
+ * who gets the link; the seat is kept, and the board is where to go next.
  */
 
 /** After nothing needs the waiting room any more, the connection stays this long. */
@@ -84,14 +88,6 @@ const CHECK_MESSAGES: Record<
 const LICHESS_FAILED = 'Lichess did not take the game.';
 
 const isSide = (value: unknown): value is Side => value === 'white' || value === 'black';
-
-/** The rating shown beside the name: the puzzle rating, when the player shows it. */
-function shownRating(): number | null {
-  if (!useLivePrefs.getState().showRating) return null;
-  const rating = useProgress.getState().puzzleRating;
-  if (typeof rating !== 'number' || !Number.isFinite(rating)) return null;
-  return Math.min(MAX_RATING, Math.max(MIN_RATING, Math.round(rating)));
-}
 
 function playerOf(value: unknown): LivePlayer {
   const player = (typeof value === 'object' && value !== null ? value : {}) as Record<
@@ -211,6 +207,9 @@ export function createLobbyStore(): LobbyStore {
   let watchers = 0;
   /** The game being joined, until the relay answers. */
   let joining: string | null = null;
+  /** The correspondence game being made, until the relay answers; whether it has gone. */
+  let inviting: { game: GameKind; tc: string; color: ColorChoice } | null = null;
+  let inviteSent = false;
   let linger: ReturnType<typeof setTimeout> | null = null;
   /** The games the relay lists, this device's own included. */
   let listed: OpenGame[] = [];
@@ -320,7 +319,31 @@ export function createLobbyStore(): LobbyStore {
       if (socket.state === 'open') sendJoin();
     },
 
+    invited: null,
+
+    invite: (options) => {
+      if (disposed) return;
+      const game: GameKind = options.game ?? 'chess';
+      if (
+        !CORRESPONDENCE_GAMES.includes(game) ||
+        !isCorrespondence(options.tc) ||
+        !(COLOR_CHOICES as readonly string[]).includes(options.color)
+      ) {
+        set({ notice: 'That game cannot be made.' });
+        return;
+      }
+      if (!relayConfigured()) {
+        set({ notice: UNAVAILABLE_NOTICE });
+        return;
+      }
+      inviting = { game, tc: options.tc, color: options.color };
+      inviteSent = false;
+      ensure();
+      if (socket.state === 'open') sendInvite();
+    },
+
     clearPairing: () => set({ pairing: null }),
+    clearInvited: () => set({ invited: null }),
     clearNotice: () => set({ notice: null }),
   }));
   const { getState: get, setState: set } = store;
@@ -335,7 +358,7 @@ export function createLobbyStore(): LobbyStore {
   /* The connection                                                    */
   /* ---------------------------------------------------------------- */
 
-  const needed = () => watchers > 0 || get().mine !== null || joining !== null;
+  const needed = () => watchers > 0 || get().mine !== null || joining !== null || inviting !== null;
 
   /** Connects when something needs the waiting room; lets go a moment after nothing does. */
   function ensure(): void {
@@ -380,8 +403,9 @@ export function createLobbyStore(): LobbyStore {
     listed = [];
     const { mine } = get();
     const patch: Partial<LobbyState> = { connection: 'unavailable', seeks: [], players: 0 };
-    if (joining !== null) {
+    if (joining !== null || inviting !== null) {
       joining = null;
+      inviting = null;
       patch.notice = UNAVAILABLE_NOTICE;
     }
     if (mine && mine.relay !== 'failed') patch.mine = { ...mine, relay: 'failed' };
@@ -396,10 +420,16 @@ export function createLobbyStore(): LobbyStore {
       sendSeek();
     }
     if (joining !== null) sendJoin();
+    if (inviting !== null) sendInvite();
   }
 
   function onDown({ opened }: { code: number; opened: boolean }): void {
     clearRepost();
+    if (inviting !== null && inviteSent) {
+      // Its answer is lost with the socket: better to say so than to make a second game.
+      inviting = null;
+      set({ notice: 'The invitation could not be made: try again.' });
+    }
     if (!needed()) {
       listed = [];
       set({ connection: 'idle', seeks: [], players: 0 });
@@ -464,6 +494,19 @@ export function createLobbyStore(): LobbyStore {
     if (mine.relay !== 'posting') setMine({ ...mine, relay: 'posting' });
   }
 
+  function sendInvite(): void {
+    if (inviting === null || inviteSent) return;
+    inviteSent = socket.send({
+      t: 'create',
+      game: inviting.game,
+      opts: {},
+      tc: inviting.tc,
+      color: inviting.color,
+      name: useLivePrefs.getState().name,
+      rating: shownRating(),
+    });
+  }
+
   function sendJoin(): void {
     if (joining === null) return;
     socket.send({
@@ -503,6 +546,8 @@ export function createLobbyStore(): LobbyStore {
       }
       case 'paired':
         return onPaired(message);
+      case 'created':
+        return onCreated(message);
       case 'gone':
         joining = null;
         set({ notice: GONE_NOTICE });
@@ -519,6 +564,12 @@ export function createLobbyStore(): LobbyStore {
   function onError(message: Record<string, unknown>): void {
     const text = typeof message.message === 'string' ? message.message : 'That was refused.';
     const { mine } = get();
+    if (inviting !== null && inviteSent) {
+      inviting = null;
+      set({ notice: text });
+      ensure();
+      return;
+    }
     if (message.code === 'failed') {
       // The game could not be made: the relay has dropped both posts.
       joining = null;
@@ -583,9 +634,24 @@ export function createLobbyStore(): LobbyStore {
     });
   }
 
+  /** The correspondence game is made: its seat is kept, and its board is where to go. */
+  function onCreated(message: Record<string, unknown>): void {
+    const { game, seat, color, tc } = message;
+    if (inviting === null) return;
+    const asked = inviting.game;
+    inviting = null;
+    if (typeof game !== 'string' || !ID_PATTERN.test(game) || !isCorrespondence(tc)) return;
+    if (typeof seat !== 'string' || !SEAT_PATTERN.test(seat) || !isSide(color)) return;
+    const kind = isGame(message.kind) ? message.kind : asked;
+    rememberSeat(game, seat, color, kind, Date.now(), true);
+    set({ invited: { game, path: liveGamePath('relay', game, kind) } });
+    ensure();
+  }
+
   function paired(pairing: Pairing): void {
     setMine(null, { pairing });
     playSound('notify');
+    pairingNotice(pairing);
     ensure();
   }
 

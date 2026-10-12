@@ -1,15 +1,24 @@
 /**
  * The rules of a live game, on chess.js: moves in UCI ("e2e4", "e7e8q"), how a
  * game ends by itself, and who can still mate when the other side's flag falls.
+ * A Chess960 game is played on chessops instead (chess960.mjs), through the
+ * same few calls: the functions here take either game.
  */
 import { Chess } from 'chess.js';
+import { Chess960Game } from './chess960.mjs';
 
 const UCI = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
 
 /**
+ * @typedef {Chess | Chess960Game} RulesGame A game of chess (or a variant of it) on
+ * chess.js, or a Chess960 game.
+ */
+
+/**
  * Plays a move given in UCI on `chess`: the move as chess.js describes it, or
- * null when it is not a legal move (or not a move at all).
- * @param {Chess} chess
+ * null when it is not a legal move (or not a move at all). Chess960 castles
+ * with the king taking its own rook ("e1h1").
+ * @param {RulesGame} chess
  * @param {unknown} uci
  */
 export function playUci(chess, uci) {
@@ -27,15 +36,20 @@ export function playUci(chess, uci) {
 
 /**
  * The game after `moves` from the initial position, or from `startFen` (Army
- * Draft's armies); null when one of them is not legal, or the position is not
- * one (a stored game is never like that, but nothing is taken on trust).
+ * Draft's armies, a Chess960 start); null when one of them is not legal, or
+ * the position is not one (a stored game is never like that, but nothing is
+ * taken on trust). A Chess960 game (`game`) needs its `startFen`.
  * @param {readonly string[]} moves
  * @param {string | null} [startFen]
+ * @param {string} [game]
+ * @returns {RulesGame | null}
  */
-export function replay(moves, startFen = null) {
+export function replay(moves, startFen = null, game = 'chess') {
+  /** @type {RulesGame} */
   let chess;
   try {
-    chess = startFen ? new Chess(startFen) : new Chess();
+    if (game === 'chess960') chess = new Chess960Game(startFen ?? '');
+    else chess = startFen ? new Chess(startFen) : new Chess();
   } catch {
     return null;
   }
@@ -48,7 +62,7 @@ export function replay(moves, startFen = null) {
 /**
  * How the game stands after its last move: over by itself (mate, stalemate,
  * a dead position, threefold repetition, fifty moves), or null.
- * @param {Chess} chess
+ * @param {RulesGame} chess
  * @returns {{ result: '1-0' | '0-1' | '1/2-1/2', reason: string } | null}
  */
 export function endOf(chess) {
@@ -72,7 +86,7 @@ const lightSquare = (/** @type {string} */ square) =>
  * cannot; nor can a king and one minor piece against a bare king, nor bishops
  * all on one colour of square against a king with at most bishops on that same
  * colour. Anything else could, with the other side's help.
- * @param {Chess} chess
+ * @param {RulesGame} chess
  * @param {'w' | 'b'} color
  */
 export function cannotMate(chess, color) {

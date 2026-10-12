@@ -4,18 +4,35 @@ import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { loadEnv, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import {
   fillSitePlaceholders,
   relayOrigins,
   sitePlaceholders,
   withContentSecurityPolicy,
 } from './scripts/lib/html.ts';
+import { iconSprite, withIconSprite } from './scripts/lib/iconSprite.ts';
+import { ICONS } from './src/components/ui/iconData.ts';
 import { siteConfig } from './src/site.config.ts';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
   version: string;
 };
+
+/**
+ * Unit tests that run in a process of their own (forks) rather than in a vm context: the build
+ * scripts' and the relay's, which run under Node (`@vitest-environment node`), need no DOM and
+ * run Node code at full speed outside one; two that replace `window.location`, which jsdom's
+ * own context keeps fixed; and one that tells errors apart with `instanceof Error`, which Node's
+ * abort reasons fail in a vm context (they come from another realm).
+ */
+const FORKED_TEST_FILES = [
+  'scripts/**/*.test.ts',
+  'relay/**/*.test.ts',
+  'src/app/UpdatePrompt.test.tsx',
+  'src/lib/fetchWithTimeout.test.ts',
+  'src/store/profiles.test.ts',
+];
 
 /** What git prints for `args`, or '' outside a checkout. */
 function git(...args: string[]): string {
@@ -72,6 +89,19 @@ function siteMetadataHtml(): Plugin {
   return {
     name: 'chess-trainer:site-metadata',
     transformIndexHtml: (html) => fillSitePlaceholders(html, values),
+  };
+}
+
+/**
+ * Puts the icons into the page as an SVG sprite (scripts/lib/iconSprite.ts):
+ * `<Icon>` draws each with `<use>`, so their paths stay out of the start-up
+ * JavaScript. In the dev server too, so icons show there the same way.
+ */
+function iconSpriteHtml(): Plugin {
+  const sprite = iconSprite(ICONS);
+  return {
+    name: 'chess-trainer:icon-sprite',
+    transformIndexHtml: (html) => withIconSprite(html, sprite),
   };
 }
 
@@ -136,6 +166,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       siteMetadataHtml(),
+      iconSpriteHtml(),
       contentSecurityPolicyHtml(),
       VitePWA({
         // A hand-written Workbox service worker (src/sw.ts): precaching plus the
@@ -314,12 +345,29 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       globals: false,
-      setupFiles: ['./src/test/setup.ts'],
-      // The build scripts' tests live next to them and run under Node (`@vitest-environment node`).
-      include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts', 'relay/**/*.test.ts'],
+      setupFiles: ['./src/test/vmGlobals.ts', './src/test/setup.ts'],
       // Stylesheets are stubbed out of component tests; only their text is
       // served (`?raw`), for the stylesheet-scope test in src/styles.
       css: { include: [/\.css\?raw$/] },
+      // The app's tests run in the vmThreads pool: each file in a fresh context of a worker that
+      // stays up, so its modules and stores are its own, as in a process of its own, but jsdom is
+      // loaded once per worker instead of once per file, which took half the run.
+      projects: [
+        {
+          extends: true,
+          test: {
+            name: 'vm',
+            pool: 'vmThreads',
+            include: ['src/**/*.test.{ts,tsx}'],
+            exclude: [...configDefaults.exclude, ...FORKED_TEST_FILES],
+          },
+        },
+        { extends: true, test: { name: 'forks', pool: 'forks', include: FORKED_TEST_FILES } },
+      ],
+      // What a file loads stays in its vm worker (Node cannot unload modules), so a worker is
+      // replaced once its heap passes this. Low for coverage, which reads every script a worker
+      // still holds after each file: a third faster than with the default limit.
+      vmMemoryLimit: '512MB',
       coverage: {
         provider: 'v8',
         reporter: ['text', 'html', 'lcov'],

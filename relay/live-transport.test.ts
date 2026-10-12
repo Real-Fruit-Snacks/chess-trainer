@@ -5,6 +5,7 @@ import { createServer, request as httpRequest, type IncomingMessage } from 'node
 import { connect, type AddressInfo, type Socket } from 'node:net';
 import { duplexPair } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeD1 } from './fakeD1';
 import { createRelay, DEFAULT_MAX_BYTES } from './src/handler.mjs';
 import type {
   DurableNamespace,
@@ -13,7 +14,7 @@ import type {
   DurableStorage,
   LiveEnv,
 } from './src/live/cloudflare.mjs';
-import { CLOSE, LIMITS, randomId } from './src/live/shared.mjs';
+import { CLOSE, DAY_MS, LIMITS, randomId } from './src/live/shared.mjs';
 import {
   acceptKey,
   upgrade,
@@ -707,9 +708,9 @@ class FakeState implements DurableState {
 }
 
 /** An environment whose LIVE_ROOMS objects live in this test, one state per name. */
-function fakeCloudflare() {
+function fakeCloudflare(bindings: Partial<LiveEnv> = {}) {
   const rooms = new Map<string, { state: FakeState; room: LiveRoom }>();
-  const env: LiveEnv = {};
+  const env: LiveEnv = { ...bindings };
   const roomOf = (id: string) => {
     let entry = rooms.get(id);
     if (!entry) {
@@ -935,6 +936,109 @@ describe('live games on Cloudflare', () => {
     const told = white.all('present').length;
     await room.webSocketError(black, new Error('Gone.'));
     expect(white.all('present')).toHaveLength(told);
+  });
+
+  it('keeps a correspondence game’s one alarm on its earliest deadline, days away, through hibernation', async () => {
+    const cf = fakeCloudflare();
+    const lobby = new LiveLobby(new FakeState(), cf.env);
+    const poster = new FakeSocket();
+    lobby.accept(poster);
+    const invitation = { t: 'create', game: 'chess', tc: '3d', color: 'white', name: NAME_A };
+    await lobby.webSocketMessage(poster, JSON.stringify({ ...invitation, rating: null }));
+    const created = poster.last<Paired>('created')!;
+    const { room, state } = cf.roomOf(created.game);
+    // Waiting for a friend: the invitation's expiry is the only deadline.
+    expect(state.storage.alarm).toBe(T0 + LIMITS.inviteMs);
+    const white = await seated(room, created.seat);
+    expect(white.last('game')).toMatchObject({ open: 'black', clock: { running: null } });
+
+    // A friend opens the link, watches, and takes the seat.
+    at(1000);
+    const friend = new FakeSocket();
+    await room.accept(friend);
+    await room.webSocketMessage(friend, JSON.stringify({ t: 'hello', watch: true }));
+    expect(friend.deserializeAttachment()).toMatchObject({ watch: true, seat: null });
+    await room.webSocketMessage(friend, JSON.stringify({ t: 'join', name: NAME_B, rating: null }));
+    const seat = friend.last<Paired>('seat')!;
+    expect(seat.color).toBe('black');
+    // White's three days run from the join.
+    expect(state.storage.alarm).toBe(T0 + 1000 + 3 * DAY_MS);
+
+    // Days later, on a woken object, each move moves the alarm to the other side's days.
+    at(2 * DAY_MS);
+    const woken = new LiveRoom(state, cf.env);
+    await woken.webSocketMessage(white, JSON.stringify({ t: 'move', uci: 'e2e4', ply: 0 }));
+    expect(state.storage.alarm).toBe(T0 + 2 * DAY_MS + 3 * DAY_MS);
+    const black = await seated(woken, seat.seat);
+    await woken.webSocketMessage(black, JSON.stringify({ t: 'move', uci: 'e7e5', ply: 1 }));
+    expect(state.storage.alarm).toBe(T0 + 2 * DAY_MS + 3 * DAY_MS);
+    at(3 * DAY_MS);
+    await woken.webSocketMessage(white, JSON.stringify({ t: 'move', uci: 'g1f3', ply: 2 }));
+    expect(state.storage.alarm).toBe(T0 + 6 * DAY_MS);
+
+    // Black's days pass: the alarm ends the game, and the room is kept a week.
+    at(6 * DAY_MS);
+    await new LiveRoom(state, cf.env).alarm();
+    expect(white.last('end')).toMatchObject({ result: '1-0', reason: 'time' });
+    expect(state.storage.alarm).toBe(T0 + 6 * DAY_MS + LIMITS.correspondenceKeepMs);
+    at(6 * DAY_MS + LIMITS.correspondenceKeepMs);
+    await new LiveRoom(state, cf.env).alarm();
+    expect(state.storage.values.size).toBe(0);
+    expect(white.closedWith?.code).toBe(CLOSE.closed);
+  });
+
+  it('pushes a correspondence player away through the keys in D1, and forgets a gone subscription', async () => {
+    const pushed: string[] = [];
+    vi.stubGlobal('fetch', (input: string) => {
+      pushed.push(input);
+      return Promise.resolve(new Response(null, { status: pushed.length === 1 ? 201 : 410 }));
+    });
+    const cf = fakeCloudflare({ DB: fakeD1(), ALLOWED_ORIGINS: ORIGIN });
+    const lobby = new LiveLobby(new FakeState(), cf.env);
+    const poster = new FakeSocket();
+    lobby.accept(poster);
+    const invitation = { t: 'create', game: 'chess', tc: '1d', color: 'white', name: NAME_A };
+    await lobby.webSocketMessage(poster, JSON.stringify({ ...invitation, rating: null }));
+    const created = poster.last<Paired>('created')!;
+    const { room, state } = cf.roomOf(created.game);
+    const white = await seated(room, created.seat);
+    const friend = new FakeSocket();
+    await room.accept(friend);
+    await room.webSocketMessage(friend, JSON.stringify({ t: 'hello', watch: true }));
+    await room.webSocketMessage(friend, JSON.stringify({ t: 'join', name: NAME_B, rating: null }));
+    const seat = friend.last<Paired>('seat')!;
+    friend.leave();
+    await room.webSocketClose(friend, 1000);
+    const black = new FakeSocket();
+    await room.accept(black);
+    const endpoint = 'https://fcm.googleapis.com/fcm/send/black-device';
+    const keys = {
+      p256dh:
+        'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',
+      auth: 'BTBZMqHH6r4Tts7J_aSIgg',
+    };
+    await room.webSocketMessage(
+      black,
+      JSON.stringify({ t: 'hello', seat: seat.seat, push: { endpoint, keys } }),
+    );
+    black.leave();
+    await room.webSocketClose(black, 1000);
+
+    // On a woken object, White's move goes to Black's push service.
+    const woken = new LiveRoom(state, cf.env);
+    await woken.webSocketMessage(white, JSON.stringify({ t: 'move', uci: 'e2e4', ply: 0 }));
+    expect(pushed).toEqual([endpoint]);
+    expect(JSON.stringify(white.sent)).not.toContain(endpoint);
+    // The push service says it is gone (410): the room forgets it, and pushes nothing more.
+    const back = await seated(woken, seat.seat);
+    await woken.webSocketMessage(back, JSON.stringify({ t: 'move', uci: 'e7e5', ply: 1 }));
+    back.leave();
+    await woken.webSocketClose(back, 1000);
+    await woken.webSocketMessage(white, JSON.stringify({ t: 'move', uci: 'g1f3', ply: 2 }));
+    expect(pushed).toEqual([endpoint, endpoint]);
+    expect(JSON.stringify(state.storage.values.get('game'))).not.toContain(endpoint);
+    await woken.webSocketMessage(white, JSON.stringify({ t: 'resign' }));
+    expect(pushed).toHaveLength(2);
   });
 
   it('makes a game only when asked from inside: 201, then 409; 400 for what is not a game', async () => {

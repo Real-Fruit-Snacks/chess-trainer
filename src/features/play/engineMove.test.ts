@@ -28,6 +28,18 @@ const legal = new Map<Square, Square[]>([
 const pieceAt = (square: Square) => (square === 'e2' ? { type: 'p' } : { type: 'n' });
 
 describe('chooseLevelMove', () => {
+  it('asks for Chess960 rules in a Chess960 game, and for nothing extra otherwise', async () => {
+    const fen960 = 'bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1';
+    const { client, search } = fakeClient({ bestmove: { move: 'd1c1' } });
+    const request = { level: getLevel(6), fen: fen960, moves: [], legal, pieceAt };
+    expect(await chooseLevelMove(client, { skill: null }, { ...request, chess960: true })).toBe(
+      'd1c1',
+    );
+    expect(search).toHaveBeenLastCalledWith(expect.objectContaining({ chess960: true }));
+    await chooseLevelMove(client, { skill: null }, request);
+    expect(search).toHaveBeenLastCalledWith(expect.not.objectContaining({ chess960: true }));
+  });
+
   it('sends the skill level once per cache', async () => {
     const { client, setOption } = fakeClient({});
     const cache: SkillCache = { skill: null };

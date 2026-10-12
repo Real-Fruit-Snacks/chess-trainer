@@ -1,7 +1,7 @@
 // @vitest-environment node
 import type { AddressInfo } from 'node:net';
-import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fakeD1 } from './fakeD1';
 import { d1Store, fromBase64, toBase64 } from './src/d1Store.mjs';
 import {
   createRelay,
@@ -13,32 +13,7 @@ import {
 import { memoryStore } from './src/memoryStore.mjs';
 import { nodeServer } from './src/server.mjs';
 import { sqliteStore } from './src/sqliteStore.mjs';
-import worker from './src/worker.mjs';
-
-/** A stand-in for a D1 binding over node:sqlite, answering as D1 does (BLOBs as number arrays). */
-function fakeD1() {
-  const db = new DatabaseSync(':memory:');
-  return {
-    prepare(sql: string) {
-      let params: unknown[] = [];
-      const statement = {
-        bind(...values: unknown[]) {
-          params = values;
-          return statement;
-        },
-        first() {
-          const row = db.prepare(sql).get(...(params as never[]));
-          return Promise.resolve(row ?? null);
-        },
-        run() {
-          const result = db.prepare(sql).run(...(params as never[]));
-          return Promise.resolve({ success: true, meta: { changes: Number(result.changes) } });
-        },
-      };
-      return statement;
-    },
-  };
-}
+import worker, { DAILY_CRON } from './src/worker.mjs';
 
 const ID = 'a'.repeat(43);
 const TOKEN = 'T'.repeat(43);
@@ -286,7 +261,12 @@ describe.each(stores)('the relay over the %s store', (_name, makeStore) => {
 });
 
 describe('the relay entry points', () => {
-  it('runs as a Worker over D1, and its cron forgets unused vaults', async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('runs as a Worker over D1, and its daily cron forgets unused vaults', async () => {
     const env = { DB: fakeD1(), ALLOWED_ORIGINS: 'https://app.test' };
     const created = await worker.fetch(
       request('PUT', `/v1/vaults/${ID}`, { body: bytes(1, 2), headers: { 'If-None-Match': '*' } }),
@@ -297,8 +277,19 @@ describe('the relay entry points', () => {
     const read = await worker.fetch(request('GET', `/v1/vaults/${ID}`), env);
     expect(new Uint8Array(await read.arrayBuffer())).toEqual(bytes(1, 2));
     const waits: Promise<unknown>[] = [];
-    worker.scheduled(null, env, { waitUntil: (p: Promise<unknown>) => waits.push(p) });
-    expect(await Promise.all(waits)).toEqual([0]);
+    worker.scheduled({ cron: DAILY_CRON }, env, {
+      waitUntil: (p: Promise<unknown>) => waits.push(p),
+    });
+    await Promise.all(waits);
+    expect((await worker.fetch(request('GET', `/v1/vaults/${ID}`), env)).status).toBe(200);
+    // A year later, nobody having read it: gone.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + KEEP_UNUSED_MS + 1);
+    worker.scheduled({ cron: DAILY_CRON }, env, {
+      waitUntil: (p: Promise<unknown>) => waits.push(p),
+    });
+    await Promise.all(waits);
+    expect((await worker.fetch(request('GET', `/v1/vaults/${ID}`), env)).status).toBe(404);
   });
 
   it('limits new vaults per address when the Worker has a NEW_VAULTS binding', async () => {
@@ -355,8 +346,30 @@ describe('the relay entry points', () => {
     }
   });
 
+  it('passes the Node server’s client address on as Cloudflare does, whatever the client claims', async () => {
+    const seen: (string | null)[] = [];
+    const server = nodeServer((request) => {
+      seen.push(request.headers.get('CF-Connecting-IP'));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }).listen(0, '127.0.0.1');
+    await new Promise((resolve) => server.once('listening', resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const base = `http://127.0.0.1:${port}/v1/health`;
+      // From this machine: a proxy's address for the client, or none at all.
+      await fetch(base, { headers: { 'X-Forwarded-For': '192.0.2.1, 198.51.100.4' } });
+      await fetch(base, { headers: { 'CF-Connecting-IP': '203.0.113.66' } });
+      expect(seen).toEqual(['198.51.100.4', null]);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
   it('keeps bytes intact through base64, large ones included', () => {
     const large = new Uint8Array(300_000).map((_, i) => (i * 31) % 256);
-    expect(fromBase64(toBase64(large))).toEqual(large);
+    const back = fromBase64(toBase64(large));
+    // Compared byte by byte in a loop: a deep equality over 300,000 entries takes seconds.
+    expect(back.length).toBe(large.length);
+    expect(back.every((byte, i) => byte === large[i])).toBe(true);
   });
 });

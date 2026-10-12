@@ -726,8 +726,11 @@ export function gameEndSound(verdict: 'win' | 'loss' | 'draw', hotSeat = false):
   return verdict === 'loss' && !hotSeat ? 'gameLost' : 'gameEnd';
 }
 
+/** What decides a move's sound: a chess.js move has it, and so has a Chess960 one. */
+type SoundingMove = Pick<Move, 'promotion' | 'captured' | 'flags'>;
+
 /** Picks the right sound for a move that has just been played on `chess` (only check matters). */
-export function soundForMove(move: Move, chess: Pick<Chess, 'inCheck'>): SoundName {
+export function soundForMove(move: SoundingMove, chess: Pick<Chess, 'inCheck'>): SoundName {
   if (chess.inCheck()) return 'check';
   if (move.promotion) return 'promote';
   if (move.captured) return 'capture';
@@ -735,6 +738,6 @@ export function soundForMove(move: Move, chess: Pick<Chess, 'inCheck'>): SoundNa
   return 'move';
 }
 
-export function playMoveSound(move: Move, chess: Chess): void {
+export function playMoveSound(move: SoundingMove, chess: Pick<Chess, 'inCheck'>): void {
   playSound(soundForMove(move, chess));
 }

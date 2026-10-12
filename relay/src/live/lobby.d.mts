@@ -1,4 +1,5 @@
 /** Types for lobby.mjs, for the relay's tests. */
+import type { GroupSpec } from './group.mjs';
 
 export interface SeatSpec {
   name: string;
@@ -16,6 +17,10 @@ export interface GameSpec {
   tc: string | null;
   white: SeatSpec;
   black: SeatSpec;
+  /** A correspondence invitation's seat nobody holds yet (its SeatSpec has an empty name and hash). */
+  open?: 'white' | 'black' | null;
+  /** A Chess960 game's start position (a rematch's); none, and the room draws one. */
+  position?: number | null;
 }
 
 export interface Seek {
@@ -36,6 +41,10 @@ export interface LobbyData {
   seek: Seek | null;
   rateStart: number;
   rateCount: number;
+  /** When this socket made its recent invitations (correspondence games). */
+  invites?: number[];
+  /** When this socket made its recent group rooms. */
+  rooms?: number[];
 }
 
 export interface LobbyConn {
@@ -48,6 +57,8 @@ export interface LobbyConn {
 export interface LobbyPlatform {
   connections(): LobbyConn[];
   createGame(spec: GameSpec): Promise<void>;
+  /** Makes a group room, or finds it made already (none: rooms are not made here); throws when it cannot. */
+  createGroup?: (spec: GroupSpec) => Promise<'created' | 'exists'>;
   now(): number;
 }
 

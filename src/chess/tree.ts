@@ -1,5 +1,5 @@
-import { Chess, type Move } from 'chess.js';
-import { normalizeFen, sanitizeFen, START_FEN, toUci, tryMove } from './helpers';
+import { chess960Headers, isChess960Game, normalizeChess960Fen } from './chess960';
+import { normalizeFen, sanitizeFen, START_FEN } from './helpers';
 import {
   NAG_GLYPHS,
   type PgnCommand,
@@ -8,12 +8,14 @@ import {
   PgnParseError,
   parsePgn,
 } from './pgn';
+import { type ChessRules, type PlayedMove, rulesFor, type Variant } from './rules';
 import type { Fen, MoveInput, San, Uci } from './types';
 
 export interface TreeNode {
   readonly id: number;
   /** SAN of the move that leads to this node ('' for the root). */
   san: San;
+  /** The move in UCI as the engine reads it in the tree's variant (Chess960 castling: "e1h1"). */
   uci: Uci;
   /** Position after the move. */
   fen: Fen;
@@ -49,17 +51,29 @@ function moveNumberPrefix(parentFen: Fen, forceNumber: boolean): string {
 
 /**
  * A game as a tree of positions. The first child of every node is the main
- * line; further children are variations, in display order.
+ * line; further children are variations, in display order. The moves follow
+ * the rules of the tree's variant: standard chess, or Chess960.
  */
 export class GameTree {
   readonly root: TreeNode;
   current: TreeNode;
   headers: Record<string, string> = {};
   result = '*';
+  /** Standard chess or Chess960: how castling works, and what the PGN says. */
+  readonly variant: Variant;
 
-  /** The start position is normalised (see `normalizeFen`), so stale castling flags never reach the board. */
-  constructor(startFen: Fen = START_FEN) {
-    const fen = startFen === START_FEN ? startFen : normalizeFen(startFen);
+  /**
+   * The start position is normalised (see `normalizeFen`, and for Chess960
+   * `normalizeChess960Fen`), so stale castling flags never reach the board.
+   */
+  constructor(startFen: Fen = START_FEN, variant: Variant = 'standard') {
+    this.variant = variant;
+    const fen =
+      variant === 'chess960'
+        ? (normalizeChess960Fen(startFen) ?? startFen)
+        : startFen === START_FEN
+          ? startFen
+          : normalizeFen(startFen);
     this.root = makeNode({ san: '', uci: '', fen, ply: 0, parent: null });
     this.current = this.root;
   }
@@ -68,21 +82,35 @@ export class GameTree {
     return this.root.fen;
   }
 
+  /** The rules the tree's moves are played by. */
+  get rules(): ChessRules {
+    return rulesFor(this.variant);
+  }
+
+  /** Whether the game is Chess960. */
+  get chess960(): boolean {
+    return this.variant === 'chess960';
+  }
+
   /** Plays a move from the current node; reuses an existing child when the move is already there. */
   addMove(input: MoveInput | San, options: { navigate?: boolean } = {}): TreeNode | null {
-    const chess = new Chess(this.current.fen);
-    const move = tryMove(chess, input);
+    const move = this.rules.play(this.current.fen, input);
     if (!move) return null;
-    const node = this.attach(this.current, move, chess.fen());
+    const node = this.attach(this.current, move);
     if (options.navigate !== false) this.current = node;
     return node;
   }
 
-  private attach(parent: TreeNode, move: Move, fenAfter: Fen): TreeNode {
-    const uci = toUci(move);
-    const existing = parent.children.find((c) => c.uci === uci);
+  private attach(parent: TreeNode, move: PlayedMove): TreeNode {
+    const existing = parent.children.find((c) => c.uci === move.uci);
     if (existing) return existing;
-    const node = makeNode({ san: move.san, uci, fen: fenAfter, ply: parent.ply + 1, parent });
+    const node = makeNode({
+      san: move.san,
+      uci: move.uci,
+      fen: move.after,
+      ply: parent.ply + 1,
+      parent,
+    });
     parent.children.push(node);
     return node;
   }
@@ -213,7 +241,7 @@ export class GameTree {
 
   /** An independent copy (fresh node ids), positioned at the root. */
   clone(): GameTree {
-    const copy = new GameTree(this.root.fen);
+    const copy = new GameTree(this.root.fen, this.variant);
     copy.headers = { ...this.headers };
     copy.result = this.result;
     copyAnnotations(this.root, copy.root);
@@ -236,10 +264,15 @@ export class GameTree {
     return copy;
   }
 
-  /** PGN movetext with variations, comments and glyphs. */
+  /**
+   * PGN movetext with variations, comments and glyphs. A Chess960 game always
+   * names its variant and start position (the classical one too).
+   */
   toPgn(headers: Record<string, string> = {}): string {
     const merged = { ...this.headers, ...headers };
-    if (this.root.fen !== START_FEN) {
+    if (this.chess960) {
+      Object.assign(merged, chess960Headers(this.root.fen));
+    } else if (this.root.fen !== START_FEN) {
       merged.SetUp = '1';
       merged.FEN = this.root.fen;
     }
@@ -256,6 +289,8 @@ export class GameTree {
   /**
    * Builds a tree from PGN text (supports variations, comments and NAGs). Throws a
    * `PgnParseError` naming the first illegal move ("Illegal move Nf7 after Qh5").
+   * A Chess960 game (`[Variant "Chess960"]`, or a start only Chess960 has) is
+   * played by its rules.
    */
   static fromPgn(pgn: string): GameTree {
     const game = parsePgn(pgn);
@@ -263,15 +298,19 @@ export class GameTree {
   }
 
   static fromParsed(game: PgnGame): GameTree {
+    const variant: Variant = isChess960Game(game.headers) ? 'chess960' : 'standard';
     let startFen: Fen = START_FEN;
     if (game.headers.FEN) {
-      const fen = sanitizeFen(game.headers.FEN);
+      const fen =
+        variant === 'chess960'
+          ? normalizeChess960Fen(game.headers.FEN)
+          : sanitizeFen(game.headers.FEN);
       if (!fen) {
         throw new PgnParseError(`Invalid FEN header "${game.headers.FEN}"`, game.headers.FEN, 0);
       }
       startFen = fen;
     }
-    const tree = new GameTree(startFen);
+    const tree = new GameTree(startFen, variant);
     tree.headers = { ...game.headers };
     if (game.headers.FEN) tree.headers.FEN = startFen;
     tree.result = game.result;
@@ -279,13 +318,12 @@ export class GameTree {
     const addLine = (parent: TreeNode, line: PgnLine) => {
       let cursor = parent;
       for (const entry of line) {
-        const chess = new Chess(cursor.fen);
-        const move = tryMove(chess, entry.san);
+        const move = tree.rules.play(cursor.fen, entry.san);
         if (!move) {
           const where = cursor.san ? `after ${cursor.san}` : 'at the start';
           throw new PgnParseError(`Illegal move ${entry.san} ${where}`, entry.san, cursor.ply + 1);
         }
-        const node = tree.attach(cursor, move, chess.fen());
+        const node = tree.attach(cursor, move);
         if (entry.comment) node.comment = entry.comment;
         if (entry.commentBefore) node.commentBefore = entry.commentBefore;
         if (entry.commands.length) node.commands = [...entry.commands];

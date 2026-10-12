@@ -49,7 +49,7 @@ export const ONLINE_GAMES: readonly OnlineGame[] = [
     name: 'Puzzle race',
     tagline: 'The same puzzle on both boards: the first clean solve takes the round.',
     description:
-      'Both players get the same puzzles at the same moment. A wrong move is out of the round; the first to solve one cleanly takes it. Play first to two, share a round when both solve within 15 seconds, or race through as many as you can in three minutes.',
+      'Both players get the same puzzles at the same moment. A wrong move is out of the round; the first to solve one cleanly takes it. Play first to two, share a round when both solve within 15 seconds, or race through as many as you can in three minutes. Or open a room for up to eight, and send its link.',
     icon: 'stopwatch',
     duel: true,
     arcade: '/puzzles/rush',
@@ -98,6 +98,18 @@ export const ONLINE_GAMES: readonly OnlineGame[] = [
     icon: 'eye-off',
     duel: false,
     arcade: '/arcade/blindfold',
+    defaults: {},
+    minutes: '10–30',
+  },
+  {
+    kind: 'chess960',
+    name: 'Chess960',
+    tagline: 'Chess from one of 960 start positions: no opening theory to lean on.',
+    description:
+      'The pieces behind the pawns start in one of 960 orders, the same for both sides, drawn for each game; a rematch keeps it. To castle, move the king onto its own rook: both end on the squares they would in chess.',
+    icon: 'shuffle',
+    duel: false,
+    arcade: '/play/computer?variant=chess960',
     defaults: {},
     minutes: '10–30',
   },
@@ -164,7 +176,8 @@ function colorText(color: ColorChoice): string {
 
 /**
  * What a posted game is, in one line: "5+3 · Blitz · Random colour",
- * "Army Draft · 30 points · 5+3 · Plays white", "Puzzle race · Best of three · 1500".
+ * "Army Draft · 30 points · 5+3 · Plays white", "Chess960 · 5+3 · Plays white",
+ * "Puzzle race · Best of three · 1500".
  */
 export function describeSeek(seek: {
   game: GameKind;
@@ -183,7 +196,10 @@ export function describeSeek(seek: {
   return parts.join(' · ');
 }
 
-/** "a 5+3 game", "a puzzle race", "an Army Draft game": what was posted, in a sentence. */
+/**
+ * "a 5+3 game", "a puzzle race", "an Army Draft game", "a 5+3 Chess960 game": what was
+ * posted, in a sentence.
+ */
 export function gameNoun(kind: GameKind, tc: string | null): string {
   switch (kind) {
     case 'chess':
@@ -192,6 +208,8 @@ export function gameNoun(kind: GameKind, tc: string | null): string {
       return 'blindfold game';
     case 'army':
       return 'Army Draft game';
+    case 'chess960':
+      return tc ? `${tc} Chess960 game` : 'Chess960 game';
     case 'race':
       return 'puzzle race';
     case 'arbiter':

@@ -1,11 +1,14 @@
 import type { Fen, San, Uci } from '@/chess/types';
+import { useLichess } from '@/store/lichess';
 import { fetchWithTimeout, isTimeoutError, retryAfterSeconds } from './fetchWithTimeout';
 
 /**
  * Optional lookups against the Lichess opening explorer: what people actually
  * play in a position and how it goes for them. Off by default
  * (settings.explorer) because it needs the network; every call is abortable,
- * gives up after 15 seconds, and results are cached per position and database.
+ * gives up after 15 seconds, and results are cached per position and database
+ * for the session. Lichess asks for a signed-in account: a lookup carries the
+ * token of the Lichess account connected in Settings, when there is one.
  *
  * API: https://lichess.org/api#tag/Opening-Explorer
  */
@@ -79,22 +82,51 @@ interface ApiResponse {
   opening?: { eco: string; name: string } | null;
 }
 
-export const EXPLORER_ENDPOINT = 'https://explorer.lichess.ovh';
+export const EXPLORER_ENDPOINT = 'https://explorer.lichess.org';
 /** Lichess games: the rating bands and speeds that make up the "community" database. */
 export const LICHESS_RATINGS = [1600, 1800, 2000, 2200];
 export const LICHESS_SPEEDS = ['blitz', 'rapid', 'classical'];
 
 const cache = new Map<string, ExplorerResult>();
 
+/** The cache key: the database and the position (the FEN without its move counters). */
+function cacheKey(fen: Fen, database: ExplorerDatabase): string {
+  return `${database}:${fen.split(' ').slice(0, 4).join(' ')}`;
+}
+
 /** Milliseconds a lookup may take before it is given up on. */
 export const EXPLORER_TIMEOUT_MS = 15_000;
 
+/** What went wrong with a lookup, for callers that act on it (a batch waits out a 429). */
+export type ExplorerErrorKind = 'rate-limited' | 'auth' | 'timeout' | 'http' | 'unreadable';
+
 /** A failed lookup, with a message fit for the explorer card. */
 export class ExplorerError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly kind: ExplorerErrorKind = 'http',
+    /** For `rate-limited`: the seconds the explorer asked to wait, when it said. */
+    readonly retryAfter: number | null = null,
+  ) {
     super(message);
     this.name = 'ExplorerError';
   }
+}
+
+/** The connected Lichess account's token, unless Lichess has already refused it. */
+function accountToken(): string | null {
+  const { account, needsReconnect } = useLichess.getState();
+  return account?.token && !needsReconnect ? account.token : null;
+}
+
+/** Requests in flight, so a batch never runs alongside another lookup. */
+const inFlight = new Set<Promise<unknown>>();
+
+function track<T>(request: Promise<T>): Promise<T> {
+  inFlight.add(request);
+  const settle = () => inFlight.delete(request);
+  void request.then(settle, settle);
+  return request;
 }
 
 /** "in 30 seconds" / "in 2 minutes" for a Retry-After delay. */
@@ -172,19 +204,27 @@ export async function lookupExplorer(
   database: ExplorerDatabase,
   signal?: AbortSignal,
 ): Promise<ExplorerResult> {
-  const key = `${database}:${fen.split(' ').slice(0, 4).join(' ')}`;
+  const key = cacheKey(fen, database);
   const cached = cache.get(key);
   if (cached) return cached;
+  const token = accountToken();
   let res: Response;
   try {
-    res = await fetchWithTimeout(explorerUrl(fen, database), {
-      signal,
-      timeoutMs: EXPLORER_TIMEOUT_MS,
-      headers: { Accept: 'application/json' },
-    });
+    res = await track(
+      fetchWithTimeout(explorerUrl(fen, database), {
+        signal,
+        timeoutMs: EXPLORER_TIMEOUT_MS,
+        headers: token
+          ? { Accept: 'application/json', Authorization: `Bearer ${token}` }
+          : { Accept: 'application/json' },
+      }),
+    );
   } catch (err) {
     if (isTimeoutError(err)) {
-      throw new ExplorerError('The explorer took too long to answer — try again in a moment.');
+      throw new ExplorerError(
+        'The explorer took too long to answer — try again in a moment.',
+        'timeout',
+      );
     }
     // The caller's abort, or the network itself (described by describeExplorerError).
     throw err;
@@ -195,6 +235,17 @@ export async function lookupExplorer(
       wait !== null && wait > 0
         ? `The explorer is rate-limiting requests — try again in ${waitText(wait)}.`
         : 'The explorer is rate-limiting requests — try again in a minute.',
+      'rate-limited',
+      wait,
+    );
+  }
+  if (res.status === 401) {
+    // Lichess serves the explorer to signed-in accounts only.
+    throw new ExplorerError(
+      token || useLichess.getState().needsReconnect
+        ? 'Lichess did not accept this device’s sign-in for the explorer. Connect your Lichess account again in Settings.'
+        : 'The Lichess opening explorer needs a Lichess account. Connect yours in Settings to look positions up.',
+      'auth',
     );
   }
   if (!res.ok) {
@@ -204,11 +255,123 @@ export async function lookupExplorer(
   try {
     data = (await res.json()) as ApiResponse;
   } catch {
-    throw new ExplorerError('The explorer sent an answer that could not be read.');
+    throw new ExplorerError('The explorer sent an answer that could not be read.', 'unreadable');
   }
   const result = scoreForMover(normalizeExplorer(data, database), fen);
   cache.set(key, result);
   return result;
+}
+
+/** The session's answer for a position, if it was looked up already; never a request. */
+export function peekExplorer(fen: Fen, database: ExplorerDatabase): ExplorerResult | null {
+  return cache.get(cacheKey(fen, database)) ?? null;
+}
+
+/** Milliseconds between two requests of a batch. */
+export const EXPLORER_BATCH_PAUSE_MS = 500;
+/** How long a batch waits after a 429 that names no time: a minute, as Lichess asks. */
+export const EXPLORER_DEFAULT_WAIT_SECONDS = 60;
+/** A batch gives up after this many 429s in a row (the explorer is overloaded, not just busy). */
+const MAX_RATE_LIMITS_IN_A_ROW = 3;
+
+function abortError(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  return reason instanceof Error
+    ? reason
+    : new DOMException('The lookups were stopped.', 'AbortError');
+}
+
+/** Resolves after `ms`, or rejects at once when `signal` aborts. */
+function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError(signal));
+      return;
+    }
+    const onAbort = () => {
+      window.clearTimeout(timer);
+      if (signal) reject(abortError(signal));
+    };
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export interface ExplorerBatchOptions {
+  signal?: AbortSignal;
+  /** Each position's answer as it comes (from the cache or the network), with its index. */
+  onResult?: (result: ExplorerResult, index: number) => void;
+  /** Before a wait the explorer asked for (a 429): its length in seconds; null once it is over. */
+  onWait?: (seconds: number | null) => void;
+  pauseMs?: number;
+  /** The lookup, the cache and the clock: replaceable in tests. */
+  lookup?: (fen: Fen, database: ExplorerDatabase, signal?: AbortSignal) => Promise<ExplorerResult>;
+  cached?: (fen: Fen, database: ExplorerDatabase) => ExplorerResult | null;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+}
+
+/**
+ * Looks many positions up one after another, as Lichess asks of API clients:
+ * one request at a time (never alongside another lookup of the app), a short
+ * pause between requests, and after a 429 a wait as long as its Retry-After
+ * says (a minute when it says nothing) before the same position is asked
+ * again. Positions already in the session's cache cost no request and no
+ * pause. Resolves when every position has its answer; rejects with the first
+ * other failure, or with the abort when `signal` aborts. The answers that came
+ * before stay with the caller (`onResult`).
+ */
+export async function lookupExplorerBatch(
+  fens: readonly Fen[],
+  database: ExplorerDatabase,
+  {
+    signal,
+    onResult,
+    onWait,
+    pauseMs = EXPLORER_BATCH_PAUSE_MS,
+    lookup = lookupExplorer,
+    cached = peekExplorer,
+    sleep = pause,
+  }: ExplorerBatchOptions = {},
+): Promise<void> {
+  /** A request went out: the next one waits a moment first. */
+  let requested = false;
+  let limitedInARow = 0;
+  let index = 0;
+  while (index < fens.length) {
+    if (signal?.aborted) throw abortError(signal);
+    const fen = fens[index];
+    if (fen === undefined) break;
+    const hit = cached(fen, database);
+    if (hit) {
+      onResult?.(hit, index);
+      index += 1;
+      continue;
+    }
+    if (requested) await sleep(pauseMs, signal);
+    while (inFlight.size) await Promise.allSettled([...inFlight]);
+    if (signal?.aborted) throw abortError(signal);
+    requested = true;
+    try {
+      const result = await lookup(fen, database, signal);
+      limitedInARow = 0;
+      onResult?.(result, index);
+      index += 1;
+    } catch (err) {
+      if (signal?.aborted) throw abortError(signal);
+      const limited = err instanceof ExplorerError && err.kind === 'rate-limited';
+      if (!limited || limitedInARow >= MAX_RATE_LIMITS_IN_A_ROW - 1) throw err;
+      limitedInARow += 1;
+      const seconds = Math.max(1, err.retryAfter ?? EXPLORER_DEFAULT_WAIT_SECONDS);
+      onWait?.(seconds);
+      await sleep(seconds * 1000, signal);
+      onWait?.(null);
+      // The wait was the pause.
+      requested = false;
+    }
+  }
 }
 
 /**

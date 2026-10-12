@@ -5,8 +5,9 @@ import {
   fetchLichessGames,
   fetchLichessGamesPage,
   ImportError,
+  isImportableVariant,
   isStandardVariant,
-  LICHESS_STANDARD_PERFS,
+  LICHESS_PERFS,
   parseChessComCursor,
   parsePgnGames,
   parsePgnGamesDetailed,
@@ -147,13 +148,31 @@ describe('parsePgnGamesDetailed', () => {
     expect(parsePgnGamesDetailed('1. e4 e5 *').firstError).toBeNull();
   });
 
-  it('skips variant games', () => {
+  it('keeps standard chess and Chess960, and skips other variants', () => {
     const text =
       '[Variant "Chess960"]\n[FEN "bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w KQkq - 0 1"]\n\n1. e4 *\n\n[Variant "Standard"]\n\n1. d4 *\n\n[Variant "From Position"]\n[FEN "4k3/8/8/8/8/8/8/4K2R w K - 0 1"]\n\n1. O-O *\n\n[Variant "King of the Hill"]\n\n1. e4 e5 *\n';
     const games = parsePgnGames(text);
-    expect(games.map((g) => g.pgn.split('\n\n')[1])).toEqual(['1. d4 *', '1. O-O *']);
+    expect(games.map((g) => g.pgn.split('\n\n')[1])).toEqual(['1. e4 *', '1. d4 *', '1. O-O *']);
+    expect(games[0]?.startFen).toBe('bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w KQkq - 0 1');
     expect(isStandardVariant(undefined)).toBe(true);
     expect(isStandardVariant('Three-check')).toBe(false);
+    expect(isImportableVariant('Chess960')).toBe(true);
+    expect(isImportableVariant('Crazyhouse')).toBe(false);
+  });
+
+  it('replays a Chess960 game by its rules, castling and all', () => {
+    // Position 274 (BNRKNBRQ): both sides castle long at once, the king and rook swapping.
+    const games = parsePgnGames(
+      '[Variant "Chess960"]\n[FEN "bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1"]\n[SetUp "1"]\n\n1. O-O-O O-O-O 2. e4 *\n',
+    );
+    expect(games).toHaveLength(1);
+    expect(games[0]?.plies).toBe(3);
+    // An illegal castling (White's king cannot reach g1 yet) keeps the game out, with the reason.
+    const { games: none, firstError } = parsePgnGamesDetailed(
+      '[FEN "bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1"]\n[Variant "Chess960"]\n\n1. O-O *\n',
+    );
+    expect(none).toHaveLength(0);
+    expect(firstError?.message).toBe('Illegal move O-O at the start');
   });
 
   it('only keeps https links on lichess.org or chess.com as source URLs', () => {
@@ -176,16 +195,40 @@ describe('parsePgnGamesDetailed', () => {
 describe('request limits', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('asks Lichess for standard perfs only', async () => {
+  it('asks Lichess for standard and Chess960 perfs only', async () => {
     const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve(new Response(LICHESS_PGN, { status: 200 })),
     );
     vi.stubGlobal('fetch', fetchMock);
     await fetchLichessGamesPage('alice', { filters: { speed: 'all' } });
     const url = String(fetchMock.mock.calls[0]?.[0]);
-    expect(decodeURIComponent(url)).toContain(`perfType=${LICHESS_STANDARD_PERFS}`);
+    expect(decodeURIComponent(url)).toContain(`perfType=${LICHESS_PERFS}`);
+    expect(LICHESS_PERFS).toContain('chess960');
     await fetchLichessGamesPage('alice', { filters: { speed: 'blitz' } });
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('perfType=blitz');
+    expect(decodeURIComponent(String(fetchMock.mock.calls[1]?.[0]))).toContain(
+      'perfType=blitz,chess960',
+    );
+  });
+
+  it('keeps a speed filter’s own Chess960 games, and pages by what Lichess sent', async () => {
+    const game = (n: number, tc: string, variant = '') =>
+      `[Event "Rated game"]\n[Site "https://lichess.org/g${n}"]\n[UTCDate "2026.09.0${n}"]\n[UTCTime "12:00:00"]\n[White "alice"]\n[Black "bob"]\n[Result "*"]\n[TimeControl "${tc}"]\n${variant}\n1. e4 *\n`;
+    const chess960 =
+      '[Variant "Chess960"]\n[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]\n';
+    const pgn = [game(3, '300+0'), game(2, '60+0', chess960), game(1, '180+2', chess960)].join(
+      '\n',
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(pgn, { status: 200 }))),
+    );
+    const page = await fetchLichessGamesPage('alice', { max: 3, filters: { speed: 'blitz' } });
+    // The bullet Chess960 game is left out; the page was full, so there is more to load.
+    expect(page.games.map((g) => g.url)).toEqual([
+      'https://lichess.org/g3',
+      'https://lichess.org/g1',
+    ]);
+    expect(page.next).not.toBeNull();
   });
 
   it('honours Retry-After on 429 and passes a timeout signal', async () => {
@@ -212,7 +255,7 @@ describe('request limits', () => {
     });
   });
 
-  it('ignores chess.com archive URLs outside the player’s games path and skips variants', async () => {
+  it('ignores chess.com archive URLs outside the player’s games path, and keeps Chess960 games', async () => {
     const pgn = `[Event "Live Chess"]\n[Site "Chess.com"]\n[White "a"]\n[Black "b"]\n[Result "*"]\n\n1. e4 e5 *\n`;
     const fetchMock = vi.fn((url: string) => {
       if (url.endsWith('/games/archives')) {
@@ -229,6 +272,7 @@ describe('request limits', () => {
       return Promise.resolve(
         Response.json({
           games: [
+            { pgn, end_time: 300, rules: 'kingofthehill', url: 'https://www.chess.com/game/1' },
             { pgn, end_time: 200, rules: 'chess960', url: 'https://www.chess.com/game/live/9' },
             { pgn, end_time: 100, rules: 'chess', url: 'javascript:alert(1)' },
           ],
@@ -237,8 +281,7 @@ describe('request limits', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const games = await fetchChessComGames('xo', { max: 5 });
-    expect(games).toHaveLength(1);
-    expect(games[0]?.url).toBeNull();
+    expect(games.map((g) => g.url)).toEqual(['https://www.chess.com/game/live/9', null]);
     expect(fetchMock.mock.calls.map((c) => String(c[0]))).toEqual([
       'https://api.chess.com/pub/player/xo/games/archives',
       'https://api.chess.com/pub/player/xo/games/2026/09',

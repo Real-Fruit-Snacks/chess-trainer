@@ -1,4 +1,4 @@
-import { Chess } from 'chess.js';
+import { parsePlacement } from '@/chess/geometry';
 import type { Fen, LongColor } from '@/chess/types';
 import type { MaterialDisplay } from '@/store/settings';
 
@@ -19,18 +19,16 @@ export function capturedMaterial(
   mode: Exclude<MaterialDisplay, 'off'>,
 ): { captured: Role[]; diff: number } {
   const opponent: LongColor = color === 'white' ? 'black' : 'white';
-  const chess = new Chess(fen);
   const onBoard: Record<LongColor, Record<Role, number>> = {
     white: emptyCounts(),
     black: emptyCounts(),
   };
-  for (const row of chess.board()) {
-    for (const piece of row) {
-      if (!piece || piece.type === 'k') continue;
-      const role = ROLE[piece.type];
-      if (!role) continue;
-      onBoard[piece.color === 'w' ? 'white' : 'black'][role]++;
-    }
+  // The pieces alone: any FEN reads, a Chess960 one with castling rights by file too.
+  for (const piece of parsePlacement(fen).values()) {
+    if (piece.type === 'k') continue;
+    const role = ROLE[piece.type];
+    if (!role) continue;
+    onBoard[piece.color === 'w' ? 'white' : 'black'][role]++;
   }
   const captured: Role[] = [];
   let mine = 0;

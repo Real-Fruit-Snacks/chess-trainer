@@ -4,15 +4,24 @@
  * live-games.test.ts share it).
  */
 import { createLiveHub, type Socket, type SocketEvents } from './src/live/hub.mjs';
+import type { RoomPlatform } from './src/live/room.mjs';
 
 export const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-/** A hub whose clock moves only when the test moves it. */
-export function world() {
+/**
+ * A hub whose clock moves only when the test moves it (pushing through `notify`, if given;
+ * drawing Chess960 starts with `chess960Position`, if given).
+ */
+export function world({
+  notify,
+  chess960Position,
+}: { notify?: RoomPlatform['notify']; chess960Position?: () => number } = {}) {
   let time = 1_000_000;
   let queue: { at: number; run: () => void }[] = [];
   const hub = createLiveHub({
     now: () => time,
+    notify,
+    chess960Position,
     timers: {
       set: (at, run) => {
         const handle = { at, run };

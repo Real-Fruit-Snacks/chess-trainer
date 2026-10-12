@@ -18,6 +18,7 @@ import {
   Switch,
 } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
+import { chess960Number } from '@/chess/chess960';
 import { START_FEN } from '@/chess/helpers';
 import { PIECE_NAMES } from '@/chess/blunderCheck';
 import { MOTIF_HELP } from '@/features/analyze/commentary';
@@ -29,7 +30,7 @@ import { useMaiaDownload } from '@/engine/maia/maiaDownload';
 import { HUMAN_MAX_RATING, HUMAN_RATINGS } from '@/engine/maia/ratings';
 import { TIME_CONTROLS } from '@/lib/clock';
 import { siteConfig } from '@/site.config';
-import { PLAY_OPPONENTS, useSettings } from '@/store/settings';
+import { PLAY_OPPONENTS, type PlayVariant, useSettings } from '@/store/settings';
 import { useRepertoire } from '@/store/repertoire';
 import { BUILT_IN_REPERTOIRES } from '@/features/openings/repertoires';
 import { HumanOpponentDownload } from './HumanOpponentDownload';
@@ -75,9 +76,20 @@ export default function PlayPage() {
     setFocus(focusOn);
     return () => setFocus(false);
   }, [focusOn, setFocus]);
-  // A hand-off from analysis, puzzles, lessons or drills: play out this position.
-  const [handOff] = useState(() => checkStartPosition(searchParams.get('fen')));
+  // A hand-off from analysis, puzzles, lessons or drills: play out this position (a Chess960 one
+  // keeps its rules).
+  const [handOff] = useState(() =>
+    checkStartPosition(searchParams.get('fen'), {
+      chess960: searchParams.get('variant') === 'chess960',
+    }),
+  );
   const [startFrom, setStartFrom] = useState<Fen | null>(handOff.fen);
+  // Standard chess or Chess960: the last choice, unless a link or a hand-off says otherwise.
+  const [variant, setVariant] = useState<PlayVariant>(() => {
+    if (handOff.fen) return handOff.chess960 ? 'chess960' : 'standard';
+    return searchParams.get('variant') === 'chess960' ? 'chess960' : settings.playVariant;
+  });
+  const chess960Setup = variant === 'chess960';
   const [color, setColor] = useState<LongColor | 'random'>(() => {
     const requested = searchParams.get('color');
     if (requested === 'white' || requested === 'black') return requested;
@@ -160,7 +172,8 @@ export default function PlayPage() {
       searchParams.has('color') ||
       searchParams.has('level') ||
       searchParams.has('book') ||
-      searchParams.has('opponent')
+      searchParams.has('opponent') ||
+      searchParams.has('variant')
     ) {
       setSearchParams({}, { replace: true });
     }
@@ -206,7 +219,10 @@ export default function PlayPage() {
   };
 
   const startGame = () => {
-    const book = bookChoice && opponent !== 'human' && !startFrom ? bookChoice : undefined;
+    // Opening practice, the coach and the blunder check are standard chess only (the dialog
+    // shows them off for Chess960); so is Maia, whom the dialog does not offer then.
+    const book =
+      bookChoice && opponent !== 'human' && !startFrom && !chess960Setup ? bookChoice : undefined;
     if (book && !canFollowBook(book.pgn)) {
       toast(`“${book.name}” could not be read. Open it from Openings to copy or delete it.`, {
         tone: 'warning',
@@ -218,13 +234,22 @@ export default function PlayPage() {
       levelId,
       timeControlId,
       fen: startFrom ?? undefined,
-      opponent,
+      opponent: chess960Setup && opponent === 'humanlike' ? 'engine' : opponent,
       humanRating,
       autoFlip: opponent === 'human' && autoFlip,
-      coach: settings.playCoach,
-      blunderCheck: settings.playBlunderCheck,
+      coach: settings.playCoach && !chess960Setup,
+      blunderCheck: settings.playBlunderCheck && !chess960Setup,
       book,
+      variant,
     });
+    // A position handed over says nothing about the next game's kind.
+    if (!startFrom) settings.update({ playVariant: variant });
+  };
+
+  /** Chess960 is the engine's or two players' game: Maia knows standard chess only. */
+  const chooseVariant = (next: PlayVariant) => {
+    setVariant(next);
+    if (next === 'chess960' && opponent === 'humanlike') setOpponent('engine');
   };
 
   /** Play again: the same settings as the last game, straight away. */
@@ -242,7 +267,10 @@ export default function PlayPage() {
     setPeeking(true);
     window.setTimeout(() => setPeeking(false), PEEK_MS);
   };
-  const customStart = play.started && play.startFen !== START_FEN;
+  const chess960 = play.variant === 'chess960';
+  // A Chess960 game from one of its 960 starts is no custom position.
+  const customStart =
+    play.started && (chess960 ? play.chess960Position === null : play.startFen !== START_FEN);
 
   const openSetup = () => {
     dismissResult();
@@ -370,8 +398,8 @@ export default function PlayPage() {
         <h1>Play the computer</h1>
         <p>
           Eight engine levels, from “just learned the rules” to master; a human-like opponent at any
-          rating from 600 to 2600; or two players at one device. With or without a clock — take back
-          moves, ask for hints, or play blindfold.
+          rating from 600 to 2600; or two players at one device. Standard chess or Chess960, with or
+          without a clock — take back moves, ask for hints, or play blindfold.
         </p>
       </div>
 
@@ -416,6 +444,7 @@ export default function PlayPage() {
               turnColor={position.turn}
               movableColor={movableColor}
               dests={playerTurn ? position.dests : new Map()}
+              chess960={chess960}
               lastMove={position.lastMove}
               check={position.inCheck}
               autoShapes={play.hintShapes}
@@ -474,6 +503,15 @@ export default function PlayPage() {
                 <Spinner label="Loading engine" />
               ) : null}
             </div>
+            {play.started && chess960 ? (
+              <p className="small" style={{ margin: '4px 0 0' }} data-testid="play-variant">
+                <strong>
+                  {play.chess960Position === null
+                    ? 'Chess960'
+                    : `Chess960 · position ${play.chess960Position}`}
+                </strong>
+              </p>
+            ) : null}
             {play.started ? (
               <p className="small muted" style={{ margin: '4px 0 0' }}>
                 {hotSeat
@@ -495,7 +533,11 @@ export default function PlayPage() {
                   <>
                     {' '}
                     Custom starting position ·{' '}
-                    <Link to={`/analyze?fen=${encodeURIComponent(play.startFen)}`}>analyze it</Link>
+                    <Link
+                      to={`/analyze?fen=${encodeURIComponent(play.startFen)}${chess960 ? '&variant=chess960' : ''}`}
+                    >
+                      analyze it
+                    </Link>
                     .
                   </>
                 ) : null}
@@ -605,8 +647,9 @@ export default function PlayPage() {
         <div className="stack">
           {startFrom ? (
             <Alert tone="info">
-              Starting from a custom position ({startFrom.split(' ')[1] === 'b' ? 'Black' : 'White'}{' '}
-              to move).{' '}
+              {chess960Setup && chess960Number(startFrom) !== null
+                ? `Starting from Chess960 position ${chess960Number(startFrom) ?? ''}.`
+                : `Starting from a ${chess960Setup ? 'Chess960' : 'custom'} position (${startFrom.split(' ')[1] === 'b' ? 'Black' : 'White'} to move).`}{' '}
               <Button size="sm" variant="ghost" onClick={() => setStartFrom(null)}>
                 Use the initial position instead
               </Button>
@@ -659,25 +702,54 @@ export default function PlayPage() {
                 onChange={(e) => setOpponent(e.target.value as Opponent)}
               >
                 <option value="engine">Stockfish (engine)</option>
-                <option value="humanlike">A human-like opponent (Maia)</option>
+                <option value="humanlike" disabled={chess960Setup}>
+                  {chess960Setup
+                    ? 'A human-like opponent (Maia) — standard chess only'
+                    : 'A human-like opponent (Maia)'}
+                </option>
                 <option value="human">Another person at this device</option>
               </Select>
             )}
           </Field>
-          {opponent !== 'human' && !startFrom ? (
+          {startFrom ? null : (
             <Field
-              label="Practise an opening"
+              label="Game"
               hint={
-                bookChoice
-                  ? `You play ${bookChoice.color}. The opponent follows the repertoire’s lines; when the book runs out, ${opponent === 'humanlike' ? 'Maia' : 'the engine'} takes over. Leaving the book pauses the game.`
-                  : 'Rehearse a repertoire against a live opponent.'
+                chess960Setup
+                  ? 'The pieces behind the pawns start in one of 960 arrangements, a new one each game. Castle by moving your king onto its rook. Coach mode, the blunder check, opening practice and Maia are for standard chess, so they are off.'
+                  : 'The usual starting position.'
               }
             >
               {(id) => (
                 <Select
                   id={id}
-                  value={bookId}
+                  value={variant}
+                  onChange={(e) => chooseVariant(e.target.value as PlayVariant)}
+                  data-testid="variant-select"
+                >
+                  <option value="standard">Standard chess</option>
+                  <option value="chess960">Chess960 (a random start position)</option>
+                </Select>
+              )}
+            </Field>
+          )}
+          {opponent !== 'human' && !startFrom ? (
+            <Field
+              label="Practise an opening"
+              hint={
+                chess960Setup
+                  ? 'Standard chess only.'
+                  : bookChoice
+                    ? `You play ${bookChoice.color}. The opponent follows the repertoire’s lines; when the book runs out, ${opponent === 'humanlike' ? 'Maia' : 'the engine'} takes over. Leaving the book pauses the game.`
+                    : 'Rehearse a repertoire against a live opponent.'
+              }
+            >
+              {(id) => (
+                <Select
+                  id={id}
+                  value={chess960Setup ? '' : bookId}
                   onChange={(e) => setBookId(e.target.value)}
+                  disabled={chess960Setup}
                   data-testid="book-select"
                 >
                   <option value="">No — a normal game</option>
@@ -739,7 +811,7 @@ export default function PlayPage() {
               description="The board faces whoever is to move."
             />
           )}
-          {bookChoice && opponent !== 'human' && !startFrom ? null : (
+          {bookChoice && opponent !== 'human' && !startFrom && !chess960Setup ? null : (
             <Field label={opponent === 'human' ? 'Board faces' : 'Your colour'}>
               {(id) => (
                 <Select
@@ -788,22 +860,30 @@ export default function PlayPage() {
           />
           {opponent !== 'human' ? (
             <Switch
-              checked={settings.playCoach}
+              checked={settings.playCoach && !chess960Setup}
               onChange={(next) => settings.update({ playCoach: next })}
+              disabled={chess960Setup}
               label="Coach mode"
               description={
-                timeControlId === 'none'
-                  ? 'After a mistake the game pauses, explains what went wrong and offers a take-back.'
-                  : 'Only in untimed games — the coach needs time to check each move.'
+                chess960Setup
+                  ? 'Standard chess only.'
+                  : timeControlId === 'none'
+                    ? 'After a mistake the game pauses, explains what went wrong and offers a take-back.'
+                    : 'Only in untimed games — the coach needs time to check each move.'
               }
             />
           ) : null}
           {opponent !== 'human' ? (
             <Switch
-              checked={settings.playBlunderCheck}
+              checked={settings.playBlunderCheck && !chess960Setup}
               onChange={(next) => settings.update({ playBlunderCheck: next })}
+              disabled={chess960Setup}
               label="Blunder check"
-              description="Before a move that hangs material or allows mate is played, ask: checks, captures, threats? Play it anyway if you meant it."
+              description={
+                chess960Setup
+                  ? 'Standard chess only.'
+                  : 'Before a move that hangs material or allows mate is played, ask: checks, captures, threats? Play it anyway if you meant it.'
+              }
             />
           ) : null}
           <Switch

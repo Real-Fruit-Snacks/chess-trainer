@@ -6,6 +6,7 @@ import { AppearanceSettings } from './AppearanceSettings';
 import { AppSettings } from './AppSettings';
 import { DataSettings } from './DataSettings';
 import { EngineSettings } from './EngineSettings';
+import { NotificationSettings } from './NotificationSettings';
 import { PlaySettings } from './PlaySettings';
 import {
   cardForHash,
@@ -28,7 +29,12 @@ function TabContent({ tab }: { tab: SettingsTab }) {
     case 'data':
       return <DataSettings />;
     case 'app':
-      return <AppSettings />;
+      return (
+        <div className="stack">
+          <AppSettings />
+          <NotificationSettings />
+        </div>
+      );
   }
 }
 

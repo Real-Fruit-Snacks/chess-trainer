@@ -1,4 +1,4 @@
-import { Chess } from 'chess.js';
+import { type PlayedMove, rulesFor } from '@/chess/rules';
 import { GameTree, type TreeNode } from '@/chess/tree';
 import type { Fen, LongColor, San } from '@/chess/types';
 import type { ImportedGame } from '@/lib/gameImport';
@@ -47,6 +47,8 @@ export interface MainLineOfPgn {
   fens: Fen[];
   sans: San[];
   startFen: Fen;
+  /** A Chess960 game: its moves follow those rules, and it has no opening of the usual kind. */
+  chess960: boolean;
 }
 
 /** Parsed main lines by PGN text: My games holds a few hundred games and re-reads them on every render. */
@@ -73,6 +75,7 @@ export function mainLineOfPgn(pgn: string): MainLineOfPgn | null {
       startFen: tree.startFen,
       fens: [tree.startFen, ...nodes.map((n) => n.fen)],
       sans: nodes.map((n) => n.san),
+      chess960: tree.chess960,
     };
   } catch {
     line = null;
@@ -85,10 +88,19 @@ export function mainLineOfPgn(pgn: string): MainLineOfPgn | null {
   return line;
 }
 
-/** chess.js Move objects for a main line, for the game review. */
-export function movesOfLine(startFen: Fen, sans: San[]) {
-  const chess = new Chess(startFen);
-  return sans.map((san) => chess.move(san));
+/** The moves of a main line, for the game review: by Chess960's rules for a Chess960 game. */
+export function movesOfLine(startFen: Fen, sans: San[], chess960 = false): PlayedMove[] {
+  const replay = rulesFor(chess960 ? 'chess960' : 'standard').replay(startFen);
+  return sans.map((san) => {
+    const move = replay.play(san);
+    if (!move) throw new Error(`Illegal move ${san}`);
+    return move;
+  });
+}
+
+/** Whether a stored game is Chess960 (its PGN says so): such games have no openings to count. */
+export function isChess960Pgn(pgn: string): boolean {
+  return mainLineOfPgn(pgn)?.chess960 ?? false;
 }
 
 export interface OpeningRow {
@@ -115,7 +127,8 @@ const MAX_OPENING_PLIES = 24;
 
 /**
  * Groups the learner's games by opening (deepest ECO match within the first
- * twelve moves) for each colour, most played first.
+ * twelve moves) for each colour, most played first. Chess960 games are left
+ * out: their starts have no openings of this kind.
  */
 export function openingStats(
   games: ImportedGame[],
@@ -131,7 +144,7 @@ export function openingStats(
       continue;
     }
     const line = mainLineOfPgn(game.pgn);
-    if (!line) continue;
+    if (!line || line.chess960) continue;
     const opening: Opening = findOpening(table, line.fens.slice(0, MAX_OPENING_PLIES + 1)) ?? {
       eco: '—',
       name: 'Unknown opening',

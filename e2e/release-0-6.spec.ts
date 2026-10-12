@@ -148,7 +148,7 @@ function explorerBody(fen: string, database: string) {
 
 async function mockExplorer(page: Page) {
   const requests: string[] = [];
-  await page.route('https://explorer.lichess.ovh/**', (route) => {
+  await page.route('https://explorer.lichess.org/**', (route) => {
     const url = new URL(route.request().url());
     const database = url.pathname.replace('/', '');
     const fen = url.searchParams.get('fen') ?? '';

@@ -50,7 +50,7 @@ export function EngineSettings() {
             checked={settings.explorer}
             onChange={(v) => settings.update({ explorer: v })}
             label="Opening explorer lookups"
-            description="In Analyze and Openings, show what masters and Lichess players play in the position and how it goes. Uses the network; off by default."
+            description="In Analyze and Openings, show what masters and Lichess players play in the position and how it goes. Needs a Lichess account, connected under Sync & data. Uses the network; off by default."
           />
           <EngineThreadsSetting />
           <EngineFullSetting />

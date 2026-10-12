@@ -66,6 +66,12 @@ describe('the games online', () => {
     );
     expect(gameNoun('chess', '3+0')).toBe('3+0 game');
     expect(gameNoun('race', null)).toBe('puzzle race');
+    expect(describeSeek({ game: 'chess960', opts: {}, tc: '5+3', color: 'white' })).toBe(
+      'Chess960 · 5+3 · Plays white',
+    );
+    expect(gameNoun('chess960', '5+3')).toBe('5+3 Chess960 game');
+    expect(gameName('chess960')).toBe('Chess960');
+    expect(optionsFor('chess960', { budget: 30 })).toEqual({});
     // Options that are not the game's fall back to its defaults.
     expect(optionsFor('army', { budget: 31 })).toEqual({ budget: 30 });
   });

@@ -50,6 +50,9 @@ export type PlayColor = (typeof PLAY_COLORS)[number];
 /** Play's opponents: the engine's levels, the human-like opponent (Maia), a person at the device. */
 export const PLAY_OPPONENTS = ['engine', 'humanlike', 'human'] as const;
 export type PlayOpponent = (typeof PLAY_OPPONENTS)[number];
+/** The games Play offers against the engine: standard chess, or Chess960 from a random start. */
+export const PLAY_VARIANTS = ['standard', 'chess960'] as const;
+export type PlayVariant = (typeof PLAY_VARIANTS)[number];
 export const REVIEW_DEPTH_IDS = ['fast', 'balanced', 'thorough'] as const;
 export type ReviewDepth = (typeof REVIEW_DEPTH_IDS)[number];
 export const PIECE_SET_IDS = [
@@ -191,6 +194,25 @@ export interface SettingsState {
   installDismissedAt: number | null;
   /** Single-key page shortcuts (H for a hint, arrows through moves…). */
   keyboardShortcuts: boolean;
+  /** The kind of game offered for the next game against the engine: standard chess or Chess960. */
+  playVariant: PlayVariant;
+  /** In live games, a move made during the opponent's turn waits and is played at once. */
+  livePremoves: boolean;
+  /**
+   * A system notification, while the app is in the background, when someone
+   * takes this device's posted game, the opponent moves, or a game ends.
+   */
+  notifyLive: boolean;
+  /** Correspondence games: the relay pushes "Your move" while this device is away from the game. */
+  notifyCorrespondence: boolean;
+  /** A daily reminder pushed by the relay at `notifyReminderMinute`, unless this device trained that day. */
+  notifyReminder: boolean;
+  /** The daily reminder's time: minutes after local midnight, in quarter hours. */
+  notifyReminderMinute: number;
+  /** Analyze shows what players of `analysisHumanRating` would play (needs the human-like model). */
+  analysisHumanMoves: boolean;
+  /** The rating whose moves Analyze shows (600–2600, in hundreds). */
+  analysisHumanRating: number;
 
   update: (patch: Partial<PersistedSettings>) => void;
   /**
@@ -249,6 +271,14 @@ export const DEFAULT_SETTINGS = {
   blindDepth: 'short' as BlindDepth,
   installDismissedAt: null as number | null,
   keyboardShortcuts: true,
+  playVariant: 'standard' as PlayVariant,
+  livePremoves: true,
+  notifyLive: false,
+  notifyCorrespondence: false,
+  notifyReminder: false,
+  notifyReminderMinute: 18 * 60,
+  analysisHumanMoves: false,
+  analysisHumanRating: 1500,
 };
 
 export type PersistedSettings = typeof DEFAULT_SETTINGS;
@@ -259,12 +289,21 @@ export const SETTINGS_VERSION = 5;
 /**
  * The settings that belong to the device rather than to a learner: the engine
  * build it runs (threads need the service worker's headers, the full engine a
- * download kept on the device) and when its install prompt was dismissed.
- * They are kept once for every profile, under a key of their own, and never
- * synced. Everything else is the learner's: each profile keeps its own, and
- * sync between devices can carry them.
+ * download kept on the device), when its install prompt was dismissed, and its
+ * notifications (each needs this browser's permission, and the relay knows the
+ * device's push subscription). They are kept once for every profile, under a
+ * key of their own, and never synced. Everything else is the learner's: each
+ * profile keeps its own, and sync between devices can carry them.
  */
-export const DEVICE_SETTING_KEYS = ['engineThreads', 'engineFull', 'installDismissedAt'] as const;
+export const DEVICE_SETTING_KEYS = [
+  'engineThreads',
+  'engineFull',
+  'installDismissedAt',
+  'notifyLive',
+  'notifyCorrespondence',
+  'notifyReminder',
+  'notifyReminderMinute',
+] as const;
 export type DeviceSettingKey = (typeof DEVICE_SETTING_KEYS)[number];
 export const DEVICE_SETTINGS_STORAGE_KEY = 'chess-trainer:device-settings';
 
@@ -346,6 +385,15 @@ const CHECKS: {
   puzzleAutoNext: isBoolean,
   blindDepth: oneOf(BLIND_DEPTHS),
   keyboardShortcuts: isBoolean,
+  playVariant: oneOf(PLAY_VARIANTS),
+  livePremoves: isBoolean,
+  notifyLive: isBoolean,
+  notifyCorrespondence: isBoolean,
+  notifyReminder: isBoolean,
+  notifyReminderMinute: (value): value is number =>
+    numberIn(0, 24 * 60 - 15, true)(value) && value % 15 === 0,
+  analysisHumanMoves: isBoolean,
+  analysisHumanRating: isHumanRating,
 };
 
 const SIMUL_CHECKS: { [K in keyof SimulPrefs]: Check<SimulPrefs[K]> } = {

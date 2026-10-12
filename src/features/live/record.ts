@@ -1,9 +1,11 @@
 import { Chess } from 'chess.js';
+import { Chess960Game, chess960Headers, chess960Number } from '@/chess/chess960';
 import { type ImportedGame, speedFromTimeControl } from '@/lib/gameImport';
 import { siteConfig } from '@/site.config';
 import { useGames } from '@/store/games';
 import { playUci } from '../../../relay/src/live/rules.mjs';
 import { parseTimeControl } from '../../../relay/src/live/shared.mjs';
+import { describeTimeControl } from './liveView';
 import { seatOf } from './seats';
 import type { LiveEndReason, LiveGameView } from './types';
 
@@ -12,7 +14,11 @@ import type { LiveEndReason, LiveGameView } from './types';
  * engine review: as `online` games when played through the relay, as Lichess
  * games (with their link) when played there. Each carries the learner's side,
  * since the names in it are generated ones that match nothing the learner
- * imports under.
+ * imports under. A game on the relay played against the clock carries the
+ * clock after each move (`{ [%clk 0:04:59] }`, as Lichess writes it), so the
+ * review can show how the time was spent; correspondence carries none. A
+ * Chess960 game carries the tags that make it one (`[Variant "Chess960"]`,
+ * `[SetUp "1"]`, `[FEN …]`), which Analyze and My games read.
  */
 
 /** Games recorded since the app started (the games store's own check catches the rest). */
@@ -33,10 +39,22 @@ function termination(reason: LiveEndReason | null): string {
   return 'Normal';
 }
 
-/** "Casual game · 5+3", "Army Draft · 30 points · 5+3", "Rated game on Lichess · 10+0". */
+/**
+ * "Casual game · 5+3", "Army Draft · 30 points · 5+3", "Rated game on Lichess · 10+0",
+ * "Correspondence game · 3 days a move", "Chess960 · position 274 · 5+3".
+ */
 function eventOf(view: LiveGameView): string {
   if (view.source === 'lichess') {
     return `${view.rated ? 'Rated' : 'Casual'} game on Lichess · ${view.tc}`;
+  }
+  const chess960 = view.game === 'chess960';
+  if (parseTimeControl(view.tc)?.perMoveMs) {
+    const what = chess960 ? 'Chess960 correspondence game' : 'Correspondence game';
+    return `${what} · ${describeTimeControl(view.tc)}`;
+  }
+  if (chess960) {
+    const n = view.startFen ? chess960Number(view.startFen) : null;
+    return `Chess960${n === null ? '' : ` · position ${n}`} · ${view.tc}`;
   }
   if (view.game === 'army') {
     return `Army Draft${view.draft ? ` · ${view.draft.budget} points` : ''} · ${view.tc}`;
@@ -45,8 +63,26 @@ function eventOf(view: LiveGameView): string {
   return `Casual game · ${view.tc}`;
 }
 
-/** The SAN of each move (from `startFen`, or the initial position), or null when one is not legal. */
-function sanMoves(moves: readonly string[], startFen: string | null): string[] | null {
+/**
+ * The SAN of each move (from `startFen`, or the initial position), or null when one is not
+ * legal; by Chess960's rules for a Chess960 game.
+ */
+function sanMoves(
+  moves: readonly string[],
+  startFen: string | null,
+  chess960: boolean,
+): string[] | null {
+  if (chess960) {
+    const game = startFen ? Chess960Game.from(startFen) : null;
+    if (!game) return null;
+    const sans: string[] = [];
+    for (const uci of moves) {
+      const move = game.move(uci);
+      if (!move) return null;
+      sans.push(move.san);
+    }
+    return sans;
+  }
   let chess: Chess;
   try {
     chess = startFen ? new Chess(startFen) : new Chess();
@@ -62,12 +98,29 @@ function sanMoves(moves: readonly string[], startFen: string | null): string[] |
   return sans;
 }
 
-/** Numbered moves and the result, in lines of 80 characters at most (every game here starts with White to move). */
-function movetext(sans: readonly string[], result: string): string {
+/** A clock reading as `[%clk]` writes it: hours, minutes and whole seconds ("0:04:59"). */
+function clockText(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(seconds / 3600)}:${pad(Math.floor(seconds / 60) % 60)}:${pad(seconds % 60)}`;
+}
+
+/**
+ * Numbered moves, each with its clock reading when there are `clocks` (Black's
+ * move then numbered again after White's comment, "1... e5"), and the result,
+ * in lines of 80 characters at most (every game here starts with White to move).
+ */
+function movetext(
+  sans: readonly string[],
+  result: string,
+  clocks: readonly number[] | null,
+): string {
   const tokens: string[] = [];
   sans.forEach((san, index) => {
     if (index % 2 === 0) tokens.push(`${index / 2 + 1}.`);
+    else if (clocks) tokens.push(`${(index + 1) / 2}...`);
     tokens.push(san);
+    const reading = clocks?.[index];
+    if (reading !== undefined) tokens.push(`{ [%clk ${clockText(reading)}] }`);
   });
   tokens.push(result);
   const lines: string[] = [];
@@ -96,7 +149,8 @@ export function recordLiveGame(view: LiveGameView): void {
   if (view.moves.length < 2) return;
   const key = `${view.source}:${view.id}`;
   if (recorded.has(key)) return;
-  const sans = sanMoves(view.moves, view.startFen);
+  const chess960 = view.game === 'chess960';
+  const sans = sanMoves(view.moves, view.startFen, chess960);
   if (!sans) return;
   recorded.add(key);
 
@@ -105,9 +159,19 @@ export function recordLiveGame(view: LiveGameView): void {
   // A relay game is dated from its seat, so recording it again (after a reload) writes the same PGN.
   const startedAt = (lichess ? null : seatOf(view.id)?.at) ?? Date.now();
   const tc = parseTimeControl(view.tc);
-  const timeControl = tc ? `${tc.initialMs / 1000}+${tc.incrementMs / 1000}` : null;
+  // PGN's TimeControl: "300+3", or "1/259200" (one move in so many seconds) for correspondence.
+  const timeControl = !tc
+    ? null
+    : tc.perMoveMs
+      ? `1/${tc.perMoveMs / 1000}`
+      : `${tc.initialMs / 1000}+${tc.incrementMs / 1000}`;
   const event = eventOf(view);
   const date = pgnDate(startedAt);
+  // The clock after each move, as the room kept it: a relay game against the clock, whole.
+  const clocks =
+    !lichess && tc && !tc.perMoveMs && view.clocks.length === view.moves.length
+      ? view.clocks
+      : null;
 
   const headers: Record<string, string> = {
     Event: event,
@@ -122,8 +186,10 @@ export function recordLiveGame(view: LiveGameView): void {
   if (lichess && view.black.rating !== null) headers.BlackElo = String(view.black.rating);
   if (timeControl) headers.TimeControl = timeControl;
   headers.Termination = termination(view.reason);
-  // A drafted position: readers start from it (Lichess's tags for a game from a position).
-  if (view.startFen) {
+  // Chess960 from its start; a drafted position as Lichess tags a game from a position.
+  if (chess960 && view.startFen) {
+    Object.assign(headers, chess960Headers(view.startFen));
+  } else if (view.startFen) {
     headers.Variant = 'From Position';
     headers.SetUp = '1';
     headers.FEN = view.startFen;
@@ -131,7 +197,7 @@ export function recordLiveGame(view: LiveGameView): void {
 
   const pgn = `${Object.entries(headers)
     .map(([name, value]) => `[${name} "${quoted(value)}"]`)
-    .join('\n')}\n\n${movetext(sans, result)}`;
+    .join('\n')}\n\n${movetext(sans, result, clocks)}`;
 
   const game: ImportedGame = {
     id: url ?? `online-${view.id}`,

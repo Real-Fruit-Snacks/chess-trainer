@@ -4,19 +4,28 @@ import { storageKeyFor } from '@/store/profiles';
 /**
  * Whether a live game this device took part in may still be on: one kept by
  * the live-games code (features/live/seats.ts) that is not known to be over
- * and is younger than a game can last. The bar then loads and checks on it,
- * so a game survives the app being closed, or reloaded on another page.
+ * and is younger than a game can last (a correspondence game, played over
+ * days, lasts a year at most), or a group room it is a member of (a race
+ * room, an analysis room: features/live/rooms.ts). The bar then loads and checks on it, so a game
+ * survives the app being closed, or reloaded on another page, and a
+ * correspondence game where it is your move shows.
  */
 function mayBePlaying(): boolean {
   try {
     const now = Date.now();
-    for (const key of ['chess-trainer:live-seats', 'chess-trainer:live-lichess']) {
+    const keys = [
+      'chess-trainer:live-seats',
+      'chess-trainer:live-lichess',
+      'chess-trainer:live-rooms',
+    ];
+    for (const key of keys) {
       const games = JSON.parse(localStorage.getItem(storageKeyFor(key)) ?? '{}') as Record<
         string,
-        { at?: unknown; over?: unknown } | null
+        { at?: unknown; over?: unknown; corr?: unknown } | null
       >;
       for (const game of Object.values(games)) {
-        if (typeof game?.at === 'number' && now - game.at < 6 * 3_600_000 && !game.over) {
+        const lasts = game?.corr === true ? 366 * 86_400_000 : 6 * 3_600_000;
+        if (typeof game?.at === 'number' && now - game.at < lasts && !game.over) {
           return true;
         }
       }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { Chess, type Square } from 'chess.js';
-import { Board } from '@/components/board/Board';
+import { Board, type DrawShape } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { ExplorerPanel } from '@/components/chess/ExplorerPanel';
 import { TreeMoveList } from '@/components/chess/TreeMoveList';
@@ -17,18 +17,33 @@ import {
   Switch,
 } from '@/components/ui';
 import { toast } from '@/components/ui/toastStore';
-import { isPromotionMove, legalDests, parseUci, toUci, tryMove } from '@/chess/helpers';
+import {
+  castlingKingDest,
+  isPromotionMove,
+  legalDests,
+  parseUci,
+  toUci,
+  tryMove,
+} from '@/chess/helpers';
 import { GameTree, type TreeNode } from '@/chess/tree';
-import type { MoveInput, PromotionPiece, San, Uci } from '@/chess/types';
+import type { Fen, MoveInput, PromotionPiece, San, Uci } from '@/chess/types';
+import { scrollBackTo } from '@/lib/scroll';
 import { shareUrl } from '@/lib/shareCodes';
 import { pageShortcutKey } from '@/lib/shortcutKey';
 import { describeDue, isNew } from '@/lib/srs';
+import { useExplorer } from '@/lib/useExplorer';
 import { useFocusWhile } from '@/lib/useFocusWhile';
 import { useNow } from '@/lib/useNow';
+import { useStackedLayout } from '@/lib/useStackedLayout';
 import { siteConfig } from '@/site.config';
 import { cardsFor, useRepertoire } from '@/store/repertoire';
+import { useSettings } from '@/store/settings';
+import { copyName, findCopy, makeEditableCopy } from './copyRepertoire';
+import { GapAnswerCard, type GapAnswerFix, GapFinderPanel } from './GapFinder';
+import { type Gap, type GapOptions, lineText, replayGap, suggestAnswer } from './gaps';
 import { cardKey, isLearnerMove, repertoireStats } from './model';
 import { getBuiltInRepertoire, type Repertoire } from './repertoires';
+import { useGapOptions, useGapScan, useOtherAnswers } from './useGapScan';
 import { useRepertoireTrainer } from './useRepertoireTrainer';
 import './openings.css';
 import { Notated } from '@/chess/San';
@@ -154,6 +169,72 @@ function UnreadableRepertoire({
   );
 }
 
+/** What the column beside the board is for. */
+type Mode = 'train' | 'explore' | 'gaps' | 'answer';
+
+/** A gap being answered on the board. */
+interface GapFix extends GapAnswerFix {
+  replyMove: [Square, Square];
+}
+
+/** What a page opened to answer a gap is sent (a built-in repertoire's new copy). */
+interface GapResume {
+  gapAnswer: { line: San[]; reply: San; share: number | null; games: number | null };
+  gapOptions: GapOptions;
+}
+
+function fixFromGap(gap: Gap): GapFix {
+  return {
+    line: gap.line,
+    reply: gap.reply.san,
+    fenBefore: gap.fen,
+    fenAfter: gap.fenAfter,
+    replyMove: [gap.replyFrom, gap.replyTo],
+    share: gap.reply.share,
+    games: gap.games,
+  };
+}
+
+/** The gap a page was opened to answer, checked against its tree; null when there is none. */
+function readGapResume(
+  state: unknown,
+  tree: GameTree,
+): { fix: GapFix; options: GapOptions | undefined } | null {
+  if (typeof state !== 'object' || state === null) return null;
+  const { gapAnswer, gapOptions } = state as Partial<GapResume>;
+  if (typeof gapAnswer !== 'object' || typeof gapAnswer.reply !== 'string') return null;
+  const line: unknown = gapAnswer.line;
+  if (!Array.isArray(line) || !line.every((san): san is San => typeof san === 'string')) {
+    return null;
+  }
+  const replayed = replayGap(tree.root.fen, line, gapAnswer.reply);
+  if (!replayed) return null;
+  const options =
+    typeof gapOptions === 'object' &&
+    (gapOptions.database === 'lichess' || gapOptions.database === 'masters') &&
+    Number.isInteger(gapOptions.depth)
+      ? { database: gapOptions.database, depth: gapOptions.depth }
+      : undefined;
+  return {
+    fix: {
+      line,
+      reply: replayed.reply,
+      fenBefore: replayed.fenBefore,
+      fenAfter: replayed.fenAfter,
+      replyMove: [replayed.from, replayed.to],
+      share: typeof gapAnswer.share === 'number' ? gapAnswer.share : null,
+      games: typeof gapAnswer.games === 'number' ? gapAnswer.games : null,
+    },
+    options,
+  };
+}
+
+/** An arrow for a move given in SAN; none when it is not legal. */
+function arrowFor(fen: Fen, san: San, brush: string): DrawShape[] {
+  const move = tryMove(new Chess(fen), san);
+  return move ? [{ orig: move.from, dest: move.to, brush }] : [];
+}
+
 function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree: GameTree }) {
   const trainer = useRepertoireTrainer(repertoire.id, tree, repertoire.color);
   const allCards = useRepertoire((s) => s.cards);
@@ -164,7 +245,14 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
     () => repertoireStats(tree, repertoire.color, cards, now),
     [tree, repertoire.color, cards, now],
   );
-  const [explore, setExplore] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  // A copy made to answer a gap opens on that gap: the built-in repertoire's page sends it.
+  const [resume] = useState(() =>
+    repertoire.id.startsWith('custom-') ? readGapResume(location.state, tree) : null,
+  );
+  const [mode, setMode] = useState<Mode>(resume ? 'answer' : 'train');
+  const explore = mode === 'explore';
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmForget, setConfirmForget] = useState(false);
   const isCustom = repertoire.id.startsWith('custom-');
@@ -200,12 +288,47 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
   };
   const updateCustom = useRepertoire((s) => s.updateCustom);
   // The explore cursor is a path of moves so it survives the tree being rebuilt after an edit.
-  const [explorePath, setExplorePath] = useState<San[]>([]);
+  const [explorePath, setExplorePath] = useState<San[]>(() => resume?.fix.line ?? []);
   const exploreNode = useMemo(() => nodeAtPath(tree, explorePath), [tree, explorePath]);
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: Square; to: Square } | null>(
     null,
   );
+
+  // The gap finder: its options, its run and the gap shown on the board.
+  const [gapOptions, setGapOptions] = useGapOptions(resume?.options);
+  const elsewhere = useOtherAnswers(repertoire.id, repertoire.color);
+  const scan = useGapScan(tree, repertoire.color, gapOptions, elsewhere);
+  const [selectedGapId, setSelectedGapId] = useState<string | null>(null);
+  const selectedGap =
+    scan.report.gaps.find((g) => g.id === selectedGapId) ?? scan.report.gaps[0] ?? null;
+  const [gapFix, setGapFix] = useState<GapFix | null>(() => resume?.fix ?? null);
+  const [copyFor, setCopyFor] = useState<Gap | null>(null);
+  const custom = useRepertoire((s) => s.custom);
+  const existingCopy = isCustom ? undefined : findCopy(repertoire, custom);
+  const explorerOn = useSettings((s) => s.explorer);
+  const answering = mode === 'answer' && gapFix !== null;
+  const answerLookup = useExplorer(
+    answering ? gapFix.fenAfter : null,
+    explorerOn,
+    gapOptions.database,
+  );
+  const suggestion =
+    answerLookup.status === 'ready'
+      ? suggestAnswer(answerLookup.result, gapOptions.database)
+      : null;
+  const boardRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const stacked = useStackedLayout();
+
+  // What opened the page is spent once read: a reload starts from the repertoire itself.
+  useEffect(() => {
+    if (location.state == null) return;
+    void navigate(
+      { pathname: location.pathname, search: location.search, hash: location.hash },
+      { replace: true, state: null },
+    );
+  }, [location.state, location.pathname, location.search, location.hash, navigate]);
 
   const selectNode = (node: TreeNode) => {
     setExplorePath(tree.pathTo(node).map((n) => n.san));
@@ -244,23 +367,127 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
     return true;
   };
 
+  const openGaps = () => {
+    setGapFix(null);
+    setPendingPromotion(null);
+    setMode('gaps');
+    // On a phone the panel is under the board: go to it.
+    if (stacked) {
+      requestAnimationFrame(() =>
+        panelRef.current?.scrollIntoView?.({ block: 'start', behavior: 'instant' }),
+      );
+    }
+  };
+
+  /** "Add an answer": the editor on the gap, or first a copy of a built-in repertoire. */
+  const answerFromGap = (gap: Gap) => {
+    setSelectedGapId(gap.id);
+    if (!isCustom) {
+      setCopyFor(gap);
+      return;
+    }
+    setGapFix(fixFromGap(gap));
+    setPendingPromotion(null);
+    setMode('answer');
+    scrollBackTo(boardRef.current);
+  };
+
+  /** Adds the gap's reply and the learner's answer to it, with the line to them if missing. */
+  const answerGap = (input: MoveInput | San): boolean => {
+    const fix = gapFix;
+    if (!fix || !isCustom) return false;
+    const answer = tryMove(new Chess(fix.fenAfter), input);
+    if (!answer) {
+      toast('That move is not legal here.', { tone: 'warning' });
+      return false;
+    }
+    const before = countBelow(tree.root);
+    commitEdit(() => {
+      tree.goStart();
+      for (const san of [...fix.line, fix.reply]) {
+        if (!tree.addMove(san, { navigate: true })) return null;
+      }
+      return tree.addMove(answer.san, { navigate: false });
+    });
+    const added = countBelow(tree.root) - before;
+    const both = lineText(fix.fenBefore, [fix.reply, answer.san]);
+    const path = [...fix.line, fix.reply, answer.san];
+    setGapFix(null);
+    setMode('gaps');
+    toast(
+      added === 0
+        ? `The repertoire already has ${both}.`
+        : added === 1
+          ? `Added ${lineText(fix.fenAfter, [answer.san])} after ${lineText(fix.fenBefore, [fix.reply])}.`
+          : added === 2
+            ? `Added ${both}.`
+            : `Added ${both}, and the ${added - 2} moves before them.`,
+      {
+        tone: 'success',
+        actionLabel: 'Edit the line',
+        onAction: () => {
+          setExplorePath(path);
+          setNoteDraft(null);
+          setMode('explore');
+        },
+      },
+    );
+    return true;
+  };
+
+  /** Makes the editable copy (or opens the one made before) and answers the gap there. */
+  const copyAndAnswer = () => {
+    const gap = copyFor;
+    if (!gap) return;
+    const { copy, moved } = makeEditableCopy(repertoire);
+    toast(
+      existingCopy
+        ? `Opened “${copy.name}”.`
+        : moved > 0
+          ? `Made “${copy.name}”, with your progress.`
+          : `Made “${copy.name}”.`,
+      { tone: 'success' },
+    );
+    const state: GapResume = {
+      gapAnswer: {
+        line: gap.line,
+        reply: gap.reply.san,
+        share: gap.reply.share,
+        games: gap.games,
+      },
+      gapOptions,
+    };
+    void navigate(`/openings/${copy.id}`, { state });
+  };
+
+  /** The position on the editing board: the gap's, while one is answered. */
+  const editFen = answering ? gapFix.fenAfter : exploreNode.fen;
+
+  const playOnEditor = (input: MoveInput) => {
+    if (answering) answerGap(input);
+    else addExploreMove(input);
+  };
+
   const onExploreMove = (from: Square, to: Square) => {
-    if (isPromotionMove(new Chess(exploreNode.fen), from, to)) {
+    if (isPromotionMove(new Chess(editFen), from, to)) {
       setPendingPromotion({ from, to });
       return;
     }
-    addExploreMove({ from, to });
+    playOnEditor({ from, to });
   };
 
   const resolveExplorePromotion = (piece: PromotionPiece | null) => {
     const pending = pendingPromotion;
     setPendingPromotion(null);
     if (!pending || !piece) return;
-    addExploreMove({ from: pending.from, to: pending.to, promotion: piece });
+    playOnEditor({ from: pending.from, to: pending.to, promotion: piece });
   };
 
   const onExplorerPlay = (uci: Uci) => {
-    addExploreMove(parseUci(uci));
+    const { from, to, promotion } = parseUci(uci);
+    // The explorer may write castling as the king taking its rook (e1h1): the board says g1.
+    const dest = castlingKingDest(exploreNode.fen, from, to);
+    addExploreMove(promotion ? { from, to: dest, promotion } : { from, to: dest });
   };
 
   const saveNote = () => {
@@ -290,10 +517,21 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
     });
   };
 
+  const editable = (explore && isCustom) || answering;
   const exploreDests = useMemo(
+    () => (editable ? legalDests(new Chess(editFen)) : new Map<Square, Square[]>()),
+    [editable, editFen],
+  );
+  const suggestionArrow = useMemo(
+    () => (answering && suggestion ? arrowFor(editFen, suggestion.san, 'green') : undefined),
+    [answering, suggestion, editFen],
+  );
+  const gapArrow = useMemo<DrawShape[]>(
     () =>
-      explore && isCustom ? legalDests(new Chess(exploreNode.fen)) : new Map<Square, Square[]>(),
-    [explore, isCustom, exploreNode],
+      selectedGap
+        ? [{ orig: selectedGap.replyFrom, dest: selectedGap.replyTo, brush: 'yellow' }]
+        : [],
+    [selectedGap],
   );
 
   // Keyboard: Space shows the move; Enter or → goes on after a note, and to the next line
@@ -384,14 +622,40 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
       </div>
 
       <div className="trainer">
-        <div className="trainer__board" style={{ position: 'relative' }}>
+        <div className="trainer__board" style={{ position: 'relative' }} ref={boardRef}>
           {explore ? (
-            <ExploreBoard
-              node={exploreNode}
+            <EditBoard
+              fen={exploreNode.fen}
+              lastMove={squaresOf(exploreNode.uci)}
               color={repertoire.color}
               editable={isCustom}
               dests={exploreDests}
               onMove={onExploreMove}
+              ariaLabel={isCustom ? 'Repertoire editor board' : 'Repertoire explorer board'}
+            />
+          ) : answering ? (
+            <EditBoard
+              fen={gapFix.fenAfter}
+              lastMove={gapFix.replyMove}
+              color={repertoire.color}
+              editable
+              dests={exploreDests}
+              onMove={onExploreMove}
+              autoShapes={suggestionArrow}
+              ariaLabel={`Repertoire editor board: your answer to ${lineText(gapFix.fenBefore, [gapFix.reply])}`}
+            />
+          ) : mode === 'gaps' ? (
+            <Board
+              fen={selectedGap?.fen ?? tree.root.fen}
+              orientation={repertoire.color}
+              lastMove={selectedGap?.lastMove ?? null}
+              viewOnly
+              autoShapes={gapArrow}
+              ariaLabel={
+                selectedGap
+                  ? `Gap board: ${lineText(selectedGap.fen, [selectedGap.reply.san])} comes here, and the repertoire has no answer`
+                  : `${repertoire.name}: the starting position`
+              }
             />
           ) : (
             <Board
@@ -410,16 +674,16 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
               ariaLabel={`${repertoire.name} training board, ${board.turn} to move`}
             />
           )}
-          {trainer.needsPromotion && !explore ? (
+          {trainer.needsPromotion && mode === 'train' ? (
             <PromotionPicker color={repertoire.color} onSelect={trainer.resolvePromotion} />
           ) : null}
-          {pendingPromotion ? (
+          {pendingPromotion && (explore || answering) ? (
             <PromotionPicker
-              color={exploreNode.fen.split(' ')[1] === 'b' ? 'black' : 'white'}
+              color={editFen.split(' ')[1] === 'b' ? 'black' : 'white'}
               onSelect={resolveExplorePromotion}
             />
           ) : null}
-          {!explore && (phase === 'idle' || phase === 'sessionDone') ? (
+          {mode === 'train' && (phase === 'idle' || phase === 'sessionDone') ? (
             <div className="trainer__overlay">
               {/* What to do next is said once, in the status beside the board. */}
               <Card className="summary">
@@ -443,8 +707,11 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
                           ? 'Learn new lines'
                           : 'Practise'}
                   </Button>
-                  <Button size="lg" onClick={() => setExplore(true)}>
+                  <Button size="lg" onClick={() => setMode('explore')}>
                     {isCustom ? 'Edit lines' : 'Explore lines'}
+                  </Button>
+                  <Button size="lg" onClick={openGaps}>
+                    Find gaps
                   </Button>
                   <LinkButton
                     size="lg"
@@ -468,13 +735,41 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
           ) : null}
         </div>
 
-        <aside className="trainer__panel stack">
-          {explore ? (
+        <aside className="trainer__panel stack" ref={panelRef}>
+          {mode === 'gaps' ? (
+            <GapFinderPanel
+              startFen={tree.root.fen}
+              scan={scan}
+              options={gapOptions}
+              onOptions={(next) => {
+                scan.stop();
+                setGapOptions(next);
+              }}
+              selectedId={selectedGap?.id ?? null}
+              onSelect={(gap) => {
+                setSelectedGapId(gap.id);
+                scrollBackTo(boardRef.current);
+              }}
+              onAnswer={answerFromGap}
+              onClose={() => setMode('train')}
+            />
+          ) : answering ? (
+            <GapAnswerCard
+              startFen={tree.root.fen}
+              color={repertoire.color}
+              fix={gapFix}
+              database={gapOptions.database}
+              explorer={answerLookup}
+              suggestion={suggestion}
+              onAnswer={(san) => answerGap(san)}
+              onCancel={openGaps}
+            />
+          ) : explore ? (
             <>
               <Card data-testid="explore-panel">
                 <div className="row row--between">
                   <strong>{isCustom ? 'Edit lines' : 'Explore'}</strong>
-                  <Button size="sm" onClick={() => setExplore(false)}>
+                  <Button size="sm" onClick={() => setMode('train')}>
                     Back to training
                   </Button>
                 </div>
@@ -678,6 +973,27 @@ function RepertoireTrainer({ repertoire, tree }: { repertoire: Repertoire; tree:
           lines themselves are kept. This cannot be undone.
         </p>
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={copyFor !== null}
+        title={existingCopy ? `Answer it in “${existingCopy.name}”?` : 'Make your own copy?'}
+        confirmLabel={existingCopy ? 'Open my copy' : 'Make a copy'}
+        onConfirm={copyAndAnswer}
+        onClose={() => setCopyFor(null)}
+      >
+        <p className="muted">
+          Built-in repertoires cannot be changed.{' '}
+          {existingCopy
+            ? `Your copy of ${repertoire.name} can: the answer goes there.`
+            : `A copy of ${repertoire.name} is yours to edit and train, listed with your repertoires as “${copyName(repertoire.name)}”. The answer goes into it.`}
+        </p>
+        {!existingCopy && stats.learned > 0 ? (
+          <p className="muted">
+            The {stats.learned} move{stats.learned === 1 ? '' : 's'} you have learned here move to
+            the copy with their review dates, so nothing is learned twice.
+          </p>
+        ) : null}
+      </ConfirmDialog>
     </div>
   );
 }
@@ -708,33 +1024,44 @@ function nodeAtPath(tree: GameTree, path: readonly San[]): TreeNode {
   return node;
 }
 
-/** Board following the explore cursor; movable when the repertoire can be edited. */
-function ExploreBoard({
-  node,
+/** A move's squares from its UCI, for the board's last-move mark; null at the root. */
+function squaresOf(uci: Uci): [Square, Square] | null {
+  return uci.length >= 4 ? [uci.slice(0, 2) as Square, uci.slice(2, 4) as Square] : null;
+}
+
+/** The editing board: the explore cursor's position or a gap's; movable when it can be edited. */
+function EditBoard({
+  fen,
+  lastMove,
   color,
   editable,
   dests,
   onMove,
+  autoShapes,
+  ariaLabel,
 }: {
-  node: TreeNode;
+  fen: Fen;
+  lastMove: [Square, Square] | null;
   color: 'white' | 'black';
   editable: boolean;
   dests: Map<Square, Square[]>;
   onMove: (from: Square, to: Square) => void;
+  autoShapes?: DrawShape[];
+  ariaLabel: string;
 }) {
-  const turn = node.fen.split(' ')[1] === 'b' ? 'black' : 'white';
-  const last = node.uci ? ([node.uci.slice(0, 2), node.uci.slice(2, 4)] as [never, never]) : null;
+  const turn = fen.split(' ')[1] === 'b' ? 'black' : 'white';
   return (
     <Board
-      fen={node.fen}
+      fen={fen}
       orientation={color}
       turnColor={turn}
       movableColor={editable ? turn : undefined}
       dests={editable ? dests : new Map()}
-      lastMove={last}
+      lastMove={lastMove}
       viewOnly={!editable}
       onMove={onMove}
-      ariaLabel={editable ? 'Repertoire editor board' : 'Repertoire explorer board'}
+      autoShapes={autoShapes}
+      ariaLabel={ariaLabel}
     />
   );
 }

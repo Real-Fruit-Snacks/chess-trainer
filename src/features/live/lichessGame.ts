@@ -326,8 +326,17 @@ export function createLichessGame(gameId: string): LiveGameSession {
       peeks: null,
       connection,
       missing,
+      // Lichess games are this account's own: watching and invitations are the relay's.
+      watching: false,
+      watchers: 0,
+      // The record of a Lichess game is Lichess's own (its clocks with it).
+      clocks: [],
+      open: null,
+      joined: null,
       chat: [],
       next: null,
+      // Analysing together is for the relay's own games.
+      analysis: null,
       error,
       url,
       capabilities: CAPABILITIES,
@@ -348,6 +357,7 @@ export function createLichessGame(gameId: string): LiveGameSession {
         reason: null,
         offers: NO_OFFERS,
         opponentPresent: true,
+        present: { white: true, black: true },
         claimAt: null,
       };
     }
@@ -392,6 +402,10 @@ export function createLichessGame(gameId: string): LiveGameSession {
         ? { draw: standing('draw', moves), takeback: standing('takeback', moves), rematch: null }
         : NO_OFFERS,
       opponentPresent: on ? present : true,
+      present:
+        info.you === 'white'
+          ? { white: true, black: on ? present : true }
+          : { white: on ? present : true, black: true },
       claimAt: on && !present ? claimAt : null,
     };
   }
@@ -699,11 +713,13 @@ export function createLichessGame(gameId: string): LiveGameSession {
     claim: (op) => {
       if (!closed && playing()) send(op === 'win' ? 'claim-victory' : 'claim-draw');
     },
-    // Rematches, phrases and the variants are the relay's only.
+    // Rematches, phrases, the variants and invitations are the relay's only.
     rematch: () => undefined,
     say: () => undefined,
     army: () => undefined,
     peek: () => undefined,
+    join: () => undefined,
+    analyse: () => Promise.reject(new Error('A Lichess game is analysed on Lichess.')),
     close: () => {
       if (closed) return;
       closed = true;

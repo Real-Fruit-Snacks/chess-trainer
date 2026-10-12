@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useLichess } from '@/store/lichess';
 import {
   describeExplorerError,
   EXPLORER_TIMEOUT_MS,
   ExplorerError,
+  type ExplorerResult,
   explorerUrl,
   formatPercent,
   lookupExplorer,
+  lookupExplorerBatch,
   normalizeExplorer,
+  peekExplorer,
 } from './explorer';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -45,7 +49,7 @@ describe('opening explorer', () => {
 
   it('builds the request URLs for both databases', () => {
     const masters = new URL(explorerUrl(START, 'masters'));
-    expect(masters.origin + masters.pathname).toBe('https://explorer.lichess.ovh/masters');
+    expect(masters.origin + masters.pathname).toBe('https://explorer.lichess.org/masters');
     expect(masters.searchParams.get('fen')).toBe(START);
     expect(masters.searchParams.get('moves')).toBe('12');
     const lichess = new URL(explorerUrl(START, 'lichess'));
@@ -140,5 +144,196 @@ describe('opening explorer', () => {
       'The explorer answered HTTP 500 — try again later.',
     );
     expect(describeExplorerError('odd', true)).toMatch(/unavailable/);
+  });
+});
+
+describe('opening explorer: sign-in, errors and the cache', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    useLichess.setState({ account: null, needsReconnect: false });
+  });
+
+  const ok = () => Promise.resolve(new Response(JSON.stringify(masters), { status: 200 }));
+
+  it('sends the connected Lichess account’s token, which the explorer asks for', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => ok());
+    vi.stubGlobal('fetch', fetchMock);
+    await lookupExplorer('8/8/8/8/8/8/8/K2k4 w - - 0 1', 'masters');
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({ Accept: 'application/json' });
+
+    useLichess.setState({
+      account: { id: 'me', username: 'Me', token: 'lip_token', connectedAt: 0, expiresAt: null },
+    });
+    await lookupExplorer('8/8/8/8/8/8/8/K3k3 b - - 0 1', 'lichess');
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).toEqual({
+      Accept: 'application/json',
+      Authorization: 'Bearer lip_token',
+    });
+  });
+
+  it('says to connect a Lichess account when the explorer refuses the request', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('', { status: 401 }))),
+    );
+    const anonymous = await lookupExplorer('8/8/8/8/8/8/1K6/7k w - - 0 1', 'masters').catch(
+      (e: unknown) => e,
+    );
+    expect(anonymous).toMatchObject({ kind: 'auth' });
+    expect((anonymous as Error).message).toMatch(/needs a Lichess account/);
+
+    useLichess.setState({
+      account: { id: 'me', username: 'Me', token: 'revoked', connectedAt: 0, expiresAt: null },
+    });
+    await expect(lookupExplorer('8/8/8/8/8/8/2K5/7k w - - 0 1', 'masters')).rejects.toThrow(
+      /did not accept this device’s sign-in/,
+    );
+  });
+
+  it('marks a 429 with the wait the server asks for', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(new Response('', { status: 429, headers: { 'Retry-After': '30' } })),
+      ),
+    );
+    const limited = await lookupExplorer('8/8/8/8/8/8/3K4/7k w - - 0 1', 'lichess').catch(
+      (e: unknown) => e,
+    );
+    expect(limited).toMatchObject({ kind: 'rate-limited', retryAfter: 30 });
+  });
+
+  it('peeks at the session’s answers without a request', async () => {
+    const fen = '8/8/8/8/8/8/4K3/7k w - - 0 1';
+    const fetchMock = vi.fn(() => ok());
+    vi.stubGlobal('fetch', fetchMock);
+    expect(peekExplorer(fen, 'masters')).toBeNull();
+    const result = await lookupExplorer(fen, 'masters');
+    // The same position with other move counters, from the same database.
+    expect(peekExplorer('8/8/8/8/8/8/4K3/7k w - - 12 40', 'masters')).toBe(result);
+    expect(peekExplorer(fen, 'lichess')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('opening explorer batches', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const someAnswer = normalizeExplorer(masters, 'masters');
+
+  it('ask one position at a time, pause between requests and wait out a 429', async () => {
+    vi.useFakeTimers();
+    const fens = [
+      '8/8/8/8/8/8/5K2/7k w - - 0 1',
+      '8/8/8/8/8/8/6K1/k7 w - - 0 1',
+      '8/8/8/8/8/8/K7/2k5 w - - 0 1',
+    ];
+    let calls = 0;
+    const fetchMock = vi.fn(() => {
+      calls += 1;
+      return Promise.resolve(
+        calls === 2
+          ? new Response('', { status: 429, headers: { 'Retry-After': '2' } })
+          : new Response(JSON.stringify(masters), { status: 200 }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const waits: (number | null)[] = [];
+    const answered: number[] = [];
+    const done = lookupExplorerBatch(fens, 'masters', {
+      onWait: (seconds) => waits.push(seconds),
+      onResult: (_result, index) => answered.push(index),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(499);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    // The second position: a 429 asking for two seconds.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(waits).toEqual([2]);
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    // The same position again, at once: the wait was the pause.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(waits).toEqual([2, null]);
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(answered).toEqual([0, 1, 2]);
+
+    // Asked again, every position comes from the session's cache: no request, no pause.
+    const again: number[] = [];
+    await lookupExplorerBatch(fens, 'masters', { onResult: (_r, index) => again.push(index) });
+    expect(again).toEqual([0, 1, 2]);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('never sends a request while another lookup of the app is in flight', async () => {
+    let release: (res: Response) => void = () => undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            release = resolve;
+          }),
+      ),
+    );
+    const card = lookupExplorer('8/8/8/8/8/8/7K/1k6 w - - 0 1', 'masters');
+    const lookup = vi.fn((): Promise<ExplorerResult> => Promise.resolve(someAnswer));
+    const batch = lookupExplorerBatch(['8/8/8/8/8/8/7K/2k5 w - - 0 1'], 'masters', {
+      lookup,
+      cached: () => null,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(lookup).not.toHaveBeenCalled();
+    release(new Response(JSON.stringify(masters), { status: 200 }));
+    await card;
+    await batch;
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('stop at once when aborted, even in the middle of a wait', async () => {
+    const controller = new AbortController();
+    const lookup = vi.fn((): Promise<ExplorerResult> =>
+      Promise.reject(new ExplorerError('Busy.', 'rate-limited', 60)),
+    );
+    const batch = lookupExplorerBatch(['8/8/8/8/8/8/7K/3k4 w - - 0 1'], 'masters', {
+      lookup,
+      cached: () => null,
+      signal: controller.signal,
+      onWait: (seconds) => {
+        if (seconds !== null) queueMicrotask(() => controller.abort());
+      },
+    });
+    await expect(batch).rejects.toMatchObject({ name: 'AbortError' });
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('give up on any other failure, keeping the answers that came before', async () => {
+    const answered: number[] = [];
+    const lookup = vi.fn((fen: string): Promise<ExplorerResult> =>
+      fen.startsWith('7k')
+        ? Promise.reject(new ExplorerError('The explorer answered HTTP 500 — try again later.'))
+        : Promise.resolve(someAnswer),
+    );
+    await expect(
+      lookupExplorerBatch(
+        ['8/8/8/8/8/8/7K/4k3 w - - 0 1', '7k/8/8/8/8/8/7K/8 w - - 0 1'],
+        'masters',
+        {
+          lookup,
+          cached: () => null,
+          sleep: () => Promise.resolve(),
+          onResult: (_r, index) => answered.push(index),
+        },
+      ),
+    ).rejects.toThrow(/HTTP 500/);
+    expect(answered).toEqual([0]);
   });
 });

@@ -758,3 +758,63 @@ describe('the relay’s limits', () => {
     expect(state().notice).toMatch(/Too many messages/);
   });
 });
+
+describe('inviting a friend to a correspondence game', () => {
+  it('makes the game at once, keeps its seat until the end, and points at its board', async () => {
+    state().invite({ tc: '3d', color: 'white' });
+    await relay.settle();
+    const invited = state().invited!;
+    expect(invited.path).toBe(`/play/online/${invited.game}`);
+    expect(seatOf(invited.game)).toMatchObject({ color: 'white', kind: 'chess', corr: true });
+    // Nothing posted, nothing paired: the board is next, with the link to send.
+    expect(state()).toMatchObject({ mine: null, pairing: null, notice: null });
+    state().clearInvited();
+    expect(state().invited).toBeNull();
+    // The waiting room lets go once nothing needs it.
+    await vi.waitFor(() => expect(relay.openSockets('/v1/lobby')).toHaveLength(0), {
+      timeout: LINGER_MS * 2,
+    });
+  });
+
+  it('invites to a Chess960 game, whose seat is kept as one', async () => {
+    state().invite({ game: 'chess960', tc: '5d', color: 'black' });
+    await relay.settle();
+    const invited = state().invited!;
+    expect(invited.path).toBe(`/play/online/${invited.game}`);
+    expect(seatOf(invited.game)).toMatchObject({ color: 'black', kind: 'chess960', corr: true });
+    expect(state().notice).toBeNull();
+  });
+
+  it('refuses what is no correspondence game, and says what the relay refuses', async () => {
+    state().invite({ tc: '5+3', color: 'white' });
+    expect(state().notice).toBe('That game cannot be made.');
+    state().clearNotice();
+    // Days a move are for chess and Chess960 only.
+    state().invite({ game: 'army', tc: '3d', color: 'white' });
+    expect(state().notice).toBe('That game cannot be made.');
+    state().clearNotice();
+    state().watch();
+    await relay.settle();
+    for (let i = 0; i < LIMITS.invites; i++) {
+      state().invite({ tc: '1d', color: 'random' });
+      await relay.settle();
+    }
+    expect(state().notice).toBeNull();
+    state().invite({ tc: '1d', color: 'random' });
+    await relay.settle();
+    expect(state().notice).toBe('That is enough invitations for now.');
+    expect(state().invited).not.toBeNull();
+  });
+
+  it('says so when its answer is lost with the connection, rather than make a second game', async () => {
+    state().watch();
+    await relay.settle();
+    const [socket] = relay.openSockets('/v1/lobby');
+    relay.silence(socket!);
+    state().invite({ tc: '7d', color: 'black' });
+    relay.drop(socket!);
+    await relay.settle();
+    expect(state().notice).toBe('The invitation could not be made: try again.');
+    expect(state().invited).toBeNull();
+  });
+});

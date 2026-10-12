@@ -5,6 +5,8 @@
  *
  *   LiveLobby  one object (named 'lobby'): the sockets of `GET /v1/lobby`
  *   LiveRoom   one object per game (named by the game's id): `GET /v1/games/:id`
+ *   LiveGroup  one object per group room (named by its id): `GET /v1/rooms/:id`,
+ *              a room of up to eight (group.mjs), kept under 'group'
  *
  * Sockets go through the WebSocket Hibernation API: an object whose sockets
  * are quiet is evicted from memory without dropping them, and woken (a new
@@ -15,13 +17,23 @@
  * runtime itself, without waking the object.
  *
  * The waiting room makes a game by POSTing its spec to the room's object at
- * https://live.internal/create; so does a room for a rematch. The Worker
- * (worker.mjs) passes on WebSocket upgrades only, so nobody outside can.
+ * https://live.internal/create; so does a room for a rematch, and the waiting
+ * room and a game's room (for its analysis) make group rooms the same way. The
+ * Worker (worker.mjs) passes on WebSocket upgrades only, so nobody outside can.
+ *
+ * A room pushes correspondence players who are away through the relay's push
+ * keys, kept in D1 beside the vaults (the `DB` binding; without it nobody is
+ * pushed). The contact in its push messages is PUSH_CONTACT, or the first
+ * https origin of ALLOWED_ORIGINS.
  *
  * The classes are written the old way (a constructor taking the state and the
  * environment, no `cloudflare:workers` import) so the tests can run them under
  * Node against stand-ins.
  */
+import { originList } from '../handler.mjs';
+import { d1PushStore } from '../push/d1PushStore.mjs';
+import { pushContact, pushSender } from '../push/reminders.mjs';
+import { createGroup, groupData } from './group.mjs';
 import { createLobby, lobbyData } from './lobby.mjs';
 import { createRoom, roomData } from './room.mjs';
 
@@ -59,8 +71,37 @@ const INTERNAL = 'https://live.internal';
  *   get(id: unknown): { fetch(input: string | Request, init?: RequestInit): Promise<Response> },
  * }} DurableNamespace
  *
- * @typedef {{ LIVE_LOBBY?: DurableNamespace, LIVE_ROOMS?: DurableNamespace }} LiveEnv
+ * @typedef {{
+ *   LIVE_LOBBY?: DurableNamespace,
+ *   LIVE_ROOMS?: DurableNamespace,
+ *   LIVE_GROUPS?: DurableNamespace,
+ *   DB?: { prepare(sql: string): any },
+ *   ALLOWED_ORIGINS?: unknown,
+ *   PUSH_CONTACT?: unknown,
+ * }} LiveEnv
  */
+
+/**
+ * The rooms' push sender, one per set of bindings (so its keys are read once
+ * per isolate); none without a database.
+ * @type {WeakMap<object, import('./room.mjs').RoomPlatform['notify']>}
+ */
+const senders = new WeakMap();
+
+/** @param {LiveEnv} env */
+function notifierFor(env) {
+  if (!env.DB) return undefined;
+  if (!senders.has(env)) {
+    senders.set(
+      env,
+      pushSender({
+        store: d1PushStore(env.DB),
+        contact: pushContact(originList(env.ALLOWED_ORIGINS), env.PUSH_CONTACT),
+      }),
+    );
+  }
+  return senders.get(env);
+}
 
 /**
  * Makes a game room: for the waiting room after a pairing, and for a room
@@ -77,6 +118,27 @@ async function createGame(env, spec) {
     body: JSON.stringify(spec),
   });
   if (!response.ok) throw new Error(`The game room answered ${response.status}.`);
+}
+
+/**
+ * Makes a group room: for the waiting room, and for a game's analysis (the
+ * game's room asks). 'exists' when it was made already; throws when the room
+ * would not take it.
+ * @param {LiveEnv} env
+ * @param {import('./group.mjs').GroupSpec} spec
+ * @returns {Promise<'created' | 'exists'>}
+ */
+async function createGroupRoom(env, spec) {
+  const groups = env.LIVE_GROUPS;
+  if (!groups) throw new Error('No LIVE_GROUPS binding.');
+  const response = await groups.get(groups.idFromName(spec.id)).fetch(`${INTERNAL}/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(spec),
+  });
+  if (response.status === 409) return 'exists';
+  if (!response.ok) throw new Error(`The group room answered ${response.status}.`);
+  return 'created';
 }
 
 /** Lets the runtime answer `ping` with `pong`, when it can, so a ping never wakes the object. */
@@ -205,6 +267,7 @@ export class LiveLobby {
     this.lobby = createLobby({
       connections: () => this.sockets.open(),
       createGame: (spec) => createGame(env, spec),
+      createGroup: (spec) => createGroupRoom(env, spec),
       now: () => Date.now(),
     });
     answerPings(state);
@@ -271,7 +334,9 @@ export class LiveRoom {
       },
       schedule: (at) => (at === null ? storage.deleteAlarm() : storage.setAlarm(at)),
       createGame: (spec) => createGame(env, spec),
+      createGroup: (spec) => createGroupRoom(env, spec),
       now: () => Date.now(),
+      notify: notifierFor(env),
     });
     answerPings(state);
   }
@@ -344,5 +409,101 @@ export class LiveRoom {
   /** Something is due: a flag, a first move, a hello, or the room's end. */
   alarm() {
     return this.room.timer();
+  }
+}
+
+/** One group room (up to eight by link): an object per room, named by its id. */
+export class LiveGroup {
+  /**
+   * @param {DurableState} state
+   * @param {LiveEnv} _env
+   */
+  constructor(state, _env) {
+    const storage = state.storage;
+    this.storage = storage;
+    this.sockets = socketsOf(state);
+    // Made once per instance: it reads the room from storage when first needed.
+    this.group = createGroup({
+      connections: () => this.sockets.open(),
+      load: async () => (await storage.get('group')) ?? null,
+      store: (group) => storage.put('group', group),
+      remove: async () => {
+        await storage.deleteAlarm();
+        await storage.deleteAll();
+      },
+      schedule: (at) => (at === null ? storage.deleteAlarm() : storage.setAlarm(at)),
+      now: () => Date.now(),
+    });
+    answerPings(state);
+  }
+
+  /**
+   * POST https://live.internal/create with a room's spec makes the room (201;
+   * 409 when it exists already). Anything else must be a socket for the room.
+   * @param {Request} request
+   */
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (request.method === 'POST' && url.origin === INTERNAL && url.pathname === '/create') {
+      return this.create(request);
+    }
+    if (!isUpgrade(request)) return new Response('Connect with a WebSocket.', { status: 426 });
+    const [client, server] = socketPair();
+    await this.accept(server);
+    return switching(client);
+  }
+
+  /** @param {Request} request */
+  async create(request) {
+    /** @type {import('./group.mjs').GroupSpec} */
+    let spec;
+    try {
+      spec = await request.json();
+    } catch {
+      return new Response(null, { status: 400 });
+    }
+    try {
+      await this.group.create(spec);
+      return new Response(null, { status: 201 });
+    } catch {
+      const exists = (await this.storage.get('group')) != null;
+      return new Response(null, { status: exists ? 409 : 400 });
+    }
+  }
+
+  /**
+   * Takes the object's end of a new socket into the room: what `fetch` does,
+   * apart from making the socket and the 101 response. The socket then has a
+   * while to say hello.
+   * @param {DurableSocket} ws
+   */
+  async accept(ws) {
+    await this.group.open(this.sockets.accept(ws, groupData(Date.now())));
+  }
+
+  /**
+   * @param {DurableSocket} ws
+   * @param {string | ArrayBuffer} message
+   */
+  async webSocketMessage(ws, message) {
+    if (this.sockets.isClosed(ws)) return;
+    const conn = this.sockets.conn(ws);
+    if (typeof message !== 'string') return conn.close(1003, 'Only text messages are taken.');
+    await this.group.message(conn, message);
+  }
+
+  /** @param {DurableSocket} ws @param {number} [code] */
+  async webSocketClose(ws, code) {
+    if (this.sockets.end(ws, code)) await this.group.close(this.sockets.conn(ws));
+  }
+
+  /** @param {DurableSocket} ws */
+  webSocketError(ws) {
+    return this.webSocketClose(ws);
+  }
+
+  /** Something is due: a hello, a host's hand-over, the race's next step, or the room's end. */
+  alarm() {
+    return this.group.timer();
   }
 }

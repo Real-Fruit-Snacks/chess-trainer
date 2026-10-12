@@ -1,3 +1,4 @@
+import { isChess960Variant } from '@/chess/chess960';
 import { type PgnGame, PgnParseError, parsePgn, splitPgnGames } from '@/chess/pgn';
 import { GameTree } from '@/chess/tree';
 import { fetchWithTimeout, isTimeoutError, retryAfterSeconds } from './fetchWithTimeout';
@@ -116,11 +117,19 @@ export function safeSourceUrl(
   return url.href;
 }
 
-/** Variants play by other rules: only standard chess (from any position) is imported. */
+/** Standard chess, from the start or from any position (a game with no Variant tag is one). */
 export function isStandardVariant(variant: string | undefined): boolean {
   if (!variant) return true;
   const name = variant.trim().toLowerCase();
   return name === '' || name === 'standard' || name === 'from position' || name === 'chess';
+}
+
+/**
+ * Other variants play by other rules: standard chess and Chess960 are imported (the app plays
+ * and analyses both), nothing else.
+ */
+export function isImportableVariant(variant: string | undefined): boolean {
+  return isStandardVariant(variant) || isChess960Variant(variant);
 }
 
 /** Why a game in a paste could not be read, with the legal moves before the problem. */
@@ -158,7 +167,7 @@ export function parsePgnGamesDetailed(text: string): ParsedPgnGames {
     try {
       game = parsePgn(chunk);
       if (game.moves.length === 0 && !game.headers.FEN) continue;
-      if (!isStandardVariant(game.headers.Variant)) continue;
+      if (!isImportableVariant(game.headers.Variant)) continue;
       // Replaying the moves catches illegal or corrupt games (and invalid FEN headers)
       // before they reach the board.
       const tree = GameTree.fromParsed(game);
@@ -250,8 +259,14 @@ const LICHESS_PERF: Record<GameSpeed, string> = {
   correspondence: 'correspondence',
 };
 
-/** Every standard-chess perf, so variant games (Crazyhouse, Chess960…) are never requested. */
-export const LICHESS_STANDARD_PERFS = 'ultraBullet,bullet,blitz,rapid,classical,correspondence';
+/** Lichess's perf for Chess960 games, at any speed. */
+const LICHESS_CHESS960_PERF = 'chess960';
+
+/**
+ * Every perf the app imports: standard chess at every speed, and Chess960. Other variants
+ * (Crazyhouse, Atomic…) are never requested.
+ */
+export const LICHESS_PERFS = `ultraBullet,bullet,blitz,rapid,classical,correspondence,${LICHESS_CHESS960_PERF}`;
 
 /** Applies the client-side part of the filters (the APIs cover the rest, unevenly). */
 export function applyGameFilters(
@@ -292,7 +307,8 @@ export async function fetchLichessGamesPage(
   const params = new URLSearchParams({
     max: String(max),
     opening: 'true',
-    clocks: 'false',
+    // The clock after each move ([%clk]): the review shows how the time was spent.
+    clocks: 'true',
     evals: 'false',
     literate: 'false',
   });
@@ -301,8 +317,9 @@ export async function fetchLichessGamesPage(
   params.set(
     'perfType',
     filters?.speed && filters.speed !== 'all'
-      ? LICHESS_PERF[filters.speed]
-      : LICHESS_STANDARD_PERFS,
+      ? // Chess960 is one perf at every speed: its games of the other speeds are left out below.
+        `${LICHESS_PERF[filters.speed]},${LICHESS_CHESS960_PERF}`
+      : LICHESS_PERFS,
   );
   if (filters?.color && filters.color !== 'all') params.set('color', filters.color);
   if (options.cursor) params.set('until', options.cursor);
@@ -311,14 +328,16 @@ export async function fetchLichessGamesPage(
     headers: { Accept: 'application/x-chess-pgn' },
     signal: options.signal,
   });
-  const games = applyGameFilters(parsePgnGames(await res.text()), filters, user);
-  const oldest = games.reduce<number | null>(
+  const fetched = parsePgnGames(await res.text());
+  const games = applyGameFilters(fetched, filters, user);
+  // Paging follows what Lichess sent: the filters here may have left some of a full page out.
+  const oldest = fetched.reduce<number | null>(
     (acc, g) => (g.timestamp !== null && (acc === null || g.timestamp < acc) ? g.timestamp : acc),
     null,
   );
   return {
     games,
-    next: games.length >= max && oldest !== null ? String(oldest - 1) : null,
+    next: fetched.length >= max && oldest !== null ? String(oldest - 1) : null,
   };
 }
 
@@ -338,7 +357,7 @@ interface ChessComArchiveGame {
   end_time?: number;
   rated?: boolean;
   time_class?: string;
-  /** "chess" for standard games; variants ("chess960", "kingofthehill"…) are skipped. */
+  /** "chess" for standard games, "chess960"; other variants ("kingofthehill"…) are skipped. */
   rules?: string;
   white?: { username?: string };
   black?: { username?: string };
@@ -414,7 +433,7 @@ export async function fetchChessComGamesPage(
     const { games } = (await res.json()) as { games?: ChessComArchiveGame[] };
     const parsed = (games ?? [])
       .filter((g): g is ChessComArchiveGame & { pgn: string } => typeof g.pgn === 'string')
-      .filter((g) => !g.rules || g.rules === 'chess')
+      .filter((g) => !g.rules || g.rules === 'chess' || g.rules === 'chess960')
       .filter((g) => (g.end_time ?? 0) < before)
       .sort((a, b) => (b.end_time ?? 0) - (a.end_time ?? 0))
       .flatMap((g) =>

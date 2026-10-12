@@ -19,8 +19,11 @@ interface BoardProps {
   className?: string;
   movableColor?: string;
   dests?: Map<string, string[]>;
+  premovable?: boolean;
+  chess960?: boolean;
+  check?: boolean;
   lastMove?: readonly [string, string] | null;
-  onMove?: (from: string, to: string) => void;
+  onMove?: (from: string, to: string, meta?: { premove: boolean }) => void;
 }
 const board = vi.hoisted(() => ({ props: null as BoardProps | null }));
 vi.mock('@/components/board/Board', () => ({
@@ -40,6 +43,10 @@ vi.mock('./sessions', () => ({
     sessions.asked.push(`${source}/${id}`);
     return sessions.byKey.get(`${source}/${id}`) ?? null;
   },
+  watchLiveGame: (id: string) => {
+    sessions.asked.push(`watch/${id}`);
+    return sessions.byKey.get(`watch/${id}`) ?? null;
+  },
 }));
 
 const clearPairing = vi.hoisted(() => vi.fn());
@@ -49,6 +56,7 @@ vi.mock('./lobby', async () => {
 });
 
 import { playMoveSound, playSound } from '@/lib/sound';
+import { useToasts } from '@/components/ui/toastStore';
 import LiveGamePage from './LiveGamePage';
 import { useLobby } from './lobby';
 
@@ -75,6 +83,7 @@ function makeView(patch: Partial<LiveGameView> = {}): LiveGameView {
     tc: '5+3',
     rated: false,
     moves: [],
+    clocks: [],
     clock: null,
     firstMove: null,
     status: 'playing',
@@ -82,9 +91,15 @@ function makeView(patch: Partial<LiveGameView> = {}): LiveGameView {
     reason: null,
     offers: { draw: null, takeback: null, rematch: null },
     opponentPresent: true,
+    present: { white: true, black: true },
+    watching: false,
+    watchers: 0,
+    open: null,
+    joined: null,
     claimAt: null,
     chat: [],
     next: null,
+    analysis: null,
     error: null,
     url: null,
     game: 'chess',
@@ -124,13 +139,16 @@ function makeSession(initial: LiveGameView) {
     say: vi.fn(),
     army: vi.fn(),
     peek: vi.fn(),
+    join: vi.fn(),
+    analyse: vi.fn(),
     close: vi.fn(),
   };
 }
 
 type FakeSession = ReturnType<typeof makeSession>;
 
-function hold(source: LiveSource, id: string, view: LiveGameView): FakeSession {
+/** A session for a game this device plays (`source`), or watches ('watch'). */
+function hold(source: LiveSource | 'watch', id: string, view: LiveGameView): FakeSession {
   const session = makeSession(view);
   sessions.byKey.set(`${source}/${id}`, session);
   return session;
@@ -144,6 +162,7 @@ function renderGame(path = '/play/online/GAME') {
         <Route path="/play/online/:gameId" element={<LiveGamePage source="relay" />} />
         <Route path="/play/online/lichess/:gameId" element={<LiveGamePage source="lichess" />} />
         <Route path="/games" element={<p>My games</p>} />
+        <Route path="/analyze/together/:roomId" element={<p>The analysis room</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -166,6 +185,8 @@ const nextTask = () =>
 const PROMOTION_READY = ['a2a4', 'b7b5', 'a4b5', 'a7a6', 'b5a6', 'c8b7', 'a6b7', 'b8c6'];
 /** Moves that leave White ready to castle short. */
 const CASTLE_READY = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4', 'g8f6'];
+/** Chess960 position 192: the kings on f1 and f8, a knight and a rook beside each. */
+const P192 = 'bbqnrknr/pppppppp/8/8/8/8/PPPPPPPP/BBQNRKNR w KQkq - 0 1';
 
 describe('LiveGamePage', () => {
   beforeEach(() => {
@@ -188,6 +209,9 @@ describe('LiveGamePage', () => {
         cancel: vi.fn(),
         join: vi.fn(),
         clearPairing,
+        invite: vi.fn(),
+        invited: null,
+        clearInvited: vi.fn(),
         clearNotice: vi.fn(),
       },
       true,
@@ -196,16 +220,167 @@ describe('LiveGamePage', () => {
     useFocus.setState({ active: false });
   });
 
-  it('says so when this device has no seat in the game', () => {
+  it('watches a game this device has no seat in, and says when there is no such game', () => {
+    hold('watch', 'GAME', makeView({ watching: true, moves: ['e2e4'], watchers: 3 }));
+    const { unmount } = renderGame('/play/online/GAME');
+    expect(sessions.asked).toEqual(['relay/GAME', 'watch/GAME']);
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Patient Bishop v Swift Knight' }),
+    ).toBeVisible();
+    expect(screen.getByTestId('live-status')).toHaveTextContent('Swift Knight to move');
+    expect(screen.getByTestId('live-watchers')).toHaveTextContent('3 watching');
+    unmount();
+
     renderGame('/play/online/NOPE');
-    expect(sessions.asked).toEqual(['relay/NOPE']);
-    expect(screen.getByRole('heading', { level: 1, name: 'No seat in this game' })).toBeVisible();
-    expect(screen.getByTestId('live-absent')).toHaveTextContent(
-      'This device has no seat in this game. A game belongs to the two players the waiting room paired.',
-    );
+    expect(screen.getByRole('heading', { level: 1, name: 'Game not found' })).toBeVisible();
     fireEvent.click(screen.getByRole('link', { name: 'Back to Play' }));
     expect(screen.getByText('Play')).toBeInTheDocument();
     expect(document.title).toBe(`Live game · ${siteConfig.name}`);
+  });
+
+  it('plays a correspondence game: its link while a seat is open, then days left, no premoves', async () => {
+    const DAY = 86_400_000;
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const session = hold(
+      'relay',
+      'GAME',
+      makeView({
+        id: 'GAME',
+        tc: '3d',
+        open: 'black',
+        black: { name: '', rating: null },
+        clock: { white: 3 * DAY, black: 3 * DAY, running: null, at: performance.now() },
+      }),
+    );
+    renderGame();
+    expect(screen.getByRole('heading', { level: 1, name: 'Correspondence game' })).toBeVisible();
+    expect(screen.getByText('Correspondence')).toBeVisible();
+    expect(screen.getByTestId('live-status')).toHaveTextContent(
+      'Waiting for your friend to take the other seat',
+    );
+    expect(screen.getByText('Your friend, once they join')).toBeVisible();
+    expect(board.props?.movableColor).toBeUndefined();
+    expect(screen.queryByTestId('focus-toggle')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Copy watch link' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy the link' }));
+    await vi.waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/play/online/GAME`),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Call off the invitation' }));
+    expect(session.abort).toHaveBeenCalledTimes(1);
+
+    // Taken: the game is on, with the days left for the side to move.
+    session.update({
+      open: null,
+      black: { name: 'Swift Knight', rating: null },
+      clock: {
+        white: 2 * DAY + 5 * 3_600_000 + 1000,
+        black: 3 * DAY,
+        running: 'white',
+        at: performance.now(),
+      },
+    });
+    expect(screen.getByTestId('live-status')).toHaveTextContent('Your move');
+    expect(screen.getByTestId('live-days-left')).toHaveTextContent('2 days 5 h');
+    expect(screen.queryByTestId('live-invite')).toBeNull();
+    expect(board.props).toMatchObject({ movableColor: 'white', premovable: false });
+    session.update({
+      moves: ['e2e4'],
+      opponentPresent: false,
+      clock: { white: 3 * DAY, black: 3 * DAY, running: 'black', at: performance.now() },
+    });
+    expect(board.props).toMatchObject({ movableColor: undefined, premovable: false });
+    // Away over days is no news.
+    expect(screen.queryByText('Left')).toBeNull();
+  });
+
+  it('takes a correspondence invitation’s open seat from its link, and becomes the board', () => {
+    const watching = hold(
+      'watch',
+      'GAME',
+      makeView({
+        watching: true,
+        tc: '3d',
+        open: 'black',
+        black: { name: '', rating: null },
+      }),
+    );
+    renderGame();
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: 'Patient Bishop invites you to a correspondence game',
+      }),
+    ).toBeVisible();
+    expect(screen.getByTestId('live-join')).toHaveTextContent(
+      '3 days a move: each of you has these days for every move, and plays whenever suits. You play black.',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Join this game' }));
+    expect(watching.join).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Joining…' })).toBeDisabled();
+    // Refused (someone was quicker): the button may be tried again.
+    watching.update({ error: 'This game has both its players.' });
+    expect(screen.getByRole('button', { name: 'Join this game' })).toBeEnabled();
+
+    // The seat is this device's: its board takes over.
+    hold('relay', 'GAME', makeView({ tc: '3d', you: 'black' }));
+    watching.update({ joined: 'black', error: null });
+    expect(sessions.asked).toEqual(['relay/GAME', 'watch/GAME', 'relay/GAME']);
+    // The connection that watched goes at once: the players no longer count it as watching.
+    expect(watching.close).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Correspondence game' })).toBeVisible();
+    expect(screen.getByTestId('live-status')).toHaveTextContent('Patient Bishop to move');
+  });
+
+  it('invites to a Chess960 game by correspondence, and plays it over days', () => {
+    hold(
+      'watch',
+      'GAME',
+      makeView({
+        watching: true,
+        tc: '3d',
+        open: 'black',
+        black: { name: '', rating: null },
+        game: 'chess960',
+        startFen: P192,
+      }),
+    );
+    const { unmount } = renderGame();
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: 'Patient Bishop invites you to a Chess960 correspondence game',
+      }),
+    ).toBeVisible();
+    expect(screen.getByTestId('live-join-variant')).toHaveTextContent(
+      'Chess960 · position 192: the pieces start in the same shuffled order for both of you.',
+    );
+    unmount();
+
+    sessions.byKey.clear();
+    hold('relay', 'GAME', makeView({ tc: '3d', game: 'chess960', startFen: P192 }));
+    renderGame();
+    expect(screen.getByRole('heading', { level: 1, name: 'Correspondence game' })).toBeVisible();
+    expect(screen.getByTestId('live-variant')).toHaveTextContent('Chess960 · position 192');
+    expect(screen.getByText(/3 days a move: play whenever suits/)).toBeVisible();
+    expect(board.props).toMatchObject({ chess960: true, premovable: false });
+  });
+
+  it('offers a link to watch while the game is on, and says how many watch', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const session = hold('relay', 'GAME', makeView({ id: 'GAME', moves: ['e2e4'] }));
+    renderGame();
+    expect(screen.queryByTestId('live-watchers')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy watch link' }));
+    await vi.waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/play/watch/GAME`),
+    );
+    session.update({ watchers: 2 });
+    expect(screen.getByTestId('live-watchers')).toHaveTextContent('2 watching');
+    session.update({ status: 'over', result: '1-0', reason: 'resign' });
+    expect(screen.queryByRole('button', { name: 'Copy watch link' })).toBeNull();
   });
 
   it('asks for a Lichess sign-in for a Lichess game it cannot open', () => {
@@ -243,7 +418,9 @@ describe('LiveGamePage', () => {
     expect(session.move).toHaveBeenCalledWith('e2e4');
 
     session.update({ moves: ['e2e4'] });
-    expect(board.props?.movableColor).toBeUndefined();
+    // The opponent's turn: your pieces stay yours to premove with, and no move is legal now.
+    expect(board.props?.movableColor).toBe('white');
+    expect(board.props?.premovable).toBe(true);
     expect(board.props?.dests?.size).toBe(0);
     expect(board.props?.lastMove).toEqual(['e2', 'e4']);
     expect(screen.getByTestId('live-status')).toHaveTextContent('Swift Knight to move');
@@ -259,9 +436,43 @@ describe('LiveGamePage', () => {
     expect(board.props?.movableColor).toBe('white');
     session.update({ connection: 'closed' });
     expect(board.props?.movableColor).toBeUndefined();
+    expect(board.props?.premovable).toBe(false);
     expect(screen.getByTestId('live-status')).toHaveTextContent(
       'The connection to this game has closed.',
     );
+  });
+
+  it('premoves while the opponent thinks, unless switched off or the pieces are hidden', () => {
+    const session = hold('relay', 'GAME', makeView({ moves: ['e2e4'] }));
+    const { unmount } = renderGame();
+    expect(board.props).toMatchObject({ movableColor: 'white', premovable: true });
+    // The premove is played by the board once the reply is in: it comes as a move of yours.
+    session.update({ moves: ['e2e4', 'e7e5'] });
+    act(() => board.props?.onMove?.('g1', 'f3', { premove: true }));
+    expect(session.move).toHaveBeenCalledWith('g1f3');
+    // Over: nothing left to premove.
+    session.update({ status: 'over', result: '1-0', reason: 'resign' });
+    expect(board.props).toMatchObject({ movableColor: undefined, premovable: false });
+    unmount();
+
+    useSettings.getState().update({ livePremoves: false });
+    hold('relay', 'GAME', makeView({ moves: ['e2e4'] }));
+    const off = renderGame();
+    expect(board.props).toMatchObject({ movableColor: undefined, premovable: false });
+    off.unmount();
+    useSettings.getState().update({ livePremoves: true });
+
+    hold('relay', 'GAME', makeView({ game: 'blindfold', peeks: { white: 0, black: 0 } }));
+    renderGame();
+    expect(board.props).toMatchObject({ movableColor: 'white', premovable: false });
+  });
+
+  it('plays a premoved promotion as a queen, without asking', () => {
+    const session = hold('relay', 'GAME', makeView({ moves: PROMOTION_READY }));
+    renderGame();
+    act(() => board.props?.onMove?.('b7', 'a8', { premove: true }));
+    expect(session.move).toHaveBeenCalledWith('b7a8q');
+    expect(screen.queryByRole('dialog', { name: 'Choose a piece to promote to' })).toBeNull();
   });
 
   it('plays Black from the other side, and flips on request', () => {
@@ -293,6 +504,50 @@ describe('LiveGamePage', () => {
     act(() => board.props?.onMove?.('b7', 'a8'));
     fireEvent.click(screen.getByRole('button', { name: 'Knight' }));
     expect(promoting.move).toHaveBeenCalledWith('b7a8n');
+  });
+
+  it('plays Chess960 by its rules: the position named, castling onto the rook, premoves', () => {
+    const session = hold(
+      'relay',
+      'GAME',
+      makeView({ game: 'chess960', startFen: P192, moves: ['g1h3', 'g8h6'] }),
+    );
+    renderGame();
+    expect(screen.getByRole('heading', { level: 1, name: 'Chess960' })).toBeVisible();
+    expect(screen.getByTestId('live-variant')).toHaveTextContent('Chess960 · position 192');
+    expect(document.title).toBe(`Your move · Chess960 · ${siteConfig.name}`);
+    expect(board.props).toMatchObject({ chess960: true, movableColor: 'white' });
+    expect(board.props?.fen).toMatch(/^bbqnrk1r\/.*\/BBQNRK1R w KQkq /);
+    // The king castles onto its rook (h1), or steps to g1: two different moves.
+    expect(board.props?.dests?.get('f1')).toEqual(expect.arrayContaining(['g1', 'h1']));
+    act(() => board.props?.onMove?.('f1', 'h1'));
+    expect(session.move).toHaveBeenLastCalledWith('f1h1');
+
+    session.update({ moves: ['g1h3', 'g8h6', 'f1h1'] });
+    expect(vi.mocked(playMoveSound).mock.calls.at(-1)?.[0]).toMatchObject({ san: 'O-O' });
+    expect(screen.getByRole('region', { name: 'Move list' })).toHaveTextContent('1.Nh3Nh62.O-O');
+    expect(board.props?.fen).toMatch(/\/BBQNRRK1 b kq /);
+    // The opponent's turn: premoves, Chess960's castling among them, wait for it.
+    expect(board.props).toMatchObject({ premovable: true, dests: new Map() });
+    session.update({ moves: ['g1h3', 'g8h6', 'f1h1', 'f8h8'] });
+    act(() => board.props?.onMove?.('h3', 'g5', { premove: true }));
+    expect(session.move).toHaveBeenLastCalledWith('h3g5');
+  });
+
+  it('asks for the promotion piece in Chess960 too', () => {
+    const session = hold(
+      'relay',
+      'GAME',
+      makeView({
+        game: 'chess960',
+        startFen: P192,
+        moves: ['b2b4', 'a7a5', 'b4a5', 'b7b6', 'a5b6', 'c8a6', 'b6b7', 'h7h6'],
+      }),
+    );
+    renderGame();
+    act(() => board.props?.onMove?.('b7', 'a8'));
+    fireEvent.click(screen.getByRole('button', { name: 'Queen' }));
+    expect(session.move).toHaveBeenCalledWith('b7a8q');
   });
 
   it('counts down the first move, and offers to abort before both sides have moved', () => {
@@ -566,6 +821,30 @@ describe('LiveGamePage', () => {
     expect(openDialog('Draw')).toBeNull();
   });
 
+  it('goes to the game’s analysis room, and says when the opponent is there', async () => {
+    const session = hold('relay', 'GAME', makeView({ moves: ['e2e4', 'e7e5'] }));
+    renderGame();
+    // Not while the game is on.
+    expect(screen.queryByTestId('analyse-together')).toBeNull();
+    session.update({ status: 'over', result: '1-0', reason: 'resign' });
+    let dialog = openDialog('You won!')!;
+    session.analyse.mockRejectedValueOnce(new Error('The analysis room could not be made.'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Analyse together' }));
+    await nextTask();
+    expect(useToasts.getState().toasts.map((t) => t.message)).toContain(
+      'The analysis room could not be made.',
+    );
+
+    session.update({ analysis: { room: 'A'.repeat(22), by: 'black' } });
+    dialog = openDialog('You won!')!;
+    expect(dialog).toHaveTextContent('Swift Knight is analysing the game: join them.');
+    session.analyse.mockResolvedValueOnce('A'.repeat(22));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Join the analysis' }));
+    await nextTask();
+    expect(session.analyse).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('The analysis room')).toBeInTheDocument();
+  });
+
   it('answers the opponent’s rematch offer', () => {
     const session = hold('relay', 'GAME', makeView({ moves: ['e2e4', 'e7e5'] }));
     renderGame();
@@ -607,6 +886,9 @@ describe('LiveGamePage', () => {
       }),
     );
     renderGame('/play/online/lichess/abcd1234');
+    // Premoves work on Lichess too: Black has replied, and may premove while White thinks.
+    session.update({ moves: ['e2e4', 'c7c5'] });
+    expect(board.props).toMatchObject({ movableColor: 'black', premovable: true });
     expect(screen.getByText('Rated on Lichess')).toBeVisible();
     expect(screen.getByRole('heading', { level: 2, name: 'Magnus · 5+3' })).toBeVisible();
     expect(screen.getByText('GM')).toBeVisible();

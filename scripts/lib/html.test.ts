@@ -94,6 +94,8 @@ describe('Content-Security-Policy of index.html', () => {
     expect(used.size).toBe(4);
     expect(directives.get('connect-src')).toEqual(["'self'", ...CONNECT_ORIGINS]);
     expect(new Set(CONNECT_ORIGINS)).toEqual(used);
+    // The explorer at the host Lichess documents for it.
+    expect(used).toContain('https://explorer.lichess.org');
   });
 
   it('lets the app reach its relay, over WebSockets too for live games', () => {

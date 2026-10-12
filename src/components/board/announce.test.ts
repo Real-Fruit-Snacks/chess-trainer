@@ -51,6 +51,21 @@ describe('describeMove', () => {
     );
   });
 
+  it('describes Chess960 castling, the king moving onto its own rook', () => {
+    // Position 274: the king on d1 and the rook on c1 swap places on O-O-O.
+    const before = 'bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1';
+    const swapped = 'bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNKRNBRQ b kq - 1 1';
+    expect(describeMove(before, swapped, ['d1', 'c1'])).toBe('White castles queenside.');
+    // The king's rook leaves h8 empty: still castling, and the rights by file are read.
+    const black = '4k2r/8/8/8/8/8/8/4K3 b H - 0 1';
+    const castled = '5rk1/8/8/8/8/8/8/4K3 w - - 1 2';
+    expect(describeMove(black, castled, ['e8', 'h8'])).toBe('Black castles kingside.');
+    // A Chess960 position chess.js cannot read as it stands still gets its moves described.
+    const byFile = 'bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w GCgc - 0 1';
+    const pushed = 'bnrknbrq/pppppppp/8/8/4P3/8/PPPP1PPP/BNRKNBRQ b GCgc - 0 1';
+    expect(describeMove(byFile, pushed, ['e2', 'e4'])).toBe('White plays pawn e2 to e4.');
+  });
+
   it('copes without a previous position and with bad input', () => {
     const m = after(START, 'e4');
     expect(describeMove(null, m.after, m.move)).toBe('White plays pawn e2 to e4.');

@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 /**
- * The relay as a plain Node server, its vaults in a SQLite file and its live
- * games in memory: for hosting it yourself, or trying the app against a local
- * relay.
+ * The relay as a plain Node server, its vaults, push keys and reminders in a
+ * SQLite file and its live games in memory (a restart loses the games under
+ * way, correspondence games too): for hosting it yourself, or trying the app
+ * against a local relay.
  *
  *   node relay/src/server.mjs --port 8787 --db relay.db --origin https://example.github.io
  *
  * Options: --host (default 127.0.0.1), --port (8787), --db (relay.db; ':memory:' keeps nothing),
- * --origin (the app's origin, repeatable or comma-separated; default any), --max-bytes.
- * Put it behind HTTPS (a reverse proxy) for anything but local use: the app only
- * talks to an https relay, apart from localhost.
+ * --origin (the app's origin, repeatable or comma-separated; default any), --max-bytes,
+ * --push-contact (the contact in push messages, mailto: or https:; default the first
+ * https origin). Put it behind HTTPS (a reverse proxy) for anything but local use:
+ * the app only talks to an https relay, apart from localhost.
+ *
+ * Every minute it sends the reminders due; once a day it deletes vaults unused
+ * for a year and reminders unheard of for 60 days.
  */
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
@@ -18,10 +23,21 @@ import { createRelay, DEFAULT_MAX_BYTES, expireVaults, originAllowed } from './h
 import { createLiveHub } from './live/hub.mjs';
 import { ID_PATTERN } from './live/shared.mjs';
 import { refuse, upgrade } from './live/websocket.mjs';
+import {
+  createPushApi,
+  expireReminders,
+  MAX_REMINDERS,
+  pushContact,
+  pushSender,
+  sendDueReminders,
+} from './push/reminders.mjs';
+import { sqlitePushStore } from './push/sqlitePushStore.mjs';
 import { sqliteStore } from './sqliteStore.mjs';
 
-const DAY = 24 * 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
+const DAY = 24 * 60 * MINUTE;
 const GAME_PATH = /^\/v1\/games\/([^/]+)$/;
+const ROOM_PATH = /^\/v1\/rooms\/([^/]+)$/;
 /** Addresses of this machine: a reverse proxy in front of the relay, or local use. */
 const LOOPBACK = /^(?:127\.|::1$|::ffff:127\.)/;
 
@@ -29,7 +45,9 @@ const LOOPBACK = /^(?:127\.|::1$|::ffff:127\.)/;
  * An HTTP server answering with `handle` (a Fetch API handler). A body is kept
  * up to `maxBodyBytes` and one piece more, enough for the handler to refuse it
  * as too big; the rest is read and dropped, so a request that never ends cannot
- * fill the memory.
+ * fill the memory. The client's address goes to the handler as
+ * CF-Connecting-IP, as on Cloudflare (whatever the client sent in it is
+ * dropped), for the limits per address.
  * @param {(request: Request) => Promise<Response>} handle
  * @param {{ maxBodyBytes?: number }} [options]
  */
@@ -51,6 +69,9 @@ export function nodeServer(handle, { maxBodyBytes = DEFAULT_MAX_BYTES } = {}) {
           if (typeof value === 'string') headers.set(name, value);
           else if (Array.isArray(value)) headers.set(name, value.join(', '));
         }
+        headers.delete('cf-connecting-ip');
+        const address = clientAddress(req);
+        if (address) headers.set('cf-connecting-ip', address);
         const method = req.method ?? 'GET';
         const request = new Request(`http://${req.headers.host ?? 'localhost'}${req.url ?? '/'}`, {
           method,
@@ -85,9 +106,9 @@ function clientAddress(req) {
 
 /**
  * Live games on a Node server: WebSocket upgrades of `/v1/lobby` (the waiting
- * room) and `/v1/games/:id` (a game) go to `hub`, which keeps everything in
- * memory. A socket from a page on an origin that is not allowed gets 403,
- * any other path 404. Closing the server closes the hub's sockets first.
+ * room), `/v1/games/:id` (a game) and `/v1/rooms/:id` (a group room) go to
+ * `hub`, which keeps everything in memory. A socket from a page on an origin
+ * that is not allowed gets 403, any other path 404. Closing the server closes the hub's sockets first.
  * @param {import('node:http').Server} server
  * @param {{ hub?: import('./live/hub.mjs').LiveHub, allowedOrigins?: readonly string[] }} [options]
  * @returns {import('./live/hub.mjs').LiveHub}
@@ -102,12 +123,18 @@ export function attachLive(server, { hub = createLiveHub(), allowedOrigins = ['*
       // Not a path: refused below.
     }
     const game = GAME_PATH.exec(pathname)?.[1];
+    const room = ROOM_PATH.exec(pathname)?.[1];
+    const id = game ?? room;
     const lobby = pathname === '/v1/lobby';
-    if (!lobby && !(game !== undefined && ID_PATTERN.test(game))) return refuse(socket, 404);
+    if (!lobby && !(id !== undefined && ID_PATTERN.test(id))) return refuse(socket, 404);
     const ws = upgrade(req, socket, head);
     if (!ws) return;
     const events =
-      game === undefined ? hub.openLobby(ws, clientAddress(req)) : hub.openRoom(game, ws);
+      room !== undefined
+        ? hub.openGroup(room, ws)
+        : game === undefined
+          ? hub.openLobby(ws, clientAddress(req))
+          : hub.openRoom(game, ws);
     ws.on('message', (text) => void events.message(text).catch(() => undefined));
     ws.on('close', () => void events.close().catch(() => undefined));
   });
@@ -152,15 +179,42 @@ if (invokedDirectly) {
   const port = whole('port', 8787, 65535);
   const host = one('host', '127.0.0.1');
   const origins = (args.get('origin') ?? ['*']).flatMap((o) => o.split(',')).map((o) => o.trim());
+  const contactOption = one('push-contact', '');
+  if (contactOption && pushContact([], contactOption) !== contactOption) {
+    console.error('--push-contact takes a mailto: or https: address.');
+    process.exit(2);
+  }
   const store = sqliteStore(one('db', 'relay.db'));
+  const pushStore = sqlitePushStore(one('db', 'relay.db'));
   const allowedOrigins = origins.filter(Boolean);
-  const handle = createRelay({ store, allowedOrigins, maxBytes, live: true });
-  const server = nodeServer(handle, { maxBodyBytes: maxBytes });
-  attachLive(server, { allowedOrigins });
-  server.listen(port, host, () => {
-    console.log(`Chess Trainer relay (sync and live games) on http://${host}:${port}`);
+  const contact = pushContact(allowedOrigins, contactOption);
+  const handle = createRelay({
+    store,
+    allowedOrigins,
+    maxBytes,
+    live: true,
+    push: createPushApi({ store: pushStore, allowedOrigins }),
   });
-  const sweep = () => void expireVaults(store).catch(() => undefined);
+  const server = nodeServer(handle, { maxBodyBytes: maxBytes });
+  const hub = createLiveHub({ notify: pushSender({ store: pushStore, contact }) });
+  attachLive(server, { hub, allowedOrigins });
+  server.listen(port, host, () => {
+    console.log(`Chess Trainer relay (sync, live games and push) on http://${host}:${port}`);
+  });
+  const sweep = () =>
+    void Promise.all([expireVaults(store), expireReminders(pushStore)]).catch(() => undefined);
   sweep();
   setInterval(sweep, DAY).unref();
+  // The reminders due, every minute; a run still sending lets the next one pass.
+  let reminding = false;
+  const remind = () => {
+    if (reminding) return;
+    reminding = true;
+    void sendDueReminders({ store: pushStore, contact, limit: MAX_REMINDERS })
+      .catch(() => undefined)
+      .finally(() => {
+        reminding = false;
+      });
+  };
+  setInterval(remind, MINUTE).unref();
 }

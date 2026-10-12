@@ -1,12 +1,15 @@
 import { create } from 'zustand';
 import { useLichess } from '@/store/lichess';
-import { isDuel } from '../../../relay/src/live/shared.mjs';
+import { ID_PATTERN, isCorrespondence, isDuel } from '../../../relay/src/live/shared.mjs';
 import { setBarReason } from './bar';
+import { forgetCorrespondence, keepCorrespondence, noteCorrespondence } from './correspondence';
 import { createLichessGame } from './lichessLive';
+import { gameNotices } from './notify';
 import { recordLiveGame } from './record';
 import { createRelayDuel } from './relayDuel';
 import { createRelayGame } from './relayGame';
 import {
+  correspondenceSeats,
   gamesToCheck,
   LICHESS_GAME_ID,
   liveGamePath,
@@ -29,7 +32,12 @@ import type {
  * game page, the bar that leads back to it): games of chess (and their
  * variants) on the relay or on Lichess, and duels on the relay. A game in
  * progress stays connected wherever the player goes in the app; a finished
- * one is let go a minute after nothing shows it any more.
+ * one is let go a minute after nothing shows it any more. A game watched
+ * (someone else's, on the relay) is let go a minute after nothing shows it,
+ * finished or not, and never reaches My games or the bar. So is a
+ * correspondence game, which goes on for days: its connection keeps the list
+ * of correspondence games (correspondence.ts) up to date, and that list is
+ * what the bar and Play show.
  */
 export { liveGamePath, rememberSeat } from './seats';
 
@@ -49,6 +57,8 @@ interface Entry {
   id: string;
   /** A duel's connection, rather than a game of chess's. */
   duel: boolean;
+  /** A game this device watches, holding no seat in it. */
+  watch: boolean;
   /** The game's own connection. */
   inner: Connection;
   /** What callers get: the same game, its subscribers counted. */
@@ -58,6 +68,8 @@ interface Entry {
   timer: ReturnType<typeof setTimeout> | null;
   /** This module's own subscription. */
   stop: () => void;
+  /** The game's notices while the app is in the background (a game of chess this device plays). */
+  notices: ((view: LiveGameView) => void) | null;
 }
 
 const entries = new Map<string, Entry>();
@@ -73,6 +85,18 @@ export function getLiveGame(source: LiveSource, id: string): LiveGameSession | n
   if (known) return known.duel ? null : (known.session as LiveGameSession);
   const inner = openGame(source, id);
   return inner ? (track(key, source, id, false, inner) as LiveGameSession) : null;
+}
+
+/**
+ * The connection that watches a game on the relay (the same one for every
+ * caller while it lasts); null when `id` is not a game's.
+ */
+export function watchLiveGame(id: string): LiveGameSession | null {
+  if (!ID_PATTERN.test(id)) return null;
+  const key = `watch:${id}`;
+  const known = entries.get(key);
+  if (known) return known.session as LiveGameSession;
+  return track(key, 'relay', id, false, createRelayGame(id, null), true) as LiveGameSession;
 }
 
 /** The connection to a duel this device has a seat in; null when it holds none. */
@@ -102,17 +126,20 @@ function track(
   id: string,
   duel: boolean,
   inner: LiveGameSession | DuelSession,
+  watch = false,
 ): LiveGameSession | DuelSession {
   const entry: Entry = {
     key,
     source,
     id,
     duel,
+    watch,
     inner,
     session: inner,
     watchers: 0,
     timer: null,
     stop: () => undefined,
+    notices: watch || duel ? null : gameNotices(),
   };
   entry.session = counted(entry, inner);
   entries.set(key, entry);
@@ -149,6 +176,16 @@ function counted<T extends LiveGameSession | DuelSession>(entry: Entry, inner: T
 function changed(entry: Entry): void {
   if (entries.get(entry.key) !== entry) return;
   const view = entry.inner.getView();
+  if (entry.watch) {
+    lifetime(entry);
+    return;
+  }
+  if (!entry.duel) {
+    const game = view as LiveGameView;
+    if (game.missing && seatOf(entry.id)?.corr) forgetCorrespondence(entry.id);
+    else noteCorrespondence(game);
+    entry.notices?.(game);
+  }
   // Whichever side ends a game of chess, it reaches My games (once: the record keeps count).
   if (!entry.duel && view.status === 'over') recordLiveGame(view as LiveGameView);
   // A game over (or gone) is not one to come back to after a restart.
@@ -174,10 +211,20 @@ export function checkOnLiveGames(): void {
   }
 }
 
-/** A finished (or missing) game nobody shows is let go after a minute; anything else stays. */
+/** A game played over days: its connection stays only while something shows it. */
+function isCorrespondenceEntry(entry: Entry): boolean {
+  if (entry.duel || entry.source !== 'relay') return false;
+  return isCorrespondence((entry.inner.getView() as LiveGameView).tc) || !!seatOf(entry.id)?.corr;
+}
+
+/**
+ * A finished (or missing) game nobody shows is let go after a minute, and so is
+ * a game watched, and a correspondence game; anything else stays.
+ */
 function lifetime(entry: Entry): void {
   const view = entry.inner.getView();
-  const finished = view.status === 'over' || view.missing;
+  const finished =
+    entry.watch || view.status === 'over' || view.missing || isCorrespondenceEntry(entry);
   if (finished && entry.watchers === 0) {
     entry.timer ??= setTimeout(() => drop(entry), FINISHED_LINGER_MS);
   } else if (entry.timer !== null) {
@@ -196,10 +243,32 @@ function drop(entry: Entry): void {
   publish();
 }
 
+/** Correspondence games are checked on at most this often. */
+export const CORRESPONDENCE_CHECK_MS = 30_000;
+let correspondenceCheckedAt = -Infinity;
+
+/**
+ * Brings the list of correspondence games up to date from their rooms (when
+ * Play opens, and when the app starts with one on): a connection to each game
+ * still on, or not yet listed, which tells the list how it stands and goes a
+ * minute later. Games this device no longer holds a seat in leave the list.
+ */
+export function checkOnCorrespondence(now = Date.now()): void {
+  if (now - correspondenceCheckedAt < CORRESPONDENCE_CHECK_MS) return;
+  correspondenceCheckedAt = now;
+  const seats = correspondenceSeats(now);
+  keepCorrespondence(new Set(seats.map((seat) => seat.id)));
+  for (const seat of seats) {
+    if (seat.over) continue;
+    getLiveGame('relay', seat.id);
+  }
+}
+
 /** Closes every game connection (a test's clean slate). */
 export function closeLiveGames(): void {
   for (const entry of [...entries.values()]) drop(entry);
   checked = false;
+  correspondenceCheckedAt = -Infinity;
 }
 
 /** A game in progress on this device, for the bar that leads back to it. */
@@ -227,7 +296,7 @@ function publish(): void {
   const games: ActiveGame[] = [];
   for (const entry of entries.values()) {
     const view = entry.inner.getView();
-    if (!inProgress(view)) continue;
+    if (entry.watch || isCorrespondenceEntry(entry) || !inProgress(view)) continue;
     const kind: GameKind = view.game;
     games.push({
       source: entry.source,

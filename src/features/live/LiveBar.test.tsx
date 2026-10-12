@@ -23,6 +23,7 @@ vi.mock('./sessions', async () => {
   return {
     useActiveGames: create<{ games: ActiveGame[] }>()(() => ({ games: [] })),
     checkOnLiveGames: vi.fn(),
+    checkOnCorrespondence: vi.fn(),
   };
 });
 
@@ -30,7 +31,8 @@ import { useLiveBar } from '@/app/liveBar';
 import { Shell } from '@/app/Shell';
 import LiveBar from './LiveBar';
 import { useLobby } from './lobby';
-import { checkOnLiveGames, useActiveGames } from './sessions';
+import { type CorrespondenceGame, useCorrespondence } from './correspondence';
+import { checkOnCorrespondence, checkOnLiveGames, useActiveGames } from './sessions';
 
 const PAIRING: Pairing = {
   source: 'relay',
@@ -103,11 +105,15 @@ describe('LiveBar', () => {
           actions.clearPairing();
           useLobby.setState({ pairing: null });
         },
+        invite: vi.fn(),
+        invited: null,
+        clearInvited: vi.fn(),
         clearNotice: vi.fn(),
       },
       true,
     );
     useActiveGames.setState({ games: [] }, true);
+    useCorrespondence.setState({ games: [] });
   });
 
   it('says nothing when there is nothing to say', () => {
@@ -117,8 +123,57 @@ describe('LiveBar', () => {
 
   it('checks on the games that may still be on since before this start, once loaded', () => {
     vi.mocked(checkOnLiveGames).mockClear();
+    vi.mocked(checkOnCorrespondence).mockClear();
     renderBar();
     expect(checkOnLiveGames).toHaveBeenCalledTimes(1);
+    expect(checkOnCorrespondence).toHaveBeenCalledTimes(1);
+  });
+
+  it('says when it is your move in a correspondence game, and in how many', () => {
+    const game = (id: string, patch: Partial<CorrespondenceGame> = {}): CorrespondenceGame => ({
+      id: id.padEnd(22, 'A'),
+      you: 'white',
+      opponent: 'Swift Knight',
+      tc: '3d',
+      chess960: false,
+      status: 'playing',
+      turn: 'white',
+      deadline: Date.now() + 86_400_000,
+      verdict: null,
+      moves: 4,
+      ...patch,
+    });
+    // Their move, an invitation, a game over: nothing to say.
+    useCorrespondence.setState({
+      games: [
+        game('B', { turn: 'black' }),
+        game('C', { status: 'waiting', turn: null, opponent: '' }),
+        game('D', { status: 'over', turn: null, verdict: 'win' }),
+      ],
+    });
+    const { unmount } = renderBar();
+    expect(screen.queryByTestId('live-bar')).toBeNull();
+    unmount();
+
+    useCorrespondence.setState({ games: [game('E'), game('B', { turn: 'black' })] });
+    const one = renderBar();
+    const bar = screen.getByRole('region', { name: 'Live game' });
+    expect(within(bar).getByRole('status')).toHaveTextContent(
+      'Your move against Swift Knight in your correspondence game.',
+    );
+    fireEvent.click(within(bar).getByRole('link', { name: 'Go to the board' }));
+    expect(screen.getByTestId('location')).toHaveTextContent(`/play/online/${'E'.padEnd(22, 'A')}`);
+    one.unmount();
+
+    useCorrespondence.setState({ games: [game('E'), game('F', { opponent: 'Calm Rook' })] });
+    renderBar();
+    expect(screen.getByTestId('live-bar-corr')).toHaveTextContent(
+      'Your move in 2 correspondence games.',
+    );
+    expect(screen.getByRole('link', { name: 'See them' })).toHaveAttribute(
+      'href',
+      '/play#correspondence',
+    );
   });
 
   it('shows the posted game, how long it has waited, and cancels it', () => {

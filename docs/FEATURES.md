@@ -100,7 +100,40 @@ The complete reference of what Chess Trainer does, section by section. For how i
   it. Deleting a line or forgetting a repertoire's progress asks first; a stored repertoire that can
   no longer be read offers to copy its text or delete it.
 - An optional **opening explorer** (Lichess masters and community games) shows what is played in any
-  position; the card carries its own switch and says plainly when you are offline.
+  position; the card carries its own switch and says plainly when you are offline. It needs a
+  Lichess account connected in Settings: Lichess answers explorer lookups only for a signed-in
+  account, so each lookup carries the account's sign-in, and without one the card says how to
+  connect it.
+- **Find the gaps in a repertoire.** _Find gaps_ on any repertoire's page, built-in or your own,
+  opens a panel beside the board (under it on phones) that asks the explorer what is played in each
+  position where your opponent is to move and the repertoire has a reply, up to move 8, 12 (the
+  default), 16 or 20; a position reached by different move orders is asked about once, and a Black
+  repertoire against one first move skips move 1 ("Only lines after 1. e4 are checked").
+  - **A gap** is a reply played in at least 5% of the games in that position, and in at least 50
+    games (10 among the masters), after which the repertoire has no move of yours. A transposition
+    into a line you answer counts as answered; a line that just stops counts as a gap ("the line
+    stops there"). _Lichess players_ is the default database, with a note on why (masters rarely play
+    the replies club players meet); _Masters_ is a tap away.
+  - **Each gap** shows its line, the reply and how often it comes ("Played in 30% of 1,000 games ·
+    comes up in about 1 game in 3"), most often met first (each reply weighted by how often the moves
+    before it are played, your own alternatives sharing equally), and the board shows the selected
+    one with an arrow. Replies one of your other repertoires answers are listed apart, by name. Once
+    every position is checked, a summary says how much of the play the repertoire answers ("An
+    answer is ready in 92% of games up to move 12"), with how that is worked out; rare and unlisted
+    replies count against it.
+  - **Gently.** One position at a time, half a second apart, and never beside another explorer
+    lookup. When Lichess asks for a pause it waits the time it names (a minute when it names none),
+    with a countdown, and gives up after three pauses in a row. Progress shows as "12 of 40
+    positions"; _Stop_ keeps what was found, and _Check the other 28 positions_ carries on. Answers
+    are kept for the session, so a second look is instant. With the explorer switched off, the panel
+    explains the lookups first (only the positions are sent, with the Lichess sign-in) and offers
+    _Turn on the explorer and find gaps_.
+  - **Add an answer** shows the position after the reply, with the explorer's most successful answer
+    as a green arrow and a one-tap button ("Add 1... c5 2. Nf3"); the other answers played there
+    are a tap each, or you play your own. The reply and the answer are saved, the gap leaves the
+    list, and the toast offers _Edit the line_. A built-in repertoire offers to make an editable copy
+    first ("Italian Game (my copy)", or the copy you already have), and the progress moves to the
+    copy, so no move is due twice.
 
 ## Classic games
 
@@ -148,6 +181,15 @@ the engine rates yours as good. Filter by era, difficulty and what you have play
   pieces return when the game ends), and a start from **any position**: a FEN, a lesson diagram, a
   solved puzzle or a moment of a reviewed game. A position the engine cannot play (the side not to move
   in check, or a game already over) is refused with a message.
+- **Chess960** (_Game_ in the setup, remembered for the next game): the pieces behind the pawns start
+  in one of the 960 Chess960 arrangements, a new one each game (_Play again_ draws another), named
+  on the page (_Chess960 · position 274_). Castle by moving the king onto its rook; king and rook
+  end on the usual squares, wherever they started. The engine plays by the same rules at every
+  level, and take-backs, hints, the threat arrow, clocks, blindfold and two players at one device
+  work as in standard chess. Coach mode, the blunder check, opening practice and the human-like
+  opponent are for standard chess: the setup turns them off and says so. The PGN carries
+  `[Variant "Chess960"]`, `[SetUp "1"]` and the start position's FEN, and _Analyze game_ opens the
+  game by its rules.
 
 ## Play online
 
@@ -168,7 +210,8 @@ the old waiting room, to Play.
 - **Invite a friend.** _Invite a friend_ sets up any of the games (chess or a game for two) for
   whoever has the link, and keeps it out of the list; so does _Only people with the link_ in a
   game's setup. _Share link_ opens the phone's share sheet or copies the link. Whoever opens it
-  joins the game. The link keeps working if your connection drops and comes back.
+  joins the game. The link keeps working if your connection drops and comes back. For chess and
+  Chess960, the time controls include a _Correspondence_ group (see below).
 - **Wait anywhere.** A posted game stays up while you use the rest of the app. A slim bar under the
   header shows the waiting time, with _Cancel_ and a way back to Play. When someone joins, a sound
   plays and the bar offers _Go to the board_ (or _Go to the duel_). On Play itself, the board opens
@@ -190,8 +233,45 @@ the old waiting room, to Play.
   drops, the board stays playable and catches up when it is back; a move made meanwhile is sent
   then.
 - **No engine help.** The live board has no hints, evaluation or threats.
+- **Premoves.** While your opponent thinks, make your next move: it waits on the board, marked, and
+  is played the moment their move arrives, or dropped quietly when it is no longer legal. Clicking
+  elsewhere, or Escape wherever the focus is, calls it off; a premoved promotion becomes a queen.
+  With the keyboard, select and place the piece as for any move; screen readers hear "Premove g1
+  to f3: played as soon as it is your move." and "Premove cancelled." Premoves work in every live
+  game against a person, on the relay and on Lichess, but not in blindfold or correspondence games;
+  _Settings → Play → Premoves in live games_ turns them off.
+- **Watch a game.** While a game on the relay is on, _Copy watch link_ (the share sheet on a phone)
+  gives a link, `/play/watch/<id>`, that anyone can open to follow the game as it happens: the
+  board from White's side (_Flip_ turns it), both clocks, the moves, the offers and the result, and
+  nothing to play. A blindfold game shows its pieces to the people watching; the players' phrases,
+  and an army before both are in, stay private. Up to 20 can watch a game, and the players (and
+  the watchers) see how many ("2 watching"). Opening a game's own link without a seat in it watches
+  it too. Duels, and games on Lichess, are not watched.
+- **Correspondence games**, by invitation: in _Invite a friend_, chess or Chess960 with a time
+  control from the _Correspondence_ group, 1, 2, 3, 5, 7 or 14 days for every move, and a colour.
+  _Create the link_ opens your board at once, with the link to send (_Copy the link_); whoever opens
+  it sees _Join this game_, and the first to press it takes the other seat (once both seats are
+  taken, the link only watches). Each side has its days for every move, and the board shows the days and hours the side
+  to move has left instead of a ticking clock. A deadline that passes loses on time (a draw when the
+  other side could never mate), or aborts the game before both sides have moved. There is no
+  45-second first move and no claim against a player who is away: players come and go. Draws,
+  takebacks and resignation work as in any game; premoves and focus mode are left out. An
+  invitation nobody takes within a week expires.
+  - **Your correspondence games** on Play lists them, your move first: the opponent, whose move it
+    is and the time left ("Your move · 2 days 23 h left · 3 days a move"), or how a game ended. It
+    is brought up to date from the games' rooms when Play opens and when the app starts, and a game
+    stays listed for a week after it ends. When it is your move, the bar under the header says so
+    ("Your move in 2 correspondence games."), with the way to the board or the list.
+  - The relay keeps a correspondence game for a week after it ends, and a year at most; this
+    device keeps its seat as long. With _Correspondence games_ on in Settings → App →
+    [Notifications](#notifications), the relay tells you when it is your move, even with the app
+    closed.
 - **Afterwards**, the game is in My games (_played online_), from your side, ready for the engine
-  review. Aborted games and games of fewer than two moves are not kept.
+  review. A game on the relay played against the clock carries the clock after each move (`[%clk]`)
+  and its `TimeControl`, so the review shows how the time was spent; a Chess960 game carries its
+  tags. Aborted games and games of fewer than two moves are not kept.
+  _Analyse together_ then opens a shared analysis board with the game's moves for both players
+  (and anyone watching who presses it): see [Analyze](#analyze).
 - **Also look on Lichess.** When a Lichess account is connected, a switch posts the same game on
   Lichess as well, rated or casual. Whoever accepts first plays you. The other post is withdrawn at
   once, and a game that slipped through on the other side in the same moment is aborted. Lichess
@@ -206,8 +286,8 @@ the old waiting room, to Play.
 
 ## Games for two
 
-Five of the arcade's games against a person online, each posted from its tile on Play with the
-options the poster chooses (and its link to practise alone first):
+Five of the arcade's games, and Chess960, against a person online, each posted from its tile on
+Play with the options the poster chooses (and its link to practise alone first):
 
 - **Puzzle race** — the same puzzle on both boards at the same moment, near a puzzle rating the
   poster picks (600 to 2400; it starts at the one nearest your own). The first move is the
@@ -236,6 +316,14 @@ options the poster chooses (and its link to practise alone first):
   any game: moves are typed (or played on the hidden board), the last move shows in words, and each
   player may peek three times, for two seconds. Each sees how many peeks the other has used. The
   pieces come back when the game ends.
+- **Chess960** — chess from one of the 960 start positions, the same for both sides, with a time
+  control and colours as in any game. The relay draws the position for each game and the board
+  names it by its number ("Chess960 · position 192"); a rematch keeps it, with the colours swapped.
+  Castle by moving the king onto its own rook. The relay referees by Chess960's rules, and offers,
+  takebacks, claims, premoves, watching and the phrases work as in chess. It can be played by
+  correspondence, by invitation. It waits on the app's own relay only, never on Lichess as well
+  (the setup says so). Finished games are kept in My games with their Chess960
+  tags, marked _Chess960_. Its _Practise alone_ link opens a Chess960 game against the computer.
 
 The race, Arbiter and Who Stands Better? are **duels**, with no clock. The poster's device deals the
 rounds; the relay checks them (only puzzle ids, positions and moves, so nothing either device sends
@@ -247,6 +335,59 @@ phrases and focus mode work as in a game of chess. A duel that has not started w
 rounds not dealt, a player not arrived) is called off, and one the host's device cannot prepare (the
 puzzles out of reach offline, say) says why. Duels are not kept in My games; Army Draft and
 blindfold games are, named for their game, an Army Draft game from its drafted start.
+
+**Puzzle race rooms** take the race to up to eight. The race's setup has _Race against_: _One
+opponent_ (posted as above) or _A room for up to eight_, with _Five rounds_ or a _Three-minute
+race_ and the puzzle rating; _Make the room_ opens the room's page (`/play/race/<id>`) with its link
+to send (_Copy link_, or _Share link_ with the share sheet on a phone). Quick search's _Race room_
+leads to the same setup.
+
+- **The room.** Whoever opens the link sees the room and the players in it and joins under their
+  name (_Join the room_); a visitor may look on first. The players are listed with who is the host,
+  who is you, and who is here or away. The host can change the options, and starts once at least
+  two are in (_Start with 3 players_); the players there then race, on the same puzzles, dealt by
+  the host's device and checked by the relay as for a duel. A full room gives the place of a
+  player away for five minutes to whoever joins. A host away for 30 seconds hands the room to
+  whoever has been there longest, and one who leaves hands it over at once. _Leave the room_ leaves
+  it for good.
+- **Five rounds.** Each puzzle comes up on every board at once, after a three-second countdown, and
+  its round ends when every racer has answered, or after 90 seconds. Clean solves score by their
+  order, fastest first: 5, 4, 3 and 2 points for the first four, 1 for any other. The most points
+  after five puzzles wins.
+- **Three-minute race.** As against one opponent: the same run of puzzles, each at your own pace;
+  the most solved wins, then the fewer wrong answers, and three wrong answers end your race. It ends
+  early once every racer is through.
+- **Standings and places.** The board sits beside live standings (those watching see the standings
+  alone). At the end come the places, a tie sharing one ("You came 2nd with 4 points."), and the
+  host can _Race again_, with the same options or others; the next race avoids the last one's
+  puzzles. Whoever arrives during a race watches it and races the next.
+- The bar under the header leads back to the room (_Back to the room_, or _Back to the race_) from
+  anywhere in the app, even after a restart, and the set phrases work as in games. A room is
+  deleted 10 minutes after its last player leaves, and 6 hours after it was made at most.
+
+## Notifications
+
+_Settings → App → Notifications_ (`/settings#notifications`) sets three kinds, on this device only
+(they never sync), each off until switched on:
+
+- **Live games**: someone took the game you posted, your opponent moved, or a game ended, while the
+  app is in the background. The app shows these itself, so they need it running; while it is in
+  view, the page says it instead.
+- **Correspondence games**: your move ("Your move against Swift Knight"), your invitation taken and
+  the end of a game, even when the app is closed: the relay pushes them through the browser's push
+  service while you are away from the game.
+- **Daily reminder**: "Time for some chess" at the time you choose (in quarter hours, in the
+  device's time zone; 18:00 at first), unless you have trained that day. The relay pushes it too:
+  the app tells the relay when a training day is recorded, and keeps the reminder in step with the
+  device's time zone each time it starts.
+
+Each switch asks for the browser's permission as it goes on. Where the browser cannot show them, the
+card says why: on an iPhone or iPad, only the app added to the Home Screen can show notifications
+(_Share → Add to Home Screen_, then switch them on there); notifications blocked for the site need
+allowing in the browser's site settings; and a browser that cannot be reached with the app closed
+offers only _Live games_. Clicking a notification opens its game (or Home, for the reminder), in a
+window of the app already open if there is one. Switching the reminder off deletes it from the
+relay, and switching both pushed kinds off ends the browser's push subscription.
 
 ## Arcade
 
@@ -323,6 +464,64 @@ from the engine ladder and the Play results.
   move that looks like a slip is compared with the engine's choice once more, both moves in one
   search at depth 14 or more, before it is called one — so a deep sacrifice is not marked down for
   what a shallow search cannot see.
+- **Time management.** A reviewed game with clock times (`[%clk]`, as Lichess and chess.com write
+  them and the relay's games carry, or `[%emt]`) has a time chart under the review when at least
+  three moves in four, and at least six, have a reading: the time each move took (from consecutive
+  readings and the increment), White's above the line and Black's below, the review's inaccuracies,
+  mistakes and blunders coloured (with a dot, so a quick mistake still shows), the moves begun short
+  of time shaded, a cursor on the current move and a readout on hover. Up to three sentences read
+  it ("3 of your 4 mistakes came with under 30 seconds left.", "Black spent 6 minutes on move 14,
+  Nxe5."), and a table, folded away, lists every time, each move a button that goes to it. Short of
+  time is under a tenth of the starting time, from 10 seconds in bullet to a minute. Correspondence
+  games have no chart.
+- **Fix your mistakes.** _Fix your mistakes_ under a review steps through your inaccuracies,
+  mistakes and blunders, each from the position before it: "You played Nc3, a blunder. Find a better
+  move." When the game does not say which side was yours, it asks first. The engine's own move is
+  right at once; any other is judged by a short search against it, and counts when it is as good,
+  or nearly. A move that does not count, the one played in the game among them, gets a red arrow and
+  another try. _Show the move_ plays the engine's move with the review's explanation, its line and a
+  lesson link. Progress shows as "2 of 5", and the summary lists each with what you found, and
+  offers to save the ones you were shown as puzzles, or to try them again. Meanwhile the analysis is paused and
+  everything that could give the answer away is hidden (the engine, the evaluation, the move list,
+  the explorer, the cards and the review), and ← → Home End do nothing; _Back to the game_ puts the
+  engine, the board's side and the move back as they were.
+- **Human moves**, a card switched on from the card itself: what players of a rating you choose
+  (600 to 2600, in hundreds; remembered) play in the position, from Maia, the human-like model. Up to
+  five moves, each with its share and the engine's verdict (_Best_, _Good_, _Inaccuracy_, _Mistake_
+  or _Blunder_, with the score); a move in the list plays on the board. When the move players choose
+  most is a mistake or a blunder, the card says so and why: "A trap at 1500: most players choose
+  Bxd1 (80%), a mistake. Allows a forced mate in 2 after Bxf7+." The model is the human-like
+  opponent's (a one-time download of about 25 MB, offered on the card with its progress and a
+  _Stop_). The engine judges the moves only once its own analysis of the position is idle, in one
+  search at depth 12, and gives way whenever anything else needs it; with the engine off, _Check
+  these moves_ asks for the verdicts. Not shown while you analyse a game yourself, while fixing
+  mistakes, or for Chess960.
+- **Analyse together** (`/analyze/together/<id>`): a shared analysis board for up to eight people
+  with its link. Two ways in: _Analyse together_ at the end of a game against a person on the relay
+  (both players, and anyone watching who presses it, reach the same room with the game's moves;
+  when the other side is there already, the button reads _Join the analysis_), or _Analyse with a
+  friend_ on the analysis board, which makes a room from the game on the board, variations
+  included, and gives its link (the share sheet on a phone, copied elsewhere; quick search finds it
+  as _Analyse together_). Whoever opens the link joins under their name.
+  - Everyone can play moves and variations, delete a variation, make a line the main line, and draw
+    arrows and circles that everyone sees: right-click on a computer, or _Draw_ (tap a square, then
+    another for an arrow or the same one for a circle, in four colours; _Clear drawing_) on a phone
+    or from the keyboard. The relay takes only legal moves, in standard chess and Chess960, up to
+    1,000 moves in a room.
+  - _Follow_ (on at first) keeps your board on the shared position; switched off, you look around
+    alone, a line says where the others are, and _Back to the shared position_ returns. A status
+    line says what the others do ("Swift Knight played 1… c5."), with the move sounds.
+  - Each device runs its own engine, with its lines and the evaluation bar, and can switch it off.
+    The keys are Analyze's (← → Home End, F to flip). _Open in Analyze_ copies the whole tree to
+    your own analysis board. The members (who is here), the set phrases and the link are beside the
+    board, and the bar under the header leads back to the room. A room is deleted 10 minutes after
+    its last member leaves, and 6 hours after it was made at most.
+- **In your games**: every game in My games that reached the position on the board (the same
+  pieces and side to move, by any order of moves), with the opponent, the date, the result and the
+  move played next ("then 12. Nf3"), and how often each next move was chosen. Five show, then _Show
+  all_. A game opens on the move played next, asking first when the board holds work not yet saved.
+  Its index is built the first time it is needed, in small steps that keep the page responsive, and
+  again only when the games change.
 - **Analyze it yourself first**: before the engine's review, go through the game with the engine,
   the explorer, the tablebase and the position report out of sight; mark the moves where the game
   turned (M, or the button) and play what you would have played instead. "Check with the engine" then
@@ -332,7 +531,16 @@ from the engine ladder and the Play results.
   a game against the engine and next to each unreviewed game in My games.
 - **Import games** by pasting or opening a PGN (ChessBase-style `1.e4` numbering, chess.com clock
   tags, evaluation symbols and 4-field FENs included; an illegal move is named and the moves before
-  it can be loaded), or straight from a Lichess or chess.com username. Variant games are skipped.
+  it can be loaded), or straight from a Lichess or chess.com username, Lichess's games with their
+  clock times. Variants other than Chess960 are skipped.
+- **Chess960.** A Chess960 PGN (from Lichess, chess.com or the app) or FEN (castling rights as `KQkq`
+  or by file, such as `HAha`) loads with its position named over the board (_Chess960 · position
+  N_), and the engine (in its Chess960 mode), the variation tree, the game review, _Fix your
+  mistakes_, self-analysis, the board editor (a _Chess960_ box for the castling rights) and the PGN
+  export follow its rules; a share link carries the game as PGN. The opening explorer, human moves
+  and _Add line to repertoire_ are for standard chess and hidden. The position report and the move
+  explanations read the position as standard chess does (castling aside), and puzzles and threats
+  taken from a Chess960 game come only from moments where neither side can still castle.
 
 ## My games
 
@@ -344,6 +552,13 @@ positions for the threat drill, analyze a game yourself before the engine does, 
 phase, the mistakes you make most, results by colour and opening — with a "work on" list
 of lessons and themes. Rows resting on fewer than 3 games or 20 reviewed moves are greyed out.
 
+The insights' **Time** section reads the reviewed games with clock times (those reviewed from My
+games since 0.29): in how many you were short of time, the time per move and the share of it by
+phase, and your mistakes and blunders per 10 moves when short of time against otherwise, with a
+lesson to follow. _Time trouble_ joins _Work on next_ when mistakes come at least twice as often
+short of time. Chess960 games are marked _Chess960_, open in Analyze and are reviewed like any
+other, but stay out of the opening statistics.
+
 ## Home and Progress
 
 - A first-run tour, your current course, and an **adaptive daily plan**: the daily puzzle and
@@ -352,6 +567,13 @@ of lessons and themes. Rows resting on fewer than 3 games or 20 reviewed moves a
   your repertoire's openings, what your games say to work on, the next lesson and the next rung of
   the endgame ladder, with a training-day streak. A returning learner sees the day first; the
   introduction is for newcomers.
+- **What's new.** After an update, a returning learner finds a _What's new in 0.29_ card under
+  _Today_ (which stays the first heading): the release's highlights, four at first and _Show all_
+  for the rest, each leading to its feature, and _Earlier releases_ for the ones before. It shows
+  once per version, until it is dismissed (in every open tab), and never on a first visit: the
+  version a newcomer starts on counts as seen. _Settings → App → What's new_ lists the recent
+  releases' highlights, newest first, with a link to the full changelog. The version last seen is
+  kept on the device.
 - **Progress**: rating history chart, a weekly summary (the last seven calendar days against the seven
   before, with the trend shown by an arrow as well as colour), solve statistics, strengths and
   weaknesses by theme (measured against your own accuracy), lesson completion, the game log with results per engine level and per human-like rating, arcade records, drill and
@@ -360,12 +582,35 @@ of lessons and themes. Rows resting on fewer than 3 games or 20 reviewed moves a
   there is anything worth keeping — puzzles, lessons, openings or games — with a week's "Later").
   Solve counts, accuracy and solve time are lifetime figures, not just the last 300 attempts.
 
+## Quick search
+
+Ctrl+K (Cmd+K on a Mac) anywhere but in a text field, or the magnifying glass in the header (on
+phones too, beside the theme button), opens a search of the whole app: pages and their sections,
+Play's sections and the games for two (and _Race room_), lessons and courses, the built-in
+repertoires and your own, puzzle modes and themes (those with at least 10 puzzles), skill and
+endgame drills, the arcade, classic games, endgame studies, mating patterns, the reference (the
+rules, notation, every glossary term and every FAQ question) and the Settings cards. Before you
+type, it offers the 14 main sections.
+
+- **Matching.** Accents, apostrophes and capitals are ignored ("reti" finds Réti, "queens gambit"
+  the Queen's Gambit). Every word typed must match, at the start of a word, or inside one from four
+  letters or with a digit ("960"); one typo is forgiven in a word of five letters or more whose
+  first letter is right ("najdrof", "londn"). Words in the title count most.
+- **Results** come grouped by kind, each with a heading and an icon, best first, at most 8 of a kind
+  and 30 in all, with the letters found marked.
+- **Keys.** ↑ and ↓ move (and wrap round), Enter opens, Esc or the close button closes, and the
+  browser's Back closes it too; the focus goes back where it was, or to the new page. The shortcut
+  again closes it. Screen readers meet a combobox over a list of grouped options, and hear how many
+  results there are ("12 results", "No results for …") once typing pauses.
+- It loads the first time it opens (or when the pointer or the focus reaches the button), and each
+  list it searches arrives as it loads, so start-up carries none of it but the shortcut.
+
 ## Settings
 
 Settings is in five tabs: **Appearance**, **Play**, **Engine**, **Sync & data** and **App**. Each
 profile keeps its own settings (a new profile starts with those of the one it was made from), and
-sync between devices can carry them; the engine's threads, the full engine download and the install
-prompt belong to the device, shared by its profiles, and never sync. The
+sync between devices can carry them; the engine's threads, the full engine download, the install
+prompt and the notifications belong to the device, shared by its profiles, and never sync. The
 address names the open tab (`/settings#engine`), so a reload or a shared link opens it again, and a
 link to a card (`/settings#profiles` from the profile badge, `#lichess` after the Lichess sign-in, a
 join link's `#sync=…`) opens the card's tab and scrolls to it. The tabs are one tab stop: the arrow
@@ -385,15 +630,16 @@ circle or square **drag target**, moving by tap, drag or either, and captured ma
 player bars as the difference, every capture, or nothing.
 
 **Play.** The defaults (always promote to a queen, auto-advance puzzles, keyboard move entry, coach
-mode, the blunder check, the engine level for the next game), **focus mode**, which hides the header
+mode, the blunder check, the engine level for the next game), **premoves in live games** (on by
+default), **focus mode**, which hides the header
 and navigation while you play the computer (in Play, the simul and the arcade games), and
 **single-key shortcuts**, which can be turned off. The puzzle rating reset or calibration (a button
 with a confirmation; the rating history is kept), and the **human-like opponent**'s download, with
 its progress, and a Delete that frees its 25 MB.
 
-**Engine.** Review and analysis depth, the tablebase and opening-explorer lookups, threads (on by
-default), the optional **full engine** download with its progress, and a diagnostics panel with a
-speed test.
+**Engine.** Review and analysis depth, the tablebase and opening-explorer lookups (the explorer needs
+a Lichess account, connected under _Sync & data_), threads (on by default), the optional **full
+engine** download with its progress, and a diagnostics panel with a speed test.
 
 **Sync & data.** **Sync between devices** and the **Lichess account** (see below), backups,
 **profiles** for several learners on one device, and the **storage meter** with _Reset everything_.
@@ -420,7 +666,8 @@ syncs first, so this needs a connection, and only what goes beyond the synced da
 toast counts what it added. The settings stay as they are.
 
 **App.** Installing the app, the badge of due reviews on its icon, the offline puzzle download (it
-keeps going when you change page), the test lab, and the version.
+keeps going when you change page), the test lab, the version and _What's new_ (the recent
+releases' highlights), and [**Notifications**](#notifications) for this device.
 
 ### The test lab
 
@@ -462,9 +709,9 @@ tablet and computer, with no account:
 - **What syncs:** progress, ratings, lessons, flashcards, review schedules, repertoires and their
   cards, saved analyses, imported games and the settings — everything a backup holds — so every
   device is ready to play as the learner left it. The engine's threads and full download, the
-  install prompt, the Lichess sign-in and the backup reminder stay on each device. A setting changed
-  on two devices before they synced takes the value of the one that synced first, and a device
-  joining takes the synced settings.
+  install prompt, the notifications, the Lichess sign-in and the backup reminder stay on each
+  device. A setting changed on two devices before they synced takes the value of the one that
+  synced first, and a device joining takes the synced settings.
 - **What syncs on this device:** a switch for each part — _Progress_, _Repertoires_, _Saved
   analyses_, _Imported games_ and _Settings_ — all on by default, and also offered before sync is
   turned on or joined. A part switched off stays as it is on the device and the vault keeps its own
@@ -563,7 +810,9 @@ items the backup does not hold.
 
 The rules of chess, notation (SAN, PGN, FEN, engine evaluations), a searchable glossary — including
 the rating and tablebase terms the app prints (Glicko-2, rating deviation, DTZ, DTM) — linked to the
-step of the lesson that teaches each idea, and an FAQ.
+step of the lesson that teaches each idea, and an FAQ. Every glossary term and every question can be
+linked to (`/reference#glossary-zugzwang`), and a linked question opens; quick search uses these
+links.
 
 ## Sounds and haptics
 
@@ -593,7 +842,9 @@ working), focus management, a
 colour-blind-safe high-contrast board theme, high-contrast piece sets (**MPChess** and **California**), a soft sound
 theme, reduced-motion support, a visible focus ring on every surface for keyboard use (none after a
 click or a tap moved the focus; Windows High Contrast styles too) and WCAG-AA text contrast — checked by an automated axe-core sweep of every page, one of each
-parameterised route included, in all three colour schemes.
+parameterised route included, in all three colour schemes. Quick search is a combobox over a list
+of grouped options with a live count of the results, and a premove made from the keyboard is
+announced when it is set and when it is cancelled.
 
 ## App and offline
 
@@ -617,10 +868,22 @@ There is no sign-up: everything you do is stored in your browser, on your device
 the network only when you ask it to — importing your games from Lichess or chess.com, the opening
 explorer and tablebase lookups, which are off by default, the Lichess account sync once you connect
 an account, which talks to lichess.org alone, sync between devices once you turn it on, which
-sends the relay only data encrypted on the device, and live games once you open Play.
+sends the relay only data encrypted on the device, live games once you open Play, and
+notifications once you switch them on. The opening explorer answers only a signed-in Lichess
+account, so its lookups (to explorer.lichess.org) carry the sign-in of the account connected in
+Settings.
 A live game goes through the relay, which referees it: the relay sees the made-up names, the
-ratings you choose to show and the moves, keeps a game until 10 minutes after it ends, and logs
-nothing. Optional
+ratings you choose to show and the moves, keeps a game until 10 minutes after it ends (a
+correspondence game until a week after its end, and a year at most), and logs nothing. Anyone a
+player sends a game's watch link to sees the game as it happens: the board, the clocks, the names
+and the moves, never the phrases. A race room keeps its players' names and ratings and its last
+race, and an analysis room its members' names and ratings, its tree of moves and the arrows and
+circles drawn, until 10 minutes after the last one leaves (6 hours at most). For notifications pushed while
+the app is closed, the relay keeps this browser's push subscription (the address of its push
+service and its keys): with a correspondence game's seat until the game ends, and for the daily
+reminder with the time, the time zone and the last training day, until the reminder is switched
+off or the relay has heard nothing of it for 60 days (the app renews it each time it starts). A
+push goes through the browser maker's push service, encrypted for this browser. Optional
 downloads (the full engine, the human-like opponent, the whole puzzle set) come from the app's own
 site (in the offline copy, from its own folder), and the human-like opponent runs on your device like the engine: no position leaves it. Backups are
 files you keep. The page's Content-Security-Policy holds the app to that: it can connect only to
@@ -706,8 +969,13 @@ suite on every run.
   same way.
 - **Profiles** namespace the persisted stores, the settings included: the first profile keeps the
   plain `localStorage` keys, every other one gets `<key>:<profile id>`; switching reloads the app
-  into the other namespace. The device's own settings (the engine build, the install prompt) are
-  kept once, under `chess-trainer:device-settings`, for every profile.
+  into the other namespace. The device's own settings (the engine build, the install prompt, the
+  notifications) are kept once, under `chess-trainer:device-settings`, for every profile.
+- **Chess960.** The rules come from [chessops](https://github.com/niklasf/chessops)
+  (GPL-3.0-or-later) in the app and in the relay, which referees online Chess960 games with it;
+  standard chess keeps chess.js. Positions are numbered as is usual (Scharnagl's numbering: 518 is
+  the standard start), and a castling move is the king taking its own rook, on the board and in
+  UCI, as Stockfish writes it in its Chess960 mode; the SAN stays O-O and O-O-O.
 - **Openings.** `scripts/import-openings.mjs` turns the lichess-org/chess-openings dataset (CC0) into
   a table keyed by position, so the analysis board can name an opening even after a transposition.
 - **Move commentary and the coach** explain mistakes with rules, not generated prose: static exchange
@@ -722,6 +990,8 @@ queries). The threaded engine runs in all of them from the second load on (once 
 isolates the page) wherever at least three CPU cores are reported; elsewhere the one-thread engine
 runs. If the engine fails to load, lessons and puzzles still work. The human-like opponent needs
 WebAssembly SIMD (in all of them) and site storage on a secure connection; where a browser cannot keep
-its files, the setup says so. CI runs the end-to-end tests
+its files, the setup says so. Notifications need the browser's permission; those that come with the
+app closed need the Push API and a service worker as well, and on an iPhone or iPad (iOS 16.4 and
+later) only the app added to the Home Screen can show any. CI runs the end-to-end tests
 on Chromium (desktop and a phone profile), Firefox and WebKit, and once more under the production
 base path. The interface is in English only.

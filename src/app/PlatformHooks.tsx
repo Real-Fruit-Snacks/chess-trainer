@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { FILLER_PREFIX, PROBE_KEY } from '@/features/lab/labKeys';
+import { reminderToken } from '@/features/notifications/trained';
 import { consumeLaunchFiles } from '@/lib/launchQueue';
 import { removeFullEngine } from '@/engine/fullEngine';
 import { deviceSyncOn, deviceSyncStorageKey } from '@/lib/sync/enabled';
@@ -33,8 +34,9 @@ function hasLabLeftovers(): boolean {
  * keeps the service worker's isolation flag in step with the threads
  * setting, and clears away a full engine that is switched off. While device
  * sync is on, or a Lichess account is connected, that sync runs on its own; a
- * Lichess sign-in marked as refused is checked again as the app opens. The
- * import dialog, the lab code and the syncs load only when they are needed.
+ * Lichess sign-in marked as refused is checked again as the app opens, and so
+ * is the relay's copy of this device's notifications. The import dialog, the
+ * lab code and the syncs load only when they are needed.
  */
 export function PlatformHooks() {
   const due = useDueCount();
@@ -106,6 +108,16 @@ export function PlatformHooks() {
       stop?.();
     };
   }, [lichessConnected]);
+
+  // The relay's copy of this device's notifications is brought in line once as the app opens:
+  // a reminder a reset switched off is deleted, a subscription the browser replaced passed on.
+  useEffect(() => {
+    const { notifyReminder, notifyCorrespondence } = useSettings.getState();
+    if (!notifyReminder && !notifyCorrespondence && !reminderToken()) return;
+    void import('@/features/notifications/sync')
+      .then((notifications) => notifications.syncNotifications())
+      .catch(() => undefined);
+  }, []);
 
   // A sign-in marked as refused is looked at again once as the app opens: still good after
   // all, the mark goes and the sync above starts.

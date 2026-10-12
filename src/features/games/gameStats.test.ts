@@ -3,9 +3,11 @@ import type { ImportedGame } from '@/lib/gameImport';
 import { groupDeviations, repertoireDeviations } from './deviations';
 import {
   guessPlayer,
+  isChess960Pgn,
   learnerColor,
   learnerSideOf,
   mainLineOfPgn,
+  movesOfLine,
   openingStats,
   outcomeFor,
   resultSummary,
@@ -170,5 +172,39 @@ describe('repertoire deviations', () => {
       ['Bb5', 2],
       ['d4', 1],
     ]);
+  });
+});
+
+describe('Chess960 games among the learner’s games', () => {
+  /** The classical position played as Chess960 (the moves read the same, castling aside). */
+  const chess960 = (id: string, moves: string): ImportedGame => {
+    const base = game(id, 'alice', 'bob', '1-0', moves);
+    return {
+      ...base,
+      pgn: `[Variant "Chess960"]\n[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]\n${base.pgn}`,
+    };
+  };
+
+  it('knows them, and replays their moves by their rules for the review', () => {
+    const fischer = chess960('c1', '1. e4 e5 2. Nf3 Nf6 3. Bc4 Bc5 4. O-O O-O');
+    expect(isChess960Pgn(fischer.pgn)).toBe(true);
+    expect(isChess960Pgn(GAMES[0]?.pgn ?? '')).toBe(false);
+    const line = mainLineOfPgn(fischer.pgn);
+    expect(line?.chess960).toBe(true);
+    const moves = movesOfLine(line?.startFen ?? '', line?.sans ?? [], true);
+    // Castling as the king takes its rook, as the engine reads it in Chess960 mode.
+    expect(moves.map((m) => `${m.from}${m.to}`).slice(-2)).toEqual(['e1h1', 'e8h8']);
+    const standard = movesOfLine(line?.startFen ?? '', line?.sans ?? []);
+    expect(standard.map((m) => `${m.from}${m.to}`).slice(-2)).toEqual(['e1g1', 'e8g8']);
+    expect(() => movesOfLine(line?.startFen ?? '', ['e5'])).toThrow(/Illegal move e5/);
+  });
+
+  it('leaves them out of the opening statistics, but not out of the results', () => {
+    const games = [...GAMES, chess960('c1', '1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5')];
+    const stats = openingStats(games, 'alice', TABLE);
+    const italian = stats.white.find((r) => r.name === 'Italian Game');
+    expect(italian?.games).toBe(1);
+    expect(italian?.gameIds).toEqual(['g1']);
+    expect(resultSummary(games, 'alice').games).toBe(5);
   });
 });

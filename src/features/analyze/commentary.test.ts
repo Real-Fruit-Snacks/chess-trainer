@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   discoveredTargets,
   explainMove,
+  explainReviewedMove,
   materialSwing,
   MOTIF_HELP,
   staticExchange,
@@ -233,5 +234,34 @@ describe('explaining judged moves', () => {
   it('links every motif to an existing lesson', () => {
     const ids = new Set(lessons.map((l) => l.id));
     for (const help of Object.values(MOTIF_HELP)) expect(ids.has(help.lesson)).toBe(true);
+  });
+});
+
+describe('explaining a Chess960 game’s moves', () => {
+  it('reads the position without the castling rights chess.js cannot, and still explains', () => {
+    // Castling rights by file (G and C): chess.js refuses the FEN as it stands. The knight's
+    // move is judged all the same.
+    const fen = 'bnrk1brq/pppppppp/4n3/4P3/8/8/PPPP1PPP/BNRKNBRQ b GCgc - 0 3';
+    const explained = explainReviewedMove({
+      fen,
+      san: 'Nf4',
+      judgement: 'blunder',
+      bestUci: 'd7d6',
+      replyUci: 'g2g3',
+      scoreBefore: cp(0),
+      scoreAfter: cp(-300),
+    });
+    expect(explained).not.toBeNull();
+    // Castling itself goes unexplained rather than wrong.
+    expect(
+      explainReviewedMove({
+        fen: 'bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w GCgc - 0 1',
+        san: 'O-O-O',
+        judgement: 'mistake',
+        bestUci: 'e2e4',
+        scoreBefore: cp(30),
+        scoreAfter: cp(-200),
+      }),
+    ).toBeNull();
   });
 });

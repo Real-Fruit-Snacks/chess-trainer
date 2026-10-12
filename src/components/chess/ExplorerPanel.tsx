@@ -9,7 +9,8 @@ import { San } from '@/chess/San';
 
 /**
  * Opening explorer card: what people play in the position and how it goes.
- * Off until the learner opts in (network), with the switch right on the card.
+ * Off until the learner opts in (it uses the network, and Lichess asks for an
+ * account), with the switch right on the card.
  */
 export function ExplorerPanel({
   fen,
@@ -48,7 +49,7 @@ export function ExplorerPanel({
             checked={false}
             onChange={(next) => update({ explorer: next })}
             label="Look up positions"
-            description="See what people play here and how it goes for them (Lichess data, uses the network). Also in Settings."
+            description="See what people play here and how it goes for them (Lichess data, uses the network). Needs a Lichess account, connected in Settings."
           />
         </div>
       ) : state.status === 'loading' ? (

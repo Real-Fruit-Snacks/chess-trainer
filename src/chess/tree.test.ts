@@ -210,3 +210,120 @@ describe('GameTree', () => {
     expect(parsePgnCached(pgn).mainLine()).toHaveLength(6);
   });
 });
+
+/** Position 274 (BNRKNBRQ): White castles long on move 1, Black short after clearing the way. */
+const CHESS960_GAME = `[Event "Casual Chess960 game"]
+[Site "https://lichess.org/abcdefgh"]
+[White "Ann"]
+[Black "Bob"]
+[Result "*"]
+[Variant "Chess960"]
+[FEN "bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1"]
+[SetUp "1"]
+
+1. O-O-O e5 2. e4 Nf6 (2... d6 3. d4) 3. Nf3 Be7 4. d3 O-O 5. Nc3 Nc6 *`;
+
+describe('GameTree in Chess960', () => {
+  it('plays a Chess960 PGN by its rules: castling as the king onto its rook', () => {
+    const tree = GameTree.fromPgn(CHESS960_GAME);
+    expect(tree.variant).toBe('chess960');
+    expect(tree.chess960).toBe(true);
+    const line = tree.mainLine();
+    expect(line.map((n) => n.san)).toEqual([
+      'O-O-O',
+      'e5',
+      'e4',
+      'Nf6',
+      'Nf3',
+      'Be7',
+      'd3',
+      'O-O',
+      'Nc3',
+      'Nc6',
+    ]);
+    // The engine reads castling as king takes rook in this variant.
+    expect(line[0]?.uci).toBe('d1c1');
+    expect(line[7]?.uci).toBe('d8g8');
+    expect(line[0]?.fen).toBe('bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNKRNBRQ b kq - 1 1');
+    expect(line[7]?.fen.split(' ')[0]).toBe('bnr2rkq/ppppbppp/5n2/4p3/4P3/3P1N2/PPP2PPP/BNKR1BRQ');
+    expect(tree.root.children[0]?.children[0]?.children.map((n) => n.san)).toEqual(['e4']);
+    expect(line[2]?.children.map((n) => n.san)).toEqual(['Nf6', 'd6']);
+  });
+
+  it('writes the variant and its start position back, and reads its own PGN again', () => {
+    const tree = GameTree.fromPgn(CHESS960_GAME);
+    const pgn = tree.toPgn();
+    expect(pgn).toContain('[Variant "Chess960"]');
+    expect(pgn).toContain('[SetUp "1"]');
+    expect(pgn).toContain('[FEN "bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1"]');
+    expect(pgn).toContain('1. O-O-O e5 2. e4 Nf6 (2... d6 3. d4) 3. Nf3 Be7 4. d3 O-O');
+    const again = GameTree.fromPgn(pgn);
+    expect(again.variant).toBe('chess960');
+    expect(again.toPgn()).toBe(pgn);
+    expect(again.mainLine().map((n) => n.uci)).toEqual(tree.mainLine().map((n) => n.uci));
+  });
+
+  it('knows a Chess960 game by its start position when the Variant tag is missing', () => {
+    // Shredder-FEN castling rights (by file) say Chess960 on their own.
+    const shredder = GameTree.fromPgn(
+      '[FEN "bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w GCgc - 0 1"]\n\n1. O-O-O *',
+    );
+    expect(shredder.variant).toBe('chess960');
+    expect(shredder.startFen).toBe('bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1');
+    expect(shredder.mainLine()[0]?.uci).toBe('d1c1');
+    // A start position other than the classical one, KQkq and all.
+    const start = GameTree.fromPgn(
+      '[FEN "bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1"]\n\n1. O-O-O *',
+    );
+    expect(start.variant).toBe('chess960');
+    // The classical position stays standard chess.
+    expect(GameTree.fromPgn('1. e4 *').variant).toBe('standard');
+  });
+
+  it('starts from the classical position when a Chess960 PGN names none', () => {
+    const tree = GameTree.fromPgn(
+      '[Variant "Chess960"]\n\n1. e4 e5 2. Nf3 Nf6 3. Bc4 Bc5 4. O-O O-O *',
+    );
+    expect(tree.variant).toBe('chess960');
+    expect(tree.mainLine()[6]?.uci).toBe('e1h1');
+    expect(tree.mainLine()[7]?.uci).toBe('e8h8');
+    const pgn = tree.toPgn();
+    expect(pgn).toContain('[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]');
+    expect(pgn).toContain('[Variant "Chess960"]');
+  });
+
+  it('adds moves from the board either way a king is dropped to castle', () => {
+    const tree = new GameTree('r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1', 'chess960');
+    // The king onto its rook…
+    const short = tree.addMove({ from: 'e1', to: 'h1' });
+    expect(short?.san).toBe('O-O');
+    expect(short?.uci).toBe('e1h1');
+    // …or straight to its castling square: the same move, the same node.
+    tree.back();
+    expect(tree.addMove({ from: 'e1', to: 'g1' })).toBe(short);
+    expect(tree.addMove('O-O-O')?.uci).toBe('e8a8');
+    expect(tree.addMove({ from: 'a2', to: 'a5' })).toBeNull();
+    // A king beside its castling square moves as a king.
+    const near = new GameTree('4k3/8/8/8/8/8/8/R4K1R w KQ - 0 1', 'chess960');
+    expect(near.addMove({ from: 'f1', to: 'g1' })?.san).toBe('Kg1');
+  });
+
+  it('refuses a broken Chess960 game, naming the move', () => {
+    expect(() =>
+      GameTree.fromPgn('[Variant "Chess960"]\n[FEN "not a position"]\n\n1. e4 *'),
+    ).toThrow(/Invalid FEN header/);
+    // Black cannot castle short at once in position 274: the king's way is not clear.
+    expect(() =>
+      GameTree.fromPgn(
+        '[Variant "Chess960"]\n[FEN "bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1"]\n\n1. O-O-O O-O *',
+      ),
+    ).toThrow(/Illegal move O-O after O-O-O/);
+  });
+
+  it('keeps the variant in a copy', () => {
+    const tree = GameTree.fromPgn(CHESS960_GAME);
+    const copy = tree.clone();
+    expect(copy.variant).toBe('chess960');
+    expect(copy.toPgn()).toBe(tree.toPgn());
+  });
+});

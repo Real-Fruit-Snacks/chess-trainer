@@ -114,7 +114,7 @@ describe('SettingsPage', () => {
       'Profiles',
     ]);
     fireEvent.click(tab('App'));
-    expect(headings()).toEqual(['App']);
+    expect(headings()).toEqual(['App', 'Notifications']);
     expect(tab('App')).toHaveAttribute('aria-selected', 'true');
     expect(tab('Appearance')).toHaveAttribute('aria-selected', 'false');
   });

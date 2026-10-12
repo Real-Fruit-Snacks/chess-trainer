@@ -28,6 +28,7 @@ const CARD_TABS: Record<string, SettingsTab> = {
   backups: 'data',
   profiles: 'data',
   storage: 'data',
+  notifications: 'app',
 };
 
 const isTab = (name: string): name is SettingsTab => SETTINGS_TABS.some((tab) => tab.id === name);

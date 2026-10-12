@@ -15,6 +15,7 @@
  *   PUT    /v1/vaults/:id        → 201 created (If-None-Match: *), 200 updated (If-Match: "<version>");
  *                                  412 when the version moved on (ETag: the current one); 413 too big
  *   DELETE /v1/vaults/:id        → 204
+ *   /v1/push/…                   → the push endpoints (push/reminders.mjs), when given
  *
  * Every vault request carries `Authorization: Bearer <token>`: the token comes
  * from the same phrase, and only its SHA-256 is stored. A vault id is 32
@@ -62,6 +63,7 @@ const TOUCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
  *   minWriteIntervalMs?: number,
  *   allowCreate?: (request: Request) => boolean | Promise<boolean>,
  *   live?: boolean,
+ *   push?: (request: Request, respond: import('./push/reminders.mjs').Respond) => Promise<Response>,
  *   now?: () => number,
  * }} RelayOptions
  */
@@ -79,7 +81,7 @@ export async function hashToken(token) {
  * @param {number} maxBytes
  * @returns {Promise<Uint8Array | null>}
  */
-async function readBody(request, maxBytes) {
+export async function readBody(request, maxBytes) {
   if (!request.body) return new Uint8Array(0);
   const reader = request.body.getReader();
   /** @type {Uint8Array[]} */
@@ -133,13 +135,27 @@ export function originAllowed(allowed, origin) {
 }
 
 /**
+ * The app's origins from a comma-separated setting; any origin (`*`) when it
+ * names none.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+export function originList(value) {
+  const origins = String(value ?? '*')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  return origins.length > 0 ? origins : ['*'];
+}
+
+/**
  * The CORS headers for a request from `origin`. With `*` allowed, every page
  * may call the relay (it carries no cookies, so that gives nothing away);
  * otherwise only the listed origins get an answer they can read.
  */
 function corsHeaders(origin, allowed) {
   const headers = {
-    'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers':
       'Authorization, Content-Type, If-Match, If-None-Match, X-Known-Version',
     'Access-Control-Expose-Headers': 'ETag, Retry-After',
@@ -165,10 +181,16 @@ export function createRelay(options) {
     minWriteIntervalMs = DEFAULT_MIN_WRITE_INTERVAL_MS,
     allowCreate,
     live,
+    push,
     now = Date.now,
   } = options;
-  /** The health check's answer: whether live games are on, when the caller says. */
-  const health = { ok: true, maxBytes, ...(live === undefined ? {} : { live }) };
+  /** The health check's answer: whether live games are on, when the caller says; whether push is. */
+  const health = {
+    ok: true,
+    maxBytes,
+    ...(live === undefined ? {} : { live }),
+    ...(push ? { push: true } : {}),
+  };
 
   return async function handle(request) {
     const cors = corsHeaders(request.headers.get('Origin'), allowedOrigins);
@@ -191,6 +213,9 @@ export function createRelay(options) {
       const { pathname } = new URL(request.url);
       if (request.method === 'OPTIONS') return empty(204);
       if (pathname === '/v1/health' && request.method === 'GET') return json(200, health);
+      if (pathname.startsWith('/v1/push/')) {
+        return push ? await push(request, { json, empty, fail }) : fail(404, 'Not found.');
+      }
       const match = VAULT_PATH.exec(pathname);
       if (!match) return fail(404, 'Not found.');
       const id = match[1] ?? '';

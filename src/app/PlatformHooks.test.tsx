@@ -22,7 +22,10 @@ vi.mock('@/lib/lichess/sync', () => ({ startLichessSync, recheckSignIn }));
 const stopDeviceSync = vi.hoisted(() => vi.fn());
 const startDeviceSync = vi.hoisted(() => vi.fn(() => stopDeviceSync));
 vi.mock('@/lib/sync/deviceSync', () => ({ startDeviceSync }));
+const syncNotifications = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock('@/features/notifications/sync', () => ({ syncNotifications }));
 
+import { REMINDER_TOKEN_KEY } from '@/features/notifications/trained';
 import { deviceSyncStorageKey } from '@/lib/sync/enabled';
 import { useLichess } from '@/store/lichess';
 import { PlatformHooks } from './PlatformHooks';
@@ -54,6 +57,18 @@ describe('PlatformHooks', () => {
     render(<PlatformHooks />);
     await act(() => new Promise<void>((r) => setTimeout(r, 0)));
     expect(clearLabStorage).not.toHaveBeenCalled();
+  });
+
+  it('brings the relay’s copy of the notifications in line only when there is one', async () => {
+    syncNotifications.mockClear();
+    const { unmount } = render(<PlatformHooks />);
+    await act(() => new Promise<void>((r) => setTimeout(r, 0)));
+    expect(syncNotifications).not.toHaveBeenCalled();
+    unmount();
+    // A reminder the relay still holds, its switch off (a reset): it goes.
+    localStorage.setItem(REMINDER_TOKEN_KEY, 'T'.repeat(43));
+    render(<PlatformHooks />);
+    await waitFor(() => expect(syncNotifications).toHaveBeenCalledTimes(1));
   });
 
   it('removes a storage filler left by the lab at start-up', async () => {

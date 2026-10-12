@@ -480,14 +480,26 @@ export const analysesSlice = slice(analysesFields);
 const errorCounts = struct({ inaccuracy: number, mistake: number, blunder: number });
 const phaseDigest = struct({ moves: number, loss: number, errors: number });
 const perColor = <T>(schema: Schema<T>) => struct({ white: schema, black: schema });
-const reviewDigest = struct({
-  phases: struct({
-    opening: perColor(phaseDigest),
-    middlegame: perColor(phaseDigest),
-    endgame: perColor(phaseDigest),
-  }),
-  motifs: perColor(record(number)),
+const timeSpent = struct({ seconds: number, moves: number });
+const movesAndErrors = struct({ moves: number, errors: number });
+/** How one side used the clock in a game with clock times (`TimeDigest`, 0.29.0 on). */
+const timeSideDigest = struct({
+  phases: struct({ opening: timeSpent, middlegame: timeSpent, endgame: timeSpent }),
+  trouble: movesAndErrors,
+  calm: movesAndErrors,
+  short: boolean,
 });
+const reviewDigest = struct(
+  {
+    phases: struct({
+      opening: perColor(phaseDigest),
+      middlegame: perColor(phaseDigest),
+      endgame: perColor(phaseDigest),
+    }),
+    motifs: perColor(record(number)),
+  },
+  { time: struct({ trouble: number, white: timeSideDigest, black: timeSideDigest }) },
+);
 
 export const storedGame = struct(
   {

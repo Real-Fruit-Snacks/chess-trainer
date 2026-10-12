@@ -153,6 +153,18 @@ describe('Board keyboard control', () => {
     expect(screen.getByText('It is not your move.')).toBeInTheDocument();
   });
 
+  it('reports the cursor’s square on Enter when it moves nothing but reports squares', () => {
+    const onSelect = vi.fn();
+    render(<Board fen={START} onSelect={onSelect} ariaLabel="Drawing board" />);
+    const board = screen.getByRole('application', { name: 'Drawing board' });
+    act(() => board.focus());
+    fireEvent.keyDown(board, { key: 'g' });
+    fireEvent.keyDown(board, { key: '1' });
+    fireEvent.keyDown(board, { key: 'Enter' });
+    expect(onSelect).toHaveBeenCalledWith('g1');
+    expect(screen.queryByText('It is not your move.')).toBeNull();
+  });
+
   it('castles when the king is dropped on its own rook', async () => {
     const fen = 'r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1';
     const onMove = vi.fn();
@@ -353,5 +365,56 @@ describe('Board feel settings', () => {
     const { container } = render(<Board fen={START} movableColor="white" />);
     expect(container.querySelector('.board')).not.toHaveClass('board--magnify');
     expect(screen.queryByTestId('board-dragtarget')).toBeNull();
+  });
+});
+
+describe('Board in Chess960', () => {
+  /** Drops the piece on `from` onto `to` with the keyboard. */
+  const keyboardMove = (board: HTMLElement, from: string, to: string) => {
+    for (const square of [from, to]) {
+      fireEvent.keyDown(board, { key: square[0] });
+      fireEvent.keyDown(board, { key: square[1] });
+      fireEvent.keyDown(board, { key: 'Enter' });
+    }
+  };
+
+  it('reports a king dropped on its rook as it is, wherever the king stands', async () => {
+    // Position 274's back rank, cleared between the king (d1) and the rook on g1.
+    const fen = 'bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRK2RQ w KQkq - 0 1';
+    const onMove = vi.fn();
+    render(
+      <Board
+        fen={fen}
+        chess960
+        movableColor="white"
+        dests={new Map([['d1', ['c1', 'e1', 'f1', 'g1']]])}
+        onMove={onMove}
+        animate={false}
+      />,
+    );
+    const board = screen.getByRole('application', { name: /Chess board/ });
+    act(() => board.focus());
+    keyboardMove(board, 'd1', 'g1');
+    await vi.waitFor(() => expect(onMove).toHaveBeenCalledWith('d1', 'g1', expect.anything()));
+  });
+
+  it('leaves an e-file king’s drop on its rook alone', async () => {
+    const fen = 'r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1';
+    const onMove = vi.fn();
+    render(
+      <Board
+        fen={fen}
+        chess960
+        movableColor="white"
+        dests={new Map([['e1', ['d1', 'f1', 'a1', 'h1']]])}
+        onMove={onMove}
+        animate={false}
+      />,
+    );
+    const board = screen.getByRole('application', { name: /Chess board/ });
+    act(() => board.focus());
+    keyboardMove(board, 'e1', 'h1');
+    // Standard chess would report e1-g1; Chess960 keeps the king and its rook.
+    await vi.waitFor(() => expect(onMove).toHaveBeenCalledWith('e1', 'h1', expect.anything()));
   });
 });

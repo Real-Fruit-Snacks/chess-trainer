@@ -42,7 +42,8 @@ entirely in your browser, installs as an app and keeps working on a plane.
 ## Why Chess Trainer
 
 - **Everything in one place.** Learn a concept, drill it, solve puzzles on it, play it against the
-  engine and review the game — every part links to the others.
+  engine and review the game — every part links to the others, and Ctrl+K finds any lesson,
+  opening, puzzle theme or setting.
 - **Yours, and only yours.** No sign-up, no ads, no tracking. Progress lives on your device. Sync
   between devices is end-to-end encrypted with a recovery phrase only you hold, so the sync service
   never sees your data; a backup is a file you keep; and you can connect your Lichess account.
@@ -70,21 +71,27 @@ opponent: Maia-3, a neural network trained on millions of real games, which play
 600 to 2600 — the plausible plans and the missed tactics of that rating, not an engine's random
 blunders (an optional 25 MB download, run on your device). With clocks, take-backs, hints, a coach
 that pauses on a mistake and explains it, a blunder check that asks "checks, captures, threats?"
-before a move that hangs material, blindfold play, two players at one device, and a start from any
-position.
+before a move that hangs material, blindfold play, two players at one device, Chess960 from a new
+start position every game, and a start from any position.
 
 **Play online** — live games against people, with no account: post a game at a tap and carry on
 with anything else in the app until someone joins, join one from the list, or send a friend a
-private link. Or one of the games made for two: a puzzle race on the same puzzle at the same moment,
-Arbiter and Who Stands Better? duels, Army Draft and blindfold chess. The relay referees, keeping
-both clocks; you play under a made-up name, and messages are a few set phrases, so nothing a
+private link: to a game now, or to a correspondence game of days a move, with a notification when it
+is your turn. Moves can be premoved, and friends can watch from a link. Or one of the games made for
+two: Chess960, a puzzle race on the same puzzle at the same moment (or a race room for up to
+eight), Arbiter and Who Stands Better? duels, Army Draft and blindfold chess. The relay referees,
+keeping both clocks; you play under a made-up name, and messages are a few set phrases, so nothing a
 stranger types ever reaches you. Signed in to Lichess, the same post looks for an opponent there
 too, rated if you like, and the game is played here.
 
 **Analyze** — multi-line analysis by a multi-threaded Stockfish (with its full network as an optional
-99 MB download), a full variation tree, a position report, game review with an evaluation graph and
-key moments explained in words — or analyse the game yourself first and let the review score what
-you found — Lichess and chess.com imports, and shareable links that carry the whole game.
+99 MB download), a full variation tree, a position report, game review with an evaluation graph,
+key moments explained in words and a chart of where the clock time went — or analyse the game
+yourself first and let the review score what you found — and then a second try at each of your
+mistakes. Beside the board, what players of a chosen rating play in the position (and which of
+their favourite moves are traps), and your own games that reached it. Analyse a finished game with
+your opponent, or any game with friends, on one shared board. Chess960 too, Lichess and chess.com
+imports, and shareable links that carry the whole game.
 
 **Sync** — turn on sync between devices and your phone, tablet and computer stay in step: progress,
 lessons, review schedules, repertoires, analyses, games and settings, so any device is ready to
@@ -97,8 +104,8 @@ analyses live in private Lichess studies.
 
 **Train** — coordinate, vision and endgame drills on a 41-rung ladder, "What's the threat?" (name
 the opponent's threat, then meet it — in real positions and in your own games), sixteen opening
-repertoires trained with spaced repetition (or import your own), eight endgame studies and 46 classic
-games to guess move by move.
+repertoires trained with spaced repetition (or import your own, and find the common replies one has
+no answer to yet), eight endgame studies and 46 classic games to guess move by move.
 
 **Arcade** — eleven games that are not puzzles: a simul against up to eight engines at once, each
 board with its own clocks, Hand & Brain with Stockfish as your partner, a daily opening Wordle, Who
@@ -161,7 +168,8 @@ npm run dev     # downloads the engine and the human-like opponent on first run,
 `npm run check` runs CI's quality and build gates locally: lint, dead-code and dependency check,
 format check, typecheck, unit tests, a production build and the bundle budget. CI also holds the
 unit tests to a coverage floor, validates the puzzle data, and runs the end-to-end suite in four
-browser projects (desktop and phone Chromium, Firefox, WebKit), a smoke test under the production
+browser projects (desktop and phone Chromium, Firefox, WebKit), each split across several runners
+and merged into one report, a smoke test under the production
 base path, the visual snapshots and Lighthouse, and a separate workflow checks the chess content
 with Stockfish — see [what CI runs](CONTRIBUTING.md#what-ci-runs). The other scripts are listed in
 [CONTRIBUTING.md](CONTRIBUTING.md#scripts).
@@ -173,21 +181,21 @@ to **GitHub Actions**, and push to `main`. Once CI has passed, the deploy workfl
 with the right base path and deploys it; a version tag publishes a GitHub release with the offline copy attached. Custom domains
 and other static hosts are covered in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-Sync between devices and live games go through a tiny relay of your own: a Cloudflare Worker with
-D1 and Durable Objects on the free plan, or a plain Node server. [relay/README.md](relay/README.md)
-shows how to deploy it and what it can and cannot see. Setting `syncRelay` to `''` in
-`src/site.config.ts` leaves both out.
+Sync between devices, live games and the notifications that come while the app is closed go through
+a tiny relay of your own: a Cloudflare Worker with D1 and Durable Objects on the free plan, or a
+plain Node server. [relay/README.md](relay/README.md) shows how to deploy it and what it can and
+cannot see. Setting `syncRelay` to `''` in `src/site.config.ts` leaves them all out.
 
 ## Built with
 
-| Part            | Technology                                                                                                         |
-| --------------- | ------------------------------------------------------------------------------------------------------------------ |
-| App             | [React 19](https://react.dev), [TypeScript](https://www.typescriptlang.org), [Vite](https://vite.dev), Workbox     |
-| Engine          | [Stockfish 19](https://stockfishchess.org) as WebAssembly in a worker: multi-threaded, full network optional       |
-| Human-like play | [Maia-3](https://huggingface.co/UofTCSSLab/Maia3-5M) run by [ONNX Runtime Web](https://onnxruntime.ai) in a worker |
-| Board and chess | [Chessground](https://github.com/lichess-org/chessground), [chess.js](https://github.com/jhlywa/chess.js)          |
-| Data            | [Lichess](https://lichess.org) puzzle database and the chess-openings dataset (both CC0)                           |
-| Sync and live   | Web Crypto (HKDF, AES-GCM) on the device; a relay on Cloudflare Workers, D1 and Durable Objects, or Node           |
+| Part            | Technology                                                                                                                                                                  |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| App             | [React 19](https://react.dev), [TypeScript](https://www.typescriptlang.org), [Vite](https://vite.dev), Workbox                                                              |
+| Engine          | [Stockfish 19](https://stockfishchess.org) as WebAssembly in a worker: multi-threaded, full network optional                                                                |
+| Human-like play | [Maia-3](https://huggingface.co/UofTCSSLab/Maia3-5M) run by [ONNX Runtime Web](https://onnxruntime.ai) in a worker                                                          |
+| Board and chess | [Chessground](https://github.com/lichess-org/chessground), [chess.js](https://github.com/jhlywa/chess.js), [chessops](https://github.com/niklasf/chessops) (Chess960 rules) |
+| Data            | [Lichess](https://lichess.org) puzzle database and the chess-openings dataset (both CC0)                                                                                    |
+| Sync and live   | Web Crypto (HKDF, AES-GCM) on the device; a relay on Cloudflare Workers, D1 and Durable Objects, or Node, with Web Push for notifications                                   |
 
 Any evergreen browser with WebAssembly and Web Workers works: Chrome and Edge 111+, Firefox 121+,
 Safari 16.4+ (iOS 16.4+); the test suite runs on Chromium, Firefox and WebKit. The interface is in

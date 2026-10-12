@@ -8,19 +8,24 @@ const CHAT_LINES = 6;
 const PHRASE_IDS = Object.keys(PHRASES) as PhraseId[];
 
 /**
- * The set phrases two players can send each other, and the latest ones sent:
- * a game's and a duel's alike. Nothing typed ever goes anywhere.
+ * The set phrases players can send each other, and the latest ones sent: a
+ * game's and a duel's alike (by side), and a race room's (by member). Nothing
+ * typed ever goes anywhere.
  */
-export function PhraseCard({
+export function PhraseCard<By extends string = Side>({
   chat,
   you,
-  opponentName,
+  opponentName = '',
+  nameOf,
   onSay,
   disabled,
 }: {
-  chat: readonly { by: Side; text: string }[];
-  you: Side;
-  opponentName: string;
+  chat: readonly { by: By; text: string }[];
+  you: By;
+  /** Who sent a phrase that is not this player's: the opponent in a game for two… */
+  opponentName?: string;
+  /** …or, in a room, each member by name. */
+  nameOf?: (by: By) => string;
   onSay: (phrase: PhraseId) => void;
   disabled: boolean;
 }) {
@@ -42,7 +47,9 @@ export function PhraseCard({
       <ol className="live-game__chat" aria-live="polite" aria-label="Messages so far">
         {lines.map((line, i) => (
           <li key={start + i}>
-            <span className="live-game__chat-by">{line.by === you ? 'You' : opponentName}:</span>{' '}
+            <span className="live-game__chat-by">
+              {line.by === you ? 'You' : (nameOf?.(line.by) ?? opponentName)}:
+            </span>{' '}
             {line.text}
           </li>
         ))}

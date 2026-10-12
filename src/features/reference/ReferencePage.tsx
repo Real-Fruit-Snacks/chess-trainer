@@ -6,6 +6,7 @@ import { LessonText } from '@/features/learn/LessonText';
 import { getLessonMeta } from '@/features/learn/lessonMeta';
 import { prefersReducedMotion } from '@/lib/useReducedMotion';
 import { siteConfig } from '@/site.config';
+import { faqAnchor, glossaryAnchor } from './anchors';
 import { FAQ, GLOSSARY, NOTATION, RULES } from './content';
 import './reference.css';
 
@@ -26,9 +27,10 @@ export default function ReferencePage() {
 
   useEffect(() => {
     if (location.hash) {
-      document
-        .getElementById(location.hash.slice(1))
-        ?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+      const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+      // A linked question opens to its answer.
+      if (target instanceof HTMLDetailsElement) target.open = true;
+      target?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     }
   }, [location.hash]);
 
@@ -103,7 +105,7 @@ export default function ReferencePage() {
             {glossary.map((entry) => {
               const lesson = entry.lesson ? getLessonMeta(entry.lesson) : undefined;
               return (
-                <div key={entry.term} className="reference__entry">
+                <div key={entry.term} className="reference__entry" id={glossaryAnchor(entry.term)}>
                   <dt>{entry.term}</dt>
                   <dd>
                     {renderInline(entry.definition)}
@@ -138,7 +140,11 @@ export default function ReferencePage() {
         <h2>Frequently asked questions</h2>
         <div className="stack reference__faqs">
           {FAQ.map((item) => (
-            <details key={item.question} className="card reference__faq">
+            <details
+              key={item.question}
+              className="card reference__faq"
+              id={faqAnchor(item.question)}
+            >
               <summary>{item.question}</summary>
               <p className="muted" style={{ margin: '8px 0 0' }}>
                 {renderInline(item.answer)}

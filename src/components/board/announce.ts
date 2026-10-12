@@ -1,4 +1,6 @@
 import { Chess, type Color, type Move, type PieceSymbol, type Square } from 'chess.js';
+import { parsePlacement } from '@/chess/geometry';
+import { normalizeFen } from '@/chess/helpers';
 
 const PIECE_NAMES: Record<PieceSymbol, string> = {
   p: 'pawn',
@@ -15,8 +17,30 @@ function load(fen: string): Chess | null {
   try {
     return new Chess(fen);
   } catch {
-    return null;
+    // A Chess960 position's castling rights by file ("HAha"): chess.js reads the rest.
+    try {
+      return new Chess(normalizeFen(fen));
+    } catch {
+      return null;
+    }
   }
+}
+
+/**
+ * Chess960 castling, which a board shows as the king moving onto its own rook:
+ * the mover and the side, or null for any other move.
+ */
+function castlingOntoRook(
+  before: string,
+  from: Square,
+  to: Square,
+): { mover: string; side: 'kingside' | 'queenside' } | null {
+  const placement = parsePlacement(before);
+  const king = placement.get(from);
+  const rook = placement.get(to);
+  if (king?.type !== 'k' || rook?.type !== 'r' || rook.color !== king.color) return null;
+  if (from[1] !== to[1]) return null;
+  return { mover: COLOR_NAMES[king.color], side: to > from ? 'kingside' : 'queenside' };
 }
 
 function placement(fen: string): string {
@@ -81,6 +105,8 @@ export function describeMove(
   const [from, to] = move as [Square, Square];
   const next = load(after);
   if (!next) return null;
+  const castled = before ? castlingOntoRook(before, from, to) : null;
+  if (castled) return `${castled.mover} castles ${castled.side}${outcome(next)}.`;
   const moved = next.get(to);
   if (!moved) return null;
   const mover = COLOR_NAMES[moved.color];

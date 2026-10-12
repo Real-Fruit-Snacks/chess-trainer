@@ -1,4 +1,4 @@
-import { sanToUci } from '@/chess/helpers';
+import { type ChessRules, rulesFor } from '@/chess/rules';
 import type { Fen, San, Uci } from '@/chess/types';
 import type { EngineClient } from '@/engine/EngineClient';
 import { cpToWinProbability } from '@/engine/uci';
@@ -145,9 +145,10 @@ export function suggestionVerdict(loss: number, sameAsBest: boolean): Suggestion
  */
 export function engineMoveOf(
   move: Pick<ReviewedMove, 'bestUci' | 'judgement' | 'fen' | 'san'>,
+  rules: Pick<ChessRules, 'sanToUci'> = rulesFor('standard'),
 ): Uci | null {
   if (move.bestUci) return move.bestUci;
-  return move.judgement === 'best' ? sanToUci(move.fen, move.san) : null;
+  return move.judgement === 'best' ? rules.sanToUci(move.fen, move.san) : null;
 }
 
 export interface JudgedSuggestion {
@@ -169,6 +170,8 @@ export async function judgeSuggestion(
   fen: Fen,
   suggestion: Uci,
   best: Uci | null,
+  /** A Chess960 position: the engine searches by its rules (the moves written its way). */
+  chess960 = false,
 ): Promise<JudgedSuggestion | null> {
   if (!best) return null;
   if (suggestion === best) return { verdict: 'best', loss: 0, best };
@@ -177,6 +180,7 @@ export async function judgeSuggestion(
     depth: SUGGESTION_DEPTH,
     multipv: 2,
     searchmoves: [best, suggestion],
+    ...(chess960 ? { chess960: true } : {}),
   }).result;
   if (result.stopped) return null;
   const cpOf = new Map<Uci, number>();

@@ -8,20 +8,55 @@
  * abort, or when a player who left is claimed against; and it deletes itself
  * a while after the end.
  *
- * Two variants are played by the same rules. In a blindfold game the room
+ * Three variants are played by the same rules. In a blindfold game the room
  * counts each player's peeks (the pieces are hidden on their devices). In Army
  * Draft each player first sends an army bought from the budget, which the room
  * keeps from the other until both are in (or the draft time is up, when it
- * drafts for whoever has not); the game then starts from the two armies. A duel
- * (a puzzle race, Arbiter, Who Stands Better?) is a room of rounds instead:
- * duel.mjs runs it, and this file only seats its players, passes their phrases
- * and makes its rematch.
+ * drafts for whoever has not); the game then starts from the two armies. A
+ * Chess960 game starts from one of the 960 start positions, which the room
+ * draws when it makes the game (a rematch keeps it, the colours swapped), and
+ * is refereed on chessops (chess960.mjs): castling is the king taking its own
+ * rook ("e1h1"). A duel (a puzzle race, Arbiter, Who Stands Better?) is a room
+ * of rounds instead: duel.mjs runs it, and this file only seats its players,
+ * passes their phrases and makes its rematch.
+ *
+ * A game of chess may be watched: a socket that says `{t:'hello', watch:true}`
+ * instead of naming a seat gets the game as anyone may see it (no seat tokens,
+ * no phrases, no army before both are in) and every public message after it:
+ * the moves, the clocks, the offers, the presence and the end. It can send
+ * nothing but `hello` (the game again). At most `LIMITS.watchers` watch a game;
+ * the players are told how many do. Duels are not watched.
+ *
+ * A correspondence game ("3d": days for every move) is a game of chess too,
+ * played over days: each move resets the mover's days and starts the other's;
+ * a deadline that passes loses on time (it aborts the game before both sides
+ * have moved). Players come and go, so nobody claims against an absent one.
+ * Its room is made by invitation with one seat open (`open`): the first socket
+ * that sends `join` while watching takes it, and gets the seat's token; the
+ * clocks start then. An invitation nobody takes in `LIMITS.inviteMs` expires.
+ * The room lives until `LIMITS.correspondenceKeepMs` after the end (a year at
+ * most). A player may leave a push subscription with their seat (`push` in
+ * `hello`, or a `push` message): while they are away, the room pushes them
+ * their turn, the invitation taken and the end (`notify`, through the
+ * platform; a subscription its push service calls gone is forgotten).
+ *
+ * Once a game of chess is over, a player or a watcher may ask to analyse it
+ * together (`analyse`): the room makes the game's analysis room, a group room
+ * (analysisRoom.mjs) under an id derived from the game's, with the game's
+ * moves, and tells everyone where it is.
+ *
+ * Who hears what: `tell(make)` reaches the players (each their own message),
+ * `show(message)` the watchers, `announce(message)` both: a message for
+ * everyone must hold nothing private to a player.
  *
  * Times sent to the players are durations (milliseconds left, milliseconds
  * until), never the relay's clock: each side counts down from when a message
- * arrives, whatever its own clock says.
+ * arrives, whatever its own clock says. The room also keeps the mover's time
+ * after each move (`clocks`, in the snapshot), which a game's record writes
+ * beside its moves; a correspondence game keeps none.
  */
 import { hashToken } from '../handler.mjs';
+import { subscriptionOf } from '../push/webpush.mjs';
 import { armyProblem, draftFen, parseArmy, randomArmy } from './army.mjs';
 import {
   duelDeadline,
@@ -31,38 +66,54 @@ import {
   duelView,
   newDuel,
 } from './duel.mjs';
+import { chess960StartFen, isChess960Position, randomChess960Position } from './chess960.mjs';
 import { cannotMate, endOf, playUci, replay } from './rules.mjs';
 import {
+  ANALYSIS_ROOM,
+  analysisRoomId,
   BLINDFOLD_PEEKS,
   CLOSE,
+  CORRESPONDENCE_GAMES,
   isDuel,
   isPhrase,
+  isPlayerName,
+  isRating,
   LIMITS,
   parseTimeControl,
   randomId,
   SEAT_PATTERN,
 } from './shared.mjs';
 
+/** The position a game of chess starts from when it has no start of its own. */
+const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
 /**
  * @typedef {'white' | 'black'} Color
  * @typedef {import('./lobby.mjs').GameSpec} GameSpec
  * @typedef {import('./army.mjs').Army} Army
  * @typedef {import('./duel.mjs').DuelState} DuelState
+ * @typedef {import('../push/webpush.mjs').Subscription} Subscription
+ * @typedef {import('../push/webpush.mjs').PushMessage} PushMessage
  * @typedef {{ name: string, rating: number | null, seatHash: string }} Seat
  *
  * @typedef {{
  *   v: 1 | 2,
  *   id: string,
  *   createdAt: number,
- *   game?: 'chess' | 'blindfold' | 'army',
+ *   game?: 'chess' | 'blindfold' | 'army' | 'chess960',
  *   opts?: Record<string, string | number>,
- *   tc: { id: string, initialMs: number, incrementMs: number },
+ *   tc: { id: string, kind?: string, initialMs: number, incrementMs: number, perMoveMs?: number | null },
  *   white: Seat,
  *   black: Seat,
+ *   open?: Color | null,
+ *   openUntil?: number | null,
+ *   push?: { white: Subscription | null, black: Subscription | null } | null,
  *   startFen?: string | null,
+ *   position?: number | null,
  *   draft?: { budget: number, by: number, armies: { white: Army | null, black: Army | null } } | null,
  *   peeks?: { white: number, black: number } | null,
  *   moves: string[],
+ *   clocks?: number[],
  *   clock: { white: number, black: number, running: Color | null, since: number },
  *   firstMoveBy: number | null,
  *   status: 'draft' | 'playing' | 'over',
@@ -81,6 +132,7 @@ import {
  * @typedef {{
  *   id: string,
  *   seat: Color | null,
+ *   watch: boolean,
  *   openedAt: number,
  *   rateStart: number,
  *   rateCount: number,
@@ -100,8 +152,17 @@ import {
  *   remove(): Promise<void>,
  *   schedule(at: number | null): void | Promise<void>,
  *   createGame(spec: GameSpec): Promise<void>,
+ *   createGroup?: (spec: import('./group.mjs').GroupSpec) => Promise<'created' | 'exists'>,
  *   now(): number,
+ *   notify?: (subscription: Subscription, message: PushMessage) => Promise<'sent' | 'gone' | 'failed'>,
+ *   chess960Position?: () => number,
  * }} RoomPlatform
+ *   `createGroup`: makes a group room, or finds it made (the game's analysis
+ *   room; none: games are not analysed together)
+ *   `notify`: pushes a message to a player away from a correspondence game
+ *   (none: nobody is pushed)
+ *   `chess960Position`: draws a new Chess960 game's start position (none: one of the
+ *   960 at random); the end-to-end tests fix it, to reach castling in a few moves
  */
 
 /** A new socket's data (kept with the socket: a Durable Object keeps it across hibernation). */
@@ -109,6 +170,7 @@ export function roomData(now = Date.now()) {
   return /** @type {RoomData} */ ({
     id: randomId(16),
     seat: null,
+    watch: false,
     openedAt: now,
     rateStart: 0,
     rateCount: 0,
@@ -117,6 +179,58 @@ export function roomData(now = Date.now()) {
 
 /** @param {Color} color */
 const other = (color) => (color === 'white' ? 'black' : 'white');
+
+/** A game played over days: each move has its own days (`tc.perMoveMs`). @param {RoomState} s */
+const isCorrespondence = (s) =>
+  !isDuel(s.game) && Boolean(/** @type {GameState} */ (s).tc.perMoveMs);
+
+/** How long a room lives at most. @param {RoomState} s */
+const roomAgeOf = (s) => (isCorrespondence(s) ? LIMITS.correspondenceAgeMs : LIMITS.roomAgeMs);
+
+/** How long a room is kept after its game's end. @param {RoomState} s */
+const keepAfterEndOf = (s) =>
+  isCorrespondence(s) ? LIMITS.correspondenceKeepMs : LIMITS.keepAfterEndMs;
+
+/**
+ * How a correspondence game ended, for the push message to `color`.
+ * @param {GameState['result']} result
+ * @param {string} reason
+ * @param {Color} color
+ * @param {string} opponent
+ */
+function endNote(result, reason, color, opponent) {
+  if (reason === 'expired') return 'Nobody took it in time.';
+  if (reason === 'aborted' || reason === 'no-start') return 'The game was aborted.';
+  const winner = result === '1-0' ? 'white' : result === '0-1' ? 'black' : null;
+  if (winner === color) {
+    if (reason === 'checkmate') return 'You won by checkmate.';
+    if (reason === 'resign') return `You won: ${opponent} resigned.`;
+    if (reason === 'time') return 'You won on time.';
+    return 'You won.';
+  }
+  if (winner) {
+    if (reason === 'checkmate') return 'You lost by checkmate.';
+    if (reason === 'resign') return 'You resigned.';
+    if (reason === 'time') return 'You lost on time.';
+    return 'You lost.';
+  }
+  switch (reason) {
+    case 'agreement':
+      return 'Drawn by agreement.';
+    case 'stalemate':
+      return 'Drawn by stalemate.';
+    case 'repetition':
+      return 'Drawn by threefold repetition.';
+    case 'fifty-moves':
+      return 'Drawn by the fifty-move rule.';
+    case 'insufficient':
+      return 'Drawn: neither side can mate.';
+    case 'time':
+      return 'Drawn on time: the side with time left could not have mated.';
+    default:
+      return 'Drawn.';
+  }
+}
 
 /** Compares two strings without stopping at the first difference. */
 function sameText(/** @type {string} */ a, /** @type {string} */ b) {
@@ -148,20 +262,33 @@ function send(conn, message) {
 }
 
 /**
- * The state of a new game of chess (or of a variant of it).
+ * The state of a new game of chess (or of a variant of it). A Chess960 game
+ * starts from the position the spec names (a rematch's), or else one `draw` picks.
  * @param {GameSpec} spec
  * @param {number} now
+ * @param {() => number} [draw]
  * @returns {GameState}
  */
-export function newGame(spec, now) {
+export function newGame(spec, now, draw = randomChess960Position) {
   const tc = parseTimeControl(spec.tc);
   if (!tc) throw new Error(`Not a time control: ${spec.tc}`);
   const game = spec.game ?? 'chess';
-  if (game !== 'chess' && game !== 'blindfold' && game !== 'army') {
+  if (game !== 'chess' && game !== 'blindfold' && game !== 'army' && game !== 'chess960') {
     throw new Error(`Not a game of chess: ${game}`);
   }
   const opts = spec.opts ?? {};
   const army = game === 'army';
+  const perMoveMs = tc.perMoveMs;
+  const open = spec.open === 'white' || spec.open === 'black' ? spec.open : null;
+  if (perMoveMs !== null && !CORRESPONDENCE_GAMES.includes(game)) {
+    throw new Error('Correspondence is chess or Chess960.');
+  }
+  let position = null;
+  if (game === 'chess960') {
+    position = isChess960Position(spec.position) ? spec.position : draw();
+    if (!isChess960Position(position)) throw new Error(`Not a Chess960 position: ${position}`);
+  }
+  if (open && perMoveMs === null) throw new Error('Only a correspondence game waits for a player.');
   return {
     v: 2,
     id: spec.id,
@@ -171,7 +298,10 @@ export function newGame(spec, now) {
     tc,
     white: spec.white,
     black: spec.black,
-    startFen: null,
+    open,
+    openUntil: open ? now + LIMITS.inviteMs : null,
+    startFen: position !== null ? chess960StartFen(position) : null,
+    position,
     draft: army
       ? {
           budget: Number(opts.budget) || 30,
@@ -181,9 +311,13 @@ export function newGame(spec, now) {
       : null,
     peeks: game === 'blindfold' ? { white: 0, black: 0 } : null,
     moves: [],
-    clock: { white: tc.initialMs, black: tc.initialMs, running: null, since: 0 },
-    // An army game's first move is due once both armies are in.
-    firstMoveBy: army ? null : now + LIMITS.firstMoveMs,
+    // Correspondence: White's days run as soon as both players are in.
+    clock:
+      perMoveMs !== null
+        ? { white: perMoveMs, black: perMoveMs, running: open ? null : 'white', since: now }
+        : { white: tc.initialMs, black: tc.initialMs, running: null, since: 0 },
+    // An army game's first move is due once both armies are in; correspondence has none.
+    firstMoveBy: army || perMoveMs !== null ? null : now + LIMITS.firstMoveMs,
     status: army ? 'draft' : 'playing',
     result: null,
     reason: null,
@@ -204,11 +338,14 @@ export function createRoom(platform) {
   let state = null;
   let loaded = false;
   /** The position, rebuilt from the moves when the room wakes. */
-  /** @type {import('chess.js').Chess | null} */
+  /** @type {import('./rules.mjs').RulesGame | null} */
   let chess = null;
   /** Events run one at a time, in order. */
   /** @type {Promise<unknown>} */
   let queue = Promise.resolve();
+  /** Push messages for players away, delivered once the state they tell of is saved. */
+  /** @type {{ color: Color, subscription: Subscription, message: PushMessage }[]} */
+  let outbox = [];
 
   /** @template T @param {() => Promise<T>} task @returns {Promise<T>} */
   function serial(task) {
@@ -220,7 +357,10 @@ export function createRoom(platform) {
   async function ensure() {
     if (loaded) return state;
     state = await platform.load();
-    chess = state && !isDuel(state.game) ? replay(state.moves, state.startFen ?? null) : null;
+    chess =
+      state && !isDuel(state.game)
+        ? replay(state.moves, state.startFen ?? null, state.game ?? 'chess')
+        : null;
     loaded = true;
     return state;
   }
@@ -252,6 +392,13 @@ export function createRoom(platform) {
     return seats;
   }
 
+  /** The sockets watching the game (leaving out the socket `except`, which is closing). */
+  function watchers(/** @type {string | null} */ except = null) {
+    return platform
+      .connections()
+      .filter((conn) => conn.data.watch && !conn.data.seat && conn.data.id !== except);
+  }
+
   /** The player gone from the game, as `viewer` sees it: who, and when a claim is allowed. */
   function goneView(
     /** @type {GameState} */ s,
@@ -260,21 +407,26 @@ export function createRoom(platform) {
   ) {
     const away = other(viewer);
     const since = s.goneSince[away];
-    if (s.status !== 'playing' || since === null) return null;
+    if (s.status !== 'playing' || since === null || isCorrespondence(s)) return null;
     return { color: away, claimInMs: Math.max(0, since + LIMITS.goneClaimMs - now) };
   }
 
-  function nextView(/** @type {RoomState} */ s, /** @type {Color} */ viewer) {
-    return s.next ? { game: s.next.id, seat: s.next.seats[viewer], color: other(viewer) } : null;
+  /** The rematch to go to: a player's seat in it, or (for a watcher) only the game to watch. */
+  function nextView(/** @type {RoomState} */ s, /** @type {Color | null} */ viewer) {
+    if (!s.next) return null;
+    return viewer
+      ? { game: s.next.id, seat: s.next.seats[viewer], color: other(viewer) }
+      : { game: s.next.id };
   }
 
   /**
    * Army Draft's draft as `you` see it: the budget, the time left, who is
-   * ready, and the armies — only your own until both are in.
+   * ready, and the armies — only your own until both are in (a watcher's,
+   * `you` null, none).
    */
   function draftView(
     /** @type {GameState} */ s,
-    /** @type {Color} */ you,
+    /** @type {Color | null} */ you,
     /** @type {number} */ now,
   ) {
     const draft = s.draft;
@@ -320,9 +472,13 @@ export function createRoom(platform) {
     return chessSnapshot(g, you, now);
   }
 
+  /**
+   * The game of chess from `you`'s seat, or (`you` null) as a watcher sees it:
+   * no `gone` to claim against, no phrases, no seat in a rematch.
+   */
   function chessSnapshot(
     /** @type {GameState} */ s,
-    /** @type {Color} */ you,
+    /** @type {Color | null} */ you,
     /** @type {number} */ now,
   ) {
     return {
@@ -345,9 +501,12 @@ export function createRoom(platform) {
       reason: s.reason,
       offers: s.offers,
       present: present(),
-      gone: goneView(s, you, now),
-      chat: s.chat,
+      gone: you ? goneView(s, you, now) : null,
+      chat: you ? s.chat : [],
       next: nextView(s, you),
+      watchers: watchers().length,
+      open: s.open ?? null,
+      clocks: s.clocks ?? [],
     };
   }
 
@@ -360,6 +519,25 @@ export function createRoom(platform) {
     }
   }
 
+  /** Sends `message` to every watcher (leaving out the socket `except`, which is closing). */
+  function show(/** @type {unknown} */ message, /** @type {string | null} */ except = null) {
+    for (const conn of watchers(except)) send(conn, message);
+  }
+
+  /** Sends one message to the players and the watchers alike: it must hold nothing private. */
+  function announce(/** @type {unknown} */ message) {
+    tell(() => message);
+    show(message);
+  }
+
+  /** Tells everyone in the room how many watch (leaving out the socket `except`, which is closing). */
+  function countWatchers(/** @type {string | null} */ except = null) {
+    const message = { t: 'watchers', n: watchers(except).length };
+    for (const conn of platform.connections()) {
+      if (conn.data.id !== except && (conn.data.seat || conn.data.watch)) send(conn, message);
+    }
+  }
+
   /**
    * The earliest moment something must happen: a flag, a first move, the end
    * of a draft or of a duel's round, a hello, the end of the room.
@@ -368,13 +546,13 @@ export function createRoom(platform) {
     /** @type {number[]} */
     const times = [];
     for (const conn of platform.connections()) {
-      if (!conn.data.seat) times.push(conn.data.openedAt + LIMITS.helloMs);
+      if (!conn.data.seat && !conn.data.watch) times.push(conn.data.openedAt + LIMITS.helloMs);
     }
     const s = state;
     if (s) {
-      times.push(s.createdAt + LIMITS.roomAgeMs);
+      times.push(s.createdAt + roomAgeOf(s));
       if (s.status === 'over') {
-        if (s.endedAt !== null) times.push(s.endedAt + LIMITS.keepAfterEndMs);
+        if (s.endedAt !== null) times.push(s.endedAt + keepAfterEndOf(s));
       } else if (isDuel(s.game)) {
         const due = duelDeadline(/** @type {DuelState} */ (s));
         if (due !== null) times.push(due);
@@ -382,6 +560,7 @@ export function createRoom(platform) {
         const g = /** @type {GameState} */ (s);
         if (g.status === 'draft' && g.draft) times.push(g.draft.by);
         if (g.status === 'playing') {
+          if (g.open && typeof g.openUntil === 'number') times.push(g.openUntil);
           if (g.firstMoveBy !== null) times.push(g.firstMoveBy);
           const running = g.clock.running;
           if (running) times.push(now + left(g, running, now));
@@ -423,6 +602,7 @@ export function createRoom(platform) {
     s.status = 'playing';
     s.firstMoveBy = now + LIMITS.firstMoveMs;
     tell((viewer) => chessSnapshot(s, viewer, now));
+    show(chessSnapshot(s, null, now));
   }
 
   /** A refusal for anything but a game under way: still drafting, or over. */
@@ -440,6 +620,69 @@ export function createRoom(platform) {
   async function save(/** @type {number} */ now) {
     if (state) await platform.store(state);
     await platform.schedule(nextDeadline(now));
+    await deliver();
+  }
+
+  /**
+   * A push message for `color`, should they be away when the state is saved
+   * (correspondence games only: a player of a game at once is on its page).
+   * @param {GameState} s
+   * @param {Color} color
+   * @param {Omit<PushMessage, 'url' | 'tag'>} note
+   */
+  function nudge(s, color, note) {
+    const subscription = isCorrespondence(s) ? s.push?.[color] : null;
+    if (!subscription) return;
+    outbox.push({
+      color,
+      subscription,
+      message: { ...note, url: `play/online/${s.id}`, tag: s.id },
+    });
+  }
+
+  /**
+   * Pushes the messages waiting to the players still away. A subscription its
+   * push service calls gone is forgotten.
+   */
+  async function deliver() {
+    const notes = outbox;
+    outbox = [];
+    if (notes.length === 0 || !platform.notify) return;
+    let forgot = false;
+    for (const { color, subscription, message } of notes) {
+      if (present()[color]) continue;
+      /** @type {'sent' | 'gone' | 'failed'} */
+      let sent = 'failed';
+      try {
+        sent = await platform.notify(subscription, message);
+      } catch {
+        // Not delivered: the game goes on all the same.
+      }
+      const g = /** @type {GameState | null} */ (state);
+      if (sent === 'gone' && g?.push?.[color]?.endpoint === subscription.endpoint) {
+        g.push = { ...g.push, [color]: null };
+        forgot = true;
+      }
+    }
+    if (forgot && state) await platform.store(state);
+  }
+
+  /**
+   * Keeps (or, with null or anything but a subscription, drops) the push
+   * subscription a player of a correspondence game under way leaves with their
+   * seat. Whether it changed.
+   * @param {RoomState} s
+   * @param {Color} color
+   * @param {unknown} value
+   */
+  function keepSubscription(s, color, value) {
+    if (!isCorrespondence(s) || s.status === 'over') return false;
+    const g = /** @type {GameState} */ (s);
+    const subscription = value === null ? null : subscriptionOf(value);
+    const known = g.push?.[color] ?? null;
+    if (JSON.stringify(known) === JSON.stringify(subscription)) return false;
+    g.push = { white: null, black: null, ...g.push, [color]: subscription };
+    return true;
   }
 
   /**
@@ -461,11 +704,28 @@ export function createRoom(platform) {
     s.firstMoveBy = null;
     s.offers = { draw: null, takeback: null, rematch: null };
     s.goneSince = { white: null, black: null };
-    tell(() => ({ t: 'end', result, reason, clock: clockView(s, now) }));
+    announce({ t: 'end', result, reason, clock: clockView(s, now) });
+    for (const color of /** @type {Color[]} */ (['white', 'black'])) {
+      const opponent = s[other(color)].name;
+      nudge(s, color, {
+        title: opponent ? `Game over against ${opponent}` : 'Your invitation',
+        body: endNote(result, reason, color, opponent),
+      });
+    }
+    // Nothing more to push: the subscriptions go with the game.
+    s.push = null;
   }
 
-  /** The flag of the side whose clock runs has fallen: a loss, or a draw when the other cannot mate. */
+  /**
+   * The flag of the side whose clock runs has fallen: a loss, or a draw when the
+   * other cannot mate. A correspondence game's deadline before both sides have
+   * moved aborts it instead.
+   */
   function flag(/** @type {GameState} */ s, /** @type {Color} */ loser, /** @type {number} */ now) {
+    if (isCorrespondence(s) && s.moves.length < 2) {
+      end(s, '*', 'no-start', now);
+      return;
+    }
     const winner = other(loser);
     const drawn = chess !== null && cannotMate(chess, winner === 'white' ? 'w' : 'b');
     end(s, drawn ? '1/2-1/2' : winner === 'white' ? '1-0' : '0-1', 'time', now);
@@ -499,21 +759,26 @@ export function createRoom(platform) {
     send(conn, snapshot(s, seat, now));
   }
 
-  /** Takes back the last `plies` moves; the clocks keep their times and the side to move runs. */
+  /**
+   * Takes back the last `plies` moves; the clocks keep their times (in
+   * correspondence, the side to move has its days again) and the side to move runs.
+   */
   function undo(
     /** @type {GameState} */ s,
     /** @type {number} */ plies,
     /** @type {number} */ now,
   ) {
-    for (const color of /** @type {Color[]} */ (['white', 'black']))
-      s.clock[color] = left(s, color, now);
+    for (const color of /** @type {Color[]} */ (['white', 'black'])) {
+      s.clock[color] = s.tc.perMoveMs ? s.tc.perMoveMs : left(s, color, now);
+    }
     s.moves.splice(s.moves.length - plies, plies);
+    if (s.clocks) s.clocks = s.clocks.slice(0, s.moves.length);
     for (let i = 0; i < plies; i++) chess?.undo();
     s.clock.running = turn(s);
     s.clock.since = now;
     s.offers.draw = null;
     s.offers.takeback = null;
-    tell(() => ({ t: 'undo', plies, clock: clockView(s, now) }));
+    announce({ t: 'undo', plies, clock: clockView(s, now) });
   }
 
   /** How many moves a takeback asked by `asker` undoes: theirs, and the reply to it if there is one. */
@@ -521,8 +786,9 @@ export function createRoom(platform) {
     turn(s) === asker ? 2 : 1;
 
   /**
-   * What either kind of room takes: a phrase, and the rematch once it is over.
-   * Anything else is the game's own (`play`) or the duel's (duel.mjs).
+   * What either kind of room takes: a phrase, and the rematch and the analysis
+   * together once it is over. Anything else is the game's own (`play`) or the
+   * duel's (duel.mjs).
    * @param {RoomConn} conn
    * @param {RoomState} s
    * @param {Color} seat
@@ -540,7 +806,51 @@ export function createRoom(platform) {
       return save(now);
     }
     if (msg.t === 'rematch') return rematch(conn, s, seat, msg, now);
+    if (msg.t === 'analyse') return analyse(conn, s, seat, now);
     return null;
+  }
+
+  /**
+   * A player, or a watcher (`seat` null), asks to analyse the game together
+   * once it is over. The room makes the game's analysis room, or finds it made
+   * (a room of up to eight, analysisRoom.mjs), with the game's start, its
+   * moves, its players and its result, under the id derived from the game's
+   * (`analysisRoomId`). Only this room puts a game under that id, so nobody
+   * can seed another game there; asking again makes it again once it has gone.
+   * Everyone in the room hears where it is, and who asked.
+   * @param {RoomConn} conn
+   * @param {RoomState} s
+   * @param {Color | null} seat
+   * @param {number} now
+   */
+  async function analyse(conn, s, seat, now) {
+    const no = (/** @type {string} */ code, /** @type {string} */ message) => {
+      send(conn, { t: 'error', code, message });
+      send(
+        conn,
+        seat ? snapshot(s, seat, now) : chessSnapshot(/** @type {GameState} */ (s), null, now),
+      );
+    };
+    if (isDuel(s.game)) return no('bad-request', 'A duel has no game to analyse.');
+    const g = /** @type {GameState} */ (s);
+    if (g.status !== 'over') return no('not-now', 'The game is still on.');
+    if (!platform.createGroup) return no('failed', 'The analysis room could not be made.');
+    const id = await analysisRoomId(g.id);
+    /** @type {Record<string, string>} */
+    const opts = {
+      variant: g.game === 'chess960' ? 'chess960' : 'standard',
+      fen: g.startFen ?? INITIAL_FEN,
+      moves: g.moves.slice(0, ANALYSIS_ROOM.depth).join(' '),
+      result: g.result ?? '*',
+    };
+    if (isPlayerName(g.white.name)) opts.white = g.white.name;
+    if (isPlayerName(g.black.name)) opts.black = g.black.name;
+    try {
+      await platform.createGroup({ id, kind: 'analysis', opts, host: null });
+    } catch {
+      return no('failed', 'The analysis room could not be made.');
+    }
+    announce({ t: 'analysis', room: id, by: seat });
   }
 
   /**
@@ -564,12 +874,15 @@ export function createRoom(platform) {
       }
       const id = randomId(16);
       const seats = { white: randomId(32), black: randomId(32) };
+      // Chess960: the same start position again.
+      const position = isDuel(s.game) ? null : /** @type {GameState} */ (s).position;
       try {
         await platform.createGame({
           id,
           game: s.game ?? 'chess',
           opts: s.opts ?? {},
           tc: isDuel(s.game) ? null : /** @type {GameState} */ (s).tc.id,
+          position: position ?? null,
           white: {
             name: s.black.name,
             rating: s.black.rating,
@@ -587,6 +900,7 @@ export function createRoom(platform) {
       s.next = { id, seats };
       s.offers.rematch = null;
       tell((viewer) => ({ t: 'rematch', ...nextView(s, viewer) }));
+      show({ t: 'rematch', ...nextView(s, null) });
       return save(now);
     }
     if (msg.op === 'offer') {
@@ -597,7 +911,7 @@ export function createRoom(platform) {
     } else {
       return refuse(conn, s, seat, 'bad-request', 'Unknown answer.', now);
     }
-    tell(() => ({ t: 'offers', ...s.offers }));
+    announce({ t: 'offers', ...s.offers });
     return save(now);
   }
 
@@ -613,6 +927,9 @@ export function createRoom(platform) {
     switch (msg.t) {
       case 'move': {
         if (s.status !== 'playing') return notPlaying(conn, s, seat, now);
+        if (s.open) {
+          return refuse(conn, s, seat, 'not-now', 'Your opponent has not joined yet.', now);
+        }
         if (turn(s) !== seat || msg.ply !== s.moves.length) {
           return refuse(conn, s, seat, 'not-now', 'It is not your move.', now);
         }
@@ -626,7 +943,13 @@ export function createRoom(platform) {
         s.moves.push(uci);
         s.offers.draw = null;
         s.offers.takeback = null;
-        if (s.moves.length === 1) {
+        if (s.tc.perMoveMs) {
+          // Days for every move: the mover's days are whole again for the next, the other's run.
+          s.clock.white = s.tc.perMoveMs;
+          s.clock.black = s.tc.perMoveMs;
+          s.clock.running = opponent;
+          s.clock.since = now;
+        } else if (s.moves.length === 1) {
           s.firstMoveBy = now + LIMITS.firstMoveMs;
         } else if (s.moves.length === 2) {
           s.firstMoveBy = null;
@@ -637,15 +960,24 @@ export function createRoom(platform) {
           s.clock.running = opponent;
           s.clock.since = now;
         }
-        tell(() => ({
+        // The mover's time after the move, for the record (`[%clk]`); correspondence keeps none.
+        if (!s.tc.perMoveMs) (s.clocks ??= []).push(s.clock[seat]);
+        announce({
           t: 'move',
           uci,
           ply: s.moves.length - 1,
           clock: clockView(s, now),
           firstMove: firstMoveView(s, now),
-        }));
+        });
         const over = chess ? endOf(chess) : null;
-        if (over) end(s, over.result, over.reason, now);
+        if (over) {
+          end(s, over.result, over.reason, now);
+        } else {
+          nudge(s, opponent, {
+            title: `Your move against ${s[seat].name}`,
+            body: `${s[seat].name} played ${move.san}.`,
+          });
+        }
         return save(now);
       }
 
@@ -676,8 +1008,7 @@ export function createRoom(platform) {
         }
         draft.armies = { ...draft.armies, [seat]: army };
         if (draft.armies[opponent]) startDrafted(s, now);
-        else
-          tell(() => ({ t: 'draft', ready: { white: seat === 'white', black: seat === 'black' } }));
+        else announce({ t: 'draft', ready: { white: seat === 'white', black: seat === 'black' } });
         return save(now);
       }
 
@@ -689,7 +1020,7 @@ export function createRoom(platform) {
           return refuse(conn, s, seat, 'not-now', 'You have no peeks left.', now);
         }
         s.peeks = { ...s.peeks, [seat]: s.peeks[seat] + 1 };
-        tell(() => ({ t: 'peeks', ...s.peeks }));
+        announce({ t: 'peeks', ...s.peeks });
         return save(now);
       }
 
@@ -712,7 +1043,7 @@ export function createRoom(platform) {
         } else {
           return refuse(conn, s, seat, 'bad-request', 'Unknown answer.', now);
         }
-        tell(() => ({ t: 'offers', ...s.offers }));
+        announce({ t: 'offers', ...s.offers });
         return save(now);
       }
 
@@ -742,12 +1073,22 @@ export function createRoom(platform) {
         } else {
           return refuse(conn, s, seat, 'bad-request', 'Unknown answer.', now);
         }
-        tell(() => ({ t: 'offers', ...s.offers }));
+        announce({ t: 'offers', ...s.offers });
         return save(now);
       }
 
       case 'claim': {
         if (s.status !== 'playing') return notPlaying(conn, s, seat, now);
+        if (isCorrespondence(s)) {
+          return refuse(
+            conn,
+            s,
+            seat,
+            'not-now',
+            'A correspondence game waits for its players.',
+            now,
+          );
+        }
         const since = s.goneSince[opponent];
         if (
           s.moves.length < 2 ||
@@ -763,9 +1104,117 @@ export function createRoom(platform) {
         return save(now);
       }
 
+      case 'push': {
+        if (!isCorrespondence(s) || s.status === 'over') {
+          send(conn, { t: 'error', code: 'not-now', message: 'This game pushes nothing.' });
+          return;
+        }
+        if (msg.sub !== null && !subscriptionOf(msg.sub)) {
+          send(conn, { t: 'error', code: 'bad-request', message: 'That is not a subscription.' });
+          return;
+        }
+        if (keepSubscription(s, seat, msg.sub)) return save(now);
+        return;
+      }
+
       default:
         return refuse(conn, s, seat, 'bad-request', 'Unknown message.', now);
     }
+  }
+
+  /**
+   * A socket asks to watch: refused in a duel and when the room has all the
+   * watchers it takes; otherwise it gets the game as anyone may see it, and
+   * everyone hears how many watch now.
+   * @param {RoomConn} conn
+   * @param {RoomState} s
+   * @param {number} now
+   */
+  async function startWatching(conn, s, now) {
+    if (isDuel(s.game)) {
+      conn.close(CLOSE.noGame, 'A duel cannot be watched.');
+      return;
+    }
+    if (watchers().length >= LIMITS.watchers) {
+      send(conn, { t: 'error', code: 'full', message: 'This game has all the watchers it takes.' });
+      conn.close(CLOSE.full, 'Too many watchers.');
+      return;
+    }
+    conn.data.watch = true;
+    conn.save();
+    send(conn, chessSnapshot(/** @type {GameState} */ (s), null, now));
+    countWatchers();
+    // The socket owes no hello any more: its deadline goes.
+    await platform.schedule(nextDeadline(now));
+  }
+
+  /**
+   * What a watcher may say: `hello`, for the game again, `join` to take a
+   * correspondence game's open seat, and `analyse` once the game is over.
+   * Anything else is refused.
+   * @param {RoomConn} conn
+   * @param {RoomState} s
+   * @param {Record<string, unknown>} msg
+   * @param {number} now
+   */
+  async function watcherMessage(conn, s, msg, now) {
+    if (msg.t === 'hello') {
+      send(conn, chessSnapshot(/** @type {GameState} */ (s), null, now));
+      return;
+    }
+    if (msg.t === 'join') {
+      await join(conn, /** @type {GameState} */ (s), msg, now);
+      return;
+    }
+    if (msg.t === 'analyse') {
+      await analyse(conn, s, null, now);
+      return;
+    }
+    send(conn, { t: 'error', code: 'watching', message: 'Watchers can only watch.' });
+  }
+
+  /**
+   * Someone with the link takes a correspondence game's open seat: the first
+   * to ask (the room takes one message at a time) gets the seat's token, which
+   * nobody else ever sees; the game is on, and White's days start.
+   * @param {RoomConn} conn
+   * @param {GameState} s
+   * @param {Record<string, unknown>} msg
+   * @param {number} now
+   */
+  async function join(conn, s, msg, now) {
+    const color = s.open ?? null;
+    if (!color || s.status !== 'playing') {
+      send(conn, { t: 'error', code: 'taken', message: 'This game has both its players.' });
+      send(conn, chessSnapshot(s, null, now));
+      return;
+    }
+    if (!isPlayerName(msg.name) || !isRating(msg.rating ?? null)) {
+      send(conn, { t: 'error', code: 'bad-request', message: 'That name or rating is not one.' });
+      return;
+    }
+    const seat = randomId(32);
+    s[color] = {
+      name: /** @type {string} */ (msg.name),
+      rating: /** @type {number | null} */ (msg.rating ?? null),
+      seatHash: await hashToken(seat),
+    };
+    s.open = null;
+    s.openUntil = null;
+    const days = /** @type {number} */ (s.tc.perMoveMs);
+    s.clock = { white: days, black: days, running: 'white', since: now };
+    const host = other(color);
+    nudge(s, host, {
+      title: `${s[color].name} took your invitation`,
+      body:
+        host === 'white'
+          ? 'The game is on: your move.'
+          : `The game is on: ${s[color].name} moves first.`,
+    });
+    send(conn, { t: 'seat', game: s.id, seat, color });
+    tell((viewer) => chessSnapshot(s, viewer, now));
+    show(chessSnapshot(s, null, now));
+    await save(now);
   }
 
   return {
@@ -782,8 +1231,9 @@ export function createRoom(platform) {
           state = newDuel(spec, now);
           chess = null;
         } else {
-          state = newGame(spec, now);
-          chess = replay([]);
+          const game = newGame(spec, now, platform.chess960Position);
+          state = game;
+          chess = replay([], game.startFen ?? null, game.game ?? 'chess');
         }
         await save(now);
       });
@@ -836,6 +1286,14 @@ export function createRoom(platform) {
         }
         const seat = conn.data.seat;
         if (!seat) {
+          if (conn.data.watch) {
+            await watcherMessage(conn, s, msg, now);
+            return;
+          }
+          if (msg.t === 'hello' && msg.watch === true) {
+            await startWatching(conn, s, now);
+            return;
+          }
           if (msg.t !== 'hello' || typeof msg.seat !== 'string' || !SEAT_PATTERN.test(msg.seat)) {
             conn.close(CLOSE.noGame, 'Say which seat first.');
             return;
@@ -853,6 +1311,7 @@ export function createRoom(platform) {
           }
           conn.data.seat = color;
           conn.save();
+          const subscribed = 'push' in msg && keepSubscription(s, color, msg.push);
           const wasGone = s.goneSince[color] !== null;
           s.goneSince[color] = null;
           send(conn, snapshot(s, color, now));
@@ -866,14 +1325,16 @@ export function createRoom(platform) {
                   gone: duel ? null : goneView(/** @type {GameState} */ (s), viewer, now),
                 },
           );
+          show({ t: 'present', ...present(), gone: null });
           // A duel starts once both players are here (and its rounds are in).
           const started = duel && duelMaybeStart(duelContext, /** @type {DuelState} */ (s), now);
-          if (wasGone || started) await save(now);
+          if (wasGone || started || subscribed) await save(now);
           else await platform.schedule(nextDeadline(now));
           return;
         }
         if (msg.t === 'hello') {
           send(conn, snapshot(s, seat, now));
+          if ('push' in msg && keepSubscription(s, seat, msg.push)) await save(now);
           return;
         }
         const shared = common(conn, s, seat, msg, now);
@@ -900,6 +1361,12 @@ export function createRoom(platform) {
     close(conn) {
       return serial(async () => {
         const s = await ensure();
+        if (conn.data.watch) {
+          // A watcher goes: everyone else hears how many are left.
+          conn.data.watch = false;
+          if (s) countWatchers(conn.data.id);
+          return;
+        }
         const seat = conn.data.seat;
         conn.data.seat = null;
         if (!s || !seat || s.status === 'over') return;
@@ -908,7 +1375,9 @@ export function createRoom(platform) {
           .some((c) => c.data.id !== conn.data.id && c.data.seat === seat);
         if (still) return;
         const now = platform.now();
-        s.goneSince[seat] = now;
+        // Correspondence players come and go: nothing is claimed against one who left.
+        const corr = isCorrespondence(s);
+        if (!corr) s.goneSince[seat] = now;
         const seats = present(conn.data.id);
         const duel = isDuel(s.game);
         for (const other of platform.connections()) {
@@ -916,7 +1385,8 @@ export function createRoom(platform) {
           const gone = duel ? null : goneView(/** @type {GameState} */ (s), other.data.seat, now);
           send(other, { t: 'present', ...seats, gone });
         }
-        await save(now);
+        show({ t: 'present', ...seats, gone: null }, conn.data.id);
+        if (!corr) await save(now);
       });
     },
 
@@ -926,7 +1396,7 @@ export function createRoom(platform) {
         const s = await ensure();
         const now = platform.now();
         for (const conn of platform.connections()) {
-          if (!conn.data.seat && now >= conn.data.openedAt + LIMITS.helloMs) {
+          if (!conn.data.seat && !conn.data.watch && now >= conn.data.openedAt + LIMITS.helloMs) {
             conn.close(CLOSE.noHello, 'Say which seat first.');
           }
         }
@@ -935,8 +1405,8 @@ export function createRoom(platform) {
           return;
         }
         const expired =
-          now >= s.createdAt + LIMITS.roomAgeMs ||
-          (s.status === 'over' && s.endedAt !== null && now >= s.endedAt + LIMITS.keepAfterEndMs);
+          now >= s.createdAt + roomAgeOf(s) ||
+          (s.status === 'over' && s.endedAt !== null && now >= s.endedAt + keepAfterEndOf(s));
         if (expired) {
           for (const conn of platform.connections())
             conn.close(CLOSE.closed, 'The game is closed.');
@@ -953,7 +1423,10 @@ export function createRoom(platform) {
           if (g.status === 'draft' && g.draft && now >= g.draft.by) {
             startDrafted(g, now);
           } else if (g.status === 'playing') {
-            if (g.firstMoveBy !== null && now >= g.firstMoveBy) {
+            if (g.open && typeof g.openUntil === 'number' && now >= g.openUntil) {
+              // Nobody took the invitation's seat in time.
+              end(g, '*', 'expired', now);
+            } else if (g.firstMoveBy !== null && now >= g.firstMoveBy) {
               end(g, '*', 'no-start', now);
             } else if (g.clock.running && left(g, g.clock.running, now) <= 0) {
               flag(g, g.clock.running, now);

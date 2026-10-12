@@ -54,6 +54,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  /* On a narrow phone the name gives way before the buttons do (see below). */
+  min-width: 0;
   font-weight: 800;
   font-size: 1.05rem;
   color: var(--text);
@@ -63,6 +65,24 @@
 
 .shell__brand:hover {
   color: var(--text);
+}
+
+/* The name shortens, the logo stays, and the link keeps its full name for screen readers. */
+.shell__brand svg {
+  flex: none;
+}
+
+.shell__brand span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The smallest phones with a profile badge as well: the logo alone. */
+@media (max-width: 359px) {
+  .shell__header-inner:has(.shell__profile) .shell__brand span {
+    display: none;
+  }
 }
 
 .shell__nav {
@@ -78,6 +98,7 @@
   text-decoration: none;
   font-weight: 600;
   font-size: 0.95rem;
+  white-space: nowrap;
   transition:
     background var(--transition),
     color var(--transition);
@@ -256,6 +277,21 @@
 
   .shell__footer {
     margin-bottom: 0;
+  }
+}
+
+/* A window just wide enough for the header's links leaves no room for the install button
+   (Settings → App and Home's banner still offer it), and at first not for the name either: the
+   logo stands for it. */
+@media (min-width: 900px) and (max-width: 1199px) {
+  .shell__install {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1079px) {
+  .shell__brand span {
+    display: none;
   }
 }
 

@@ -28,6 +28,7 @@
     "playwright.offline.config.ts",
     "e2e",
     "scripts/**/*.ts",
-    "relay/**/*.ts"
+    "relay/**/*.ts",
+    "src/test/vmGlobals.ts"
   ]
 }

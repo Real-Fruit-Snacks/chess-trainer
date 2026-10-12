@@ -1,0 +1,102 @@
+/* ---------- Human moves ---------- */
+.humanmoves__note {
+  margin: 8px 0 0;
+}
+
+.humanmoves__rating {
+  display: inline-block;
+  width: auto;
+  min-height: 30px;
+  padding: 2px 6px;
+  font-size: 0.85rem;
+}
+
+.humanmoves__trap {
+  margin-top: 8px;
+}
+
+.humanmoves__table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.humanmoves__table th {
+  padding: 4px 6px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.humanmoves__table td {
+  padding: 4px 6px;
+  border-top: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.humanmoves__move {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.humanmoves__move:hover,
+.humanmoves__move:focus-visible {
+  background: var(--surface-2);
+}
+
+.humanmoves__share {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.humanmoves__bar {
+  flex: 1;
+  min-width: 40px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+
+.humanmoves__fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.humanmoves__pct {
+  min-width: 4ch;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.humanmoves__verdict {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+}
+
+@media (pointer: coarse) {
+  .humanmoves__move {
+    min-width: 44px;
+    min-height: 40px;
+  }
+
+  .humanmoves__rating {
+    min-height: 40px;
+  }
+}

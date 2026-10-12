@@ -26,6 +26,8 @@ import { useGames } from '@/store/games';
 import { buildInsights } from '@/features/games/insights';
 import { BackupNudge } from '@/features/progress/BackupNudge';
 import { buildDailyPlan } from './dailyPlan';
+import { hasLearnerActivity, isReturningLearner } from './seenVersion';
+import { WhatsNewCard } from './WhatsNew';
 import './home.css';
 
 const FEATURES = [
@@ -137,12 +139,9 @@ export default function HomePage() {
     document.title = `${siteConfig.name} — ${siteConfig.tagline}`;
   }, []);
 
-  const hasActivity =
-    progress.attempts.length > 0 ||
-    Object.keys(progress.lessons).length > 0 ||
-    progress.games.length > 0;
+  const hasActivity = hasLearnerActivity(progress);
   // Someone who has started gets their day first; the introduction is for newcomers.
-  const returning = hasActivity || progress.onboarded;
+  const returning = isReturningLearner(progress);
   const nextLesson = LESSON_META.find((l) => !progress.lessons[l.id]?.completedAt);
   const minutesLeft = plan.items.filter((i) => !i.done).reduce((sum, i) => sum + i.minutes, 0);
   const moreThan = plan.items.some((i) => !i.done && i.moreThan);
@@ -242,6 +241,9 @@ export default function HomePage() {
           ) : null}
         </section>
       ) : null}
+
+      {/* After the day, never before it: "Today" stays the first heading. */}
+      <WhatsNewCard returning={returning} />
 
       {returning ? (
         <>

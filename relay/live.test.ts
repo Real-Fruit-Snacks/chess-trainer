@@ -5,6 +5,9 @@ import { createRoom, type GameState } from './src/live/room.mjs';
 import { cannotMate, endOf, playUci, replay } from './src/live/rules.mjs';
 import {
   CLOSE,
+  CORRESPONDENCE_DAYS,
+  DAY_MS,
+  isCorrespondence,
   isPlayerName,
   LIMITS,
   parseTimeControl,
@@ -20,15 +23,35 @@ import { Client, type Message, NAME_A, NAME_B, paired, play, seek, world } from 
 
 describe('shared rules', () => {
   it('reads time controls, and only normal ones', () => {
-    expect(parseTimeControl('5+3')).toEqual({ id: '5+3', initialMs: 300_000, incrementMs: 3000 });
+    expect(parseTimeControl('5+3')).toEqual({
+      id: '5+3',
+      kind: 'realtime',
+      initialMs: 300_000,
+      incrementMs: 3000,
+      perMoveMs: null,
+    });
     expect(parseTimeControl('180+180')).not.toBeNull();
+    // Correspondence: days for every move, Lichess's choices only.
+    expect(parseTimeControl('3d')).toEqual({
+      id: '3d',
+      kind: 'correspondence',
+      initialMs: 3 * DAY_MS,
+      incrementMs: 0,
+      perMoveMs: 3 * DAY_MS,
+    });
+    expect(CORRESPONDENCE_DAYS.every((days) => isCorrespondence(`${days}d`))).toBe(true);
+    expect(isCorrespondence('5+3')).toBe(false);
     for (const bad of ['0+1', '05+3', '5+03', '181+0', '5+181', '5', 'x', 5, null]) {
+      expect(parseTimeControl(bad)).toBeNull();
+    }
+    for (const bad of ['0d', '4d', '03d', '30d', 'd', '3 d', '3D']) {
       expect(parseTimeControl(bad)).toBeNull();
     }
   });
 
   it('tells the speed the way Lichess does', () => {
     const speed = (id: string) => speedOf(parseTimeControl(id)!);
+    expect(speed('2d')).toBe('correspondence');
     expect(speed('1+0')).toBe('bullet');
     expect(speed('5+3')).toBe('blitz');
     expect(speed('8+0')).toBe('rapid');
@@ -331,7 +354,37 @@ describe('a game', () => {
     expect(black.last('game')).toMatchObject({
       moves: ['e2e4', 'e7e5', 'g1f3'],
       clock: { white: 293_000, black: 296_000, running: 'black' },
+      // The mover's time after each move, the increment in: what the record writes.
+      clocks: [300_000, 300_000, 293_000],
     });
+  });
+
+  it('keeps each move’s clock through takebacks, and none in correspondence', async () => {
+    const w = world();
+    const game = await paired(w);
+    await play(game, ['e2e4', 'e7e5']);
+    await w.advance(2000);
+    await play(game, ['g1f3'], 2);
+    await w.advance(1000);
+    await play(game, ['b8c6'], 3);
+    await game.white.send({ t: 'hello' });
+    expect(game.white.last('game')).toMatchObject({
+      clocks: [300_000, 300_000, 301_000, 302_000],
+    });
+    await game.white.send({ t: 'takeback', op: 'offer' });
+    await game.black.send({ t: 'takeback', op: 'accept' });
+    await game.white.send({ t: 'hello' });
+    expect(game.white.last('game')).toMatchObject({
+      moves: ['e2e4', 'e7e5'],
+      clocks: [300_000, 300_000],
+    });
+
+    const lobby = new Client((s) => w.hub.openLobby(s));
+    await lobby.send({ t: 'create', game: 'chess', tc: '1d', color: 'white', name: NAME_A });
+    const created = lobby.last('created');
+    const room = new Client((s) => w.hub.openRoom(created?.game as string, s));
+    await room.send({ t: 'hello', seat: created?.seat });
+    expect(room.last('game')).toMatchObject({ clocks: [] });
   });
 
   it('aborts a game nobody starts, and lets either side abort before both have moved', async () => {

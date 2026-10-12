@@ -31,6 +31,8 @@ export interface LevelMoveRequest {
   /** Overrides of the level's own search limits (e.g. when short of time). */
   depth?: number;
   movetime?: number;
+  /** A Chess960 game: the engine plays by its rules (castling as the king onto its rook). */
+  chess960?: boolean;
 }
 
 /**
@@ -62,6 +64,7 @@ export async function chooseLevelMove(
     depth,
     movetime,
     multipv: level.multipv,
+    ...(request.chess960 ? { chess960: true } : {}),
   }).result;
   if (result.stopped) return null;
   if (level.multipv > 1 && result.lines.size > 1) {

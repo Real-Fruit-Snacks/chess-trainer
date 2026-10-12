@@ -1,3 +1,4 @@
+import type { MoveMetadata } from '@lichess-org/chessground/types';
 import { Chess, type Square } from 'chess.js';
 import {
   type ReactNode,
@@ -12,12 +13,20 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { useFocus } from '@/app/focus';
 import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
-import { ClockDisplay } from '@/components/chess/ClockDisplay';
 import { MoveInput } from '@/components/chess/MoveInput';
 import { MoveList } from '@/components/chess/MoveList';
 import { PlayerBar } from '@/components/chess/PlayerBar';
-import { Alert, Badge, Button, Card, ConfirmDialog, Dialog, LinkButton } from '@/components/ui';
-import { isPromotionMove, opposite, toUci, tryNotation } from '@/chess/helpers';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  ConfirmDialog,
+  Dialog,
+  Icon,
+  LinkButton,
+} from '@/components/ui';
+import { opposite, toUci, tryNotation } from '@/chess/helpers';
 import { San } from '@/chess/San';
 import { describeArmy } from '@/features/arcade/army';
 import type { PromotionPiece } from '@/chess/types';
@@ -26,11 +35,14 @@ import { useStackedLayout } from '@/lib/useStackedLayout';
 import { useTicker } from '@/lib/useTicker';
 import { siteConfig } from '@/site.config';
 import { useSettings } from '@/store/settings';
-import { BLINDFOLD_PEEKS } from '../../../relay/src/live/shared.mjs';
+import { BLINDFOLD_PEEKS, isCorrespondence } from '../../../relay/src/live/shared.mjs';
+import { AnalyseTogether } from './AnalyseTogether';
 import { LiveDraftPanel } from './LiveDraft';
+import { DaysLeft, GameAbsent, LiveClockDisplay, PlayerName } from './LiveParts';
+import { WatchGame } from './WatchGame';
 import {
   canAskTakeback,
-  clockRemaining,
+  describeTimeControl,
   endSentence,
   endSummary,
   endTitle,
@@ -38,26 +50,21 @@ import {
   monotonicNow,
   opponentOf,
   sideName,
+  gameLink,
   verdictOf,
+  watchingText,
+  watchLink,
 } from './liveView';
-import { replayMoves } from './liveViewBoard';
+import { chess960Label, replayMoves } from './liveViewBoard';
 import { useLobby } from './lobby';
 import { describeOptions, gameName } from './onlineGames';
 import { PhraseCard } from './PhraseCard';
+import { shareLink } from './share';
 import { getLiveGame } from './sessions';
-import type {
-  LiveClock,
-  LiveGameSession,
-  LiveGameView,
-  LivePlayer,
-  LiveSource,
-  Side,
-} from './types';
+import type { LiveGameSession, LiveGameView, LiveSource, Side } from './types';
 import '@/features/play/play.css';
 import './live.css';
 
-/** Under this much time on your clock, a warning sounds (once a game). */
-const LOW_TIME_MS = 10_000;
 /** No moves for the board while it is not your turn (one Map, so the memoised board stays put). */
 const NO_DESTS = new Map<Square, Square[]>();
 /** How long a blindfold peek shows the pieces. */
@@ -70,53 +77,40 @@ const PEEK_MS = 2000;
  */
 export default function LiveGamePage({ source }: { source: LiveSource }) {
   const { gameId = '' } = useParams();
+  // Taking an invitation's open seat makes this device a player: its board starts afresh.
+  const [joined, setJoined] = useState(0);
   // A rematch is another game on the same route: its page starts afresh.
-  return <LiveGame key={`${source}/${gameId}`} source={source} id={gameId} />;
+  return (
+    <LiveGame
+      key={`${source}/${gameId}/${joined}`}
+      source={source}
+      id={gameId}
+      onJoined={() => setJoined((n) => n + 1)}
+    />
+  );
 }
 
-function LiveGame({ source, id }: { source: LiveSource; id: string }) {
+function LiveGame({
+  source,
+  id,
+  onJoined,
+}: {
+  source: LiveSource;
+  id: string;
+  onJoined: () => void;
+}) {
   const session = useMemo(() => getLiveGame(source, id), [source, id]);
   if (!session) {
-    return source === 'lichess' ? (
+    // A game on the relay without a seat here: someone else's, to watch, or a correspondence
+    // invitation whose open seat this device may take.
+    if (source === 'relay') return <WatchGame id={id} onJoined={onJoined} />;
+    return (
       <GameAbsent title="Not signed in to Lichess" lichess>
         Sign in to Lichess to play your Lichess games here.
-      </GameAbsent>
-    ) : (
-      <GameAbsent title="No seat in this game">
-        This device has no seat in this game. A game belongs to the two players the waiting room
-        paired.
       </GameAbsent>
     );
   }
   return <LiveSession session={session} />;
-}
-
-function GameAbsent({
-  title,
-  children,
-  lichess = false,
-}: {
-  title: string;
-  children: ReactNode;
-  lichess?: boolean;
-}) {
-  useEffect(() => {
-    document.title = `Live game · ${siteConfig.name}`;
-  }, []);
-  return (
-    <div className="narrow">
-      <Card data-testid="live-absent">
-        <h1 className="live-game__absent-title">{title}</h1>
-        <p>{children}</p>
-        <div className="row">
-          <LinkButton variant="primary" to="/play">
-            Back to Play
-          </LinkButton>
-          {lichess ? <LinkButton to="/settings#lichess">Lichess in Settings</LinkButton> : null}
-        </div>
-      </Card>
-    </div>
-  );
 }
 
 function LiveSession({ session }: { session: LiveGameSession }) {
@@ -144,6 +138,7 @@ function LiveSession({ session }: { session: LiveGameSession }) {
 
 /** "Live game", "Army Draft", "Blindfold game": the page's title, under Play. */
 function gameTitle(view: LiveGameView): string {
+  if (isCorrespondence(view.tc)) return 'Correspondence game';
   if (view.game === 'chess') return 'Live game';
   if (view.game === 'blindfold') return 'Blindfold game';
   return gameName(view.game);
@@ -157,7 +152,16 @@ function GameHeader({ view }: { view: LiveGameView }) {
         <Link to="/play">Play</Link> / {view.game === 'chess' ? 'Live game' : gameName(view.game)}
       </p>
       <h1>{gameTitle(view)}</h1>
-      {view.game === 'army' ? (
+      {view.game === 'chess960' ? (
+        <p className="live-game__subtitle-line">
+          {chess960Label(view.startFen)}. Castle by moving the king onto its rook.
+        </p>
+      ) : null}
+      {isCorrespondence(view.tc) ? (
+        <p className="live-game__subtitle-line">
+          {describeTimeControl(view.tc)}: play whenever suits, within the days of each move.
+        </p>
+      ) : view.game === 'army' ? (
         <p className="live-game__subtitle-line">
           {options ? `${options} · ` : ''}
           Kings are free, and nobody castles.
@@ -176,15 +180,24 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
   const stacked = useStackedLayout();
   const movesKey = view.moves.join(' ');
   const position = useMemo(
-    () => replayMoves(movesKey ? movesKey.split(' ') : [], view.startFen),
-    [movesKey, view.startFen],
+    () => replayMoves(movesKey ? movesKey.split(' ') : [], view.startFen, view.game),
+    [movesKey, view.startFen, view.game],
   );
+  const chess960 = view.game === 'chess960';
   const opponent = opponentOf(view);
   const opponentSide = opposite(view.you);
   const playing = view.status === 'playing';
   const closed = view.connection === 'closed';
-  const yourTurn = playing && position.turn === view.you;
+  // Correspondence: days for every move, and an invitation's seat that may still be open.
+  const corr = isCorrespondence(view.tc);
+  const inviting = playing && view.open !== null;
+  const yourTurn = playing && position.turn === view.you && !inviting;
   const canMove = yourTurn && !closed;
+  // Premoves: a move made during the opponent's turn waits and is played the moment theirs
+  // arrives. Not with the pieces hidden, nor over days.
+  const premovesOn = useSettings((s) => s.livePremoves);
+  const premoves =
+    premovesOn && playing && !closed && !inviting && !corr && view.game !== 'blindfold';
   const [flipped, setFlipped] = useState(false);
   const orientation: Side = flipped ? opposite(view.you) : view.you;
   // A promotion being chosen belongs to the position it was started in: once the moves change
@@ -214,8 +227,8 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
       setPeeking(false);
     }, PEEK_MS);
   };
-  // A drafted position has no captured material to count from the usual set.
-  const showMaterial = view.startFen === null;
+  // A drafted position has no captured material to count from the usual set; Chess960 has it.
+  const showMaterial = view.startFen === null || chess960;
   const lastMove = position.history[position.history.length - 1];
 
   useEffect(() => {
@@ -228,7 +241,8 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
   const playFocus = useSettings((s) => s.playFocus);
   const updateSettings = useSettings((s) => s.update);
   const setFocus = useFocus((s) => s.set);
-  const focusOn = playFocus && playing;
+  // Not for a game played over days.
+  const focusOn = playFocus && playing && !corr;
   useEffect(() => {
     setFocus(focusOn);
     return () => setFocus(false);
@@ -269,14 +283,17 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
     playSound('lowTime');
   }, []);
 
-  const onMove = (from: Square, to: Square) => {
+  const onMove = (from: Square, to: Square, meta?: MoveMetadata) => {
     if (!canMove) return;
-    if (isPromotionMove(position.chess, from, to)) {
-      setPromotion({ from, to, at: movesKey });
+    if (position.isPromotion(from, to)) {
+      // A premoved promotion is played at once, so it becomes a queen: there is no time to ask.
+      if (meta?.premove) session.move(`${from}${to}q`);
+      else setPromotion({ from, to, at: movesKey });
       return;
     }
     // Castling arrives as the king's two-square move (the board turns a king dropped on its rook
-    // into that), which is what the relay and Lichess expect.
+    // into that), which is what the relay and Lichess expect; in Chess960 as the king onto its
+    // rook, which is what the room expects there.
     session.move(`${from}${to}`);
   };
 
@@ -298,23 +315,31 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
   const playerBar = (side: Side) => {
     const player = side === 'white' ? view.white : view.black;
     const you = side === view.you;
+    // Over days a player away is no news: they come back to move.
+    const left = !you && playing && !corr && !view.opponentPresent;
     return (
       <PlayerBar
         name={
-          <PlayerName player={player} you={you} left={!you && playing && !view.opponentPresent} />
+          view.open === side ? (
+            <span className="live-game__player muted">Your friend, once they join</span>
+          ) : (
+            <PlayerName player={player} you={you} left={left} />
+          )
         }
         color={side}
         fen={position.fen}
         showMaterial={showMaterial}
         extra={
-          view.clock ? (
+          !view.clock ? null : corr ? (
+            <DaysLeft clock={view.clock} side={side} live={playing} />
+          ) : (
             <LiveClockDisplay
               clock={view.clock}
               side={side}
               live={playing}
               onLow={you ? onLowTime : undefined}
             />
-          ) : null
+          )
         }
       />
     );
@@ -385,8 +410,10 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
               fen={position.fen}
               orientation={orientation}
               turnColor={position.turn}
-              movableColor={canMove ? view.you : undefined}
+              movableColor={canMove || premoves ? view.you : undefined}
               dests={canMove ? position.dests : NO_DESTS}
+              chess960={chess960}
+              premovable={premoves}
               lastMove={position.lastMove}
               check={position.check}
               onMove={onMove}
@@ -433,12 +460,22 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
           <Card>
             <div className="row row--between">
               <h2 className="live-game__title">
-                {opponent.name} · {view.tc}
+                {inviting ? 'Your invitation' : opponent.name} ·{' '}
+                {corr ? describeTimeControl(view.tc) : view.tc}
               </h2>
               <Badge tone={view.rated ? 'accent' : 'neutral'}>
-                {view.rated ? 'Rated on Lichess' : 'Casual'}
+                {view.rated ? 'Rated on Lichess' : corr ? 'Correspondence' : 'Casual'}
               </Badge>
             </div>
+            {/* The start position by number, here too: a phone held upright hides the header's. */}
+            {chess960 ? (
+              <p
+                className="small muted live-game__armies live-game__variant"
+                data-testid="live-variant"
+              >
+                {chess960Label(view.startFen)}
+              </p>
+            ) : null}
             {view.game === 'army' && view.draft ? (
               <p className="small muted live-game__armies" data-testid="live-armies">
                 {[view.you, opponentSide]
@@ -459,6 +496,37 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
             >
               {statusLine(view, position.turn, opponent.name)}
             </p>
+            {inviting ? (
+              <div className="live-game__invite" data-testid="live-invite">
+                <p className="small">
+                  Send your friend this game’s link: it opens the game for them, in the app, and the
+                  first to take the other seat plays you. It waits a week.
+                </p>
+                <div className="row">
+                  <Button
+                    variant="primary"
+                    onClick={() =>
+                      void shareLink(
+                        gameLink(view.id),
+                        chess960
+                          ? 'Play me: a Chess960 correspondence game'
+                          : 'Play me: a correspondence game',
+                        'Link copied.',
+                      )
+                    }
+                  >
+                    <Icon name="link" size={18} />
+                    <span>Copy the link</span>
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            {view.watchers > 0 ? (
+              <p className="small muted live-game__watchers" data-testid="live-watchers">
+                <Icon name="eye" size={16} className="live-game__watchers-icon" />
+                <span>{watchingText(view.watchers)}</span>
+              </p>
+            ) : null}
             <div className="play__actions">
               {playing && view.moves.length >= 2 ? (
                 <>
@@ -478,19 +546,36 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
                   ) : null}
                 </>
               ) : null}
+              {playing && !inviting && view.source === 'relay' ? (
+                <Button
+                  onClick={() =>
+                    void shareLink(
+                      watchLink(view.id),
+                      `Watch ${view.white.name} v ${view.black.name}`,
+                      'Watch link copied.',
+                    )
+                  }
+                  data-testid="live-watch-link"
+                >
+                  <Icon name="eye" size={18} />
+                  <span>Copy watch link</span>
+                </Button>
+              ) : null}
               <Button onClick={() => setFlipped((f) => !f)}>Flip</Button>
-              <Button
-                onClick={() => updateSettings({ playFocus: !playFocus })}
-                aria-pressed={playFocus}
-                title="Hide the header and navigation while a game is on"
-                data-testid="focus-toggle"
-              >
-                Focus
-              </Button>
+              {corr ? null : (
+                <Button
+                  onClick={() => updateSettings({ playFocus: !playFocus })}
+                  aria-pressed={playFocus}
+                  title="Hide the header and navigation while a game is on"
+                  data-testid="focus-toggle"
+                >
+                  Focus
+                </Button>
+              )}
               {playing ? (
                 view.moves.length < 2 ? (
                   <Button variant="danger" onClick={() => session.abort()} disabled={closed}>
-                    Abort
+                    {inviting ? 'Call off the invitation' : 'Abort'}
                   </Button>
                 ) : (
                   <Button variant="danger" onClick={() => setConfirmResign(true)} disabled={closed}>
@@ -500,6 +585,11 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
               ) : null}
             </div>
             {!playing ? <div className="play__actions">{endActions}</div> : null}
+            {!playing && view.analysis?.by === opponentSide ? (
+              <p className="small" role="status">
+                {opponent.name} is analysing the game: join them.
+              </p>
+            ) : null}
             {view.error ? (
               <p className="small live-game__error" role="alert">
                 {view.error}
@@ -567,6 +657,11 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
         {view.offers.rematch === opponentSide && !view.next ? (
           <p className="muted">{opponent.name} wants a rematch.</p>
         ) : null}
+        {view.analysis?.by === opponentSide ? (
+          <p className="muted" data-testid="live-analysis-offer">
+            {opponent.name} is analysing the game: join them.
+          </p>
+        ) : null}
       </Dialog>
     </div>
   );
@@ -577,43 +672,8 @@ function statusLine(view: LiveGameView, turn: Side, opponentName: string): strin
   if (view.connection === 'reconnecting') return 'Reconnecting…';
   if (view.connection === 'connecting') return 'Connecting…';
   if (view.connection === 'closed') return 'The connection to this game has closed.';
+  if (view.open) return 'Waiting for your friend to take the other seat';
   return turn === view.you ? 'Your move' : `${opponentName} to move`;
-}
-
-function PlayerName({ player, you, left }: { player: LivePlayer; you: boolean; left: boolean }) {
-  return (
-    // The spaces between the parts are for screen readers and copied text; the flex gap spaces
-    // them on screen.
-    <span className="live-game__player">
-      {player.title ? <span className="live-game__ptitle">{player.title}</span> : null}{' '}
-      <span>{player.name}</span>
-      {you ? <span className="sr-only"> (you)</span> : null}{' '}
-      {player.rating !== null ? <span className="live-game__rating">{player.rating}</span> : null}{' '}
-      {left ? <Badge tone="warning">Left</Badge> : null}
-    </span>
-  );
-}
-
-/** One side's clock: only the running one ticks (five times a second, with the shared ticker). */
-function LiveClockDisplay({
-  clock,
-  side,
-  live,
-  onLow,
-}: {
-  clock: LiveClock;
-  side: Side;
-  live: boolean;
-  onLow?: () => void;
-}) {
-  const running = live && clock.running === side;
-  useTicker(running);
-  const ms = clockRemaining(clock, side, running ? monotonicNow() : clock.at);
-  const low = running && ms <= LOW_TIME_MS;
-  useEffect(() => {
-    if (low) onLow?.();
-  }, [low, onLow]);
-  return <ClockDisplay ms={ms} running={running} lowTimeMs={LOW_TIME_MS} />;
 }
 
 function FirstMoveNotice({ firstMove }: { firstMove: { color: Side; deadline: number } }) {
@@ -732,6 +792,7 @@ function EndActions({
   return (
     <>
       {recorded ? <LinkButton to="/games">Review in My games</LinkButton> : null}
+      <AnalyseTogether session={session} view={view} />
       <LinkButton to="/play">New opponent</LinkButton>
       {view.source === 'lichess' && view.url ? (
         <a className="btn btn--primary" href={view.url} target="_blank" rel="noreferrer">

@@ -28,11 +28,15 @@ import {
   parseTimeControl,
   QUICK_TIME_CONTROLS,
 } from '../../../relay/src/live/shared.mjs';
+import { type CorrespondenceGame, useCorrespondence, yourMove } from './correspondence';
 import { GameDialog } from './GameDialog';
 import { lichessSeekAllowed, reconnectLichessForLive } from './lichessLive';
 import {
+  daysAMove,
   describeTimeControl,
+  endTitle,
   formatElapsed,
+  formatTimeLeft,
   joinLink,
   lichessStatus,
   othersHere,
@@ -43,6 +47,7 @@ import {
 import { useLobby } from './lobby';
 import { describeSeek, gameNoun, ONLINE_GAMES, onlineGame } from './onlineGames';
 import { useLivePrefs } from './prefs';
+import { checkOnCorrespondence, liveGamePath } from './sessions';
 import type { ColorChoice, GameKind, LobbyConnection, MySeek } from './types';
 import './live.css';
 
@@ -78,13 +83,18 @@ export default function PlayHubPage() {
 
 function PlayHub() {
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const connection = useLobby((s) => s.connection);
   const mine = useLobby((s) => s.mine);
   const pairing = useLobby((s) => s.pairing);
+  const invited = useLobby((s) => s.invited);
   const notice = useLobby((s) => s.notice);
+  const correspondence = useCorrespondence((s) => s.games);
   /** The game dialog: a game's own Play, or an invitation (null: closed). */
-  const [dialog, setDialog] = useState<{ kind: GameKind; invite: boolean } | null>(null);
+  const [dialog, setDialog] = useState<{ kind: GameKind; invite: boolean; room?: boolean } | null>(
+    null,
+  );
 
   useEffect(() => {
     document.title = `Play · ${siteConfig.name}`;
@@ -92,6 +102,16 @@ function PlayHub() {
 
   // The waiting room stays connected while this page shows (and while a game is posted).
   useEffect(() => useLobby.getState().watch(), []);
+
+  // The correspondence games, as their rooms have them now.
+  useEffect(() => checkOnCorrespondence(), []);
+
+  // The bar's "See them" leads to their card.
+  const listed = correspondence.length > 0;
+  useEffect(() => {
+    if (hash !== '#correspondence' || !listed) return;
+    document.getElementById('correspondence')?.scrollIntoView?.({ block: 'start' });
+  }, [hash, listed]);
 
   // A shared link (?join=<id>) joins its game once; a link from the arcade (?play=<game>) opens
   // that game's dialog. Either way the address bar is left clean, so a reload does neither again.
@@ -109,6 +129,8 @@ function PlayHub() {
       return;
     }
     if (isGame(play)) setDialog({ kind: play, invite: false });
+    // A race room (from quick search): the race's dialog, a room for up to eight chosen.
+    else if (play === 'race-room') setDialog({ kind: 'race', invite: false, room: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
   }, []);
 
@@ -118,6 +140,13 @@ function PlayHub() {
     void navigate(pairing.path);
     useLobby.getState().clearPairing();
   }, [pairing, navigate]);
+
+  // An invitation made: to its board, where the link to send is.
+  useEffect(() => {
+    if (!invited) return;
+    void navigate(invited.path);
+    useLobby.getState().clearInvited();
+  }, [invited, navigate]);
 
   const openGame = (kind: GameKind) => setDialog({ kind, invite: false });
   const invite = () => setDialog({ kind: 'chess', invite: true });
@@ -145,7 +174,7 @@ function PlayHub() {
           </Alert>
         ) : null}
 
-        <div className="hub">
+        <div className={correspondence.length > 0 ? 'hub hub--corr' : 'hub'}>
           <div className="hub__person">
             {mine ? (
               <WaitingCard mine={mine} />
@@ -153,6 +182,7 @@ function PlayHub() {
               <QuickPlayCard connection={connection} onInvite={invite} />
             )}
           </div>
+          {correspondence.length > 0 ? <CorrespondenceCard games={correspondence} /> : null}
           <ComputerCard />
           <OpenGamesCard connection={connection} posted={!!mine} />
           <GamesForTwo onPlay={openGame} disabled={connection === 'unavailable'} />
@@ -164,6 +194,7 @@ function PlayHub() {
         open={dialog !== null}
         kind={dialog?.kind ?? 'chess'}
         invite={dialog?.invite ?? false}
+        room={dialog?.room ?? false}
         onClose={() => setDialog(null)}
       />
     </div>
@@ -515,6 +546,70 @@ function WaitingCard({ mine }: { mine: MySeek }) {
           </Alert>
         </div>
       ) : null}
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Correspondence                                                     */
+/* ------------------------------------------------------------------ */
+
+/** A correspondence game's line: whose move and the time left, or how it ended. */
+function corrStatus(game: CorrespondenceGame): string {
+  const days = `${game.chess960 ? 'Chess960 · ' : ''}${daysAMove(game.tc) ?? game.tc}`;
+  if (game.status === 'waiting') return `Waiting for your friend to take the other seat · ${days}`;
+  if (game.status === 'over') return game.verdict ? endTitle(game.verdict) : 'Over';
+  const whose = yourMove(game) ? 'Your move' : 'Their move';
+  const left =
+    game.deadline !== null ? ` · ${formatTimeLeft(game.deadline - Date.now())} left` : '';
+  return `${whose}${left} · ${days}`;
+}
+
+function CorrespondenceCard({ games }: { games: readonly CorrespondenceGame[] }) {
+  return (
+    <Card
+      as="section"
+      id="correspondence"
+      aria-labelledby="live-corr-title"
+      className="hub__corr"
+      data-testid="live-corr"
+    >
+      <div className="hub__head">
+        <span className="hub__icon">
+          <Icon name="mail" size={22} />
+        </span>
+        <h2 id="live-corr-title" className="live__title">
+          Your correspondence games
+        </h2>
+      </div>
+      <ul className="live__seeks" role="list">
+        {games.map((game) => {
+          const mine = yourMove(game);
+          return (
+            <li key={game.id} className="live__seek" data-testid="live-corr-game">
+              <span className="live__seek-who">
+                <span className="live__seek-name">{game.opponent || 'Your invitation'}</span>
+              </span>
+              <span className={`live__seek-what small${mine ? ' live__corr-turn' : ' muted'}`}>
+                {corrStatus(game)}
+              </span>
+              <LinkButton
+                size="sm"
+                variant={mine ? 'primary' : undefined}
+                className="live__seek-join"
+                to={liveGamePath('relay', game.id)}
+                aria-label={
+                  game.opponent
+                    ? `${mine ? 'Play your move' : 'Open the game'} against ${game.opponent}`
+                    : 'Open your invitation'
+                }
+              >
+                {mine ? 'Play' : 'Open'}
+              </LinkButton>
+            </li>
+          );
+        })}
+      </ul>
     </Card>
   );
 }

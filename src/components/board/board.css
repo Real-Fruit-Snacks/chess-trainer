@@ -257,3 +257,56 @@
 .board__dragtarget--square {
   background: rgba(20, 85, 30, 0.28);
 }
+
+/* ---------- Premoves (live games) ---------- */
+/* A premove waiting for its turn: both squares tinted and ringed, so it reads apart from the last
+   move without relying on the colour alone. Blue on most boards; rust on the blue ones, where
+   blue would vanish; the Okabe–Ito reddish purple on the high-contrast board. */
+.board {
+  --premove-fill: rgba(36, 64, 160, 0.42);
+  --premove-ring: rgba(20, 38, 120, 0.9);
+  --premove-dot: rgba(36, 64, 160, 0.6);
+}
+
+.board--theme-blue,
+.board--theme-blue2,
+.board--theme-blue3,
+.board--theme-canvas,
+.board--theme-blue-marble,
+.board--theme-ice {
+  --premove-fill: rgba(176, 74, 36, 0.45);
+  --premove-ring: rgba(120, 44, 16, 0.9);
+  --premove-dot: rgba(176, 74, 36, 0.65);
+}
+
+.board--theme-contrast {
+  --premove-fill: rgba(204, 121, 167, 0.8);
+  --premove-ring: rgba(96, 30, 74, 1);
+  --premove-dot: rgba(204, 121, 167, 0.95);
+}
+
+.board cg-board square.current-premove {
+  background: var(--premove-fill);
+  box-shadow: inset 0 0 0 max(2px, 0.5cqw) var(--premove-ring);
+}
+
+.board cg-board square.premove-dest {
+  background: radial-gradient(var(--premove-dot) 22%, transparent 24%);
+}
+
+.board cg-board square.oc.premove-dest {
+  background: radial-gradient(transparent 0%, transparent 78%, var(--premove-dot) 80%);
+}
+
+.board cg-board square.premove-dest:hover,
+.board cg-board square.premove-dest.hover {
+  background: var(--premove-fill);
+}
+
+@media (forced-colors: active) {
+  .board cg-board square.current-premove {
+    forced-color-adjust: none;
+    background: Highlight;
+    box-shadow: inset 0 0 0 3px CanvasText;
+  }
+}

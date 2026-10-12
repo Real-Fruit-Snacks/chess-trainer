@@ -44,6 +44,12 @@ function PlayCard() {
           description="Skips the promotion menu."
         />
         <Switch
+          checked={settings.livePremoves}
+          onChange={(v) => settings.update({ livePremoves: v })}
+          label="Premoves in live games"
+          description="Against a person, make your next move while they think: it is played the moment they have moved, and a promotion becomes a queen. Click elsewhere or press Escape to cancel it. Not in blindfold games."
+        />
+        <Switch
           checked={settings.puzzleAutoNext}
           onChange={(v) => settings.update({ puzzleAutoNext: v })}
           label="Auto-advance puzzles"

@@ -17,8 +17,10 @@ import { siteConfig } from '@/site.config';
 import { useSettings } from '@/store/settings';
 import { ArbiterDuelRound } from './duel/ArbiterDuelRound';
 import { JudgeDuelRound } from './duel/JudgeDuelRound';
-import { RaceRound } from './duel/RaceRound';
-import { TimedRace } from './duel/TimedRace';
+import { CountdownOverlay, PhaseClock } from './duel/PhaseClock';
+import { DuelRaceStatus, RaceRound } from './duel/RaceRound';
+import { DuelLanes, TimedRace } from './duel/TimedRace';
+import { raceItems } from './duelRounds';
 import {
   duelEndSentence,
   duelEndSummary,
@@ -194,10 +196,43 @@ function DuelScreen({ session, view }: { session: DuelSession; view: DuelView })
 
   const overlay = <PhaseOverlay view={view} opponentName={opponent.name} />;
   const roundProps = { view, session, overlay, opponentName: opponent.name };
+  const phase = view.status === 'playing' ? view.phase : null;
   const board = timed ? (
-    <TimedRace {...roundProps} />
+    <TimedRace
+      items={raceItems(view.items)}
+      phase={phase}
+      progress={view.progress?.[view.you] ?? null}
+      orientation={view.you}
+      onReport={(report) => session.report(report)}
+      overlay={overlay}
+    >
+      {(mine) => (
+        <DuelLanes
+          mine={mine}
+          theirs={view.progress?.[them] ?? null}
+          live={phase === 'live'}
+          opponentName={opponent.name}
+        />
+      )}
+    </TimedRace>
   ) : view.game === 'race' ? (
-    <RaceRound key={view.round} {...roundProps} />
+    <RaceRound
+      key={view.round}
+      puzzle={raceItems(view.items)[view.round] ?? null}
+      phase={phase}
+      reported={view.mine !== null}
+      orientation={view.you}
+      onResult={(result) => session.report({ round: view.round, ...result })}
+      overlay={overlay}
+      status={(solving, solver) => (
+        <DuelRaceStatus
+          view={view}
+          solving={solving}
+          solver={solver}
+          opponentName={opponent.name}
+        />
+      )}
+    />
   ) : view.game === 'arbiter' ? (
     <ArbiterDuelRound key={view.round} {...roundProps} />
   ) : (
@@ -369,19 +404,6 @@ function statusLine(view: DuelView, opponentName: string): string {
   return `${round} is on.`;
 }
 
-/** The time left in the round on, ticking. */
-function PhaseClock({ ends, label }: { ends: number; label: string }) {
-  useTicker(true);
-  return (
-    <p className="duel__clock">
-      <span className="small muted">{label}</span>{' '}
-      <span className="duel__clock-time" role="timer">
-        {formatCountdown(ends - monotonicNow())}
-      </span>
-    </p>
-  );
-}
-
 /**
  * What covers the board between rounds: the wait before the duel starts, and
  * the countdown before each round.
@@ -389,21 +411,14 @@ function PhaseClock({ ends, label }: { ends: number; label: string }) {
 function PhaseOverlay({ view, opponentName }: { view: DuelView; opponentName: string }) {
   const counting = view.status === 'playing' && view.phase === 'countdown';
   const setup = view.status === 'setup';
-  useTicker(counting || (setup && view.setupDeadline !== null));
+  useTicker(setup && view.setupDeadline !== null);
   if (counting && view.phaseEnds !== null) {
-    const left = Math.max(1, Math.ceil((view.phaseEnds - monotonicNow()) / 1000));
     const timed = view.game === 'race' && view.opts.format === 'timed';
     return (
-      <div className="trainer__overlay duel__overlay" data-testid="duel-countdown">
-        <div className="duel__countdown">
-          <span className="duel__countdown-round">
-            {timed ? 'The race starts in' : roundLabel(view, view.round)}
-          </span>
-          <span className="duel__countdown-number" aria-hidden="true">
-            {left}
-          </span>
-        </div>
-      </div>
+      <CountdownOverlay
+        ends={view.phaseEnds}
+        label={timed ? 'The race starts in' : roundLabel(view, view.round)}
+      />
     );
   }
   if (!setup) return null;

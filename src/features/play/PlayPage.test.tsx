@@ -497,3 +497,91 @@ describe('PlayPage', () => {
     expect(within(alert).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });
+
+describe('PlayPage in Chess960', () => {
+  beforeEach(() => {
+    useProgress.getState().resetAll();
+    useSettings.getState().reset();
+    board.props = null;
+    engineState.status = 'ready';
+    engineState.error = null;
+    maiaFiles.state.downloaded = true;
+    sessionStorage.clear();
+  });
+
+  /** The open setup dialog (a test fails plainly when it is not there). */
+  const setupDialog = (): HTMLElement => {
+    const dialog = openDialog('New game');
+    if (!dialog) throw new Error('The setup dialog is not open');
+    return dialog;
+  };
+  const boardChess960 = () => (board.props as { chess960?: boolean } | null)?.chess960;
+
+  it('turns off what is standard chess only, and names the start position on the page', async () => {
+    useSettings
+      .getState()
+      .update({ playCoach: true, playBlunderCheck: true, playOpponent: 'humanlike' });
+    renderPlay('/play/computer');
+    const setup = setupDialog();
+    const game = within(setup).getByLabelText('Game');
+    expect(game).toHaveValue('standard');
+    fireEvent.change(game, { target: { value: 'chess960' } });
+    // Maia plays standard chess only: the engine takes her place, and her option says why.
+    expect(within(setup).getByLabelText('Opponent')).toHaveValue('engine');
+    const maia = within(setup).getByRole('option', {
+      name: 'A human-like opponent (Maia) — standard chess only',
+    });
+    expect(maia).toBeDisabled();
+    for (const name of ['Coach mode', 'Blunder check']) {
+      const toggle = within(setup).getByRole('switch', { name });
+      expect(toggle).not.toBeChecked();
+      expect(toggle).toBeDisabled();
+    }
+    expect(within(setup).getByTestId('book-select')).toBeDisabled();
+    expect(setup).toHaveTextContent('Castle by moving your king onto its rook.');
+    expect(setup).toHaveTextContent(
+      'Coach mode, the blunder check, opening practice and Maia are for standard chess, so they are off.',
+    );
+    // The settings themselves are kept for standard games.
+    expect(useSettings.getState().playCoach).toBe(true);
+
+    fireEvent.click(within(setup).getByRole('button', { name: 'Start' }));
+    await nextTask();
+    expect(useSettings.getState().playVariant).toBe('chess960');
+    expect(screen.getByTestId('play-variant').textContent).toMatch(/^Chess960 · position \d+$/);
+    expect(boardChess960()).toBe(true);
+    expect(screen.queryByText(/Coach on/)).toBeNull();
+    expect(screen.queryByText(/Blunder check on/)).toBeNull();
+  });
+
+  it('plays a handed-over Chess960 position: castling, the PGN and the hand-off to analysis', async () => {
+    const fen = 'bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1';
+    renderPlay(`/play/computer?fen=${encodeURIComponent(fen)}&variant=chess960&color=white`);
+    const setup = setupDialog();
+    expect(setup).toHaveTextContent('Starting from Chess960 position 274.');
+    // The position decides the game: no choice to make.
+    expect(within(setup).queryByLabelText('Game')).toBeNull();
+    fireEvent.click(within(setup).getByRole('button', { name: 'Start' }));
+    await nextTask();
+    expect(screen.getByTestId('play-variant')).toHaveTextContent('Chess960 · position 274');
+    // A handed-over position does not change the next game's kind.
+    expect(useSettings.getState().playVariant).toBe('standard');
+    // The king dropped on its rook castles.
+    act(() => board.props?.onMove?.('d1', 'c1'));
+    await nextTask();
+    expect(screen.getByLabelText('Move list')).toHaveTextContent('O-O-O');
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze game' }));
+    await nextTask();
+    const pgn = readHandoff()?.pgn ?? '';
+    expect(pgn).toContain('[Variant "Chess960"]');
+    expect(pgn).toContain('[SetUp "1"]');
+    expect(pgn).toContain(`[FEN "${fen}"]`);
+    expect(pgn).toContain('1. O-O-O');
+  });
+
+  it('remembers the choice and offers it again', () => {
+    useSettings.getState().update({ playVariant: 'chess960' });
+    renderPlay('/play/computer');
+    expect(within(setupDialog()).getByLabelText('Game')).toHaveValue('chess960');
+  });
+});

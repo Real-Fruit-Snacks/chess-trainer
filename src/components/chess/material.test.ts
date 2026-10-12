@@ -25,3 +25,11 @@ describe('captured material', () => {
     expect(capturedMaterial(UNEVEN, 'white', 'difference').captured).toEqual(['knight', 'pawn']);
   });
 });
+
+describe('capturedMaterial in Chess960', () => {
+  it('reads a position whose castling rights chess.js would refuse', () => {
+    // Castling rights by file (the castling rook is not the outermost one).
+    const fen = 'rk5r/pppppppp/8/8/8/8/PPPPPPP1/RK2R2R w E - 0 1';
+    expect(capturedMaterial(fen, 'black', 'difference')).toEqual({ captured: ['pawn'], diff: -4 });
+  });
+});

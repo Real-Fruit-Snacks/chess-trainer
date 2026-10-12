@@ -3,9 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DrawShape } from '@/components/board/Board';
 import { type BlunderWarning, checkBlunder } from '@/chess/blunderCheck';
 import {
+  chess960Number,
+  chess960UciToSan,
+  normalizeChess960Fen,
+  randomChess960,
+} from '@/chess/chess960';
+import {
   canStillMate,
   isPromotionMove,
   isValidFen,
+  normalizeFen,
   parseUci,
   START_FEN,
   toUci,
@@ -14,7 +21,8 @@ import {
   uciToSan,
 } from '@/chess/helpers';
 import type { Fen, LongColor, MoveInput, PromotionPiece, Uci } from '@/chess/types';
-import { useChess } from '@/chess/useChess';
+import { type UseChess, useChess } from '@/chess/useChess';
+import { type UseChess960, useChess960 } from '@/chess/useChess960';
 import { ENGINE_LEVELS, type EngineLevel, getLevel } from '@/engine/levels';
 import { humanThinkMs, sampleHumanMove } from '@/engine/maia/encoding';
 import { maiaClient, type MaiaStatus, useMaiaStatus } from '@/engine/maia/maiaClient';
@@ -35,7 +43,7 @@ import { gameEndSound, playSound } from '@/lib/sound';
 import { type GameRecordSource, useProgress } from '@/store/progress';
 import { cardsFor, useRepertoire } from '@/store/repertoire';
 import { chooseLevelMove, ensureSkill, type SkillCache } from './engineMove';
-import { type PlayOpponent, useSettings } from '@/store/settings';
+import { type PlayOpponent, type PlayVariant, useSettings } from '@/store/settings';
 import {
   type BookDeviation,
   type BookState,
@@ -64,6 +72,9 @@ export interface GameOver {
  * person at the same device.
  */
 export type Opponent = PlayOpponent;
+
+/** The game on the board: standard chess on chess.js, or Chess960. */
+export type PlayGame = UseChess | UseChess960;
 
 export interface GameSetup {
   color: LongColor | 'random';
@@ -94,6 +105,13 @@ export interface GameSetup {
   source?: GameRecordSource;
   /** What the mode calls the game, e.g. "Odds Ladder · queen odds" (also the PGN Event). */
   event?: string;
+  /**
+   * Standard chess (the default) or Chess960, from a random start position —
+   * or from `fen`, a Chess960 position. Coach mode, the blunder check, opening
+   * practice and the human-like opponent are for standard chess: a Chess960
+   * game is played against the engine without them.
+   */
+  variant?: PlayVariant;
 }
 
 /** Where the game stands with respect to the practised repertoire. */
@@ -127,7 +145,11 @@ export interface HintMove {
 }
 
 export interface UsePlayVsEngine {
-  game: ReturnType<typeof useChess>;
+  game: PlayGame;
+  /** Standard chess or Chess960. */
+  variant: PlayVariant;
+  /** A Chess960 game that began from one of the 960 start positions: its number (0–959). */
+  chess960Position: number | null;
   /** Who plays the other side: the engine, the human-like opponent or a second person (hot-seat). */
   opponent: Opponent;
   playerColor: LongColor;
@@ -218,7 +240,12 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const settings = useSettings();
   const recordGame = useProgress((s) => s.recordGame);
 
-  const game = useChess(START_FEN, { autoQueen });
+  const standard = useChess(START_FEN, { autoQueen });
+  const fischer = useChess960({ autoQueen });
+  const [variant, setVariant] = useState<PlayVariant>('standard');
+  const [chess960Position, setChess960Position] = useState<number | null>(null);
+  const chess960 = variant === 'chess960';
+  const game: PlayGame = chess960 ? fischer : standard;
   const { engine, status: engineStatus, error: engineError, start: startEngine } = useEngine();
 
   const [playerColor, setPlayerColor] = useState<LongColor>('white');
@@ -284,6 +311,17 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const recordedRef = useRef(false);
   const gameRef = useRef(game);
   gameRef.current = game;
+  /** The variant being played, for callbacks that ask the engine (its rules follow the game's). */
+  const variantRef = useRef(variant);
+  variantRef.current = variant;
+  /**
+   * The live position for chess.js's read-only questions, such as who can still mate. A Chess960
+   * position reads the same without its castling rights, the one rule that differs.
+   */
+  const liveChess = useCallback((): Chess => {
+    const current = gameRef.current;
+    return 'chess' in current ? current.chess() : new Chess(normalizeFen(current.game().fen()));
+  }, []);
   /** The latest result, for handlers that may run from a render or two ago. */
   const gameOverRef = useRef(gameOver);
   gameOverRef.current = gameOver;
@@ -324,9 +362,11 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     if (hotSeat && autoFlip && started && !gameOver) setOrientation(position.turn);
   }, [hotSeat, autoFlip, started, gameOver, position.turn]);
 
+  // Opening practice is standard chess: the book follows the standard game's moves.
+  const standardHistory = standard.position.history;
   const bookNow = useMemo(
-    () => (bookBase ? followBook(bookBase, position.history) : null),
-    [bookBase, position.history],
+    () => (bookBase && !chess960 ? followBook(bookBase, standardHistory) : null),
+    [bookBase, chess960, standardHistory],
   );
   const book: BookInfo | null = bookNow
     ? {
@@ -410,7 +450,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
         if (gameRef.current.pendingPromotion) gameRef.current.resolvePromotion(null);
         const winner: LongColor = lost === 'white' ? 'black' : 'white';
         // A flag against a side that cannot mate any more is a draw (FIDE 6.9).
-        const decisive = canStillMate(gameRef.current.chess(), winner);
+        const decisive = canStillMate(liveChess(), winner);
         const verdict: GameOver['verdict'] = !decisive
           ? 'draw'
           : winner === playerColor
@@ -437,7 +477,17 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       syncClockView();
     }, 100);
     return () => window.clearInterval(id);
-  }, [hasClock, started, gameOver, clockView.running, engine, playerColor, hotSeat, syncClockView]);
+  }, [
+    hasClock,
+    started,
+    gameOver,
+    clockView.running,
+    engine,
+    playerColor,
+    hotSeat,
+    syncClockView,
+    liveChess,
+  ]);
 
   // After every move, press the clock for the side that just moved.
   const lastPliesRef = useRef(0);
@@ -508,7 +558,16 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       reason: gameOver.reason,
       plies: position.history.length,
       pgn: gameRef.current.pgn(
-        pgnHeaders(playerColor, level, timeControl, gameOver.result, opponent, event, humanRating),
+        pgnHeaders(
+          playerColor,
+          level,
+          timeControl,
+          gameOver.result,
+          opponent,
+          event,
+          humanRating,
+          variantRef.current === 'chess960',
+        ),
       ),
       source: humanlike ? 'humanlike' : bookNow ? 'book' : source,
       ...(event ? { event } : {}),
@@ -621,13 +680,17 @@ export function usePlayVsEngine(): UsePlayVsEngine {
         fen,
         moves: movesUci,
         legal: gameRef.current.position.dests,
-        pieceAt: (square) => gameRef.current.chess().get(square),
+        pieceAt: (square) => {
+          const current = gameRef.current;
+          return 'chess' in current ? current.chess().get(square) : current.game().pieceAt(square);
+        },
         depth,
         movetime,
+        ...(chess960 ? { chess960: true } : {}),
       });
       return uci ? { uci, thinkMs: MIN_THINK_MS } : null;
     },
-    [client, level, hasClock, engineColor, humanlike, humanRating],
+    [client, level, hasClock, engineColor, humanlike, humanRating, chess960],
   );
 
   const evaluateForCoach = useCallback(
@@ -765,12 +828,15 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       book: nextBook,
       source: nextSource = 'play',
       event: nextEvent,
+      variant: nextVariant = 'standard',
     }: GameSetup) => {
       engine().stop();
       searchIdRef.current++;
-      // A repertoire decides the colour and the opponent; the book only makes sense from the start.
+      const fischerGame = nextVariant === 'chess960';
+      // A repertoire decides the colour and the opponent; the book only makes sense from the start
+      // of a standard game.
       let bookState: BookState | null = null;
-      if (nextBook && nextOpponent !== 'human' && !fen) {
+      if (nextBook && nextOpponent !== 'human' && !fen && !fischerGame) {
         try {
           bookState = createBook(nextBook);
         } catch (err) {
@@ -791,18 +857,22 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       setSource(nextSource);
       setEvent(nextEvent);
       const control = getTimeControl(nextTc);
-      setOpponent(nextOpponent);
+      // The human-like opponent knows standard chess only: Chess960 is the engine's game.
+      const opponentNow: Opponent =
+        fischerGame && nextOpponent === 'humanlike' ? 'engine' : nextOpponent;
+      setOpponent(opponentNow);
       if (isHumanRating(nextHumanRating)) setHumanRating(nextHumanRating);
       setAutoFlip(nextAutoFlip);
       // The coach needs the engine free between moves and no clock to run down. Against the
-      // human-like opponent it judges with Stockfish all the same.
-      setCoach(nextCoach && nextOpponent !== 'human' && control.initialMs === 0);
+      // human-like opponent it judges with Stockfish all the same. Like the blunder check, it
+      // knows standard chess only.
+      setCoach(nextCoach && !fischerGame && opponentNow !== 'human' && control.initialMs === 0);
       setCoachAlert(null);
       setCoachChecking(false);
       setCoachInterventions(0);
       coachEvals.current = new Map();
       coachRunRef.current++;
-      setBlunderCheck(nextBlunderCheck && nextOpponent !== 'human');
+      setBlunderCheck(nextBlunderCheck && !fischerGame && opponentNow !== 'human');
       setBlunderAlert(null);
       setBlunderStops(0);
       blunderCountedRef.current = new Set();
@@ -824,13 +894,23 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       lastPliesRef.current = 0;
       alertPausedRef.current = false;
       setClockView({ white: control.initialMs, black: control.initialMs, running: null });
-      game.reset(fen && isValidFen(fen) ? fen : START_FEN);
+      if (fischerGame) {
+        // A Chess960 position handed over, or one of the 960 starts at random.
+        const given = fen ? normalizeChess960Fen(fen) : null;
+        const pick = given ? { fen: given, number: chess960Number(given) } : randomChess960();
+        fischer.reset(pick.fen);
+        setChess960Position(pick.number);
+      } else {
+        standard.reset(fen && isValidFen(fen) ? fen : START_FEN);
+        setChess960Position(null);
+      }
+      setVariant(nextVariant);
       void engine()
         .newGame()
         .catch(() => undefined);
       setStarted(true);
     },
-    [engine, game],
+    [engine, standard, fischer],
   );
 
   const canPlayerMove =
@@ -846,8 +926,11 @@ export function usePlayVsEngine(): UsePlayVsEngine {
   const coachCheck = useCallback(
     (fenBefore: string, san: string, uci: Uci) => {
       if (!coach || engineStatus !== 'ready') return;
+      const current = gameRef.current;
+      // Coach mode is standard chess only.
+      if (!('chess' in current)) return;
       // The React snapshot lags one render behind; the live instance already has the move.
-      const live = gameRef.current.chess();
+      const live = current.chess();
       // A move that ends the game (mate, stalemate, a draw) is not a mistake to pause over.
       if (live.isGameOver()) return;
       const fenAfter = live.fen();
@@ -880,8 +963,10 @@ export function usePlayVsEngine(): UsePlayVsEngine {
    */
   const holdBack = useCallback(
     (input: MoveInput): boolean => {
-      if (!blunderCheck || hotSeat) return false;
-      const live = gameRef.current.chess();
+      const current = gameRef.current;
+      // The blunder check is standard chess only.
+      if (!blunderCheck || hotSeat || !('chess' in current)) return false;
+      const live = current.chess();
       // A move that ends the game — mate, or a draw by repetition the live game can see — is
       // never held back. The live game has the history a position alone lacks.
       const probe = tryMove(live, input);
@@ -911,7 +996,11 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       setHintArrow(null);
       setBlunderAlert(null);
       // A promotion still waiting for its piece is checked once the piece is chosen.
-      const promotes = isPromotionMove(gameRef.current.chess(), from, to);
+      const current = gameRef.current;
+      const promotes =
+        'chess' in current
+          ? isPromotionMove(current.chess(), from, to)
+          : current.game().isPromotion(from, to);
       const piece = promotion ?? (promotes && autoQueen ? 'q' : undefined);
       if ((!promotes || piece) && holdBack({ from, to, ...(piece ? { promotion: piece } : {}) })) {
         return;
@@ -928,8 +1017,9 @@ export function usePlayVsEngine(): UsePlayVsEngine {
       if (!canPlayerMove) return false;
       setHintArrow(null);
       setBlunderAlert(null);
-      if (blunderCheck && !hotSeat) {
-        const typed = tryNotation(new Chess(gameRef.current.chess().fen()), notation, {
+      const current = gameRef.current;
+      if (blunderCheck && !hotSeat && 'chess' in current) {
+        const typed = tryNotation(new Chess(current.chess().fen()), notation, {
           autoQueen,
         });
         if (!typed) return false;
@@ -1086,7 +1176,13 @@ export function usePlayVsEngine(): UsePlayVsEngine {
     async (fen: string, moves: Uci[]): Promise<Uci | null> => {
       const engineClient = client();
       await ensureSkill(engineClient, skillCache.current, 20);
-      const handle = engineClient.search({ fen, moves, depth: 14, multipv: 1 });
+      const handle = engineClient.search({
+        fen,
+        moves,
+        depth: 14,
+        multipv: 1,
+        ...(variantRef.current === 'chess960' ? { chess960: true } : {}),
+      });
       const result = await handle.result;
       if (result.stopped) return null;
       return result.bestmove.move;
@@ -1106,7 +1202,7 @@ export function usePlayVsEngine(): UsePlayVsEngine {
           const { from, to } = parseUci(best);
           setHintArrow({
             kind,
-            san: sanOf(moveFen, best) ?? `${from}–${to}`,
+            san: sanOf(moveFen, best, variantRef.current === 'chess960') ?? `${from}–${to}`,
             shape: { orig: from, dest: to, brush: kind === 'hint' ? 'paleBlue' : 'red' },
           });
         })
@@ -1171,13 +1267,16 @@ export function usePlayVsEngine(): UsePlayVsEngine {
           opponent,
           event,
           humanRating,
+          chess960,
         ),
       ),
-    [game, playerColor, level, timeControl, gameOver, opponent, event, humanRating],
+    [game, playerColor, level, timeControl, gameOver, opponent, event, humanRating, chess960],
   );
 
   return {
     game,
+    variant,
+    chess960Position,
     opponent,
     playerColor,
     level,
@@ -1231,9 +1330,9 @@ export function usePlayVsEngine(): UsePlayVsEngine {
 }
 
 /** SAN of a UCI move in `fen`, or null when the position or the move cannot be read. */
-function sanOf(fen: Fen, uci: Uci): string | null {
+function sanOf(fen: Fen, uci: Uci, chess960 = false): string | null {
   try {
-    return uciToSan(fen, uci);
+    return chess960 ? chess960UciToSan(fen, uci) : uciToSan(fen, uci);
   } catch {
     return null;
   }
@@ -1247,6 +1346,7 @@ function pgnHeaders(
   opponent: Opponent = 'engine',
   event?: string,
   humanRating?: number,
+  chess960 = false,
 ): Record<string, string> {
   const engineName =
     opponent === 'humanlike'
@@ -1259,10 +1359,10 @@ function pgnHeaders(
     Event: event
       ? `Chess Trainer — ${event}`
       : hotSeat
-        ? 'Chess Trainer — two players'
+        ? `Chess Trainer — ${chess960 ? 'Chess960, ' : ''}two players`
         : opponent === 'humanlike'
           ? 'Chess Trainer — play a human-like opponent'
-          : 'Chess Trainer — play vs engine',
+          : `Chess Trainer — ${chess960 ? 'Chess960' : 'play'} vs engine`,
     Site: 'Chess Trainer',
     Date: `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`,
     White: hotSeat ? 'White' : playerColor === 'white' ? 'You' : engineName,

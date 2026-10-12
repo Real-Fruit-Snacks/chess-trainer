@@ -4,11 +4,12 @@ Chess Trainer is a static, client-only application: there are no accounts, and e
 stored in your browser, on your device. The app talks to the network only when you ask it to —
 importing your games from Lichess or chess.com, the opening explorer and tablebase lookups, which are
 off by default, the Lichess account sync, sync between devices, whose relay
-([`relay/`](relay/README.md)) stores only data encrypted on the device, and live games, which the
-same relay referees (see [Privacy and network use](docs/FEATURES.md#privacy-and-network-use)). The
-attack surface is therefore small, but not zero: the app parses user-supplied PGN/FEN, share links
-and imported JSON backups, calls those public APIs on request, opens synced vaults, exchanges
-messages with other players through the relay, and ships a service worker.
+([`relay/`](relay/README.md)) stores only data encrypted on the device, live games, which the
+same relay referees, and notifications, which it pushes (see
+[Privacy and network use](docs/FEATURES.md#privacy-and-network-use)). The attack surface is
+therefore small, but not zero: the app parses user-supplied PGN/FEN, share links and imported JSON
+backups, calls those public APIs on request, opens synced vaults, exchanges messages with other
+players through the relay, receives pushed notices, and ships a service worker.
 
 ## Reporting a vulnerability
 
@@ -33,8 +34,15 @@ In scope:
   devices report), learn the phrase, or link vaults to people; and the relay itself
   (`relay/src/`)
 - Live games: anything that lets someone take a player's seat, move or act for a player, join a
-  private game without its link, bend the rules or the clocks the relay keeps, or put anything a
-  player typed in front of another player; and the referee (`relay/src/live/`)
+  private game or a race or analysis room without its link, watch a game without its link, see
+  what a watcher must not (the phrases, an army before both are in), take a room member's place,
+  seed a game's analysis room with moves that game did not have, bend the rules or the clocks the
+  relay keeps, or put anything a player typed in front of another player; and the referee
+  (`relay/src/live/`)
+- Notifications: anything that makes the relay send a request anywhere but a browser's push
+  service, read, replace or delete another device's subscription or reminder, or push a device
+  what it did not ask for; and a notice that opens anything but the app's own pages
+  (`relay/src/push/`, `src/sw/notifications.ts`)
 - The offline copy's launcher (`launcher/`): anything that lets another computer reach it, makes it
   serve a file from outside the copy's app folder, or makes it do anything but serve that folder
 
@@ -47,7 +55,7 @@ Out of scope:
 
 - **Content-Security-Policy.** Every page carries a policy (a meta tag written at build time) that
   runs only the site's own scripts and its one inline theme script, by hash; allows connections only
-  to the site itself, lichess.org, explorer.lichess.ovh, tablebase.lichess.ovh, api.chess.com and
+  to the site itself, lichess.org, explorer.lichess.org, tablebase.lichess.ovh, api.chess.com and
   the sync relay named in `src/site.config.ts` (its WebSockets included); and
   forbids plugins, `<base>` changes and form posts elsewhere. The service worker adds
   `frame-ancestors 'none'` to the pages it serves, so the app cannot be framed by another site.
@@ -63,7 +71,8 @@ Out of scope:
   browser tab of its own), the answer is refused unless its state matches, and the one-time code is removed from
   the address bar before it is used. The token asks only for `puzzle:read puzzle:write study:read
 study:write`, and `board:play` for live games on Lichess (optional: the sync works without it); it
-  is kept in the profile's local storage on this device, sent only to lichess.org, never written
+  is kept in the profile's local storage on this device, sent only to lichess.org (and to its
+  opening explorer, explorer.lichess.org, which asks for a signed-in account), never written
   into a backup, an export or a link, and revoked on Lichess by Disconnect and by Reset everything.
   A personal token pasted instead is checked with Lichess (it must allow those four permissions)
   and kept the same way. The token plays only games the learner started from Play, and
@@ -98,22 +107,67 @@ study:write`, and `board:play` for live games on Lichess (optional: the sync wor
 
 - **Live games.** The relay is the referee, so it sees what it needs to referee and nothing more:
   - **Seats.** Pairing makes two random 256-bit seat tokens and sends each player their own; the
-    game's room keeps their SHA-256 only. A socket must give a seat's token within 10 seconds, or
-    it is closed. Game ids and private games' ids are random 128-bit values.
-  - **Rules.** The room takes only legal moves (chess.js), on the mover's own turn and in order,
-    keeps both clocks itself, and ends the game by the rules; a player's client cannot move for
-    the other, stop a clock or declare a result.
+    game's room keeps their SHA-256 only. A socket must give a seat's token, or ask to watch,
+    within 10 seconds, or it is closed. Game ids (made anew at pairing), private games' ids and
+    race rooms' ids are random 128-bit values, so a game can be watched, or a room joined, only by
+    someone a player gave its link to. A correspondence invitation's open seat goes to the first
+    person with the game's link who asks for it, and its token to that socket alone.
+  - **Watchers** get what the players may both see — the board, the clocks, the offers, who is
+    there and the end — never a seat token, the players' phrases or an army before both are in,
+    and can send nothing that changes the game. At most 20 watch one game.
+  - **Rules.** The room takes only legal moves (chess.js, and chessops for Chess960), on the
+    mover's own turn and in order, keeps both clocks itself, and ends the game by the rules; a
+    player's client cannot move for the other, stop a clock or declare a result.
   - **No typed text.** Names must be made of the two word lists the app and the relay share, and
     the relay refuses any other; messages are phrase ids from a fixed list. Nothing a player types
     reaches another player. Lichess chat is not shown.
-  - **What the relay sees.** The made-up names, the ratings players choose to show, the moves, the
-    phrases sent, and, like any server, each socket's IP address (used only to allow at most 10
-    sockets from one address, and kept no longer than the socket). It keeps no logs; a game room
-    is deleted 10 minutes after its game ends, 6 hours after it was made at most, and a posted game
-    goes with its socket. Live games are not encrypted end to end: the referee has to read the moves.
+  - **What the relay sees.** The made-up names, the ratings players choose to show, the moves (and
+    the clock after each, for the game's record), the phrases sent, and, like any server, each
+    socket's IP address (used only to allow at most 10 sockets from one address, and to count the
+    rooms an address makes, and kept no longer than the socket). It keeps no logs; a game room is
+    deleted 10 minutes after its game ends, 6 hours after it was made at most, and a posted game
+    goes with its socket. A correspondence game's room is kept until 7 days after its end, a year
+    after it was made at most, and an invitation nobody takes expires after 7 days. Live games are
+    not encrypted end to end: the referee has to read the moves.
+  - **Race rooms** keep their members' names and ratings, the SHA-256 of each member's 256-bit
+    token, when each came and went, the last 20 phrases and the race (its options, and the last
+    race's puzzles, racers, results and places), and are deleted 10 minutes after the last member
+    leaves, 6 hours after they were made at most. A room holds 8 members and 20 visitors; the host's
+    puzzles are checked as a duel's rounds are.
+  - **Analysis rooms** keep what race rooms keep of their members, and a tree of at most 1,000
+    moves with the arrows and circles drawn on it, deleted on the same terms. Every move is checked
+    as legal from the room's start (chess.js, or chessops for Chess960), and the names a room is
+    made with must be the app's word-list names. A finished game's room is made only by that game's
+    own room, with the game's real moves, under an id derived from the game's (SHA-256), which the
+    waiting room never gives out (its rooms' ids are random): anyone with the game's link — the
+    players and those they sent it to — can open it, and nobody can plant other moves under it.
   - **Abuse.** Sockets come only from the app's origins; a message is at most 2 KB, a socket may send
     20 every 10 seconds, the waiting room holds at most 100 games and 2,000 sockets, and one phrase
-    every 2 seconds is passed on per player.
+    every 2 seconds is passed on per player. A socket may make 5 correspondence invitations an
+    hour, and the sockets of one address 10 race rooms an hour.
+- **Notifications.** Push goes through the browsers' own push services, and the relay learns no
+  more than it needs to deliver:
+  - **Subscriptions.** A browser's push subscription (its push service's address and keys) reaches
+    the relay only once the learner switches on correspondence notifications or the daily reminder,
+    with the browser's permission. A correspondence room keeps it with that player's seat until the
+    game ends, or until the player takes it back or the push service says it is gone; the other
+    player and watchers never see it. A reminder is kept under the SHA-256 of a random 256-bit
+    token only its device holds, with the subscription, the time of day and time zone, when it is
+    next due, the last training day, and when it was made and last heard of; it is deleted when
+    switched off, or after 60 days unheard of, and the relay keeps 5,000 at most.
+  - **Only push services.** The relay writes only to the browsers' push services
+    (`fcm.googleapis.com`, `*.push.services.mozilla.com`, `*.push.apple.com`,
+    `*.notify.windows.com`, over https with no port), never to any other address a client names,
+    and forgets a subscription its service answers `404` or `410` for.
+  - **Encrypted and signed.** Each message is encrypted for the browser (RFC 8291, `aes128gcm`), so
+    the push service cannot read it, and signed with the relay's own key (VAPID, RFC 8292), made
+    on first use and kept in its database, never sent anywhere. The push service sees a message's
+    size, time to live and topic (a game's id, or `reminder`).
+  - **Notices.** The service worker shows only a checked notice (a title and a line of text of
+    bounded length) and opens only the app's own plain paths; anything else opens Home.
+  - **Abuse.** The push endpoints take requests only from the app's origins, with bodies of 4 KB at
+    most, 20 a minute from one address; an optional rate-limit binding (`NEW_REMINDERS`) caps the
+    reminders each address can create.
 - **The offline copy's launcher.** It listens on the loopback addresses only (127.0.0.1 and ::1),
   so no other computer can reach it; it answers only GET and HEAD, with files from inside the
   copy's app folder (the path is cleaned first, and the folder refuses `..` and, on Windows,

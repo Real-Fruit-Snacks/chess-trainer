@@ -42,6 +42,12 @@ export interface BoardProps {
   movableColor?: LongColor | 'both';
   /** Legal destinations per origin square; when omitted any move is accepted (free mode). */
   dests?: Map<Key, Key[]>;
+  /**
+   * Chess960 castling: the king, wherever it stands on its back rank, castles by moving onto
+   * its own rook. `dests` lists that move as it is (the rook's square, as chessops gives it)
+   * and `onMove` reports it as it is: the king's square and its rook's.
+   */
+  chess960?: boolean;
   lastMove?: readonly [Key, Key] | null;
   /** Highlight the king of the side to move as being in check. */
   check?: boolean;
@@ -62,6 +68,10 @@ export interface BoardProps {
    * never occurs here) and a king dropped on its own rook reports the castling square.
    */
   onMove?: (from: Square, to: Square, meta: MoveMetadata) => void;
+  /**
+   * A square tapped or clicked. On a board without `movableColor`, Enter on the keyboard
+   * cursor's square reports it too (a page that draws on the board by squares).
+   */
   onSelect?: (key: Key) => void;
   /** Called when the user changes the drawn shapes. */
   onShapesChange?: (shapes: DrawShape[]) => void;
@@ -70,6 +80,13 @@ export interface BoardProps {
   ariaLabel?: string;
   /** Announce each move (derived from `fen` and `lastMove`) to screen readers. Default true. */
   announceMoves?: boolean;
+  /**
+   * Premoves for `movableColor` while the other side is to move (give it empty `dests` then):
+   * a move made meanwhile waits, marked on the board, and is played the moment a position
+   * comes in with that colour to move (`onMove` then has `meta.premove`), or dropped quietly
+   * when it is not legal there. A click elsewhere on the board, or Escape, cancels it.
+   */
+  premovable?: boolean;
 }
 
 /** Whether two destination maps allow the same moves (pages may rebuild the Map every render). */
@@ -106,6 +123,7 @@ function BoardImpl({
   turnColor,
   movableColor,
   dests,
+  chess960 = false,
   lastMove,
   check = false,
   highlights,
@@ -121,11 +139,17 @@ function BoardImpl({
   className,
   ariaLabel,
   announceMoves = true,
+  premovable = false,
 }: BoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<Api | null>(null);
   const callbacks = useRef({ onMove, onSelect, onShapesChange });
   callbacks.current = { onMove, onSelect, onShapesChange };
+  // What chessground's premove events do (set in an effect once the announcer is there).
+  const premoveEventsRef = useRef({
+    set: (_orig: Key, _dest: Key): void => undefined,
+    unset: (): void => undefined,
+  });
   const instructionsId = useId();
 
   const boardTheme = useSettings((s) => s.boardTheme);
@@ -143,11 +167,20 @@ function BoardImpl({
   const effectiveTurn = turnColor ?? (fen.split(' ')[1] === 'b' ? 'black' : 'white');
   const canDrag = !viewOnly && moveMethod !== 'tap';
   const canTap = !viewOnly && moveMethod !== 'drag';
-  // Chessground castles when the king is dropped on its rook only if the rook square is a destination.
+  // Chessground castles when the king is dropped on its rook only if the rook square is a
+  // destination. Chess960's destinations are that already; standard chess's gain the rooks.
   const cgDests = useMemo(
-    () => (dests ? withRookCastleDests(fen, dests as Map<Square, Square[]>) : undefined),
-    [dests, fen],
+    () =>
+      dests
+        ? chess960
+          ? (dests as Map<Square, Square[]>)
+          : withRookCastleDests(fen, dests as Map<Square, Square[]>)
+        : undefined,
+    [dests, fen, chess960],
   );
+  // For the move handler, which chessground keeps from the first render.
+  const chess960Ref = useRef(chess960);
+  chess960Ref.current = chess960;
 
   // The latest position props, for the self-healing step after a move.
   const position = useRef({ fen, effectiveTurn, cgDests, lastMove, movableColor, check });
@@ -174,7 +207,10 @@ function BoardImpl({
   const afterMove = (orig: Key, dest: Key, meta: MoveMetadata) => {
     const before = position.current;
     const from = orig as Square;
-    const to = castlingKingDest(before.fen, from, dest as Square);
+    // Standard castling is reported on the king's square; Chess960's stays king onto rook.
+    const to = chess960Ref.current
+      ? (dest as Square)
+      : castlingKingDest(before.fen, from, dest as Square);
     // Chessground calls this from a timeout, outside any React event, so the page's state
     // updates are flushed here; afterwards the latest render is in `position`.
     flushSync(() => callbacks.current.onMove?.(from, to, meta));
@@ -213,7 +249,15 @@ function BoardImpl({
       rookCastle: true,
       events: { after: afterMove },
     },
-    premovable: { enabled: false },
+    premovable: {
+      enabled: premovable && !viewOnly,
+      showDests: showLegalMoves,
+      castle: true,
+      events: {
+        set: (orig, dest) => premoveEventsRef.current.set(orig, dest),
+        unset: () => premoveEventsRef.current.unset(),
+      },
+    },
     draggable: { enabled: canDrag, showGhost: true, autoDistance: true },
     selectable: { enabled: canTap },
     drawable: {
@@ -287,7 +331,15 @@ function BoardImpl({
       draggable: { enabled: canDrag },
       selectable: { enabled: canTap },
       drawable: { enabled: drawable && !viewOnly, shapes: shapesRef.current },
+      premovable: { enabled: premovable && !viewOnly, showDests: showLegalMoves },
     });
+    // A premove waits for a position with its colour to move: played then (chessground checks
+    // it against the new destinations and drops it quietly when it is not legal), or dropped
+    // when premoves stop (the game ended).
+    if (api.state.premovable.current) {
+      if (!premovable || viewOnly) api.cancelPremove();
+      else if (movableColor === effectiveTurn) api.playPremove();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     fen,
@@ -305,6 +357,7 @@ function BoardImpl({
     canTap,
     showLegalMoves,
     drawable,
+    premovable,
   ]);
 
   // The drag target: a mark on the square the dragged piece is over, placed
@@ -376,12 +429,47 @@ function BoardImpl({
   const pendingFile = useRef<string | null>(null);
   const interactive = !viewOnly;
 
+  // A premove waiting for its turn (chessground keeps it and says when it is set or goes): it is
+  // announced, and Escape cancels it wherever the focus is.
+  const [premoveWaiting, setPremoveWaiting] = useState(false);
+  useEffect(() => {
+    premoveEventsRef.current = {
+      set: (orig, dest) => {
+        setPremoveWaiting(true);
+        setCursorText(`Premove ${orig} to ${dest}: played as soon as it is your move.`);
+      },
+      unset: () => setPremoveWaiting(false),
+    };
+  }, []);
+  useEffect(() => {
+    if (!premoveWaiting) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || !apiRef.current?.state.premovable.current) {
+        return;
+      }
+      apiRef.current.cancelPremove();
+      setCursorText('Premove cancelled.');
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [premoveWaiting]);
+
   /** Enter or Space on `square`: select a piece, move to a destination, or explain why not. */
   const activate = (square: Square) => {
     const api = apiRef.current;
     if (!api) return;
+    // A board that moves nothing but reports its squares (to draw on it, say): the square goes
+    // to the page, as a tap on it does.
+    if (!movableColor && callbacks.current.onSelect) {
+      callbacks.current.onSelect(square);
+      return;
+    }
     const selected = api.state.selected as Square | undefined;
     const ownTurn = movableColor === 'both' || movableColor === effectiveTurn;
+    if (premovable && movableColor && !ownTurn) {
+      premoveByKeyboard(square, selected);
+      return;
+    }
     if (!movableColor || !ownTurn) {
       setCursorText('It is not your move.');
       return;
@@ -421,6 +509,33 @@ function BoardImpl({
     );
   };
 
+  /** Enter while the other side is to move: picks one of your pieces, then sets its premove. */
+  const premoveByKeyboard = (square: Square, selected: Square | undefined) => {
+    const api = apiRef.current;
+    if (!api) return;
+    const piece = api.state.pieces.get(square);
+    if (piece && piece.color === movableColor) {
+      api.selectSquare(square, true);
+      setCursorText(
+        `${describeSquare(fen, square)} selected for a premove. Move to a destination and press Enter.`,
+      );
+      return;
+    }
+    if (!selected) {
+      setCursorText(
+        piece
+          ? `${describeSquare(fen, square)}. Not one of your pieces.`
+          : 'Your opponent is to move: select one of your pieces to premove.',
+      );
+      return;
+    }
+    const before = api.state.premovable.current;
+    api.selectSquare(square, true);
+    // A premove set is announced as it is set (see premoveEventsRef).
+    const after = api.state.premovable.current;
+    if (!after || after === before) setCursorText('That piece cannot go there.');
+  };
+
   const describeCursor = (square: Square) =>
     describeSquare(fen, square, {
       selected: (apiRef.current?.state.selected as Square | undefined) ?? null,
@@ -440,9 +555,16 @@ function BoardImpl({
       setCursor(current);
       activate(current);
     } else if (e.key === 'Escape') {
-      if (!apiRef.current?.state.selected) return;
-      apiRef.current.selectSquare(null);
-      setCursorText('Selection cleared.');
+      const api = apiRef.current;
+      if (api?.state.premovable.current) {
+        api.cancelPremove();
+        setCursorText('Premove cancelled.');
+      } else if (api?.state.selected) {
+        api.selectSquare(null);
+        setCursorText('Selection cleared.');
+      } else {
+        return;
+      }
     } else if (/^[a-hA-H]$/.test(e.key)) {
       // The first half of a typed square. Swallowed so page shortcuts (h for hint,
       // f to flip, s for the solution) never fire from the board.

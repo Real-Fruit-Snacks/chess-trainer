@@ -38,6 +38,16 @@
   min-width: 0;
 }
 
+.hub__corr {
+  grid-area: corr;
+  min-width: 0;
+}
+
+/* With correspondence games: their card right after a person's, the open games after it. */
+.hub--corr {
+  grid-template-areas: 'computer' 'person' 'corr' 'open' 'games' 'name';
+}
+
 @media (min-width: 900px) {
   .hub {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -50,6 +60,22 @@
       'games games'
       'name name';
   }
+
+  .hub--corr {
+    grid-template-rows: auto 1fr auto auto auto;
+    grid-template-areas:
+      'person computer'
+      'person open'
+      'corr corr'
+      'games games'
+      'name name';
+  }
+}
+
+/* A correspondence game where it is your move. */
+.live__corr-turn {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 /* A card's icon beside its title. */
@@ -563,6 +589,18 @@
   margin: var(--space-1) 0 0;
 }
 
+/* A Chess960 game's position by number, beside the board: only where the page header's line that
+   names it is hidden (a phone held upright, global.css), so it is never said twice. */
+.live-game__variant {
+  display: none;
+}
+
+@media (max-width: 599px) and (orientation: portrait) {
+  .live-game__variant {
+    display: block;
+  }
+}
+
 /* Army Draft's draft (LiveDraft.tsx). */
 .live-draft__lead {
   margin: var(--space-2) 0 var(--space-3);
@@ -698,4 +736,36 @@ html:has(.live-bar) {
   .live-bar {
     border-color: CanvasText;
   }
+}
+
+/* ---------- Watching (WatchGame.tsx), and the watchers a player sees ---------- */
+.live-game__watchers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: var(--space-2) 0 0;
+}
+
+.live-game__watchers-icon {
+  flex: none;
+  color: var(--accent);
+}
+
+/* A correspondence game's days left for the side to move, where a clock would be. */
+.live-game__days {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--accent);
+}
+
+/* The invitation to a correspondence game, while its other seat is open. */
+.live-game__invite {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.live-game__invite p {
+  margin: 0;
 }

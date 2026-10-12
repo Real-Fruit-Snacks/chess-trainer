@@ -18,7 +18,7 @@ import {
   speedName,
   verdictOf,
 } from './liveView';
-import { replayMoves } from './liveViewBoard';
+import { chess960Label, replayMoves } from './liveViewBoard';
 import type { LiveEndReason, LiveGameView } from './types';
 
 describe('time controls', () => {
@@ -120,6 +120,7 @@ function view(patch: Partial<LiveGameView>): LiveGameView {
     tc: '5+3',
     rated: false,
     moves: [],
+    clocks: [],
     clock: null,
     firstMove: null,
     status: 'over',
@@ -127,9 +128,15 @@ function view(patch: Partial<LiveGameView>): LiveGameView {
     reason: null,
     offers: { draw: null, takeback: null, rematch: null },
     opponentPresent: true,
+    present: { white: true, black: true },
+    watching: false,
+    watchers: 0,
+    open: null,
+    joined: null,
     claimAt: null,
     chat: [],
     next: null,
+    analysis: null,
     error: null,
     url: null,
     game: 'chess',
@@ -246,5 +253,30 @@ describe('replaying the moves', () => {
     const game = replayMoves(['e2e4', 'e2e4', 'e7e5']);
     expect(game.history).toHaveLength(1);
     expect(game.turn).toBe('black');
+  });
+
+  it('plays Chess960 by its rules: castling is the king onto its rook', () => {
+    const start = 'bbqnrknr/pppppppp/8/8/8/8/PPPPPPPP/BBQNRKNR w KQkq - 0 1';
+    const ready = replayMoves(['g1h3', 'g8h6'], start, 'chess960');
+    expect(ready.dests.get('f1')).toEqual(expect.arrayContaining(['g1', 'h1']));
+    const castled = replayMoves(['g1h3', 'g8h6', 'f1h1', 'f8h8'], start, 'chess960');
+    expect(castled.history.map((m) => m.san)).toEqual(['Nh3', 'Nh6', 'O-O', 'O-O']);
+    expect(castled.history[2]?.flags).toBe('k');
+    expect(castled.lastMove).toEqual(['f8', 'h8']);
+    expect(castled.fen).toMatch(/^bbqnrrk1\/.*\/BBQNRRK1 w - /);
+    expect(castled.turn).toBe('white');
+    expect(castled.chess.inCheck()).toBe(false);
+    // A move that does not fit stops the replay, as in chess.
+    expect(replayMoves(['g1h3', 'g8h6', 'f1g1x'], start, 'chess960').history).toHaveLength(2);
+    // Promotions, and the start position named by its number.
+    const promoting = replayMoves(
+      ['b2b4', 'a7a5', 'b4a5', 'b7b6', 'a5b6', 'c8a6', 'b6b7', 'h7h6'],
+      start,
+      'chess960',
+    );
+    expect(promoting.isPromotion('b7', 'a8')).toBe(true);
+    expect(promoting.isPromotion('h3', 'g5')).toBe(false);
+    expect(chess960Label(start)).toBe('Chess960 · position 192');
+    expect(chess960Label(null)).toBe('Chess960');
   });
 });

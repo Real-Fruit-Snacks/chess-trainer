@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { uciLineToSan } from '@/chess/helpers';
+import { rulesFor } from '@/chess/rules';
 import type { Fen, LongColor, Uci } from '@/chess/types';
 import { formatScore, type SearchInfo } from '@/engine/uci';
 import { Spinner } from '@/components/ui';
@@ -17,6 +17,8 @@ export interface EngineLinesProps {
   onPlayMove?: (uci: Uci) => void;
   /** Move number and side for the first move of each line, e.g. "12." / "12..." */
   moveLabel: string;
+  /** A Chess960 position: the engine writes castling as the king taking its own rook. */
+  chess960?: boolean;
 }
 
 /**
@@ -32,16 +34,18 @@ export function EngineLines({
   thinking,
   onPlayMove,
   moveLabel,
+  chess960 = false,
 }: EngineLinesProps) {
   const rendered = useMemo(() => {
+    const rules = rulesFor(chess960 ? 'chess960' : 'standard');
     const out: { multipv: number; info: SearchInfo; sans: string[] }[] = [];
     for (let i = 1; i <= count; i++) {
       const info = lines.get(i);
       if (!info) continue;
-      out.push({ multipv: i, info, sans: uciLineToSan(fen, info.pv.slice(0, 12)) });
+      out.push({ multipv: i, info, sans: rules.lineToSan(fen, info.pv.slice(0, 12)) });
     }
     return out;
-  }, [fen, lines, count]);
+  }, [fen, lines, count, chess960]);
 
   // Announce the best line when thinking stops (true → false), not on every update.
   const wasThinking = useRef(thinking);

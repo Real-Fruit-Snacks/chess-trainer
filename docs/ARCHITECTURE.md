@@ -30,6 +30,7 @@ This document explains the moving parts and the reasoning behind them.
 │  │                      insights (phases · motifs · work-on list)    │
 │  ├─ features/live       Play hub · live games and duels: relay rooms │
 │  │                      and Lichess Board API (no engine) ── relay   │
+│  │                      watching · correspondence · group rooms      │
 │  ├─ features/arcade     eleven games: useHandAndBrain · useFortress ─┤
 │  │                      useSimul (one engine, a queue of boards)     │
 │  │                      odds · army · dailyOpening · engineSays      │
@@ -41,7 +42,10 @@ This document explains the moving parts and the reasoning behind them.
 │  └─ features/lab        test lab: platform · sounds · icons · board  │
 │                                                                      │
 │  ├─ features/home       adaptive daily plan · courses · first-run tour│
+│  │                      what's new (highlights per release)          │
 │  ├─ features/placement  placement quiz → course + starting rating    │
+│  ├─ features/search     quick search (Ctrl+K): a lazy dialog         │
+│  ├─ features/notifications  push subscription · reminders ── relay   │
 │  app/ Shell · PlatformHooks (icon badge, file handlers) · routes      │
 │  chess/ (chess.js helpers, PGN, GameTree, geometry) components/board  │
 │  lib/ srs · puzzleReview · gameImport · clock · sound · haptics       │
@@ -53,6 +57,7 @@ This document explains the moving parts and the reasoning behind them.
 │                                                                        │
 │  Service worker (src/sw.ts, Workbox) ── precache · runtime caches for  │
 │    puzzle chunks, board pictures and engine builds · COOP/COEP         │
+│    · shows the relay's push notices and opens their page on a click    │
 └────────────────────────────────────────────────────────────────────────┘
         ▲ static files only (+ optional lichess.org / chess.com API calls:
           game import, tablebase, opening explorer, the Lichess account
@@ -63,12 +68,13 @@ This document explains the moving parts and the reasoning behind them.
 │  engine/*.wasm, puzzles/*.json,     │   │  Node + SQLite: one sealed   │
 │  openings/openings.json,            │   │  vault per recovery phrase,  │
 │  boards/ (the board pictures)       │   │  versioned by ETag; live     │
-│  maia/ (the human-like opponent,    │   │  games: a waiting room and a │
-│                                     │   │  room per game (Durable      │
-│                                     │   │  Objects, or in memory)      │
-│                                     │   └──────────────────────────────┘
-│  downloaded on request)             │
-└─────────────────────────────────────┘
+│  maia/ (the human-like opponent,    │   │  games: a waiting room, a    │
+│  downloaded on request)             │   │  room per game and per race  │
+└─────────────────────────────────────┘   │  room (Durable Objects, or   │
+                                          │  in memory); Web Push for    │
+                                          │  notifications (a cron for   │
+                                          │  the daily reminders)        │
+                                          └──────────────────────────────┘
 ```
 
 ## Build and deployment
@@ -100,10 +106,19 @@ This document explains the moving parts and the reasoning behind them.
   (`scripts/lib/html.ts`): scripts from the site plus the inline pre-paint theme script by its
   SHA-256 hash (computed from the final HTML at build time, so it cannot go stale),
   `'wasm-unsafe-eval'` for the engine and the human-like opponent's runtime, connections to the site
-  and the four APIs (lichess.org, explorer.lichess.ovh, tablebase.lichess.ovh, api.chess.com),
+  and the four APIs (lichess.org, explorer.lichess.org, tablebase.lichess.ovh, api.chess.com),
   inline styles (Chessground and React set style attributes), and `object-src`/`base-uri` `'none'`.
   A meta tag cannot set `frame-ancestors`; the service worker adds that header to the pages it
   serves (`src/sw/framing.ts`). The dev server has no policy.
+- **The icons are a sprite in the page.** Every icon is a 24×24 path in
+  `src/components/ui/iconData.ts` (stroked, unless marked filled). Another html transform
+  (`scripts/lib/iconSprite.ts`) writes them all into `index.html` as one hidden `<svg>` of
+  `<symbol>`s at the start of `<body>`, and `<Icon name="…">` draws a `<use href="#icon-…">` of its
+  symbol, taking its stroke from the `<svg>` around it (a filled symbol sets its own fill). The paths
+  are markup the browser reads before any script runs, not start-up JavaScript: moving them out of
+  the start-up code took 2.7 KB gzipped off it (45.3 KB in 0.28; 44.0 KB in 0.29, with the
+  release's own start-up parts). A new icon needs only its name in
+  `IconName` and its path in `ICONS`.
 - The engine binaries are **not in git**. `scripts/setup-engine.mjs` downloads the pinned Stockfish.js
   release and verifies SHA-256 checksums; it runs before `dev` and `build` (CI caches the download and
   still checks it), and writes `public/engine/version.json`, a record of the build for people — the
@@ -152,6 +167,10 @@ This document explains the moving parts and the reasoning behind them.
   `terminate()` likewise rejects everything still waiting instead of leaving promises pending.
 - `uci.ts` parses `info`/`bestmove` lines into typed objects and converts scores to White's
   perspective and to win probabilities (the same logistic model Lichess uses).
+- A search's `chess960` flag (`SearchParams.chess960`, and the same on `LevelMoveRequest`) sends
+  `setoption name UCI_Chess960` before its `position`, only when the value differs from the one the
+  engine has, so one engine serves standard and Chess960 positions alike. In Chess960 mode
+  Stockfish reads and writes castling as the king taking its own rook, as the app does.
 
 Each page owns its own engine instance through `useEngine()`, which terminates the worker on unmount.
 Creating a worker is cheap (the WASM comes from the HTTP/service-worker cache), and per-page instances
@@ -299,7 +318,8 @@ tint it. Piece sprites come from the piece-set stylesheets described below (the 
 CC BY-SA 3.0, credited in the footer).
 
 The board is deliberately "dumb": it reports `onMove(from, to)` and renders whatever `fen`, `dests`,
-`shapes` and highlights it is given. All rules live in hooks built on chess.js. It is also
+`shapes` and highlights it is given. All rules live in hooks built on chess.js (on chessops for
+Chess960). It is also
 self-healing: after `onMove` it re-applies the position from its props unless the page answered with a
 new one, so a cancelled promotion or a drill that keeps its position puts the piece back and stays
 movable. `onMove` runs inside `flushSync`, because Chessground calls it from a timeout. A king dropped on
@@ -314,6 +334,16 @@ surface (`.board__surface`, which holds Chessground and the keyboard cursor) fil
 square, in the muted text colour. Off the squares they never sit under a piece and read the same on
 every theme and both orientations. The eval bar on the analysis board matches the surface height
 with the same gutter (`.trainer__board:has(.board--coords) > .evalbar`).
+
+Two props serve the live games and Chess960. `premovable` turns on Chessground's premoves for the
+player's colour while it is the opponent's turn (the page keeps `movableColor` on the player then,
+with no destinations): a premove set is announced in the board's live region, Escape cancels it
+wherever the focus is, and the keyboard cursor can set one too. When a position arrives with the
+player to move and a premove waiting, the board plays it at once (`playPremove`, which Chessground
+only does when the move is legal), and `onMove` gets `meta.premove`; an illegal one is dropped.
+`square.current-premove` is styled for every board theme. `chess960` passes the destinations
+through as given (castling is the king onto its rook, with no translation to the castling square)
+and reports castling to `onMove` as king to rook, premoves included.
 
 Every interactive board is also keyboard-operable (`keyboard.ts`): the container is focusable, the arrow
 keys move a square cursor (from the viewer's side), Enter selects the piece under the cursor and then its
@@ -368,7 +398,25 @@ letters.
   each move's `commands` (the prose stays clean), evaluation symbols (`+-`, `∞`, `±` …) turned into
   NAGs, `%` escape lines and stray words dropped, a comment before a variation's first move kept as
   `commentBefore`. `splitPgnGames` handles multi-game files, header-less games included (a result
-  followed by a blank line, or a `1.` that restarts a game).
+  followed by a blank line, or a `1.` that restarts a game). `parseClock`, `clockOf` and
+  `elapsedOf` read a move's `[%clk]` and `[%emt]` as seconds, for the time chart.
+- `chess960.ts` — Chess960 on [chessops](https://github.com/niklasf/chessops), with no React or
+  DOM: what the helpers give for standard chess (destinations for Chessground, a move from squares,
+  UCI or SAN with its SAN and the FEN after, check, mate, stalemate, insufficient material,
+  repetition and the fifty-move rule), plus start positions by Scharnagl's numbering (0 to 959;
+  518 is the standard start) and a random one. Castling is the king onto its own rook everywhere —
+  on the board, in UCI (`e1h1`; `e1g1` is read too) and in a move's `to` — while its SAN stays
+  `O-O`. FENs are written as X-FEN (`KQkq` while the castling rooks are the outermost on their
+  side of the king, the rook's file otherwise), and Shredder-FEN (`HAha`) is read too.
+  `Chess960Game` keeps a game's history, repetitions and result and writes its PGN
+  (`[Variant "Chess960"]`, `[SetUp "1"]`, `[FEN …]`); `isChess960Game` tells a Chess960 game from
+  its tags, its castling rights by file, or a start other than 518.
+- `rules.ts` — one rule set per variant (`rulesFor('standard' | 'chess960')`), so a feature asks
+  the game's rules rather than chess.js; standard chess goes on through the chess.js helpers
+  unchanged. `useChess960.ts` is `useChess`'s counterpart. Features built on chess.js alone (the
+  commentary, the position report, the threat drill, the coach, the blunder check, the explorer,
+  Maia) see a Chess960 position as standard chess with its castling rights dropped, or are not
+  offered; puzzles and threats are taken from a Chess960 game only where neither side can castle.
 - `tree.ts` — `GameTree`, a tree of positions where the first child is the main line. It supports
   adding moves (re-using existing children), navigation, promoting/deleting variations, comments and
   glyphs, and round-trips to PGN (the comment before the first move and `[%clk]` commands included).
@@ -376,7 +424,9 @@ letters.
   reaches a board; `parsePgnGames` (`lib/gameImport.ts`) skips such games. `parsePgnCached` memoises
   `fromPgn` per PGN string (a 32-entry LRU, each call returns a fresh clone) for the Home, Progress and
   due-count code that re-reads the repertoires on every render. The analysis board and the repertoire
-  trainer are built on it.
+  trainer are built on it. A tree has a `variant` (`new GameTree(fen, 'chess960')`), found when a
+  PGN is loaded (`isChess960Game`), which decides its rules (`tree.rules`), and `toPgn` writes the
+  Chess960 tags.
 - `blunderCheck.ts` — the play page's blunder check, without the engine: a move that allows mate in
   one, or loses two pawns' worth or more to a capture sequence (an alpha-beta search over captures
   only, material as the measure, both sides free to stop capturing), is held back — but only when
@@ -415,10 +465,12 @@ letters.
   explorer, the tablebase): it combines the caller's signal with a 15 s `AbortSignal.timeout` and reads
   `Retry-After` on 429 responses.
 - `gameImport.ts` splits multi-game PGN text (`parsePgnGamesDetailed` also returns the first parse error
-  and the legal prefix before an illegal move), replays each game for legality, skips variant games
-  (`Variant` header, chess.com `rules`), keeps only `https:` links on lichess.org or chess.com as source
-  URLs (`safeSourceUrl`), and fetches recent games from the public Lichess (`/api/games/user/…`, PGN
-  stream, standard perfs only) and chess.com (monthly archives under the player's own path, at most six
+  and the legal prefix before an illegal move), replays each game for legality by its variant's
+  rules, skips variants other than Chess960 (`Variant` header, chess.com `rules`), keeps only `https:`
+  links on lichess.org or chess.com as source URLs (`safeSourceUrl`), and fetches recent games from
+  the public Lichess (`/api/games/user/…`, PGN stream with each move's clock, the standard perfs and
+  `chess960`; paging follows the oldest game Lichess sent, whatever the filters kept) and chess.com
+  (monthly archives under the player's own path, at most six
   per page) APIs with typed errors (`not-found`, `rate-limited`, `network`, `empty`), time-control /
   colour / rated filters and cursors for "load older games" (the chess.com cursor carries the month).
 - `shareLink.ts` builds and reads the analysis share links: the PGN is deflated with the Compression
@@ -441,6 +493,7 @@ letters.
 | `useBlindPuzzle`                               | loading → solving ⇄ replying → solved / failed (→ solving, practice)                                                               | The board keeps the start position (`blind.ts`: `prepareBlind`, `judgeBlindMove`); moves come from two clicks on a `ClickBoard` or typed SAN, judged in the hidden position. Any mate solves. A peek shows the current position and keeps the level of that length from rising (+40 clean, −60 for a miss).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `useThreatDrill`                               | loading → threat → (checking) → defend → (checking) → done                                                                         | The threat stage shows `passMove(fen)` (the opponent to move); a guess or a defence the position does not list is put to the engine (`verifyThreatGuess`, `verifyDefence`: searchmoves, within 50 and 70 cp). Own threats come up every third position while due.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `useSelfReview` (on `useAnalysis`)             | off → marking → checking → done                                                                                                    | Turns the analysis engine off while the learner marks moves and plays alternatives (the first move from the position before a mark is taken as its suggestion); then runs the review, scores the marks (`selfReview.ts`), judges each suggestion against the review's move in one searchmoves search, records the result and puts the engine back.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `useFixMistakes` (on `useAnalysis`)            | off → asking → (checking) → found / shown → asking … → summary                                                                     | Steps through the learner's inaccuracies, mistakes and blunders from a review (`mistakesToFix`, for the side the headers name, else the side the learner picks), each from the position before it. The board shows the hook's own position, so the `GameTree` is left as it was, and the analysis engine is off throughout. `classifyAttempt` sorts a move: the engine's own is right at once, the game's move (or a weaker one) gets another try, and any other is searched against the engine's in one search (`judgeSuggestion`, as self-analysis judges a suggestion) and counts when it is `best` or `good`. Leaving puts the engine, the orientation and the node back; a review that goes ends the pass. The summary's missed moves become own-game puzzles.                                                                                                                                                                                                                                                                                                                                             |
 | `useDrillGame`                                 | idle → playing → won / lost                                                                                                        | Full-strength engine plays the other side; the position is adjudicated after every move (mate, promotion, stalemate, material loss counted from the learner's side, move limit, engine eval). `endgameLadder.ts` orders the 41 drills by difficulty into rungs and reports what is climbed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `PatternDrill`                                 | intro → solving → solved / failed, per pattern                                                                                     | The nineteen named mates (`matingPatterns.ts`: a lead-in move plus a forced mate, all checked in tests) run through `usePuzzleTrainer` one after another; results are stored per pattern and per full run.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | book (in `usePlayVsEngine`)                    | in-book ⇄ out-of-book / deviated                                                                                                   | `openingBook.ts` follows the game through a repertoire's tree: the opponent's replies come from the book, weighted towards the learner's least-known moves (the store keys cards by repertoire and path, so the hook passes them through `cardsFor()`; a lapsed move counts as relearning, not new). The engine takes over when the book ends. A learner move outside the book pauses the game, clocks included, with a take-back, and lapses the SM-2 card: the alert comes with the move that left the book (again after a take-back and the same move; never for later moves of a game played on), the lapse once per ply and move. The hint in book is the repertoire's move; a repertoire that cannot be read is refused at the start.                                                                                                                                                                                                                                                                                                                                                                     |
@@ -454,6 +507,83 @@ letters.
 | `useArbiter`                                   | idle → watching (start position → real moves → the illegal move) → verdict → … → over                                              | Each round comes from `arbiter.ts`: a classic game replayed with chess.js, two to six of its real moves, then an illegal move from `arbiterMoves.ts` — eighteen kinds in three tiers (a piece moving in a way it never can; the right movement where it is not allowed; what the king's safety and the move order forbid). They are worked out on a bare board (`chess/geometry.ts`) since chess.js refuses them, and a test checks every one it finds across the collection against chess.js. The replay speeds up each round, pauses itself when the page is hidden (covering the board), and a call counts until the next move would have come, plus a quarter of a second.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `useGhostKnight`                               | idle → hunting → ended → … → over                                                                                                  | `ghostKnight.ts` keeps a hunt as pure state: hunter moves on a board without kings, the knight's reply by fixed rules (take an unprotected hunter in reach, else the safe square with the most room, with a little chance) and, because those rules are fixed, the exact set of squares it could be on — what the shaded mode draws. A slider that runs into the unseen knight stops and takes it. Budgets were set from simulated hunts, and a test plays every squad with a hunter that looks one move ahead.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
+## Analyze and My games: human moves, time, your own games
+
+- **Human moves** (`HumanMovesCard.tsx`, `useHumanMoves.ts`, `humanMoves.ts`). `useHumanPrediction`
+  asks `maiaClient().predict` for the position at the chosen rating (120 ms after the position
+  settles, cached by rating and FEN), and `topHumanMoves` keeps up to five, each chosen by at least
+  3% (the likeliest always). `useHumanChecks` has the engine judge them in the mode the page works
+  out (`CheckMode`): `auto` once the engine is ready, no review is running and the live analysis is
+  idle with lines; `manual` when the engine is off and the learner asks; `wait` meanwhile; `off`.
+  `checkMoves` judges them all in one `searchmoves` search at depth 12, the analysis's best move
+  included (`legalIn` guards it), after a 250 ms grace and with an `AbortSignal` that stops it the
+  moment the analysis or a review needs the engine; results are cached per FEN. The verdicts are
+  the review's own (`verdictOf`: `judge` and `mateFloor`), and `trapNote` explains a favourite that
+  is a mistake with the review's `explainMove`.
+- **Time** (`timeUse.ts`, `TimeChart.tsx`). `src/chess/pgn.ts` reads `[%clk]` and `[%emt]`;
+  `gameTimes` turns consecutive readings of one side into the time each move took (the clock
+  before, less the clock after, plus the `TimeControl` increment), copes with Lichess's untimed
+  first moves and missing readings, and gives nothing for correspondence time controls or when
+  fewer than three moves in four (or fewer than six) have a reading. `timeTroubleSeconds` says what
+  short of time means: a tenth of the base time, as a round figure from 10 to 60 seconds. `timeColumns` lays out
+  the chart, and `readTimeUse` and `describeTimes` write its sentences and its accessible summary.
+  A My games review stores a `TimeDigest` in the review digest (`time`, optional in the backup
+  schema), which `insights.ts` adds up into the Time section and the _Time trouble_ work-on item; a
+  game reviewed before 0.29 has none.
+- **In your games** (`positionIndex.ts`, `usePositionIndex.ts`, `InYourGamesCard.tsx`). Positions
+  are keyed by placement and side to move (`positionKey`), so any move order finds them. Each
+  game's main line is read once (`mainLineOfPgn`) and cached by game id; the index is built in 12 ms
+  slices with a `setTimeout` between them, keeps a game's first visit to each position with the
+  move played next, and is kept while the set of game ids stays the same.
+
+## The repertoire gap finder (`src/features/openings/`)
+
+- `gaps.ts`, with no network: `positionsToCheck` gives the positions where the opponent is to move
+  and the repertoire has a reply, up to the depth, each once (`positionKey`), nearest first.
+  `analyseGaps` finds the gaps (a reply with at least 5% of the games there and at least 50 of
+  them, 10 among the masters, after which the repertoire has no move of the learner's) and orders
+  them by reach, a flow over the position graph in which the opponent's replies are weighted by
+  their explorer share and the learner's own moves split equally; coverage is one less the reach of
+  the unanswered replies over the reach known, and null until every position is checked.
+  `suggestAnswer` takes the best-scoring move among those with enough games and 5%;
+  `answeredPositions` and `replayGap` serve the other repertoires and the answer mode.
+- `useGapScan.ts` runs `lookupExplorerBatch` and keeps the results in state, answers already in the
+  session's cache counting at once; `useOtherAnswers` lists the positions the learner's other
+  repertoires of the same colour answer.
+- `RepertoirePage` has four modes: train, explore, gaps and answer, which adds the line, the reply
+  and the answer in one edit. `copyRepertoire.ts` makes "<name> (my copy)" of a built-in repertoire
+  and moves its SM-2 cards to the copy (`useRepertoire.setState`, no new store API); router state
+  carries the gap waiting for an answer to the copy's page.
+- `lib/explorer.ts`: every lookup carries `Authorization: Bearer` with the token of the Lichess
+  account connected in Settings (not once the sign-in is marked as needing renewal); a 401 is an
+  `ExplorerError` of kind `auth`, which the card shows as it is. `peekExplorer` reads the session's
+  cache without a request. `lookupExplorerBatch` is a generic, abortable runner: one request at a
+  time, after any other lookup in flight, 500 ms apart; it waits out a 429 for its `Retry-After`
+  (60 s when none can be read, which in a browser is usual: Lichess does not expose the header) and
+  gives up after three in a row. `lookupExplorer` is unchanged for its other callers.
+
+## Quick search and what's new
+
+- **Quick search** (`src/features/search/`). `quickSearch.ts` is the only part in the start-up
+  code: the Ctrl/Cmd+K check (not from a text field, not over another modal dialog), the open state
+  and `openQuickSearch()`. `SearchDialog.tsx` is a lazy chunk, preloaded when the pointer or the
+  focus reaches the header's button; if it cannot load, a toast says so. `searchIndex.ts` holds the
+  static entries (pages and sections, Play's games through `ONLINE_GAMES`, Settings cards by tab or
+  card hash) and `SEARCH_SOURCES`, one dynamic import per content module, started on first open:
+  results grow as each list arrives, and a list that fails is skipped. `match.ts` normalises (case,
+  accents, apostrophes), scores (title words first; a title equal to the query, or starting with
+  it, first of all), forgives one typo in a word of five letters or more, groups and limits the
+  results (8 a kind, 30 in all) and gives the ranges to mark. The reference's anchors
+  (`glossary-<term>`, `faq-<question>`) come from `src/features/reference/anchors.ts`.
+- **What's new** (`src/features/home/whatsNew.ts`, `WhatsNew.tsx`). Each release's highlights (an
+  icon, a title, a sentence, and a page or the quick search), newest first, and the version
+  helpers: `releasesUpTo` (a build never tells of a later release) and `unseenRelease`. The version
+  last seen is the device's (`chess-trainer:seen-version` in `localStorage`, `seenVersion.ts`),
+  outside backups and sync. The shell records a newcomer's first visit, whatever page it starts on,
+  so a first visit announces nothing; a returning learner with nothing recorded comes from before
+  the card, and is shown the news. A release adds its entry at the top; a test checks each link is
+  a route of the app.
+
 ## Persistence (`src/store/`)
 
 Five zustand stores persisted to `localStorage` with versioned keys (and `migrate` functions), plus the
@@ -465,12 +595,16 @@ profile list:
   two players) and the human-like opponent's rating (`playHumanRating`), review depth, threads (on by default — version 5 switched them on
   for every earlier save) and the full engine, puzzle preferences (auto-advance, the blind-puzzle
   length), time control, keyboard move entry, blindfold play, coach mode and the blunder check,
-  tablebase opt-in. Enum fields are validated on
+  tablebase opt-in, the variant of the next game against the engine (`playVariant`), premoves in
+  live games (`livePremoves`), and Analyze's human moves and their rating (`analysisHumanMoves`,
+  `analysisHumanRating`), with the device's notifications (`notifyLive`, `notifyCorrespondence`,
+  `notifyReminder`, `notifyReminderMinute`). Enum fields are validated on
   load (an unknown board theme falls back to the default) and nested defaults (`simul`) are merged
   field by field. The learner-scoped fields it used to hold (backup reminder, tour flag, import
   usernames) moved to `progress` in 0.12; `migrate` hands them over once. Since 0.24 its one saved
   value is made of two (`settingsStorage`): the learner's settings under the profile's key, and the
-  device's (`DEVICE_SETTING_KEYS`: threads, the full engine, the install prompt) under
+  device's (`DEVICE_SETTING_KEYS`: threads, the full engine, the install prompt, the
+  notifications) under
   `chess-trainer:device-settings`, once for every profile and never synced. A profile with no
   settings of its own yet reads the main profile's, a new profile is given a copy of the current
   one's, and a save from before the split gives the device's from the profile's. Backups (format 12) and sync carry the learner's (`learnerSettingsOf`, checked on the way in by
@@ -493,8 +627,9 @@ profile list:
 - `repertoire` — SM-2 cards keyed by repertoire and move path, custom PGN repertoires, session history.
 - `games` — the learner's imported games (up to 200; past the cap unreviewed games go first, and
   `addGames` returns `{ added, dropped }`) with their review results, keyed by URL or PGN hash. Each
-  review also stores a `digest` (loss and errors per phase and colour, mistake motifs) that
-  `insights.ts` aggregates for the Insights card and the daily plan's work-on items. Included in
+  review also stores a `digest` (loss and errors per phase and colour, mistake motifs, and, for a
+  game with clocks reviewed since 0.29, its `time`) that `insights.ts` aggregates for the Insights
+  card and the daily plan's work-on items. Included in
   backups since export version 7.
 - `analyses` — the analysis library: PGNs with variations under a name and a collection (a Lichess study
   export becomes one collection per study). Included in backups (export version 5); an import replaces
@@ -630,6 +765,14 @@ colour scheme and piece set before the first paint (the page's Content-Security-
 hash), and its title, description and social-card tags are filled from `site.config.ts` by a Vite
 html transform.
 
+The worker also shows the notices the relay pushes (`push`: a correspondence game's news, the daily
+reminder), as a browser expects every push to show something, and handles their clicks
+(`notificationclick`): a window already on the notice's page comes forward, else a window of the
+app is sent there, else a new one opens. `src/sw/notifications.ts`, shared with the page (which
+shows its own live-game notices through `registration.showNotification` while it is in the
+background), checks a notice's title, body and tag and allows only the app's own plain paths as
+the page to open (anything else opens Home).
+
 ## Platform integrations (`src/app/PlatformHooks.tsx`, `src/lib/backup.ts`)
 
 - **Icon badge.** `useDueCount` adds up due puzzle reviews, lesson recall and repertoire cards (each
@@ -651,11 +794,14 @@ html transform.
   per cue and sound theme, gated by the `haptics` setting. Neither plays before the first tap or key
   press. Sound output runs through one limiter at the destination, resumes a suspended or interrupted
   context, claims an `ambient` audio session where WebKit offers one and suspends after a quiet minute.
-- **Explorer.** `lib/explorer.ts` wraps the Lichess opening explorer (masters or community database),
-  cached per position and database, debounced and abortable in `useExplorer`, and goes through
-  `fetchWithTimeout` (15 s; a 429 names the server's `Retry-After` wait). `describeExplorerError`
-  turns offline, unreachable and timed-out lookups into plain words for the card. `ExplorerPanel` is
-  the shared card used by Analyze and the repertoire editor, with its own switch. Off by default
+- **Explorer.** `lib/explorer.ts` wraps the Lichess opening explorer at explorer.lichess.org
+  (masters or community database), cached per position and database, debounced and abortable in
+  `useExplorer`, and goes through `fetchWithTimeout` (15 s; a 429 names the server's `Retry-After`
+  wait). Lichess answers it only for a signed-in account, so each lookup carries the connected
+  Lichess account's token (see [the gap finder](#the-repertoire-gap-finder-srcfeaturesopenings)).
+  `describeExplorerError` turns offline, unreachable and timed-out lookups into plain words for the
+  card, and a lookup refused for want of a sign-in says how to connect the account. `ExplorerPanel`
+  is the shared card used by Analyze and the repertoire editor, with its own switch. Off by default
   because it uses the network.
 
 ## The Lichess account sync (`src/lib/lichess/`)
@@ -904,48 +1050,145 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
 
 ## Live games (`src/features/live/`, `relay/src/live/`)
 
-Two people play each other through the relay, which referees; a post can go to Lichess at the same
-time, through its Board API.
+Two people play each other through the relay, which referees, at once or over days, and others may
+watch; a post can go to Lichess at the same time, through its Board API. A race room gathers up to
+eight, an analysis room up to eight round one board, and the relay pushes notifications to players
+who are away.
 
 - **The relay's rules are platform-free** (`relay/src/live/`). `shared.mjs` holds what the relay and
-  the app agree on — the time controls, the two word lists names are made from, the phrases, the
-  limits, the close codes — and the app imports it, so the two never disagree. `rules.mjs` wraps
-  chess.js: UCI moves, the endings that need no claim, and who could still mate when a flag falls
-  (lila's rule). `lobby.mjs` is the waiting room: one seek per socket, living as long as the
-  socket; a public seek that matches one already waiting (the same time control, colours that fit)
-  is paired with the oldest at once; any seek can be joined by its id. Pairing makes the room with
-  the hashes of two new seat tokens and sends each player their own. `room.mjs` is one game: seats
-  taken only with a token, legal moves only on the mover's turn, the clocks kept by the room (they
-  start with Black's first move; each side's first move has 45 seconds), offers that lapse with a
-  move, takebacks of one move or two (never past the first moves), claims against a player gone 30
+  the app agree on — the time controls (minutes and seconds, or days a move), the two word lists
+  names are made from, the phrases, the limits, the close codes — and the app imports it, so the
+  two never disagree. `rules.mjs` wraps chess.js: UCI moves, the endings that need no claim, and
+  who could still mate when a flag falls (lila's rule); `replay(moves, startFen, game)` takes the
+  game's kind, and a Chess960 game is `chess960.mjs`'s. `lobby.mjs` is the waiting room: one seek
+  per socket, living as long as the socket; a public seek that matches one already waiting (the
+  same game, options and time control, colours that fit) is paired with the oldest at once; any
+  seek can be joined by its id. Pairing makes the room, under a new random id, with the hashes of
+  two new seat tokens and sends each player their own. `room.mjs` is one game: seats taken only
+  with a token, legal moves only on the mover's turn, the clocks kept by the room (they start with
+  Black's first move; each side's first move has 45 seconds), offers that lapse with a move,
+  takebacks of one move or two (never past the first moves), claims against a player gone 30
   seconds, rematches with the colours swapped. Times go out as durations, never the relay's clock.
   Events run one at a time; every change is stored, and the room's next deadline (a flag, a first
-  move, a socket's hello, a draft's or a round's end, its own end) is its one timer.
-- **Games beyond chess.** A seek carries its `game` — `chess`, `blindfold`, `army`, `race`,
-  `arbiter` or `judge` — and its `opts`, checked by `gameOptions` (`shared.mjs`); only the same game
-  with the same options pairs. A blindfold room counts each side's `peek` (three) and tells both. An
-  Army Draft room opens with the draft: each seat sends its `army` within two minutes, one is drafted
-  for a seat without, and the game starts from `draftFen` of the two (`army.mjs`: the prices, the
-  budget check and the placement, which the arcade imports too). The duels (`duel.mjs`) have no
-  clock. The white seat is the host, whose device sends the rounds once (`content`), and
-  `duelRules.mjs` checks them before they go on: puzzle ids with lines chess.js replays, Arbiter
-  replays whose moves are legal and whose illegal move is a known kind, positions with an
-  evaluation, all bounded in number and size, and never text. The room runs each round on its timer
-  — a countdown, the round, its result — takes each player's result as their device measured it
-  (`result`, once), and decides the round (`raceRound`, `arbiterRound`, `judgeRound`) and the duel
-  (`duelResult`). After the first clean solve or call it waits a few seconds for a quicker result
-  still in flight (fifteen more in the race's window format). A judgement stays hidden from the
-  other player until its round is over. A three-minute race is one long round with each player's
-  progress (`timedResult`). `duelRules.mjs` is also Who Stands Better?'s scoring, and the app imports
-  it, so the arcade and the duel score alike.
-- **Two platforms.** On Cloudflare (`cloudflare.mjs`) the waiting room is one Durable Object and
-  each game another, SQLite-backed (the free plan's kind), with the WebSocket Hibernation API: a
-  socket's own data is its attachment, a game is the room's stored state, the deadline its alarm,
-  and the runtime answers `ping` without waking the object. The waiting room makes a room by
-  POSTing its spec to the room's object on an internal address the Worker never forwards to;
-  `worker.mjs` passes on only WebSocket upgrades of `/v1/lobby` and `/v1/games/:id`, from the
-  app's origins. On Node (`hub.mjs` over `websocket.mjs`, a dependency-free RFC 6455 server) the
-  same cores run in memory. chess.js is the relay's one dependency (`relay/package.json`).
+  move, a socket's hello, a draft's or a round's end, a correspondence deadline, an invitation's
+  expiry, its own end) is its one timer. Who hears what is explicit: `tell(make)` reaches each
+  player with their own message, `show(message)` the watchers, `announce(message)` both.
+- **Games beyond chess.** A seek carries its `game` — `chess`, `blindfold`, `army`, `chess960`,
+  `race`, `arbiter` or `judge` — and its `opts`, checked by `gameOptions` (`shared.mjs`); only the
+  same game with the same options pairs. A blindfold room counts each side's `peek` (three) and
+  tells both. An Army Draft room opens with the draft: each seat sends its `army` within two
+  minutes, one is drafted for a seat without, and the game starts from `draftFen` of the two
+  (`army.mjs`: the prices, the budget check and the placement, which the arcade imports too). The
+  duels (`duel.mjs`) have no clock. The white seat is the host, whose device sends the rounds once
+  (`content`), and `duelRules.mjs` checks them before they go on: puzzle ids with lines chess.js
+  replays, Arbiter replays whose moves are legal and whose illegal move is a known kind, positions
+  with an evaluation, all bounded in number and size, and never text. The room runs each round on
+  its timer — a countdown, the round, its result — takes each player's result as their device
+  measured it (`result`, once), and decides the round (`raceRound`, `arbiterRound`, `judgeRound`)
+  and the duel (`duelResult`). After the first clean solve or call it waits a few seconds for a
+  quicker result still in flight (fifteen more in the race's window format). A judgement stays
+  hidden from the other player until its round is over. A three-minute race is one long round with
+  each player's progress (`timedResult`). `duelRules.mjs` is also Who Stands Better?'s scoring, and
+  the app imports it, so the arcade and the duel score alike.
+- **Chess960** (`chess960.mjs`, on chessops). The start positions copy the app's numbering
+  (`src/chess/chess960.ts`; an app test checks all 960 agree), and `randomChess960Position()` draws
+  one with `crypto` (rejection sampling, so each is equally likely). `newGame` draws the `position`
+  and keeps it with its `startFen` in the game's state, or takes the spec's (a rematch keeps the
+  position); the snapshot carries `startFen`. `Chess960Game` gives the referee the few calls it
+  uses from chess.js — move, undo, turn, board and the endings — so `playUci`, `endOf` and
+  `cannotMate` work on either game. Moves are strict: legal only when `pos.dests(from).has(to)`,
+  with a promotion piece given exactly when one is needed; castling is the king taking its own rook
+  (`e1h1`), and `e1g1` is refused. Repetitions compare positions by their EPD. A test-only
+  `RoomPlatform.chess960Position` (the hub's option, `relay/testWorld.ts`, the app's stand-in relay
+  and `startLiveRelay` in `e2e/live.ts`) fixes the draw; production never sets it.
+- **Watching.** A game room's socket may say `{t:'hello', watch:true}` instead of naming a seat. A
+  watcher gets the snapshot with no `you`, and after it whatever is `show`n or `announce`d (moves,
+  clocks, offers, presence, the end), never the phrases or an army before both are in, and may send
+  nothing but `hello` (and, at an open correspondence seat, `join`). At most 20 watch a game
+  (`LIMITS.watchers`); the players hear how many (`{t:'watchers', n}`, and in the snapshot). Duels
+  close a watcher. A game id is a new random value at pairing, so only the players can hand out a
+  game to watch.
+- **Correspondence.** A time control of days (`1d` … `14d`; `parseTimeControl` gives its
+  `perMoveMs`) is offered only for `CORRESPONDENCE_GAMES` (chess and Chess960), and only by
+  invitation: the waiting room's `create` (5 an hour from a socket) makes the room at once with the
+  poster's seat and an open one. Whoever has the link watches until they send `join`; the room
+  takes one message at a time, so the first gets the seat, its token to that socket alone. Each
+  move gives the mover's days back and starts the other's; a deadline that passes is a loss on
+  time (a draw when the other side cannot mate), or an abort before both have moved. There is no
+  first-move deadline and no claim against a player away. An invitation nobody takes in 7 days ends
+  the game (`expired`); a correspondence room is kept 7 days after its end, a year at most, against
+  10 minutes and 6 hours for a game at once.
+- **Clock times for the record.** A game at once keeps the mover's clock after each move
+  (`clocks` in the snapshot, in milliseconds), so `record.ts` can write `[%clk]` after every move
+  and a `TimeControl` tag; correspondence keeps none.
+- **Push from the rooms.** A correspondence seat's `hello` (or a later `{t:'push', sub}`) may carry
+  the player's push subscription, kept with the seat until the game ends, or until the player takes
+  it back or the push service says it is gone. `save(now)` stores the state, sets the timer, then
+  delivers what `nudge` queued: the opponent's move ("Your move against …"), an invitation taken,
+  the end, each only to a player with no socket in the room, and only once the change is stored.
+- **Group rooms** (`group.mjs`, `groupKinds.mjs`, `raceRoom.mjs`, `analysisRoom.mjs`). A
+  platform-free core for a room of up to 8 members who came by its link, made through the waiting
+  room's `create-room` (10 an hour from an address; up to 16 KB, the other messages of the waiting
+  room 2 KB) under a random id, or by a game room (below). A member's token is kept only as its hash, and a
+  reconnection with the token keeps the member's place; the room tracks who is here, makes its
+  maker host, hands a host gone 30 seconds over to whoever has been here longest (one who leaves
+  hands over at once), lets 20 visitors look and `join`, gives the place of a member gone 5 minutes
+  to a joiner when full, passes the set phrases, and is deleted 10 minutes after the last member
+  leaves, 6 hours after it was made at most. What the room does is its kind's: a module
+  (`GroupKindModule`: `options`, `create`, `view`, `deadline`, `message`, `timer`, and optionally
+  `big` and `presence`) registered in `groupKinds.mjs` and `GROUP_KINDS`, whose plain state the room
+  saves after each call, with one timer on the earliest deadline of either. `raceRoom.mjs` is the
+  race: the host's device deals the puzzles, checked by `duelContent` as a duel's; a race starts
+  with at least two members here, who are its racers; a round ends when every racer here has
+  reported, or after 90 seconds, and scores clean solves by their order (5, 4, 3, 2, then 1); the
+  timed race is one three-minute round, three wrong answers out. Every change sends the whole race
+  state to everyone (the puzzles only at the start and in the snapshot); places at the end share
+  ties; the next race avoids the last one's puzzles.
+- **Analysis rooms** (`analysisRoom.mjs`, the second kind). The state is a tree of moves as plain
+  JSON — each node its parent, its UCI move, its children in order and the shapes drawn on it — and
+  the shared node `at`; positions are replayed from the moves (chess.js, or `chess960.mjs` for
+  Chess960) and cached in memory only, so every move is checked and the stored state stays small.
+  Members send `move` (with `go: false` to leave the shared node alone), `at`, `delete`, `promote`
+  and `shapes`; the room answers each with one message to everyone (`added`, `at`, `deleted`,
+  `promoted`, `shapes`). Bounds in `ANALYSIS_ROOM` (shared.mjs): 1,000 moves, lines of 600
+  half-moves, 16 shapes a position and 256 in all. A room made from Analyze brings its start, its
+  moves (variations in brackets, as in a PGN), a result and names, all checked on creation (names
+  only the app's own word-list names). A finished game's room is made by the game room itself:
+  `{t:'analyse'}` from a player or a watcher, once the game is over, makes the room through the
+  platform (`RoomPlatform.createGroup`, answered `created` or `exists`) with the game's real start,
+  moves, names and result, under `analysisRoomId(gameId)` (SHA-256 of `analysis-room:<gameId>`,
+  16 bytes, base64url), with no members (`GroupSpec.host` null: the first to join is host); the
+  game room tells everyone `{t:'analysis', room, by}`. Only game rooms make rooms under such ids —
+  the waiting room's are random — so no one can seed a fake game there; asking again finds the
+  room, or makes it again once it has gone. Duels and games in progress are refused.
+- **Two platforms.** On Cloudflare (`cloudflare.mjs`) the waiting room is one Durable Object, each
+  game another (`LiveRoom`), and each group room a third kind (`LiveGroup`, bound as `LIVE_GROUPS`,
+  made by the `live-v2` migration), all SQLite-backed (the free plan's kind), with the WebSocket
+  Hibernation API: a socket's own data is its attachment, a game is the room's stored state, the
+  deadline its alarm, and the runtime answers `ping` without waking the object. The waiting room
+  makes a room by POSTing its spec to the room's object on an internal address the Worker never
+  forwards to; `worker.mjs` passes on only WebSocket upgrades of `/v1/lobby`, `/v1/games/:id` and
+  `/v1/rooms/:id`, from the app's origins. A game room that pushes reads the relay's push keys from
+  D1 once. On Node (`hub.mjs` over `websocket.mjs`, a dependency-free RFC 6455 server) the same
+  cores run in memory, group rooms through `openGroup`; a restart ends the games in progress,
+  correspondence ones included. The relay has two packages (`relay/package.json`): chess.js, and
+  chessops for Chess960.
+- **Push** (`relay/src/push/`). `webpush.mjs` sends Web Push on WebCrypto alone, which the Worker
+  and Node both have: the payload encrypted for the browser (RFC 8291, `aes128gcm`, tested against
+  the RFC's own worked example) and the request signed for the push service (VAPID, RFC 8292: an
+  ES256 token for the service's origin, good for 12 hours, naming a contact). The relay makes its
+  key pair on first use and keeps it (`push_keys`, in D1, the SQLite file or memory), so there is
+  no secret to configure; `GET /v1/push/key` gives the public key. It writes only to the browsers'
+  push services (`fcm.googleapis.com`, `*.push.services.mozilla.com`, `*.push.apple.com`,
+  `*.notify.windows.com`, https, no port), never to another address a client names, and forgets a
+  subscription its service answers `404` or `410` for. `reminders.mjs` is the daily reminder:
+  `POST`/`DELETE /v1/push/reminder` and `POST /v1/push/trained` (from the app's origins, 4 KB, 20
+  a minute from an address, 5,000 reminders at most), keyed by the hash of a device's own token,
+  with the time in quarter hours and the IANA time zone; a cron every 15 minutes on Cloudflare
+  (25 a run, the free plan's subrequests) and a timer every minute on Node send those due, unless
+  the day was trained, and one more than an hour late waits for the next day. The daily cron
+  deletes reminders unheard of for 60 days. `pushSchema.mjs` is the two tables, the same in D1
+  and SQLite, which the relay makes itself.
 - **The app's side.** `socket.ts` is a WebSocket that reconnects (1, 2, 4, 8, 15 seconds, at once
   when the device comes back online or into view) and pings every 25 seconds. `lobby.ts` keeps the
   waiting room connected while the page shows, a game is posted or one is being joined, and lets
@@ -954,21 +1197,68 @@ time, through its Board API.
   the other post is withdrawn, and a game that slipped through on the other side is aborted.
   `sessions.ts` keeps one connection per game, shared by the page and the bar; it outlives the page
   while the game is on (the bar leads back) and closes a minute after a finished game is left.
-  `relayGame.ts` plays a move on the board at once and sends it; the room's echo confirms it, and a
-  refusal comes with the whole game, which puts the board right. Seat tokens are kept per profile
-  (`seats.ts`), a day at most. `record.ts` keeps a finished game in My games with the learner's
-  side (`StoredGame.side`), so the review needs no player name, and a drafted game with its start
-  (`FEN`, `SetUp`).
-- **Play and the duels.** `PlayHubPage.tsx` is Play (`/play`): it posts, waits and joins, and
-  `GameDialog.tsx` sets up any game, described in `onlineGames.ts`; the game against the computer
-  is at `/play/computer`, and the old links redirect. `relayDuel.ts` is a duel's session, kept by
-  `sessions.ts` beside the games: on the host's device it makes the rounds with `duelRounds.ts`
-  (puzzles near the level from the puzzle service, Arbiter rounds built as in the arcade from the
-  classic games, quiet positions for Who Stands Better?), and both devices read them back from what
-  the relay passed on. A round's time runs from the moment it shows on the device, and a result the
-  room may have missed is sent again after a reconnection. `DuelPage.tsx` (`/play/duel/:id`) shows
-  each round with the arcade's own parts: the puzzle trainer (`RaceRound`, `TimedRace`), Arbiter's
-  replay (`ArbiterDuelRound`) and the judging slider (`JudgeDuelRound`).
+  `relayGame.ts` plays a move on the board at once and sends it, checked by the game's own rules;
+  the room's echo confirms it, and a refusal comes with the whole game, which puts the board right.
+  `liveViewBoard.replayMoves` gives the board its destinations, SAN and promotions by the game's
+  rules, Chess960's from `src/chess/chess960.ts`. Seat tokens are kept per profile (`seats.ts`): a
+  day for a game at once, and for a correspondence game while it is on and a week after. `record.ts`
+  keeps a finished game in My games with the learner's side (`StoredGame.side`), so the review
+  needs no player name, a drafted game with its start (`FEN`, `SetUp`), a Chess960 game with its
+  tags, and a relay game at once with its clocks.
+- **Premoves, watching and correspondence in the app.** `LiveGamePage` passes `premovable` to the
+  board while it is the opponent's turn, unless the `livePremoves` setting is off or the game is
+  blindfold or correspondence, and sends a premoved promotion as a queen. `WatchGamePage`
+  (`/play/watch/:gameId`) and `WatchGame.tsx` show a relay game read-only through
+  `watchLiveGame`; `LiveGamePage` falls back to it for a relay game this device has no seat in,
+  which is also how a correspondence invitation's open seat is taken (_Join this game_).
+  `correspondence.ts` keeps, per profile, the device's correspondence games as their rooms last
+  told it (whose move, the deadline, how it ended), which Play lists and the bar reads without
+  connecting to every room; `checkOnCorrespondence` brings it up to date when Play opens and when
+  the app starts.
+- **Race rooms in the app.** `relayGroup.ts` is a generic group session over a kind's client
+  (`createRelayGroup`), and `raceRoom.ts` the race's, whose host deals through `prepareDuel` as a
+  duel's host does. `roomSessions.ts` keeps one connection per room and feeds the bar; `rooms.ts`
+  keeps the memberships (`chess-trainer:live-rooms`, which `src/app/liveBar.ts` reads at start-up)
+  and makes rooms (`makeGroupRoom`). `RaceRoomPage.tsx` (`/play/race/:roomId`) is the room;
+  `RaceRound` and `TimedRace` serve the duels and the rooms alike.
+- **Analysis rooms in the app.** `analysisRoom.ts` keeps the room's tree as a `GameTree`, in step
+  with the room's messages; it owns following and browsing alone (the learner's own moves show at
+  once while they travel), sends the steps through the moves at most every 300 ms (the last always),
+  and lands a learner whose line was deleted on the nearest move left. `analysisOptionsFor(tree)`
+  makes a room's options from an Analyze tree, falling back to the main line when the variations
+  would not fit. `AnalysisRoomPage.tsx` (`/analyze/together/:roomId`) reuses Analyze's board, eval
+  bar, move tree and engine lines, with an engine of each device's own (`useRoomEngine.ts`) and a
+  _Draw_ tool for phones and keyboards (the board reports Enter on a square through `onSelect` when
+  nothing on it can move). `AnalyseTogether.tsx` is the button at the end of a game and on the watch
+  page; `AnalyseWithFriend.tsx` the dialog on Analyze, which loads the live-games code only when
+  used (`?together=1` opens it). `roomSessions.ts` keys its connections by kind, so the bar says
+  which room leads back.
+- **Notifications in the app** (`src/features/notifications/`). `support.ts` says what the browser
+  can do (`notificationsHere`: granted, ask, denied, unsupported, or `home-screen` for an iPhone or
+  iPad outside the installed app; `pushHere`). `notify.ts` (in `live/`) follows each game's views
+  and, while the page is hidden, shows a notice through the service worker's `showNotification`
+  for an opponent's move, an invitation taken, an end or a pairing, under the live or the
+  correspondence switch by the game's time control. `pushSubscription.ts` subscribes the browser
+  with the relay's key once a pushed kind is on (a subscription made with another key is
+  replaced) and ends it once neither is; `relayGame.ts` gives a correspondence room the
+  subscription in its `hello`, and again whenever it changes. `reminders.ts` keeps the device's
+  reminder on the relay under a token of its own (`chess-trainer:reminder-token`), and `trained.ts`
+  tells the relay of each training day the progress store records (`keepalive`, so it outlives a
+  closing page). `sync.ts` runs once as the app opens (`PlatformHooks`, only when something is on):
+  it deletes a reminder switched off meanwhile, ends a subscription nothing needs, and keeps the
+  reminder again, in the device's time zone of the day. The four settings are the device's
+  (`DEVICE_SETTING_KEYS`).
+- **Play and the duels.** `PlayHubPage.tsx` is Play (`/play`): it posts, waits and joins, lists the
+  correspondence games, and `GameDialog.tsx` sets up any game, described in `onlineGames.ts`
+  (`?play=<game>` opens a game's setup, `?play=race-room` the race's with a room chosen); the game
+  against the computer is at `/play/computer`, and the old links redirect. `relayDuel.ts` is a
+  duel's session, kept by `sessions.ts` beside the games: on the host's device it makes the rounds
+  with `duelRounds.ts` (puzzles near the level from the puzzle service, Arbiter rounds built as in
+  the arcade from the classic games, quiet positions for Who Stands Better?), and both devices read
+  them back from what the relay passed on. A round's time runs from the moment it shows on the
+  device, and a result the room may have missed is sent again after a reconnection. `DuelPage.tsx`
+  (`/play/duel/:id`) shows each round with the arcade's own parts: the puzzle trainer (`RaceRound`,
+  `TimedRace`), Arbiter's replay (`ArbiterDuelRound`) and the judging slider (`JudgeDuelRound`).
 - **Lichess** (`lichessStream.ts`, `lichessSeek.ts`, `lichessGame.ts`). Streams go straight to
   lichess.org, outside the account sync's one-request-at-a-time queue, read as ndjson and given up
   after 30 seconds of silence. The seek opens the event stream first (games already in progress
@@ -977,18 +1267,28 @@ time, through its Board API.
   stream (`gameFull`, then `gameState`, `opponentGone`); its endings map onto the app's, and a draw
   Lichess does not explain is told apart from the final position. The `board:play` permission is
   optional: new sign-ins ask for it, and a sign-in without it is offered a reconnection that comes
-  back to the waiting room (`PendingLogin.returnTo`).
+  back to the waiting room (`PendingLogin.returnTo`). Only standard chess is posted there.
 - **The shell** loads the bar (`LiveBar.tsx`) only once `app/liveBar.ts` says there is something to
-  show, so start-up code carries none of the feature.
+  show (a game posted or in progress, a correspondence game where it is your move, a group room), so
+  start-up code carries none of the feature.
 - **Tests.** `relay/live.test.ts` runs the cores on a clock the test moves; `relay/live-transport.test.ts`
   runs the WebSocket server, the Node relay end to end and the Durable Object classes against
-  stand-ins. The app's unit tests use
-  the real cores behind a stand-in `WebSocket` (`src/test/fakeLiveHub.ts`) and a Board API stand-in
-  that streams or long-polls (`src/test/fakeLichessBoard.ts`). `relay/live-games.test.ts` plays the
-  games beyond chess — drafts, peeks, every duel to its end — on the same test clock
-  (`relay/testWorld.ts`). `e2e/release-0-26-live.spec.ts` plays whole games between two browser
-  contexts through Playwright's WebSocket routes over the same cores, and a Lichess game through the
-  stand-in; `e2e/release-0-28-play.spec.ts` plays each game for two the same way.
+  stand-ins. The app's unit tests use the real cores behind a stand-in `WebSocket`
+  (`src/test/fakeLiveHub.ts`) and a Board API stand-in that streams or long-polls
+  (`src/test/fakeLichessBoard.ts`). On the same test clock (`relay/testWorld.ts`),
+  `relay/live-games.test.ts` plays the games beyond chess — drafts, peeks, every duel to its end —
+  and `live-watch.test.ts`, `live-correspondence.test.ts`, `live-chess960.test.ts` and
+  `live-groups.test.ts` watching, correspondence (with the rooms' pushes), Chess960 and the group
+  rooms, and `live-analysis.test.ts` the analysis rooms (legal moves only, variations, shapes, the
+  bounds, Chess960, a game's room and its trust rule); `relay/push.test.ts` checks Web Push against RFC 8291's example, VAPID, the reminders, the
+  endpoints, the stores and the cron. An app test cross-checks 40 random Chess960 games: every move
+  the board offers, the relay accepts with the same SAN, and both agree how each ended.
+  `e2e/release-0-26-live.spec.ts` plays whole games between two browser contexts through
+  Playwright's WebSocket routes over the same cores, and a Lichess game through the stand-in;
+  `release-0-28-play.spec.ts` plays each game for two the same way, and the 0.29 specs premoves,
+  watching from a third context, a correspondence game, the notifications card (with the
+  Notification and Push APIs stood in for), Chess960 online, race rooms, and analysing a finished
+  game together and a room made from Analyze.
 
 ## Accessibility
 
@@ -1006,7 +1306,10 @@ time, through its Board API.
   `src/lib/shortcutKey.ts`: case-insensitive, never with a modifier, never from a field, a dialog or
   the board, and — with `pageShortcutKey` / `characterShortcutsOn` — no single-character shortcut
   at all when the learner turns them off in Settings (WCAG 2.1.4); Enter, Space and the arrows are
-  not character keys and keep working.
+  not character keys and keep working. Quick search's Ctrl/Cmd+K is the one shortcut with a
+  modifier (`src/features/search/quickSearch.ts`); it stays out of text fields and other dialogs
+  too. Its dialog is a combobox over a listbox of grouped options (`aria-activedescendant`), with a
+  live region that counts the results once typing pauses.
 - The shell moves focus to `<main>` after in-app navigation (not when only the hash or the search
   changed) and `<ScrollRestoration>` starts each new page at the top while back/forward restore the
   old offset; `html { scroll-padding }` keeps focused controls clear of the sticky header and bottom
@@ -1053,7 +1356,15 @@ warning gives way to a confirmation.
 ## Testing strategy
 
 - **Unit (Vitest + jsdom):** pure logic (UCI parsing, rating, selection, review grading, stores) and
-  hook state machines via `renderHook`.
+  hook state machines via `renderHook`. The app's tests run in Vitest's `vmThreads` pool: each file
+  in a fresh context of a worker that stays up, so its modules and stores are its own, as in a
+  process of its own, but jsdom loads once per worker rather than once per file, which took half
+  the run. `src/test/vmGlobals.ts` lends the context what jsdom's lacks and the app uses
+  (`crypto.subtle`, the web streams), and a worker is replaced once its heap passes 512 MB
+  (`vmMemoryLimit`, which keeps coverage runs fast). The relay's and the build scripts' tests, which
+  run under Node, and the few files a vm context cannot hold (two that replace `window.location`,
+  one that compares errors with `instanceof` across realms) run on `forks`: `FORKED_TEST_FILES` in
+  `vite.config.ts` lists them. A whole run takes about half the time it took on `forks` alone.
 - **Content tests:** every lesson position and task, every repertoire line, every classic game, every
   endgame study (including the scripted replies after every accepted alternative), every drill position
   and every threat-drill position (the threat after a pass, its line, the defences and the game move)
@@ -1071,16 +1382,24 @@ warning gives way to a confirmation.
   worker, so they only run against the built app), and the human-like opponent: its download, a game
   with its real replies, its record on Progress, a game played offline from the stored copy after a
   reload (online in WebKit, which Playwright cannot start a worker in while offline), Delete in
-  Settings, and a game in a cross-origin-isolated page.
+  Settings, and a game in a cross-origin-isolated page. Since 0.29 also human moves with the real
+  model, the time chart and the Time insights, fixing mistakes, the games that reached a position,
+  the gap finder against a stand-in explorer, quick search and what's new, Chess960 against the
+  engine and in Analyze and My games, and between browser contexts premoves, watching, a
+  correspondence game, the notifications card, Chess960 online and race rooms.
 - **Accessibility sweep (axe-core):** `e2e/axe.spec.ts` audits every page — the top-level ones and
   one of each parameterised route — in all three colour schemes, against WCAG 2.1 A/AA, and fails on
   any violation (the chessground board and the transient toasts are excluded). It sees each page as
   it first renders; states reached by playing are covered by the release specs' own axe checks.
-- **Browsers.** CI runs four Playwright projects in parallel jobs: the whole suite on desktop and
-  mobile Chromium, and the shell, engine, arcade, settings, lab, small-phone, accessibility and
-  release specs on Firefox and WebKit. A local `npm run e2e` runs the two Chromium projects;
-  `ALL_BROWSERS=1` adds the other two. CI allows two retries; the nightly run sets
-  `PLAYWRIGHT_FAIL_ON_FLAKY=1`, so a test that needed one fails it.
+- **Browsers.** CI runs four Playwright projects: the whole suite on desktop and mobile Chromium,
+  and the shell, engine, arcade, settings, lab, small-phone, accessibility and release specs
+  (`CROSS_BROWSER_SPECS` in `playwright.config.ts`, the 0.29 ones among them) on Firefox and
+  WebKit. Each project is split across runners with Playwright's `--shard` — four for each Chromium
+  project, three for Firefox and for WebKit, fourteen jobs in all — and each shard uploads a blob
+  report; the _End-to-end report_ job merges them into one HTML report (`playwright merge-reports`),
+  failures' traces and screenshots included, whether the shards passed or not. A local
+  `npm run e2e` runs the two Chromium projects; `ALL_BROWSERS=1` adds the other two. CI allows two
+  retries; the nightly run sets `PLAYWRIGHT_FAIL_ON_FLAKY=1`, so a test that needed one fails it.
 - **Production path.** One CI job builds with `VITE_BASE_PATH=/chess-trainer/` and runs
   `e2e/release-0-12-meta.spec.ts` (every URL in it relative) behind `scripts/serve-dist.mjs`, which
   answers like GitHub Pages: `404.html` with a 404 for a deep link. The same spec checks the footer

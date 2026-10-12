@@ -19,7 +19,7 @@ import { createHash } from 'node:crypto';
 export const CONNECT_ORIGINS = [
   'https://lichess.org',
   'https://api.chess.com',
-  'https://explorer.lichess.ovh',
+  'https://explorer.lichess.org',
   'https://tablebase.lichess.ovh',
 ] as const;
 

@@ -1,4 +1,5 @@
 import { Chess, type Color, type Move, type PieceSymbol, type Square } from 'chess.js';
+import { normalizeFen } from '@/chess/helpers';
 import type { Fen, Uci } from '@/chess/types';
 import type { Score } from '@/engine/uci';
 
@@ -554,7 +555,11 @@ export function explainMove(ctx: MoveContext): Explanation | null {
   };
 }
 
-/** Explains a move from a game review. */
+/**
+ * Explains a move from a game review. A Chess960 position is read without the
+ * castling rights standard chess cannot express (`normalizeFen`): the motifs
+ * are the same, and a castling move simply goes unexplained.
+ */
 export function explainReviewedMove(move: {
   fen: Fen;
   san: string;
@@ -568,7 +573,7 @@ export function explainReviewedMove(move: {
 }): Explanation | null {
   if (!move.judgement) return null;
   return explainMove({
-    fen: move.fen,
+    fen: normalizeFen(move.fen),
     san: move.san,
     judgement: move.judgement,
     bestUci: move.bestUci,

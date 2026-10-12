@@ -3,61 +3,71 @@ import { Board } from '@/components/board/Board';
 import { PromotionPicker } from '@/components/board/PromotionPicker';
 import { usePuzzleTrainer } from '@/features/puzzles/usePuzzleTrainer';
 import { DUEL_RULES } from '../../../../relay/src/live/shared.mjs';
-import { raceItems, trainerPuzzle } from '../duelRounds';
+import { trainerPuzzle } from '../duelRounds';
 import { resultWords, seconds } from '../duelView';
-import type { DuelSession, DuelView } from '../types';
+import type { DuelView, RacePuzzle, Side } from '../types';
 
 /** An empty board between the rounds: nothing to study before the round goes live. */
 export const EMPTY_FEN = '8/8/8/8/8/8/8/8 w - - 0 1';
 
 /**
- * A round of a puzzle race: the same puzzle on both boards at the same moment.
- * The first move is the opponent's (as in every puzzle); then each player finds
- * the line. A wrong move is out of the round; a clean solve reports its time,
- * measured here. When the round ends, the board plays the solution through.
+ * A round of a puzzle race: the same puzzle on every board at the same
+ * moment, in a duel and in a race room alike. The first move is the
+ * opponent's (as in every puzzle); then each player finds the line. A wrong
+ * move is out of the round; a clean solve reports its time, measured here.
+ * When the round ends, the board plays the solution through.
  */
 export function RaceRound({
-  view,
-  session,
+  puzzle,
+  phase,
+  reported,
+  orientation,
+  onResult,
   overlay,
-  opponentName,
+  status,
 }: {
-  view: DuelView;
-  session: DuelSession;
+  /** The round's puzzle (null until the puzzles are in). */
+  puzzle: RacePuzzle | null;
+  /** The round's phase while the race is on; null otherwise. */
+  phase: 'countdown' | 'live' | 'reveal' | null;
+  /** This player's result is in: the board takes no more moves. */
+  reported: boolean;
+  /** The board's side until the puzzle shows. */
+  orientation: Side;
+  onResult: (result: { ok: boolean; ms: number }) => void;
   overlay: ReactNode;
-  opponentName: string;
+  /** What shows under the board while the round is live. */
+  status: (solving: boolean, solver: Side) => ReactNode;
 }) {
-  const puzzle = raceItems(view.items)[view.round] ?? null;
-  const live = view.status === 'playing' && view.phase === 'live';
-  const round = view.round;
+  const live = phase === 'live';
   const trainer = usePuzzleTrainer((event) => {
-    session.report({ round, ok: event.outcome === 'solved', ms: event.durationMs });
+    onResult({ ok: event.outcome === 'solved', ms: event.durationMs });
   });
   const { load, showSolution } = trainer;
   // Puzzles are never repeated within a race: the id says which round the board is on.
   const loaded = puzzle !== null && trainer.puzzle?.id === puzzle.id;
 
-  // The puzzle comes out when the round goes live, on both boards at once.
+  // The puzzle comes out when the round goes live, on every board at once.
   useEffect(() => {
     if (live && puzzle && !loaded) load(trainerPuzzle(puzzle));
   }, [live, puzzle, loaded, load]);
 
   // Once the round is over, the line plays through for whoever did not finish it.
-  const reveal = view.phase === 'reveal' && loaded;
+  const reveal = phase === 'reveal' && loaded;
   const unsolved = trainer.phase !== 'solved' && !trainer.solutionShown;
   useEffect(() => {
     if (reveal && unsolved) showSolution();
   }, [reveal, unsolved, showSolution]);
 
-  const shown = loaded && view.phase !== 'countdown';
-  const solving = live && loaded && trainer.phase === 'solving' && !view.mine;
+  const shown = loaded && phase !== 'countdown';
+  const solving = live && loaded && trainer.phase === 'solving' && !reported;
 
   return (
     <>
       <div className="trainer__board" style={{ position: 'relative' }}>
         <Board
           fen={shown ? trainer.position.fen : EMPTY_FEN}
-          orientation={shown ? trainer.solverColor : view.you}
+          orientation={shown ? trainer.solverColor : orientation}
           turnColor={trainer.position.turn}
           movableColor={solving ? trainer.solverColor : undefined}
           dests={solving ? trainer.position.dests : new Map()}
@@ -76,19 +86,13 @@ export function RaceRound({
         ) : null}
         {overlay}
       </div>
-      {live ? (
-        <RaceStatus
-          view={view}
-          solving={solving}
-          solver={trainer.solverColor}
-          opponentName={opponentName}
-        />
-      ) : null}
+      {live ? status(solving, trainer.solverColor) : null}
     </>
   );
 }
 
-function RaceStatus({
+/** The line under the board in a duel: this player's round, and the opponent's. */
+export function DuelRaceStatus({
   view,
   solving,
   solver,
@@ -97,7 +101,7 @@ function RaceStatus({
   view: DuelView;
   solving: boolean;
   /** The side the puzzle is solved for. */
-  solver: 'white' | 'black';
+  solver: Side;
   opponentName: string;
 }) {
   const theirs = view.theirs && 'ok' in view.theirs ? view.theirs : null;

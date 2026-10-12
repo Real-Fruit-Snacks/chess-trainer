@@ -46,9 +46,12 @@ const STARTUP_LIMIT_BYTES = 46 * KB;
  * 6.5 MB for the eight piece sets from Lichess, about 0.27 MB of stylesheets, so every set works
  * offline from the first visit; the page itself loads only the chosen one. 0.25 raised it from
  * 6.75 MB for the lessons rewritten as conversations with a coach, about 0.7 MB more on disk —
- * some 0.2 MB gzipped — so every lesson still works offline; a lesson page loads only its file.)
+ * some 0.2 MB gzipped — so every lesson still works offline; a lesson page loads only its file.
+ * 0.29 raised it from 7.5 MB for its features, about 0.25 MB on disk — Chess960's rules (chessops),
+ * correspondence, race and analysis rooms, notifications, quick search, human moves, the gap
+ * finder — so all of them work offline from the first visit as well.)
  */
-const PRECACHE_LIMIT_BYTES = 7.5 * KB * KB;
+const PRECACHE_LIMIT_BYTES = 7.75 * KB * KB;
 
 function gzipSize(file) {
   return gzipSync(readFileSync(file), { level: 9 }).length;

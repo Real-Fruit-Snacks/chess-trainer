@@ -1,7 +1,7 @@
-import { Chess, type Move } from 'chess.js';
 import type { MoveJudgement } from '@/components/chess/MoveList';
-import { passMove, START_FEN, toUci } from '@/chess/helpers';
-import type { Fen, Uci } from '@/chess/types';
+import { START_FEN, toUci } from '@/chess/helpers';
+import { type ChessRules, rulesFor } from '@/chess/rules';
+import type { Fen, MoveInput, San, Uci } from '@/chess/types';
 import type { EngineClient } from '@/engine/EngineClient';
 import { cpToWinProbability, type Score, scoreToWhiteCp } from '@/engine/uci';
 
@@ -167,7 +167,7 @@ export const RECHECK_MIN_DEPTH = 14;
  */
 async function evaluate(
   engine: EngineClient,
-  position: { startFen: Fen; moves: Uci[] },
+  position: { startFen: Fen; moves: Uci[]; chess960: boolean },
   depth: number,
   signal: AbortSignal | undefined,
   searchmoves?: Uci[],
@@ -182,6 +182,7 @@ async function evaluate(
       depth,
       multipv,
       ...(searchmoves ? { searchmoves } : {}),
+      ...(position.chess960 ? { chess960: true } : {}),
     }).result;
     if (!result.stopped) return result;
   }
@@ -198,21 +199,28 @@ function flipScore(score: Score | null): Score | null {
   return score ? { type: score.type, value: -score.value } : null;
 }
 
+/** A move of the game to review: its SAN, and its squares for the engine's notation. */
+export type ReviewMove = Pick<MoveInput, 'from' | 'to'> & { san: San; promotion?: string };
+
 /**
  * Evaluates every position of a game at a fixed depth and classifies each move
  * by how much win probability it gave away compared with the engine's choice.
+ * A Chess960 game (`chess960`) is replayed and searched by Chess960's rules.
  */
 export async function reviewGame(
   engine: EngineClient,
   startFen: Fen,
-  moves: Move[],
+  moves: readonly ReviewMove[],
   options: {
     depth?: number;
     onProgress?: (done: number, total: number) => void;
     signal?: AbortSignal;
+    chess960?: boolean;
   } = {},
 ): Promise<ReviewSummary> {
   const depth = options.depth ?? 12;
+  const chess960 = options.chess960 === true;
+  const rules = rulesFor(chess960 ? 'chess960' : 'standard');
   const total = moves.length + 1;
   const evaluations: {
     win: number;
@@ -235,27 +243,27 @@ export async function reviewGame(
   const passThreats = new Map<number, PassThreat>();
   const PV_PLIES = 6;
 
-  const chess = new Chess(startFen);
+  const game = rules.replay(startFen);
   const played: Uci[] = [];
   /** The position after each ply (index 0: the start). */
   const fens: Fen[] = [];
   for (let ply = 0; ply <= moves.length; ply++) {
     if (options.signal?.aborted) throw new DOMException('Review cancelled', 'AbortError');
-    const moverIsWhite = chess.turn() === 'w';
-    fens.push(chess.fen());
+    const moverIsWhite = game.turn() === 'white';
+    fens.push(game.fen());
 
-    if (chess.isGameOver()) {
-      const win = chess.isCheckmate() ? (moverIsWhite ? 0 : 1) : 0.5;
+    if (game.isGameOver()) {
+      const win = game.isCheckmate() ? (moverIsWhite ? 0 : 1) : 0.5;
       evaluations.push({ win, score: null, best: null, pv: [], depth: 0 });
     } else {
       const searchDepth = depthFor(depth, {
-        legalMoves: chess.moves().length,
+        legalMoves: game.legalMoveCount(),
         ply,
         fromStart: startFen === START_FEN,
       });
       const result = await evaluate(
         engine,
-        { startFen, moves: [...played] },
+        { startFen, moves: [...played], chess960 },
         searchDepth,
         options.signal,
       );
@@ -289,7 +297,7 @@ export async function reviewGame(
         const both = before.best ? [before.best, last] : [last];
         const result = await evaluate(
           engine,
-          { startFen, moves: played.slice(0, ply - 1) },
+          { startFen, moves: played.slice(0, ply - 1), chess960 },
           Math.max(before.depth, RECHECK_MIN_DEPTH),
           options.signal,
           both,
@@ -305,6 +313,7 @@ export async function reviewGame(
       if (first === 'mistake' || first === 'blunder') {
         const threat = await passSearch(
           engine,
+          rules,
           fens[ply - 1],
           Math.max(before.depth, RECHECK_MIN_DEPTH),
           options.signal,
@@ -317,8 +326,9 @@ export async function reviewGame(
     options.onProgress?.(ply + 1, total);
     const move = moves[ply];
     if (move) {
-      const done = chess.move(move.san);
-      played.push(toUci(done));
+      const done = game.play(move.san);
+      if (!done) throw new Error(`The game could not be replayed at ${move.san}.`);
+      played.push(done.uci);
     }
   }
 
@@ -329,12 +339,12 @@ export async function reviewGame(
   };
   const losses = { white: [] as number[], black: [] as number[] };
 
-  const replay = new Chess(startFen);
+  const replay = rules.replay(startFen);
   moves.forEach((move, i) => {
     const before = evaluations[i];
     const after = evaluations[i + 1];
     if (!before || !after) return;
-    const mover = replay.turn() === 'w' ? 'white' : 'black';
+    const mover = replay.turn();
     // Loss from the mover's point of view.
     let loss = moverLoss(mover === 'white', before.win, after.win);
     const played = toUci(move);
@@ -373,12 +383,7 @@ export async function reviewGame(
     let bestSan: string | null = null;
     if (before.best && !isBest) {
       try {
-        const probe = new Chess(replay.fen());
-        bestSan = probe.move({
-          from: before.best.slice(0, 2),
-          to: before.best.slice(2, 4),
-          promotion: before.best[4],
-        }).san;
+        bestSan = rules.uciToSan(replay.fen(), before.best);
       } catch {
         bestSan = null;
       }
@@ -404,7 +409,7 @@ export async function reviewGame(
         ? optional('passThreat', passThreats.get(i))
         : {}),
     });
-    replay.move(move.san);
+    replay.play(move.san);
   });
 
   const accuracy = {
@@ -428,17 +433,18 @@ function optional<K extends string, V>(key: K, value: V | undefined): Partial<Re
  */
 async function passSearch(
   engine: EngineClient,
+  rules: ChessRules,
   fen: Fen | undefined,
   depth: number,
   signal: AbortSignal | undefined,
   plies: number,
 ): Promise<PassThreat | null> {
-  const passed = fen ? passMove(fen) : null;
+  const passed = fen ? rules.passMove(fen) : null;
   if (!passed) return null;
   try {
     const result = await evaluate(
       engine,
-      { startFen: passed, moves: [] },
+      { startFen: passed, moves: [], chess960: rules.variant === 'chess960' },
       depth,
       signal,
       undefined,

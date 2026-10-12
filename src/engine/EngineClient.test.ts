@@ -391,6 +391,30 @@ describe('EngineClient searches', () => {
     expect(go).toBe('go depth 12 searchmoves g1f3 b1c3');
   });
 
+  it('switches Chess960 rules per search, only when they change, before the position', async () => {
+    const client = new EngineClient();
+    const fen960 = 'bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1';
+    await client.search({ fen: 'standard' }).result;
+    await client.search({ fen: fen960, moves: ['d1c1'], chess960: true }).result;
+    await client.search({ fen: fen960, moves: ['d1c1', 'e7e5'], chess960: true }).result;
+    await client.search({ fen: 'standard again', chess960: false }).result;
+    await client.search({ fen: 'standard once more' }).result;
+    const sent = (FakeWorker.instances[0]?.sent ?? []).filter(
+      (c) => c.startsWith('setoption name UCI_Chess960') || c.startsWith('position'),
+    );
+    expect(sent).toEqual([
+      // Stockfish starts in standard mode: nothing to say for the first search.
+      'position fen standard',
+      'setoption name UCI_Chess960 value true',
+      `position fen ${fen960} moves d1c1`,
+      `position fen ${fen960} moves d1c1 e7e5`,
+      'setoption name UCI_Chess960 value false',
+      'position fen standard again',
+      'position fen standard once more',
+    ]);
+    client.terminate();
+  });
+
   it('defaults to depth 12 and passes the moves played since the position', async () => {
     const client = new EngineClient();
     await client.search({ fen: 'startpos-fen', moves: ['e2e4', 'e7e5'] }).result;

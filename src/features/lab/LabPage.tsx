@@ -13,7 +13,6 @@ import {
   EmptyState,
   Field,
   Icon,
-  ICON_NAMES,
   Input,
   Kbd,
   LinkButton,
@@ -26,6 +25,7 @@ import {
   Switch,
   type Tone,
 } from '@/components/ui';
+import { ICON_NAMES } from '@/components/ui/iconData';
 import { toast } from '@/components/ui/toastStore';
 import { EngineDiagnostics } from '@/features/settings/EngineDiagnostics';
 import { SoundThemePicker, VolumeSlider } from '@/features/settings/SoundControls';

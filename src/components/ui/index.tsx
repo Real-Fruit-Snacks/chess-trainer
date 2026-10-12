@@ -822,4 +822,4 @@ export function ScrollRegion({
   );
 }
 
-export { Icon, ICON_NAMES, type IconName, type IconProps, Stars } from './Icon';
+export { Icon, type IconName, type IconProps, Stars } from './Icon';

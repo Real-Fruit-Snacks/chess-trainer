@@ -1,17 +1,10 @@
-import { Chess, type Move, type Square } from 'chess.js';
+import { Chess, type Square } from 'chess.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DrawShape } from '@/components/board/Board';
 import type { MoveJudgement } from '@/components/chess/MoveList';
-import {
-  isPromotionMove,
-  legalDests,
-  parseUci,
-  sanitizeFen,
-  START_FEN,
-  toLongColor,
-  tryMove,
-  tryNotation,
-} from '@/chess/helpers';
+import { isChess960Fen, normalizeChess960Fen } from '@/chess/chess960';
+import { parseUci, sanitizeFen, START_FEN } from '@/chess/helpers';
+import type { ChessRules, PlayedMove } from '@/chess/rules';
 import { GameTree, type TreeNode } from '@/chess/tree';
 import type { Fen, LongColor, PromotionPiece, Uci } from '@/chess/types';
 import { useEngine } from '@/engine/useEngine';
@@ -85,7 +78,12 @@ export interface UseAnalysis {
   deleteFromHere: () => void;
   setComment: (text: string, node?: TreeNode) => void;
   setGlyph: (nag: number | null, node?: TreeNode) => void;
-  loadFen: (fen: Fen) => boolean;
+  /**
+   * Loads a position. A Chess960 one — asked for with `chess960`, or one only
+   * Chess960 has (castling rights by file, a start other than the classical
+   * one) — is analysed by Chess960's rules.
+   */
+  loadFen: (fen: Fen, options?: { chess960?: boolean }) => boolean;
   /**
    * Loads a PGN, opened at its last move, at `atPly` (1-based main-line ply) or,
    * with `line`, at the node reached by following those UCI moves from the start.
@@ -108,22 +106,19 @@ export interface UseAnalysis {
   retryEngine: () => Promise<void>;
 }
 
-function viewedPosition(node: TreeNode): ViewedPosition {
-  const chess = new Chess(node.fen);
-  const over = chess.isGameOver();
-  let result: ViewedPosition['result'] = null;
-  if (over) {
-    result = chess.isCheckmate() ? (chess.turn() === 'w' ? '0-1' : '1-0') : '1/2-1/2';
-  }
+/** A node's position, by the tree's rules (Chess960 castling: the king onto its rook). */
+function viewedPosition(node: TreeNode, rules: ChessRules): ViewedPosition {
+  const info = rules.position(node.fen);
+  const over = info.status.over;
   return {
     fen: node.fen,
-    turn: toLongColor(chess.turn()),
-    dests: legalDests(chess),
+    turn: info.turn,
+    dests: info.dests,
     lastMove: node.uci ? [parseUci(node.uci).from, parseUci(node.uci).to] : null,
-    inCheck: chess.inCheck(),
-    moveNumber: chess.moveNumber(),
+    inCheck: info.inCheck,
+    moveNumber: info.moveNumber,
     gameOver: over,
-    result,
+    result: over ? (info.status.result === '*' ? '1/2-1/2' : info.status.result) : null,
   };
 }
 
@@ -162,11 +157,13 @@ export function useAnalysis(): UseAnalysis {
   const current = useMemo(() => tree.current, [tree, version]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const path = useMemo(() => tree.pathTo(current), [tree, current, version]);
-  const viewed = useMemo(() => viewedPosition(current), [current]);
+  const viewed = useMemo(() => viewedPosition(current, tree.rules), [current, tree]);
   // The moves that led to the viewed position, so the engine sees repetitions (a string: the
   // search restarts only when the line changes, not on every edit of the tree).
   const startFen = tree.startFen;
   const history = useMemo(() => path.map((n) => n.uci).join(' '), [path]);
+  /** A Chess960 game: the engine plays by its rules too. */
+  const chess960 = tree.chess960;
 
   // Opening name for the current line.
   useEffect(() => {
@@ -237,6 +234,7 @@ export function useAnalysis(): UseAnalysis {
         moves: history ? history.split(' ') : [],
         depth: analysisDepth,
         multipv: analysisLines,
+        ...(chess960 ? { chess960: true } : {}),
       },
       (info) => {
         if (cancelled) return;
@@ -271,6 +269,7 @@ export function useAnalysis(): UseAnalysis {
     engineStatus,
     startFen,
     history,
+    chess960,
     viewed.gameOver,
     analysisDepth,
     analysisLines,
@@ -289,7 +288,7 @@ export function useAnalysis(): UseAnalysis {
   }, [lines, engineOn]);
 
   const commit = useCallback(
-    (move: Move | null) => {
+    (move: PlayedMove | null) => {
       if (!move) return false;
       const node = tree.addMove({
         from: move.from,
@@ -297,7 +296,7 @@ export function useAnalysis(): UseAnalysis {
         promotion: move.promotion as PromotionPiece | undefined,
       });
       if (!node) return false;
-      playMoveSound(move, new Chess(node.fen));
+      playMoveSound(move, { inCheck: () => tree.rules.position(node.fen).inCheck });
       bump();
       return true;
     },
@@ -306,15 +305,16 @@ export function useAnalysis(): UseAnalysis {
 
   const playMove = useCallback(
     (from: Square, to: Square, promotion?: PromotionPiece) => {
-      const chess = new Chess(tree.current.fen);
-      if (!promotion && isPromotionMove(chess, from, to)) {
+      const { rules } = tree;
+      const fen = tree.current.fen;
+      if (!promotion && rules.isPromotion(fen, from, to)) {
         if (autoQueen) promotion = 'q';
         else {
-          setPendingPromotion({ from, to, color: toLongColor(chess.turn()) });
+          setPendingPromotion({ from, to, color: rules.position(fen).turn });
           return;
         }
       }
-      commit(tryMove(chess, { from, to, promotion }));
+      commit(rules.play(fen, { from, to, promotion }));
     },
     [tree, autoQueen, commit],
   );
@@ -328,10 +328,8 @@ export function useAnalysis(): UseAnalysis {
   );
 
   const playNotation = useCallback(
-    (notation: string): boolean => {
-      const chess = new Chess(tree.current.fen);
-      return commit(tryNotation(chess, notation, { autoQueen }));
-    },
+    (notation: string): boolean =>
+      commit(tree.rules.playTyped(tree.current.fen, notation, { autoQueen })),
     [tree, autoQueen, commit],
   );
 
@@ -340,8 +338,9 @@ export function useAnalysis(): UseAnalysis {
       const pending = pendingPromotion;
       setPendingPromotion(null);
       if (!pending || !piece) return;
-      const chess = new Chess(tree.current.fen);
-      commit(tryMove(chess, { from: pending.from, to: pending.to, promotion: piece }));
+      commit(
+        tree.rules.play(tree.current.fen, { from: pending.from, to: pending.to, promotion: piece }),
+      );
     },
     [pendingPromotion, tree, commit],
   );
@@ -444,7 +443,14 @@ export function useAnalysis(): UseAnalysis {
   );
 
   const loadFen = useCallback(
-    (fen: Fen) => {
+    (fen: Fen, options: { chess960?: boolean } = {}) => {
+      if (options.chess960 === true || isChess960Fen(fen)) {
+        // Castling rights by file kept, and checked by Chess960's rules.
+        const own = normalizeChess960Fen(fen);
+        if (!own) return false;
+        replaceTree(new GameTree(own, 'chess960'));
+        return true;
+      }
       // Repairs stale castling flags and en passant squares; rejects non-positions.
       const clean = sanitizeFen(fen);
       if (!clean) return false;
@@ -505,11 +511,11 @@ export function useAnalysis(): UseAnalysis {
     const controller = new AbortController();
     reviewAbort.current = controller;
     setReviewProgress(0);
-    // The reviewer only needs SAN, but takes chess.js moves; replay the main line to get them.
-    const chess = new Chess(tree.startFen);
-    const moves: Move[] = [];
+    // The reviewer takes the main line's moves, replayed by the game's rules.
+    const replay = tree.rules.replay(tree.startFen);
+    const moves: PlayedMove[] = [];
     for (const node of line) {
-      const move = tryMove(chess, node.san);
+      const move = replay.play(node.san);
       if (!move) break;
       moves.push(move);
     }
@@ -518,6 +524,7 @@ export function useAnalysis(): UseAnalysis {
     reviewGame(engine(), tree.startFen, moves, {
       depth: reviewDepth,
       signal: controller.signal,
+      ...(tree.chess960 ? { chess960: true } : {}),
       onProgress: (done, total) => {
         setReviewProgress(done / total);
         if (done >= 3) {

@@ -12,7 +12,10 @@ const PlayHubPage = lazy(() => import('@/features/live/PlayHubPage'));
 const PlayPage = lazy(() => import('@/features/play/PlayPage'));
 const LiveGamePage = lazy(() => import('@/features/live/LiveGamePage'));
 const DuelPage = lazy(() => import('@/features/live/DuelPage'));
+const WatchGamePage = lazy(() => import('@/features/live/WatchGamePage'));
+const RaceRoomPage = lazy(() => import('@/features/live/RaceRoomPage'));
 const AnalyzePage = lazy(() => import('@/features/analyze/AnalyzePage'));
+const AnalysisRoomPage = lazy(() => import('@/features/live/AnalysisRoomPage'));
 const ProgressPage = lazy(() => import('@/features/progress/ProgressPage'));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
 const LabPage = lazy(() => import('@/features/lab/LabPage'));
@@ -77,7 +80,10 @@ export const routes: RouteObject[] = [
       { path: 'play/online/:gameId', element: <LiveGamePage source="relay" /> },
       { path: 'play/online/lichess/:gameId', element: <LiveGamePage source="lichess" /> },
       { path: 'play/duel/:gameId', element: <DuelPage /> },
+      { path: 'play/watch/:gameId', element: <WatchGamePage /> },
+      { path: 'play/race/:roomId', element: <RaceRoomPage /> },
       { path: 'analyze', element: <AnalyzePage /> },
+      { path: 'analyze/together/:roomId', element: <AnalysisRoomPage /> },
       { path: 'drills', element: <DrillsPage /> },
       { path: 'drills/coordinates', element: <CoordinatesDrill /> },
       { path: 'drills/vision', element: <VisionDrill /> },

@@ -36,12 +36,19 @@ const PUZZLE_ID = /^[A-Za-z0-9]{3,12}$/;
 
 const PREPARE_FAILED = 'The rounds could not be prepared.';
 
-/** A race's puzzles: near its level for rounds, climbing from below it for a timed race. */
-async function racePuzzles(opts: GameOptions, random: () => number): Promise<RacePuzzle[]> {
+/**
+ * A race's puzzles: near its level for rounds, climbing from below it for a
+ * timed race; none of those in `avoid` (a room's last race).
+ */
+async function racePuzzles(
+  opts: GameOptions,
+  random: () => number,
+  avoid: ReadonlySet<string>,
+): Promise<RacePuzzle[]> {
   const level = opts.level ?? 1500;
   const timed = opts.format === 'timed';
   const count = timed ? TIMED_RACE_PUZZLES : DUEL_RULES.race.rounds;
-  const used = new Set<string>();
+  const used = new Set<string>(avoid);
   const puzzles: RacePuzzle[] = [];
   for (let i = 0; i < count * 2 && puzzles.length < count; i++) {
     const n = puzzles.length;
@@ -126,16 +133,18 @@ function judgeItems(random: () => number): JudgeItem[] {
 /**
  * Makes a duel's rounds on the host's device, checked as the relay will check
  * them. Throws (with a sentence to show) when they cannot be made: the
- * puzzles out of reach offline, say.
+ * puzzles out of reach offline, say. A race's puzzles leave out those in
+ * `avoid` (a race room's last race, so the next has new ones).
  */
 export async function prepareDuel(
   game: DuelKind,
   opts: GameOptions,
   random: () => number = Math.random,
+  avoid: ReadonlySet<string> = new Set(),
 ): Promise<DuelItems> {
   let items: unknown[];
   try {
-    if (game === 'race') items = await racePuzzles(opts, random);
+    if (game === 'race') items = await racePuzzles(opts, random, avoid);
     else if (game === 'arbiter') items = arbiterItems(random);
     else items = judgeItems(random);
   } catch (err) {

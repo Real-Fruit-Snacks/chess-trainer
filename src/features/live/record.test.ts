@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clockOf, parsePgn } from '@/chess/pgn';
+import { mainLineOfPgn } from '@/features/games/gameStats';
 import { siteConfig } from '@/site.config';
 import { sortedGames, useGames } from '@/store/games';
 import { randomId } from '../../../relay/src/live/shared.mjs';
@@ -22,6 +24,7 @@ function finished(over: Partial<LiveGameView> = {}): LiveGameView {
     tc: '5+3',
     rated: false,
     moves: FOOLS_MATE,
+    clocks: [],
     clock: { white: 1000, black: 2000, running: null, at: 0 },
     firstMove: null,
     status: 'over',
@@ -29,9 +32,15 @@ function finished(over: Partial<LiveGameView> = {}): LiveGameView {
     reason: 'checkmate',
     offers: { draw: null, takeback: null, rematch: null },
     opponentPresent: true,
+    present: { white: true, black: true },
+    watching: false,
+    watchers: 0,
+    open: null,
+    joined: null,
     claimAt: null,
     chat: [],
     next: null,
+    analysis: null,
     error: null,
     url: null,
     game: 'chess',
@@ -48,10 +57,14 @@ const games = () => sortedGames(useGames.getState().games);
 
 describe('recording a live game', () => {
   beforeEach(() => useGames.getState().clear());
+  afterEach(() => vi.useRealTimers());
 
   it('keeps a relay game in My games, with the learner’s side and a full PGN', () => {
     const view = finished();
     const startedAt = new Date(2026, 9, 10, 18, 30).getTime();
+    // A seat is kept a day: the game is recorded half an hour after it started.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(startedAt + 30 * 60_000);
     rememberSeat(view.id, randomId(32), 'black', 'chess', startedAt);
     recordLiveGame(view);
     expect(games()).toHaveLength(1);
@@ -88,6 +101,38 @@ describe('recording a live game', () => {
     expect(game.pgn).not.toMatch(/Elo/);
   });
 
+  it('writes the clock after each move of a game against the clock, as Lichess does', () => {
+    recordLiveGame(finished({ clocks: [300_000, 300_000, 293_400, 296_999] }));
+    const game = games()[0];
+    expect(game?.pgn.split('\n\n')[1]).toBe(
+      [
+        '1. f3 { [%clk 0:05:00] } 1... e5 { [%clk 0:05:00] } 2. g4 { [%clk 0:04:53] }',
+        '2... Qh4# { [%clk 0:04:56] } 0-1',
+      ].join('\n'),
+    );
+    // The review reads them back: the seconds left after each move.
+    const moves = parsePgn(game?.pgn ?? '').moves;
+    expect(moves.map((move) => move.san)).toEqual(['f3', 'e5', 'g4', 'Qh4#']);
+    expect(moves.map((move) => clockOf(move.commands))).toEqual([300, 300, 293, 296]);
+
+    // Readings that do not cover every move are left out, and an hour shows as one.
+    recordLiveGame(finished({ clocks: [300_000, 300_000] }));
+    expect(games()[0]?.pgn).not.toContain('%clk');
+    recordLiveGame(finished({ tc: '60+0', clocks: [3_600_000, 3_600_000, 3_599_000, 3_541_000] }));
+    expect(games()[0]?.pgn).toContain('1. f3 { [%clk 1:00:00] }');
+    expect(games()[0]?.pgn).toContain('2... Qh4# { [%clk 0:59:01] } 0-1');
+  });
+
+  it('keeps a correspondence game with its days a move', () => {
+    recordLiveGame(finished({ tc: '3d' }));
+    const game = games()[0]!;
+    expect(game).toMatchObject({
+      event: 'Correspondence game · 3 days a move',
+      speed: 'correspondence',
+    });
+    expect(game.pgn).toContain('[TimeControl "1/259200"]');
+  });
+
   it('keeps an Army Draft game from its drafted position, and names a blindfold game', () => {
     const startFen = draftFen({ q: 1, r: 2, b: 0, n: 0, p: 8 }, { q: 0, r: 2, b: 2, n: 2, p: 2 });
     recordLiveGame(
@@ -116,6 +161,42 @@ describe('recording a live game', () => {
 
     recordLiveGame(finished({ game: 'blindfold' }));
     expect(games().map((g) => g.event)).toContain('Blindfold game · 5+3');
+  });
+
+  it('keeps a Chess960 game with the tags that make it one, ready for the review', () => {
+    const startFen = 'bbqnrknr/pppppppp/8/8/8/8/PPPPPPPP/BBQNRKNR w KQkq - 0 1';
+    recordLiveGame(
+      finished({
+        game: 'chess960',
+        startFen,
+        // 1.Nh3 Nh6 2.O-O O-O (each king onto its rook), then Black resigns.
+        moves: ['g1h3', 'g8h6', 'f1h1', 'f8h8'],
+        clocks: [300_000, 300_000, 299_000, 298_000],
+        result: '1-0',
+        reason: 'resign',
+      }),
+    );
+    const game = games()[0]!;
+    expect(game).toMatchObject({ event: 'Chess960 · position 192 · 5+3', startFen, plies: 4 });
+    expect(game.pgn).toContain('[Variant "Chess960"]\n[SetUp "1"]\n[FEN "' + startFen + '"]');
+    expect(game.pgn).not.toContain('From Position');
+    expect(game.pgn).toMatch(
+      /1\. Nh3 \{ \[%clk 0:05:00\] \} 1\.\.\. Nh6 .*\s2\. O-O .*\s2\.\.\. O-O .*\s1-0$/s,
+    );
+    // My games and Analyze read it as Chess960, castling and all.
+    const line = mainLineOfPgn(game.pgn);
+    expect(line).toMatchObject({ chess960: true, sans: ['Nh3', 'Nh6', 'O-O', 'O-O'] });
+    expect(line?.fens.at(-1)).toMatch(/^bbqnrrk1\/.*\/BBQNRRK1 w - /);
+
+    // By correspondence, it says so.
+    recordLiveGame(
+      finished({ game: 'chess960', startFen, tc: '3d', moves: ['g1h3', 'g8h6'], result: '1-0' }),
+    );
+    expect(games().map((g) => g.event)).toContain('Chess960 correspondence game · 3 days a move');
+    // Moves that are not legal in Chess960 (castling written the standard way) make no PGN.
+    recordLiveGame(finished({ game: 'chess960', startFen, moves: ['g1h3', 'g8h6', 'f1g1x'] }));
+    recordLiveGame(finished({ game: 'chess960', startFen: null, moves: ['g1h3', 'g8h6'] }));
+    expect(games()).toHaveLength(2);
   });
 
   it('keeps each game once, even when it is told again or removed meanwhile', () => {

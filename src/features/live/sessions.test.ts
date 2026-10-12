@@ -16,9 +16,19 @@ vi.mock('./lichessLive', () => ({
 }));
 
 import { createLichessGame } from './lichessLive';
-import { gamesToCheck, markGameOver, rememberLichessGame, SEAT_KEEP_MS, seatOf } from './seats';
+import { useCorrespondence } from './correspondence';
 import {
+  correspondenceSeats,
+  gamesToCheck,
+  markGameOver,
+  rememberLichessGame,
+  SEAT_KEEP_MS,
+  seatOf,
+} from './seats';
+import {
+  checkOnCorrespondence,
   checkOnLiveGames,
+  CORRESPONDENCE_CHECK_MS,
   closeLiveGames,
   FINISHED_LINGER_MS,
   getDuel,
@@ -26,6 +36,7 @@ import {
   liveGamePath,
   rememberSeat,
   useActiveGames,
+  watchLiveGame,
 } from './sessions';
 
 let relay: FakeLiveRelay;
@@ -35,6 +46,7 @@ beforeEach(() => {
   relay = installFakeLiveRelay();
   useGames.getState().clear();
   useLichess.setState({ account: null });
+  useCorrespondence.setState({ games: [] });
 });
 
 afterEach(() => {
@@ -85,6 +97,7 @@ function fakeLichessSession(id: string) {
     tc: '10+0',
     rated: true,
     moves: [],
+    clocks: [],
     clock: null,
     firstMove: null,
     status: 'playing',
@@ -92,9 +105,15 @@ function fakeLichessSession(id: string) {
     reason: null,
     offers: { draw: null, takeback: null, rematch: null },
     opponentPresent: true,
+    present: { white: true, black: true },
+    watching: false,
+    watchers: 0,
+    open: null,
+    joined: null,
     claimAt: null,
     chat: [],
     next: null,
+    analysis: null,
     error: null,
     url: `https://lichess.org/${id}`,
     game: 'chess',
@@ -126,6 +145,8 @@ function fakeLichessSession(id: string) {
     say: vi.fn(),
     army: vi.fn(),
     peek: vi.fn(),
+    join: vi.fn(),
+    analyse: vi.fn(),
     close() {
       session.closed = true;
     },
@@ -336,6 +357,50 @@ describe('game connections', () => {
     fresh?.close();
   });
 
+  it('watches a game as one connection, never in the bar or My games, let go once unseen', async () => {
+    vi.useFakeTimers();
+    const { game, opponent } = await seated();
+    const player = getLiveGame('relay', game)!;
+    const watched = watchLiveGame(game)!;
+    expect(watchLiveGame(game)).toBe(watched);
+    expect(watched).not.toBe(player);
+    expect(watchLiveGame('not a game')).toBeNull();
+    const unsubscribe = watched.subscribe(() => undefined);
+    await relay.settle();
+    expect(watched.getView()).toMatchObject({ watching: true, connection: 'open' });
+    // The bar knows only the game this device plays.
+    expect(useActiveGames.getState().games.map((g) => g.id)).toEqual([game]);
+
+    player.move('e2e4');
+    await relay.settle();
+    await opponent.send({ t: 'move', uci: 'e7e5', ply: 1 });
+    await opponent.send({ t: 'resign' });
+    await relay.settle();
+    expect(watched.getView()).toMatchObject({ status: 'over', moves: ['e2e4', 'e7e5'] });
+    // Kept once, by the player's connection.
+    expect(sortedGames(useGames.getState().games)).toHaveLength(1);
+    expect(sortedGames(useGames.getState().games)[0]).toMatchObject({ side: 'white' });
+
+    // Shown no more: a minute later it is closed and forgotten.
+    unsubscribe();
+    await vi.advanceTimersByTimeAsync(FINISHED_LINGER_MS);
+    await relay.settle();
+    expect(watched.getView().connection).toBe('closed');
+    expect(watchLiveGame(game)).not.toBe(watched);
+  });
+
+  it('lets a game watched go a minute after nothing shows it, even while it is on', async () => {
+    vi.useFakeTimers();
+    const { game } = await seated();
+    const watched = watchLiveGame(game)!;
+    watched.subscribe(() => undefined)();
+    await relay.settle();
+    expect(watched.getView().status).toBe('playing');
+    await vi.advanceTimersByTimeAsync(FINISHED_LINGER_MS);
+    await relay.settle();
+    expect(watched.getView().connection).toBe('closed');
+  });
+
   it('keeps a Lichess game that ends in My games, and closes a game on request', () => {
     useLichess.setState({ account });
     const fake = fakeLichessSession('Zz9yX8wV');
@@ -379,6 +444,69 @@ async function seatedInDuel(game = 'judge') {
   await opponent.send({ t: 'hello', seat: host.last('paired')!.seat });
   return { id, opponent };
 }
+
+describe('correspondence games', () => {
+  const DAY = 86_400_000;
+
+  it('keeps a seat while its game is on, however long, and a week after the end', () => {
+    const id = randomId(16);
+    const now = Date.now();
+    rememberSeat(id, randomId(32), 'white', 'chess', now - 40 * DAY, true);
+    expect(seatOf(id, now)).toMatchObject({ corr: true, color: 'white' });
+    // Not one of the games played at once that a restart checks on.
+    expect(gamesToCheck(now)).toEqual([]);
+    expect(correspondenceSeats(now).map((seat) => seat.id)).toEqual([id]);
+    markGameOver('relay', id, now);
+    expect(seatOf(id, now + 6 * DAY)).toMatchObject({ over: true, overAt: now });
+    expect(seatOf(id, now + 8 * DAY)).toBeNull();
+  });
+
+  it('checks on its games through their rooms, lists them, and keeps them out of the bar’s games', async () => {
+    vi.useFakeTimers();
+    const lobby = relay.lobbyClient();
+    await lobby.send({
+      t: 'create',
+      game: 'chess',
+      tc: '2d',
+      color: 'white',
+      name: 'Patient Bishop',
+      rating: null,
+    });
+    const created = lobby.last('created')!;
+    const game = created.game as string;
+    rememberSeat(game, created.seat as string, 'white', 'chess', Date.now(), true);
+    const friend = relay.roomClient(game);
+    await friend.send({ t: 'hello', watch: true });
+    await friend.send({ t: 'join', name: 'Swift Knight', rating: null });
+
+    checkOnCorrespondence();
+    await relay.settle();
+    expect(relay.openSockets(`/v1/games/${game}`)).toHaveLength(1);
+    expect(useCorrespondence.getState().games).toEqual([
+      expect.objectContaining({
+        id: game,
+        opponent: 'Swift Knight',
+        status: 'playing',
+        turn: 'white',
+      }),
+    ]);
+    expect(useLiveBar.getState().active).toBe(true);
+    // A game over days is no "game in progress" for the bar to lead back to.
+    expect(useActiveGames.getState().games).toEqual([]);
+
+    // Checked a moment ago: not again so soon.
+    checkOnCorrespondence();
+    await relay.settle();
+    expect(relay.sockets.filter((s) => s.path === `/v1/games/${game}`)).toHaveLength(1);
+
+    // Nothing shows it: its connection goes a minute later, the list stays.
+    await vi.advanceTimersByTimeAsync(FINISHED_LINGER_MS);
+    await relay.settle();
+    expect(relay.openSockets(`/v1/games/${game}`)).toHaveLength(0);
+    expect(useCorrespondence.getState().games).toHaveLength(1);
+    expect(CORRESPONDENCE_CHECK_MS).toBeLessThanOrEqual(FINISHED_LINGER_MS);
+  });
+});
 
 describe('duel connections', () => {
   it('opens a duel as a duel, one connection, and the bar leads back to it', async () => {

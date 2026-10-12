@@ -10,15 +10,24 @@ import type {
   DuelResult,
   JudgeItem,
   RacePuzzle,
+  RaceResult,
 } from '../../../relay/src/live/duelRules.mjs';
+import type { Square } from 'chess.js';
+import type { GameTree, TreeNode } from '@/chess/tree';
+import type { Fen, MoveInput, Uci } from '@/chess/types';
+import type { DrawShape } from '@/components/board/Board';
 import type {
+  AnalysisVariant,
   ArbiterPace,
   ColorChoice,
   DuelKind,
   GameKind,
   GameOptions,
+  GroupKind,
+  GroupOptions,
   PhraseId,
   RaceFormat,
+  RaceRoomFormat,
   TimeControlSpec,
 } from '../../../relay/src/live/shared.mjs';
 
@@ -38,7 +47,7 @@ export type {
   TimeControlSpec,
 };
 
-/** The games played by the rules of chess: chess itself, blindfold, and Army Draft. */
+/** The games played by the rules of chess: chess itself, blindfold, Army Draft and Chess960. */
 export type ChessKind = Exclude<GameKind, DuelKind>;
 
 export type Side = 'white' | 'black';
@@ -80,6 +89,8 @@ export type LiveEndReason =
   | 'aborted'
   /** Nobody made the first move in time. */
   | 'no-start'
+  /** A correspondence invitation nobody took in time. */
+  | 'expired'
   /** A draw Lichess does not explain further (repetition, fifty moves, agreement…). */
   | 'draw'
   /** Any other ending Lichess reports (a cheat detected, an unknown finish). */
@@ -106,7 +117,10 @@ export interface LiveGameView {
   /** Chess, or a variant of it (always chess on Lichess). */
   game: ChessKind;
   opts: GameOptions;
-  /** The position the moves start from: Army Draft's armies; null for the initial position. */
+  /**
+   * The position the moves start from: Army Draft's armies, a Chess960 game's start; null for
+   * the initial position.
+   */
   startFen: string | null;
   /** Army Draft's draft (before the game and after it), or null. */
   draft: LiveDraft | null;
@@ -116,7 +130,12 @@ export interface LiveGameView {
   connection: 'connecting' | 'open' | 'reconnecting' | 'closed';
   /** No such game, or this device holds no seat in it: the page says so. */
   missing: boolean;
-  /** Which side this device plays. */
+  /**
+   * This device watches the game: it holds no seat, sends nothing, and sees the
+   * game from White's side (`you` is then 'white').
+   */
+  watching: boolean;
+  /** Which side this device plays (White when watching). */
   you: Side;
   white: LivePlayer;
   black: LivePlayer;
@@ -125,6 +144,11 @@ export interface LiveGameView {
   rated: boolean;
   /** The moves so far, in UCI ("e2e4", "e7e8q"), from `startFen` (or the initial position). */
   moves: string[];
+  /**
+   * The mover's time left after each move, in milliseconds, as the relay's room
+   * keeps them for the record (games at once on the relay; none elsewhere).
+   */
+  clocks: number[];
   clock: LiveClock | null;
   /** Before both sides have moved: who must make a first move, and by when (performance.now()). */
   firstMove: { color: Side; deadline: number } | null;
@@ -136,12 +160,25 @@ export interface LiveGameView {
   offers: Record<OfferKind, Side | null>;
   /** Whether the opponent is connected to the game. */
   opponentPresent: boolean;
+  /** Whether each player is connected to the game. */
+  present: Record<Side, boolean>;
+  /** How many watch the game (the relay's own games; 0 elsewhere). */
+  watchers: number;
+  /** A correspondence invitation's seat that nobody has taken yet. */
+  open: Side | null;
+  /** The seat this device has just taken, watching a correspondence invitation: its board is next. */
+  joined: Side | null;
   /** When this device may claim the game against an opponent who left (performance.now()), or null. */
   claimAt: number | null;
   /** The phrases sent so far, oldest first, as text. */
   chat: { by: Side; text: string }[];
   /** A rematch to go to: the page of the next game. */
   next: { path: string } | null;
+  /**
+   * The game's analysis room, once someone in the game asked for it (the relay's own games):
+   * its id, and who asked (a player's side; null for someone watching).
+   */
+  analysis: { room: string; by: Side | null } | null;
   /** The last thing refused ("That move is not legal."), until the next change. */
   error: string | null;
   /** The game on Lichess, for Lichess games. */
@@ -171,6 +208,13 @@ export interface LiveGameSession {
   army(army: Army): void;
   /** Blindfold: counts a peek (the page shows the pieces for a moment). */
   peek(): void;
+  /** Watching a correspondence invitation: takes its open seat, under this device's name. */
+  join(): void;
+  /**
+   * Once the game is over: asks for its analysis room (the relay makes it, the same one for
+   * everyone in the game). Resolves with the room's id; rejects with a sentence to show.
+   */
+  analyse(): Promise<string>;
   /** Ends the connection (the game itself goes on without this device). */
   close(): void;
 }
@@ -351,6 +395,12 @@ export interface PostOptions {
   lichess: { rated: boolean } | null;
 }
 
+/** An invitation to a correspondence game, just made: its board is where to go. */
+export interface Invitation {
+  game: string;
+  path: string;
+}
+
 export interface LobbyState {
   connection: LobbyConnection;
   /** The public games waiting, oldest first (this device's own left out). */
@@ -368,7 +418,15 @@ export interface LobbyState {
   cancel(): void;
   /** Joins a posted game by its id (from the list, or from a shared link). */
   join(seekId: string): void;
+  /**
+   * Makes a correspondence game by invitation ("3d": days a move): its room, at once. A game
+   * of chess unless `game` says Chess960.
+   */
+  invite(options: { game?: GameKind; tc: string; color: ColorChoice }): void;
+  /** The invitation just made, until the page goes to its board. */
+  invited: Invitation | null;
   clearPairing(): void;
+  clearInvited(): void;
   clearNotice(): void;
 }
 
@@ -389,4 +447,206 @@ export interface LivePrefs {
   color: ColorChoice;
   /** The time control posted last. */
   tc: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Group rooms: a puzzle race for up to eight, a game analysed together */
+/* ------------------------------------------------------------------ */
+
+export type { AnalysisVariant, GroupKind, GroupOptions, RaceResult, RaceRoomFormat };
+
+/** A member of a group room, as everyone in it sees them. */
+export interface GroupMember {
+  /** The room's own id for them (8 characters), the same for everyone. */
+  id: string;
+  name: string;
+  rating: number | null;
+  /** Whether they are connected to the room. */
+  here: boolean;
+}
+
+/**
+ * A group room on the relay (relay/src/live/group.mjs) from this device: who
+ * is in it, and the state of what they do there (the room's kind, `S`).
+ */
+export interface GroupView<S> {
+  id: string;
+  kind: GroupKind;
+  connection: LiveGameView['connection'];
+  /** No such room (gone, or never made): the page says so. */
+  missing: boolean;
+  /** This device's member id; null while it only looks at the room (it may join). */
+  you: string | null;
+  /** The host's member id. */
+  host: string | null;
+  /** The members, in the order they joined. */
+  members: GroupMember[];
+  /** Members a room takes at most. */
+  max: number;
+  /** The phrases sent so far, oldest first, as text (members see them). */
+  chat: { by: string; text: string }[];
+  /** The kind's state, once the room has said. */
+  state: S | null;
+  /** This device has asked to join, and the room has not answered yet. */
+  joining: boolean;
+  /** The last thing refused ("This room is full."), until the next change. */
+  error: string | null;
+}
+
+/** A race room's options: rounds or three minutes, and the puzzles' rating. */
+export interface RaceRoomOptions {
+  format: RaceRoomFormat;
+  level: number;
+}
+
+export interface RaceRoomRacer {
+  id: string;
+  name: string;
+  rating: number | null;
+}
+
+/** A round of a race room played: every racer's result, and the points they scored. */
+export interface RaceRoomRound {
+  round: number;
+  results: Record<string, RaceResult>;
+  points: Record<string, number>;
+}
+
+/** A race in a room: the one on, or the last one. */
+export interface RaceRoomRace {
+  /** The races started in the room so far, this one included. */
+  number: number;
+  format: RaceRoomFormat;
+  level: number;
+  status: 'playing' | 'over';
+  /** Who races: the members here when it started. */
+  racers: RaceRoomRacer[];
+  /** The puzzles, the same for everyone (empty when this device missed them). */
+  items: RacePuzzle[];
+  /** The round on (the timed race is one long round: 0). */
+  round: number;
+  phase: 'countdown' | 'live' | 'reveal' | null;
+  /** When the phase ends (`performance.now()`). */
+  phaseEnds: number | null;
+  /** When the round went live (`performance.now()`), while it is. */
+  liveSince: number | null;
+  /** The round on: the results in so far, by member. */
+  results: Record<string, RaceResult>;
+  rounds: RaceRoomRound[];
+  /** Points so far, by member (rounds). */
+  scores: Record<string, number>;
+  /** Each racer's progress (timed). */
+  progress: Record<string, DuelProgress> | null;
+  /** At the end: the places, best first (racers who tie share one). */
+  places: { id: string; place: number }[] | null;
+}
+
+export interface RaceRoomState {
+  /** The next race's options (the race on has its own). */
+  opts: RaceRoomOptions;
+  /** The races started so far. */
+  count: number;
+  race: RaceRoomRace | null;
+}
+
+export interface RaceRoomView extends GroupView<RaceRoomState> {
+  /** This device, the host's, is dealing the puzzles of a race about to start. */
+  dealing: boolean;
+}
+
+/** A report of this device's result: a round's, or one puzzle of the timed race. */
+export type RaceRoomReport =
+  { round: number; ok: boolean; ms: number } | { index: number; ok: boolean; ms: number };
+
+export interface RaceRoomSession {
+  getView(): RaceRoomView;
+  subscribe(listener: () => void): () => void;
+  /** Takes a place in the room, under this device's name. */
+  join(): void;
+  /** Gives the place up for good. */
+  leave(): void;
+  say(phrase: PhraseId): void;
+  /** The host: the next race's options, for everyone to see. */
+  setOptions(opts: RaceRoomOptions): void;
+  /** The host: deals the puzzles and starts a race with the members here. */
+  start(): void;
+  report(result: RaceRoomReport): void;
+  close(): void;
+}
+
+/** A change someone else made in an analysis room, for the line that says so. */
+export interface AnalysisEvent {
+  /** Counts up with every change, so the same words said twice are news twice. */
+  seq: number;
+  /** The member who made it. */
+  by: string;
+  /** What they did, after their name: "played 12. Nf3", "went back to the start". */
+  words: string;
+  /** A move of theirs, for its sound: the position it was played in, and the move (UCI). */
+  move: { fen: Fen; uci: Uci } | null;
+}
+
+/** A game analysed together, as the room keeps it. */
+export interface AnalysisRoomState {
+  variant: AnalysisVariant;
+  /** The room's moves as a tree; it changes in place, and `version` with it. */
+  tree: GameTree;
+  version: number;
+  /** Each position by the room's id for it (the start is 0), and back. */
+  nodes: ReadonlyMap<number, TreeNode>;
+  ids: ReadonlyMap<TreeNode, number>;
+  /** The shared position: the room's id of the node the followers are on. */
+  at: number;
+  /** The arrows and circles on each position, by the room's id. */
+  shapes: ReadonlyMap<number, DrawShape[]>;
+  /** The players and the result, when the room was made from a game. */
+  white: string | null;
+  black: string | null;
+  result: string;
+  /** The last change someone else made. */
+  last: AnalysisEvent | null;
+}
+
+/** A move this device has played, on its way to the room: the board shows it at once. */
+export interface AnalysisPending {
+  /** The room's id of the position it was played in. */
+  from: number;
+  uci: Uci;
+  /** The position after it, and its squares. */
+  fen: Fen;
+  lastMove: [Square, Square];
+}
+
+export interface AnalysisRoomView extends GroupView<AnalysisRoomState> {
+  /** This device follows the shared position (on unless the player browses alone). */
+  follow: boolean;
+  /** The room's id of the position this device shows: the shared one while it follows. */
+  viewed: number;
+  pending: AnalysisPending | null;
+}
+
+export interface AnalysisRoomSession {
+  getView(): AnalysisRoomView;
+  subscribe(listener: () => void): () => void;
+  /** Takes a place in the room, under this device's name. */
+  join(): void;
+  /** Gives the place up for good. */
+  leave(): void;
+  say(phrase: PhraseId): void;
+  /** Following the shared position, or browsing alone (back on: to the shared position). */
+  setFollow(on: boolean): void;
+  /** Shows a position: following, the shared position goes there for everyone. */
+  goTo(node: number): void;
+  /**
+   * Plays a move from the position shown: into the room's tree (a new variation, or the move
+   * there already), and to it. False when it is not legal there.
+   */
+  play(move: MoveInput): boolean;
+  /** Deletes a move and everything after it. */
+  remove(node: number): void;
+  /** Makes a move's line the main line. */
+  promote(node: number): void;
+  /** Sets a position's arrows and circles (none: clears them). */
+  draw(node: number, shapes: DrawShape[]): void;
+  close(): void;
 }

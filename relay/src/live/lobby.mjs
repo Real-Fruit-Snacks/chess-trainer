@@ -12,15 +12,33 @@
  * seat tokens, and sends each player their own token: only the two of them
  * can take a seat in the room. In a duel the poster (whose device sends the
  * rounds) takes the white seat.
+ *
+ * A correspondence game (days a move: chess or Chess960) is never a seek:
+ * `create` makes its room at once, with the poster's seat and an open one that
+ * whoever has the link takes in the room itself (room.mjs). The poster goes
+ * straight to the board to send that link. A socket may make `LIMITS.invites`
+ * of them an hour.
+ *
+ * A group room (group.mjs: a puzzle race for up to eight, a game analysed
+ * together) is made here too: `create-room` makes it at once
+ * (`platform.createGroup`) with its maker as host, and hands them the room's
+ * id and their member token; the others come by its link. The sockets of one
+ * address may make `GROUP_LIMITS.rooms` an hour. An analysis room comes with
+ * its game, so `create-room` may be as large as `LIMITS.contentBytes`.
  */
 import { hashToken } from '../handler.mjs';
 import {
   CLOSE,
   COLOR_CHOICES,
+  CORRESPONDENCE_GAMES,
   gameOptions,
+  GROUP_LIMITS,
+  groupOptions,
   ID_PATTERN,
+  isCorrespondence,
   isDuel,
   isGame,
+  isGroupKind,
   isPlayerName,
   isRating,
   LIMITS,
@@ -50,6 +68,8 @@ import {
  *   seek: Seek | null,
  *   rateStart: number,
  *   rateCount: number,
+ *   invites?: number[],
+ *   rooms?: number[],
  * }} LobbyData
  *
  * @typedef {{
@@ -67,13 +87,22 @@ import {
  *   tc: string | null,
  *   white: SeatSpec,
  *   black: SeatSpec,
+ *   open?: 'white' | 'black' | null,
+ *   position?: number | null,
  * }} GameSpec
+ *
+ * A seat nobody holds yet (a correspondence invitation's): `open` names it,
+ * and its SeatSpec has an empty name and hash. `position`: a Chess960 game's
+ * start position (a rematch's; none, and the room draws one).
  *
  * @typedef {{
  *   connections(): LobbyConn[],
  *   createGame(spec: GameSpec): Promise<void>,
+ *   createGroup?: (spec: import('./group.mjs').GroupSpec) => Promise<'created' | 'exists'>,
  *   now(): number,
  * }} LobbyPlatform
+ *   `createGroup`: makes a group room, or finds it made already (none: rooms
+ *   are not made here); it throws when the room cannot be made.
  */
 
 /** A new socket's data (kept with the socket: a Durable Object keeps it across hibernation). */
@@ -84,6 +113,7 @@ export function lobbyData(address = '') {
     seek: null,
     rateStart: 0,
     rateCount: 0,
+    invites: [],
   });
 }
 
@@ -276,6 +306,113 @@ export function createLobby(platform) {
     };
   }
 
+  /**
+   * A correspondence game by invitation: its room is made at once with the
+   * poster's seat and an open one, and the poster gets the seat and the game.
+   * @param {LobbyConn} conn
+   * @param {Record<string, unknown>} msg
+   */
+  async function invite(conn, msg) {
+    const game = msg.game ?? 'chess';
+    const opts = CORRESPONDENCE_GAMES.includes(game) ? gameOptions(game, msg.opts) : null;
+    const color = /** @type {ColorChoice} */ (msg.color);
+    if (!opts || !isCorrespondence(msg.tc) || !COLOR_CHOICES.includes(color)) {
+      send(conn, { t: 'error', code: 'bad-request', message: 'That game cannot be made.' });
+      return;
+    }
+    const player = who(conn, msg);
+    if (!player) return;
+    const now = platform.now();
+    const recent = (conn.data.invites ?? []).filter((at) => now - at < LIMITS.invitesWindowMs);
+    if (recent.length >= LIMITS.invites) {
+      send(conn, { t: 'error', code: 'busy', message: 'That is enough invitations for now.' });
+      return;
+    }
+    conn.data.invites = [...recent, now];
+    conn.save();
+    const id = randomId(16);
+    const seat = randomId(32);
+    const posterWhite = whiteOf(color, 'random') === 'owner';
+    const poster = { ...player, seatHash: await hashToken(seat) };
+    const open = { name: '', rating: null, seatHash: '' };
+    const tc = /** @type {string} */ (msg.tc);
+    try {
+      await platform.createGame({
+        id,
+        game,
+        opts,
+        tc,
+        white: posterWhite ? poster : open,
+        black: posterWhite ? open : poster,
+        open: posterWhite ? 'black' : 'white',
+      });
+    } catch {
+      send(conn, { t: 'error', code: 'failed', message: 'The game could not be made.' });
+      return;
+    }
+    send(conn, {
+      t: 'created',
+      game: id,
+      kind: game,
+      opts,
+      tc,
+      seat,
+      color: posterWhite ? 'white' : 'black',
+    });
+  }
+
+  /**
+   * A group room (a puzzle race for up to eight): made at once, its maker the
+   * host, who gets the room's id and their member token. The sockets of one
+   * address may make `GROUP_LIMITS.rooms` in `GROUP_LIMITS.roomsWindowMs`.
+   * @param {LobbyConn} conn
+   * @param {Record<string, unknown>} msg
+   */
+  async function makeRoom(conn, msg) {
+    const kind = msg.kind;
+    const opts = isGroupKind(kind) ? groupOptions(kind, msg.opts) : null;
+    if (!opts || !platform.createGroup) {
+      send(conn, { t: 'error', code: 'bad-request', message: 'That room cannot be made.' });
+      return;
+    }
+    const player = who(conn, msg);
+    if (!player) return;
+    const now = platform.now();
+    const madeLately = (/** @type {LobbyData} */ data) =>
+      (data.rooms ?? []).filter((at) => now - at < GROUP_LIMITS.roomsWindowMs);
+    const recent = madeLately(conn.data);
+    const others = conn.data.address
+      ? platform
+          .connections()
+          .filter((c) => c.data.id !== conn.data.id && c.data.address === conn.data.address)
+          .reduce((sum, c) => sum + madeLately(c.data).length, 0)
+      : 0;
+    if (recent.length + others >= GROUP_LIMITS.rooms) {
+      send(conn, { t: 'error', code: 'busy', message: 'That is enough rooms for now.' });
+      return;
+    }
+    conn.data.rooms = [...recent, now];
+    conn.save();
+    const id = randomId(16);
+    const token = randomId(32);
+    let made = 'failed';
+    try {
+      made = await platform.createGroup({
+        id,
+        kind: /** @type {string} */ (kind),
+        opts,
+        host: { ...player, tokenHash: await hashToken(token) },
+      });
+    } catch {
+      // Not made: said below.
+    }
+    if (made !== 'created') {
+      send(conn, { t: 'error', code: 'failed', message: 'The room could not be made.' });
+      return;
+    }
+    send(conn, { t: 'room-created', room: id, kind, opts, token });
+  }
+
   return {
     /**
      * A socket has joined the waiting room: refused (closed) past the limits,
@@ -304,13 +441,18 @@ export function createLobby(platform) {
         conn.send('pong');
         return;
       }
-      if (text.length > LIMITS.messageBytes) {
+      if (text.length > LIMITS.contentBytes) {
         conn.close(CLOSE.tooBig, 'Message too big.');
         return;
       }
       if (!allowed(conn)) return;
       conn.save();
       const msg = parse(text);
+      // Only a room made with what it holds (an analysis room's game) says more than a message holds.
+      if (text.length > LIMITS.messageBytes && msg?.t !== 'create-room') {
+        conn.close(CLOSE.tooBig, 'Message too big.');
+        return;
+      }
       if (!msg) {
         send(conn, { t: 'error', code: 'bad-request', message: 'That is not a message.' });
         return;
@@ -330,6 +472,14 @@ export function createLobby(platform) {
           typeof msg.private !== 'boolean'
         ) {
           send(conn, { t: 'error', code: 'bad-request', message: 'That game cannot be posted.' });
+          return;
+        }
+        if (tc?.kind === 'correspondence') {
+          send(conn, {
+            t: 'error',
+            code: 'bad-request',
+            message: 'A correspondence game is played by invitation: send its link.',
+          });
           return;
         }
         const wants = { game: /** @type {string} */ (game), opts, tc: tc?.id ?? null, color };
@@ -382,6 +532,16 @@ export function createLobby(platform) {
         conn.save();
         send(conn, { t: 'cancelled' });
         if (had) broadcast();
+        return;
+      }
+
+      if (msg.t === 'create') {
+        await invite(conn, msg);
+        return;
+      }
+
+      if (msg.t === 'create-room') {
+        await makeRoom(conn, msg);
         return;
       }
 

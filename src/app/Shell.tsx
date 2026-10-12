@@ -1,4 +1,5 @@
 import {
+  type ComponentType,
   type KeyboardEvent,
   type FocusEvent,
   lazy,
@@ -12,8 +13,12 @@ import {
 import { Link, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router';
 import { Spinner, Icon, type IconName } from '@/components/ui';
 import { Toasts } from '@/components/ui/toast';
+import { toast } from '@/components/ui/toastStore';
+import { isReturningLearner, noteFirstVisit } from '@/features/home/seenVersion';
+import { useQuickSearch } from '@/features/search/quickSearch';
 import { siteConfig } from '@/site.config';
 import { activeProfile, useProfiles } from '@/store/profiles';
+import { useProgress } from '@/store/progress';
 import { useSettings } from '@/store/settings';
 import { ErrorBoundary } from './ErrorBoundary';
 import { InstallButton } from './InstallPrompt';
@@ -39,6 +44,30 @@ const PieceCredit = lazy(() => import('@/components/board/PieceCredit'));
  */
 const LiveBar = lazy(() =>
   import('@/features/live/LiveBar').catch(() => ({ default: () => null })),
+);
+
+interface SearchDialogProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+/** Quick search could not be loaded (offline before it was ever cached): say so, and close. */
+function SearchUnavailable({ open, onClose }: SearchDialogProps) {
+  useEffect(() => {
+    if (!open) return;
+    toast('Search could not be loaded. Reload the page to try again.', { tone: 'warning' });
+    onClose();
+  }, [open, onClose]);
+  return null;
+}
+
+/**
+ * Quick search, in its own chunk with every list it searches: loaded when it is first opened
+ * (or when the pointer or the focus reaches its button), never at start-up.
+ */
+const loadSearch = () => import('@/features/search/SearchDialog');
+const SearchDialog = lazy<ComponentType<SearchDialogProps>>(() =>
+  loadSearch().catch(() => ({ default: SearchUnavailable })),
 );
 
 const CLASSIC_CREDIT = (
@@ -200,6 +229,27 @@ function ProfileBadge() {
     >
       {current.name}
     </Link>
+  );
+}
+
+/** The way into quick search on every screen size; Ctrl+K (Cmd+K on a Mac) does the same. */
+function SearchButton({ onOpen }: { onOpen: () => void }) {
+  const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);
+  const preload = () => void loadSearch().catch(() => undefined);
+  return (
+    <button
+      type="button"
+      className="shell__iconbtn"
+      aria-label="Search"
+      aria-keyshortcuts="Control+K Meta+K"
+      title={`Search (${mac ? '⌘K' : 'Ctrl+K'})`}
+      data-testid="search-button"
+      onClick={onOpen}
+      onPointerEnter={preload}
+      onFocus={preload}
+    >
+      <Icon name="search" size={18} />
+    </button>
   );
 }
 
@@ -389,7 +439,11 @@ export function Shell() {
   const section = navSection(location.pathname);
   const inMore = MORE_PATHS.has(section);
   const shortcuts = useShortcutsDialog();
+  const search = useQuickSearch();
   const mainRef = useRef<HTMLElement>(null);
+
+  // A newcomer's first visit counts this version's news as seen (Home's "What's new").
+  useEffect(() => noteFirstVisit(isReturningLearner(useProgress.getState())), []);
 
   // After in-app navigation, move keyboard focus (and the screen reader's
   // reading position) to the new page rather than leaving it on the old link.
@@ -451,6 +505,7 @@ export function Shell() {
               <InstallButton size="sm" variant="ghost" />
             </div>
             <ProfileBadge />
+            <SearchButton onOpen={search.show} />
             <ThemeToggle />
           </div>
         </div>
@@ -521,6 +576,11 @@ export function Shell() {
         </div>
       </footer>
       <ShortcutsDialog open={shortcuts.open} onClose={() => shortcuts.setOpen(false)} />
+      {search.mounted ? (
+        <Suspense fallback={null}>
+          <SearchDialog open={search.open} onClose={search.close} />
+        </Suspense>
+      ) : null}
 
       <nav className="shell__bottomnav" aria-label="Primary (mobile)">
         {MOBILE_NAV.map((item) => {

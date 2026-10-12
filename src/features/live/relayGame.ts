@@ -1,18 +1,26 @@
 import type { Chess } from 'chess.js';
-import { type Army, parseArmy } from '../../../relay/src/live/army.mjs';
-import { playUci, replay } from '../../../relay/src/live/rules.mjs';
 import {
+  correspondencePush,
+  onCorrespondencePush,
+} from '@/features/notifications/pushSubscription';
+import { type Army, parseArmy } from '../../../relay/src/live/army.mjs';
+import { playUci, replay, type RulesGame } from '../../../relay/src/live/rules.mjs';
+import {
+  analysisRoomId,
   CLOSE,
   gameOptions,
   ID_PATTERN,
+  isCorrespondence,
   isPhrase,
   LIMITS,
+  parseTimeControl,
   PHRASES,
   SEAT_PATTERN,
 } from '../../../relay/src/live/shared.mjs';
+import { shownRating, useLivePrefs } from './prefs';
 import { recordLiveGame } from './record';
 import { liveSocketUrl } from './relayUrls';
-import { liveGamePath, rememberSeat } from './seats';
+import { liveGamePath, rememberSeat, seatOf, watchGamePath } from './seats';
 import { LiveSocket } from './socket';
 import type {
   ChessKind,
@@ -34,11 +42,28 @@ import type {
  * then brings the clocks), and catches up from the room's snapshot whenever
  * it has missed something: after a refusal, and after every reconnection.
  * Blindfold and Army Draft are games of chess too: the room counts the peeks,
- * and keeps each army from the other player until both are in.
+ * and keeps each army from the other player until both are in. So is Chess960,
+ * from the start position the room drew: its moves are checked here by the
+ * room's own rules (relay/src/live/chess960.mjs), castling as the king taking
+ * its rook.
+ *
+ * Without a seat the same connection watches: the room sends the game as
+ * anyone may see it, and nothing can be played from here — but a watcher of a
+ * correspondence invitation may take its open seat (`join`), which this device
+ * then keeps.
  *
  * The room sends durations (time left, time until), never its own clock, so
  * each is turned into a moment on this device's `performance.now()` clock as
  * it arrives.
+ *
+ * A correspondence seat tells its room where to push this device while it is
+ * away (`push` in its hello, null while correspondence notifications are off),
+ * and tells it again at once when that changes.
+ *
+ * Once the game is over, a player or a watcher may ask for its analysis room
+ * (`analyse`): the room makes it, under an id derived from the game's, and
+ * tells everyone in the game where it is. A game whose room has gone (a while
+ * after its end) is still found under that id, should its analysis room be there.
  */
 
 const CAPABILITIES: LiveGameView['capabilities'] = Object.freeze({
@@ -66,6 +91,7 @@ const REASONS: readonly LiveEndReason[] = [
   'abandoned',
   'aborted',
   'no-start',
+  'expired',
 ];
 
 const OPS: readonly OfferOp[] = ['offer', 'accept', 'decline'];
@@ -101,6 +127,24 @@ function clockOf(value: unknown, at: number): LiveClock | null {
     running: isSide(clock.running) ? clock.running : null,
     at,
   };
+}
+
+/** The clock readings a snapshot carries: the mover's time after each move, one a move at most. */
+function readingsOf(value: unknown, plies: number): number[] {
+  if (!Array.isArray(value)) return [];
+  const readings: number[] = [];
+  for (const item of value.slice(0, plies)) {
+    const ms = finite(item);
+    if (ms === null) return [];
+    readings.push(Math.max(0, ms));
+  }
+  return readings;
+}
+
+/** `readings` with move `ply`'s in its place (after the last, or instead of a guess); as they were when that cannot be. */
+function withReading(readings: number[], ply: number, ms: number | null): number[] {
+  if (ms === null || ply > readings.length) return readings;
+  return [...readings.slice(0, ply), ms];
 }
 
 /** The clocks stopped at `at`: the running side's time as it stands then. */
@@ -176,15 +220,15 @@ function movesOf(value: unknown): string[] | null {
   return Array.isArray(value) && value.every((move) => typeof move === 'string') ? value : null;
 }
 
-const CHESS_KINDS: readonly ChessKind[] = ['chess', 'blindfold', 'army'];
+const CHESS_KINDS: readonly ChessKind[] = ['chess', 'blindfold', 'army', 'chess960'];
 
 function chessKindOf(value: unknown): ChessKind {
   return CHESS_KINDS.find((kind) => kind === value) ?? 'chess';
 }
 
-/** A FEN to start from, when the room gives one that chess.js takes. */
-function startFenOf(value: unknown): string | null {
-  return typeof value === 'string' && replay([], value) !== null ? value : null;
+/** A FEN to start from, when the room gives one that the game's rules take. */
+function startFenOf(value: unknown, game: ChessKind): string | null {
+  return typeof value === 'string' && replay([], value, game) !== null ? value : null;
 }
 
 const count = (value: unknown): number =>
@@ -224,18 +268,35 @@ function draftOf(value: unknown, at: number): LiveDraft | null {
 
 /**
  * The game a rematch leads to (the same game as this one): its seat is kept at
- * once, and its page is where to go.
+ * once, and its page is where to go. A watcher follows the players there, to
+ * watch again.
  */
-function nextOf(value: unknown, kind: ChessKind): LiveGameView['next'] {
+function nextOf(
+  value: unknown,
+  kind: ChessKind,
+  watching: boolean,
+  correspondence: boolean,
+): LiveGameView['next'] {
   if (typeof value !== 'object' || value === null) return null;
   const { game, seat, color } = value as Record<string, unknown>;
   if (typeof game !== 'string' || !ID_PATTERN.test(game)) return null;
+  if (watching) return { path: watchGamePath(game) };
   if (typeof seat !== 'string' || !SEAT_PATTERN.test(seat) || !isSide(color)) return null;
-  rememberSeat(game, seat, color, kind);
+  rememberSeat(game, seat, color, kind, Date.now(), correspondence);
   return { path: liveGamePath('relay', game, kind) };
 }
 
-function blankView(id: string, you: Side): LiveGameView {
+const sideOrNull = (value: unknown): Side | null => (isSide(value) ? value : null);
+
+function presentOf(value: unknown): LiveGameView['present'] {
+  const present = (typeof value === 'object' && value !== null ? value : {}) as Record<
+    string,
+    unknown
+  >;
+  return { white: present.white === true, black: present.black === true };
+}
+
+function blankView(id: string, you: Side, watching: boolean): LiveGameView {
   return {
     source: 'relay',
     id,
@@ -246,12 +307,14 @@ function blankView(id: string, you: Side): LiveGameView {
     peeks: null,
     connection: 'connecting',
     missing: false,
+    watching,
     you,
     white: { name: '', rating: null },
     black: { name: '', rating: null },
     tc: '',
     rated: false,
     moves: [],
+    clocks: [],
     clock: null,
     firstMove: null,
     status: 'playing',
@@ -259,9 +322,14 @@ function blankView(id: string, you: Side): LiveGameView {
     reason: null,
     offers: NO_OFFERS,
     opponentPresent: false,
+    present: { white: false, black: false },
+    watchers: 0,
+    open: null,
+    joined: null,
     claimAt: null,
     chat: [],
     next: null,
+    analysis: null,
     error: null,
     url: null,
     capabilities: CAPABILITIES,
@@ -269,17 +337,32 @@ function blankView(id: string, you: Side): LiveGameView {
 }
 
 const DOWN_MESSAGE = 'The connection is down: try again in a moment.';
+/** How long the room may take to make the game's analysis room before this side gives up. */
+const ANALYSIS_TIMEOUT_MS = 15_000;
 
 /**
  * The connection to a game on the relay, with this device's seat token
  * (`color`, the side the seat plays, is known from the pairing; the room's
- * first snapshot says it again).
+ * first snapshot says it again), or without one (`seat` null) to watch it.
  */
-export function createRelayGame(id: string, seat: string, color: Side = 'white'): LiveGameSession {
-  let view = blankView(id, color);
+export function createRelayGame(
+  id: string,
+  seat: string | null,
+  color: Side = 'white',
+): LiveGameSession {
+  const watching = seat === null;
+  let view = blankView(id, watching ? 'white' : color, watching);
+  /** A correspondence seat: its room may push this device while it is away. */
+  const pushed = () => !watching && (isCorrespondence(view.tc) || seatOf(id)?.corr === true);
+  const hello = () =>
+    seat === null
+      ? { t: 'hello', watch: true }
+      : pushed()
+        ? { t: 'hello', seat, push: correspondencePush() }
+        : { t: 'hello', seat };
   const listeners = new Set<() => void>();
   /** The position after `view.moves`, to check this board's own moves. */
-  let chess = replay([]) as Chess;
+  let chess: RulesGame = replay([]) as Chess;
   /** A snapshot has come since the first connection: the view is the room's. */
   let loaded = false;
   /** The room said there is no such game (any more): nothing to reconnect to. */
@@ -290,10 +373,23 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
   let unsent: { uci: string; ply: number } | null = null;
   /** When the opponent will have been gone long enough to claim against (the room's word), or null. */
   let awayUntil: number | null = null;
+  /** Watching an invitation: its open seat has been asked for. */
+  let joinSent = false;
+  /** The analysis room asked for, until the room answers. */
+  let analysing: {
+    promise: Promise<string>;
+    settle: (room: string | null, error?: string) => void;
+  } | null = null;
+
+  /** The clock readings with move `ply`'s, from the clocks just after it (correspondence keeps none). */
+  const readingAt = (ply: number, clock: LiveClock | null): number[] =>
+    parseTimeControl(view.tc)?.perMoveMs
+      ? view.clocks
+      : withReading(view.clocks, ply, clock ? clock[turnOf(ply)] : null);
 
   const socket = new LiveSocket(() => liveSocketUrl(`/v1/games/${id}`), {
     open: () => {
-      socket.send({ t: 'hello', seat });
+      socket.send(hello());
     },
     message: onMessage,
     down: onDown,
@@ -312,7 +408,8 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
   }
 
   function record(): void {
-    if (recorded || view.status !== 'over') return;
+    // A game watched is somebody else's: it is not kept in My games.
+    if (recorded || watching || view.status !== 'over') return;
     recorded = true;
     recordLiveGame(view);
   }
@@ -333,6 +430,7 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
 
   function onDown({ code }: { code: number; opened: boolean }): void {
     if (closed) return;
+    analysing?.settle(null, DOWN_MESSAGE);
     if (code === CLOSE.noGame) {
       gone = true;
       unsent = null;
@@ -358,7 +456,7 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
 
   /** Asks the room for the whole game again (it answers a second hello with a snapshot). */
   function catchUp(): void {
-    socket.send({ t: 'hello', seat });
+    socket.send(hello());
   }
 
   function onMessage(message: Record<string, unknown>): void {
@@ -378,10 +476,21 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
       case 'say':
         return onSay(message);
       case 'rematch': {
-        const next = nextOf(message, view.game);
+        const next = nextOf(message, view.game, watching, isCorrespondence(view.tc));
         if (next) emit({ next, offers: { ...view.offers, rematch: null }, error: null });
         return;
       }
+      case 'watchers':
+        return emit({ watchers: count(message.n) });
+      case 'analysis': {
+        const room = message.room;
+        if (typeof room !== 'string' || !ID_PATTERN.test(room)) return;
+        emit({ analysis: { room, by: sideOrNull(message.by) } });
+        analysing?.settle(room);
+        return;
+      }
+      case 'seat':
+        return onSeat(message);
       case 'draft':
         // An army is in (the other's stays hidden until both are, when a snapshot comes).
         if (view.draft) emit({ draft: { ...view.draft, ready: readyOf(message.ready) } });
@@ -391,6 +500,11 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
       case 'error':
         // The snapshot that follows puts the board right; a move refused is not sent again.
         unsent = null;
+        joinSent = false;
+        if (analysing) {
+          analysing.settle(null, typeof message.message === 'string' ? message.message : undefined);
+          return;
+        }
         return emit({
           error: typeof message.message === 'string' ? message.message : 'That was refused.',
         });
@@ -401,18 +515,18 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
 
   function onSnapshot(message: Record<string, unknown>): void {
     const moves = movesOf(message.moves);
-    const startFen = startFenOf(message.startFen);
-    const position = moves ? replay(moves, startFen) : null;
-    if (!moves || !position || !isSide(message.you)) return;
-    const now = performance.now();
-    const you = message.you;
-    const opponent = other(you);
     const game = chessKindOf(message.game);
+    const startFen = startFenOf(message.startFen, game);
+    // A Chess960 game always has its start position: without one, nothing is shown.
+    const position = moves ? replay(moves, startFen, game) : null;
+    // A watcher's snapshot names no seat: the board is seen from White's side.
+    const you = watching ? 'white' : isSide(message.you) ? message.you : null;
+    if (!moves || !position || !you) return;
+    const now = performance.now();
+    const opponent = other(you);
     const status =
       message.status === 'over' ? 'over' : message.status === 'draft' ? 'draft' : 'playing';
-    const present = (
-      typeof message.present === 'object' && message.present !== null ? message.present : {}
-    ) as Record<string, unknown>;
+    const present = presentOf(message.present);
     const away = (
       typeof message.gone === 'object' && message.gone !== null ? message.gone : {}
     ) as Record<string, unknown>;
@@ -435,18 +549,37 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
       black: playerOf(message.black),
       tc: typeof message.tc === 'string' ? message.tc : view.tc,
       moves,
+      clocks: readingsOf(message.clocks, moves.length),
       clock: clockOf(message.clock, now),
       firstMove: status === 'playing' ? firstMoveOf(message.firstMove, now) : null,
       status,
       result: resultOf(message.result),
       reason: reasonOf(message.reason),
       offers: offersOf(message.offers),
-      opponentPresent: present[opponent] === true,
+      opponentPresent: present[opponent],
+      present,
+      watchers: count(message.watchers),
+      open: sideOrNull(message.open),
       chat: chatOf(message.chat),
-      next: nextOf(message.next, game),
+      next: nextOf(message.next, game, watching, isCorrespondence(message.tc)),
     });
     sendAgain();
     record();
+  }
+
+  /**
+   * The open seat this watcher asked for is this device's: its token is kept
+   * (as a correspondence game's, until the game ends), and the page goes on to
+   * the player's board.
+   */
+  function onSeat(message: Record<string, unknown>): void {
+    const { seat: token, color } = message;
+    if (!watching || typeof token !== 'string' || !SEAT_PATTERN.test(token) || !isSide(color)) {
+      return;
+    }
+    joinSent = false;
+    rememberSeat(id, token, color, view.game, Date.now(), true);
+    emit({ joined: color, error: null });
   }
 
   /** A move this board played that the room never had: played again if it still fits. */
@@ -469,7 +602,7 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
     if (ply === view.moves.length - 1 && view.moves[ply] === uci) {
       // The echo of this board's own move: the room's clocks replace the guess.
       if (unsent?.ply === ply) unsent = null;
-      emit({ clock, firstMove });
+      emit({ clock, firstMove, clocks: readingAt(ply, clockOf(message.clock, now)) });
       return;
     }
     if (ply !== view.moves.length || !playUci(chess, uci)) {
@@ -478,6 +611,7 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
     }
     emit({
       moves: [...view.moves, uci],
+      clocks: readingAt(ply, clockOf(message.clock, now)),
       clock,
       firstMove,
       // A move ends the standing draw and takeback offers (the room does the same).
@@ -491,12 +625,13 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
     if (typeof plies !== 'number' || !Number.isInteger(plies) || plies < 1) return catchUp();
     if (plies > view.moves.length) return catchUp();
     const moves = view.moves.slice(0, view.moves.length - plies);
-    const position = replay(moves, view.startFen);
+    const position = replay(moves, view.startFen, view.game);
     if (!position) return catchUp();
     chess = position;
     if (unsent && unsent.ply >= moves.length) unsent = null;
     emit({
       moves,
+      clocks: view.clocks.slice(0, moves.length),
       clock: clockOf(message.clock, performance.now()) ?? view.clock,
       offers: { ...view.offers, draw: null, takeback: null },
       error: null,
@@ -528,7 +663,8 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
     const claimIn =
       view.status === 'playing' && away.color === opponent ? finite(away.claimInMs) : null;
     awayUntil = claimIn !== null ? performance.now() + Math.max(0, claimIn) : null;
-    emit({ opponentPresent: message[opponent] === true });
+    const present = presentOf(message);
+    emit({ opponentPresent: present[opponent], present });
   }
 
   function onSay(message: Record<string, unknown>): void {
@@ -538,13 +674,17 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
   }
 
   function move(uci: string): void {
-    if (closed || gone || view.missing || view.status === 'over') return;
+    if (watching || closed || gone || view.missing || view.status === 'over') return;
     if (!loaded) {
       emit({ error: 'The game is still loading.' });
       return;
     }
     if (view.status === 'draft') {
       emit({ error: 'The armies are still being chosen.' });
+      return;
+    }
+    if (view.open) {
+      emit({ error: 'Your opponent has not joined yet.' });
       return;
     }
     const ply = view.moves.length;
@@ -558,10 +698,18 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
       return;
     }
     const now = performance.now();
+    // Correspondence: the mover's days are whole again, the other's run; no first-move rule.
+    const perMoveMs = parseTimeControl(view.tc)?.perMoveMs ?? null;
+    const clock = perMoveMs
+      ? { white: perMoveMs, black: perMoveMs, running: other(view.you), at: now }
+      : clockAfterMove(view.clock, ply, view.you, now);
     emit({
       moves: [...view.moves, normal],
-      clock: clockAfterMove(view.clock, ply, view.you, now),
-      firstMove: ply === 0 ? { color: 'black', deadline: now + LIMITS.firstMoveMs } : null,
+      // A guess until the room's echo brings the reading (its increment in).
+      clocks: readingAt(ply, clock),
+      clock,
+      firstMove:
+        ply === 0 && !perMoveMs ? { color: 'black', deadline: now + LIMITS.firstMoveMs } : null,
       offers: { ...view.offers, draw: null, takeback: null },
       error: null,
     });
@@ -572,7 +720,7 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
 
   /** Sends anything else; it needs the connection (only a move waits for one). */
   function act(message: Record<string, unknown>): void {
-    if (closed || gone || view.missing) return;
+    if (watching || closed || gone || view.missing) return;
     if (!socket.send(message)) {
       emit({ error: DOWN_MESSAGE });
       return;
@@ -585,6 +733,13 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
     (op: OfferOp): void => {
       if (OPS.includes(op)) act({ t, op });
     };
+
+  // Correspondence notifications switched on or off on this device: the room hears at once.
+  const stopPush = watching
+    ? () => undefined
+    : onCorrespondencePush((push) => {
+        if (loaded && pushed() && view.status !== 'over') socket.send({ t: 'push', sub: push });
+      });
 
   start();
 
@@ -615,10 +770,43 @@ export function createRelayGame(id: string, seat: string, color: Side = 'white')
     peek: () => {
       if (view.peeks && view.status === 'playing') act({ t: 'peek' });
     },
+    join: () => {
+      if (!watching || closed || gone || !view.open || joinSent) return;
+      if (!socket.send({ t: 'join', name: useLivePrefs.getState().name, rating: shownRating() })) {
+        emit({ error: DOWN_MESSAGE });
+        return;
+      }
+      joinSent = true;
+      emit({ error: null });
+    },
+    analyse() {
+      if (analysing) return analysing.promise;
+      if (view.status !== 'over') return Promise.reject(new Error('The game is still on.'));
+      // The game's room has gone: its analysis room, if it is still there, has the same id.
+      if (gone) return analysisRoomId(id);
+      if (closed || !socket.send({ t: 'analyse' })) return Promise.reject(new Error(DOWN_MESSAGE));
+      let settle: (room: string | null, error?: string) => void = () => undefined;
+      const promise = new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(
+          () => settle(null, 'The relay did not answer: try again in a moment.'),
+          ANALYSIS_TIMEOUT_MS,
+        );
+        settle = (room, error) => {
+          clearTimeout(timer);
+          analysing = null;
+          if (room) resolve(room);
+          else reject(new Error(error ?? 'The analysis room could not be made.'));
+        };
+      });
+      analysing = { promise, settle: (room, error) => settle(room, error) };
+      return promise;
+    },
     close() {
       if (closed) return;
       closed = true;
+      analysing?.settle(null, DOWN_MESSAGE);
       unsent = null;
+      stopPush();
       socket.dispose();
       emit({ connection: 'closed' });
     },

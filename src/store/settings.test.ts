@@ -31,7 +31,15 @@ describe('the settings, the learner’s and the device’s', () => {
   it('splits every setting into one or the other', () => {
     const all = Object.keys(DEFAULT_SETTINGS).sort();
     expect([...LEARNER_SETTING_KEYS, ...DEVICE_SETTING_KEYS].sort()).toEqual(all);
-    expect(DEVICE_SETTING_KEYS).toEqual(['engineThreads', 'engineFull', 'installDismissedAt']);
+    expect(DEVICE_SETTING_KEYS).toEqual([
+      'engineThreads',
+      'engineFull',
+      'installDismissedAt',
+      'notifyLive',
+      'notifyCorrespondence',
+      'notifyReminder',
+      'notifyReminderMinute',
+    ]);
   });
 
   it("keeps the device's settings under a key of their own", () => {
@@ -40,7 +48,34 @@ describe('the settings, the learner’s and the device’s', () => {
     const device = stored(DEVICE_SETTINGS_STORAGE_KEY);
     expect(learner).toMatchObject({ boardTheme: 'blue' });
     for (const key of DEVICE_SETTING_KEYS) expect(learner).not.toHaveProperty(key);
-    expect(device).toEqual({ engineThreads: false, engineFull: true, installDismissedAt: null });
+    expect(device).toEqual({
+      engineThreads: false,
+      engineFull: true,
+      installDismissedAt: null,
+      notifyLive: false,
+      notifyCorrespondence: false,
+      notifyReminder: false,
+      notifyReminderMinute: 18 * 60,
+    });
+  });
+
+  it('keeps the notifications on this device, their time in quarter hours', async () => {
+    save(DEVICE_SETTINGS_STORAGE_KEY, { notifyReminder: true, notifyReminderMinute: 7 * 60 + 45 });
+    await useSettings.persist.rehydrate();
+    expect(useSettings.getState()).toMatchObject({
+      notifyReminder: true,
+      notifyReminderMinute: 7 * 60 + 45,
+    });
+    for (const odd of [7 * 60 + 5, -15, 24 * 60, '1080']) {
+      useSettings.setState({ ...DEFAULT_SETTINGS });
+      save(DEVICE_SETTINGS_STORAGE_KEY, { notifyReminderMinute: odd });
+      await useSettings.persist.rehydrate();
+      expect(useSettings.getState().notifyReminderMinute).toBe(18 * 60);
+    }
+    // A synced copy carries none of them.
+    expect(
+      learnerSettingsFrom({ notifyLive: true, notifyReminder: true, boardTheme: 'blue' }),
+    ).toEqual({ boardTheme: 'blue' });
   });
 
   it('reads the two back as one', async () => {

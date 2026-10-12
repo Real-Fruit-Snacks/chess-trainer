@@ -1,5 +1,6 @@
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Field, Input, Segmented } from '@/components/ui';
+import { isChess960Fen, isChess960Game } from '@/chess/chess960';
 import { isValidFen, sanitizeFen } from '@/chess/helpers';
 import type { Fen } from '@/chess/types';
 import {
@@ -81,6 +82,12 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
     if (!trimmed) return;
     setError(null);
     setParseError(null);
+    // A Chess960 position (castling rights by file, a Chess960 start) is loaded as one.
+    if (isChess960Fen(trimmed)) {
+      if (onLoadFen(trimmed)) onDone();
+      else setError('That FEN could not be loaded.');
+      return;
+    }
     // 4-field FENs and EPDs count: the missing counters are filled in.
     if (isValidFen(trimmed)) {
       const fen = sanitizeFen(trimmed);
@@ -299,6 +306,7 @@ export function ImportPanel({ onLoadFen, onLoadPgn, onDone }: ImportPanelProps) 
                   <strong>{game.white}</strong> – <strong>{game.black}</strong>
                 </span>
                 <span className="import__meta small muted">
+                  {isChess960Game(game.headers ?? {}, game.startFen) ? 'Chess960 · ' : ''}
                   {game.result} · {Math.ceil(game.plies / 2)} moves
                   {game.date ? ` · ${game.date}` : ''}
                   {game.event ? ` · ${game.event}` : ''}

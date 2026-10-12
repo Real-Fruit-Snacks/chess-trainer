@@ -12,6 +12,7 @@ const SPEED_NAMES: Record<LichessSpeed, string> = {
   blitz: 'Blitz',
   rapid: 'Rapid',
   classical: 'Classical',
+  correspondence: 'Correspondence',
 };
 
 /** Lichess's name for the speed of a time control ("Blitz" for "5+3"); null for anything else. */
@@ -20,10 +21,39 @@ export function speedName(tc: string): string | null {
   return spec ? SPEED_NAMES[speedOf(spec)] : null;
 }
 
-/** "5+3 · Blitz". */
+/** "5+3 · Blitz"; a correspondence game's "3 days a move". */
 export function describeTimeControl(tc: string): string {
+  const days = daysAMove(tc);
+  if (days) return days;
   const speed = speedName(tc);
   return speed ? `${tc} · ${speed}` : tc;
+}
+
+/** "3 days a move", "1 day a move" for a correspondence time control; null for any other. */
+export function daysAMove(tc: string): string | null {
+  const spec = parseTimeControl(tc);
+  if (!spec?.perMoveMs) return null;
+  const days = Math.round(spec.perMoveMs / 86_400_000);
+  return `${days} ${days === 1 ? 'day' : 'days'} a move`;
+}
+
+/**
+ * Time left on a correspondence game's move, to the nearest unit that matters:
+ * "2 days 5 h", "5 h 20 min", "12 min", "45 s" (rounded down: it never claims more
+ * than there is).
+ */
+export function formatTimeLeft(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) {
+    const dayText = `${days} ${days === 1 ? 'day' : 'days'}`;
+    return hours > 0 ? `${dayText} ${hours} h` : dayText;
+  }
+  if (hours > 0) return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`;
+  if (minutes > 0) return `${minutes} min`;
+  return `${seconds} s`;
 }
 
 export function sideName(side: Side): string {
@@ -85,6 +115,21 @@ export function clockRemaining(clock: LiveClock, side: Side, now: number): numbe
 /** The link that joins this device's posted game: Play with `?join=`. */
 export function joinLink(seekId: string): string {
   return `${window.location.origin}${import.meta.env.BASE_URL}play?join=${encodeURIComponent(seekId)}`;
+}
+
+/** The link to a game's own page: a correspondence invitation's, which takes its open seat. */
+export function gameLink(gameId: string): string {
+  return `${window.location.origin}${import.meta.env.BASE_URL}play/online/${encodeURIComponent(gameId)}`;
+}
+
+/** The link that watches a game on the relay. */
+export function watchLink(gameId: string): string {
+  return `${window.location.origin}${import.meta.env.BASE_URL}play/watch/${encodeURIComponent(gameId)}`;
+}
+
+/** "2 watching". */
+export function watchingText(watchers: number): string {
+  return `${watchers} watching`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -166,7 +211,9 @@ export function canAskTakeback(view: Pick<LiveGameView, 'moves' | 'you' | 'sourc
 export type Verdict = 'win' | 'loss' | 'draw' | 'aborted' | 'unknown';
 
 export function verdictOf(view: Pick<LiveGameView, 'result' | 'reason' | 'you'>): Verdict {
-  if (view.reason === 'aborted' || view.reason === 'no-start') return 'aborted';
+  if (view.reason === 'aborted' || view.reason === 'no-start' || view.reason === 'expired') {
+    return 'aborted';
+  }
   if (view.result === '1/2-1/2') return 'draw';
   if (view.result === '1-0') return view.you === 'white' ? 'win' : 'loss';
   if (view.result === '0-1') return view.you === 'black' ? 'win' : 'loss';
@@ -216,6 +263,8 @@ export function endSentence(
       return 'Aborted before both sides had moved.';
     case 'no-start':
       return 'Nobody moved in time.';
+    case 'expired':
+      return 'Nobody took the invitation in time.';
     case 'repetition':
       return 'By threefold repetition.';
     case 'fifty-moves':
@@ -229,6 +278,54 @@ export function endSentence(
     case 'other':
     case null:
       return 'The game has ended.';
+  }
+}
+
+/**
+ * How a game watched ended, in a sentence that names the players: "Patient
+ * Bishop won by checkmate.", "Drawn by agreement.".
+ */
+export function watchedEnd(
+  view: Pick<LiveGameView, 'result' | 'reason' | 'white' | 'black'>,
+): string {
+  const { result, reason } = view;
+  const winner = result === '1-0' ? view.white.name : result === '0-1' ? view.black.name : null;
+  const loser = result === '1-0' ? view.black.name : result === '0-1' ? view.white.name : null;
+  if (reason === 'aborted') return 'Aborted before both sides had moved.';
+  if (reason === 'no-start') return 'Aborted: nobody moved in time.';
+  if (reason === 'expired') return 'Nobody took the invitation in time.';
+  if (winner && loser) {
+    switch (reason) {
+      case 'checkmate':
+        return `${winner} won by checkmate.`;
+      case 'resign':
+        return `${winner} won: ${loser} resigned.`;
+      case 'time':
+        return `${winner} won on time.`;
+      case 'abandoned':
+        return `${winner} won: ${loser} left the game.`;
+      default:
+        return `${winner} won.`;
+    }
+  }
+  if (result !== '1/2-1/2') return 'The game has ended.';
+  switch (reason) {
+    case 'agreement':
+      return 'Drawn by agreement.';
+    case 'stalemate':
+      return 'Drawn by stalemate.';
+    case 'repetition':
+      return 'Drawn by threefold repetition.';
+    case 'fifty-moves':
+      return 'Drawn by the fifty-move rule.';
+    case 'insufficient':
+      return 'Drawn: neither side can mate.';
+    case 'time':
+      return 'Drawn on time: the side with time left could not have mated.';
+    case 'abandoned':
+      return 'Drawn: a player left the game.';
+    default:
+      return 'Drawn.';
   }
 }
 

@@ -23,6 +23,12 @@ export interface SearchParams {
   searchmoves?: Uci[];
   /** Search until `stop()` is called. */
   infinite?: boolean;
+  /**
+   * Play by Chess960's rules (`UCI_Chess960`): castling goes in and comes out
+   * as the king taking its own rook ("e1h1"), in `moves`, `searchmoves`, the
+   * lines and the best move. Off by default.
+   */
+  chess960?: boolean;
 }
 
 export interface SearchResult {
@@ -105,6 +111,8 @@ export class EngineClient {
   private errorListeners = new Set<(err: Error) => void>();
   private nextId = 1;
   private currentMultiPv = 1;
+  /** What `UCI_Chess960` was last set to (Stockfish starts with it off). */
+  private currentChess960 = false;
   private terminated = false;
 
   status: EngineStatus = 'idle';
@@ -431,6 +439,12 @@ export class EngineClient {
         if (multipv !== this.currentMultiPv) {
           this.send(`setoption name MultiPV value ${multipv}`);
           this.currentMultiPv = multipv;
+        }
+        // Before the position: Stockfish reads the moves after it in this mode's notation.
+        const chess960 = params.chess960 === true;
+        if (chess960 !== this.currentChess960) {
+          this.send(`setoption name UCI_Chess960 value ${String(chess960)}`);
+          this.currentChess960 = chess960;
         }
         const moves = params.moves?.length ? ` moves ${params.moves.join(' ')}` : '';
         this.send(`position fen ${params.fen}${moves}`);

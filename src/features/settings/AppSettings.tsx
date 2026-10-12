@@ -5,8 +5,10 @@ import {
   type OfferState,
   useInstall,
 } from '@/app/pwa';
+import { useState } from 'react';
 import { badgingSupported } from '@/app/useAppBadge';
-import { Card, LinkButton, Switch } from '@/components/ui';
+import { Button, Card, LinkButton, Switch } from '@/components/ui';
+import { WhatsNewDialog } from '@/features/home/WhatsNew';
 import { formatDate } from '@/lib/dates';
 import { siteConfig } from '@/site.config';
 import { useSettings } from '@/store/settings';
@@ -22,12 +24,16 @@ function describeInstall(state: OfferState): string {
     : base;
 }
 
-/** Settings → App: installing it, its icon badge, puzzles for offline use, the test lab, the version. */
+/**
+ * Settings → App: installing it, its icon badge, puzzles for offline use, the test lab, what is
+ * new in the recent releases, the version.
+ */
 export function AppSettings() {
   const appBadge = useSettings((s) => s.appBadge);
   const update = useSettings((s) => s.update);
   const install = useInstall();
   const installText = describeInstall(install);
+  const [whatsNew, setWhatsNew] = useState(false);
   return (
     <div className="settings__grid settings__grid--single">
       <Card>
@@ -63,6 +69,12 @@ export function AppSettings() {
               Open the test lab
             </LinkButton>
           </div>
+          <div className="settings__row">
+            <span className="small">The highlights of this version and the ones before it.</span>
+            <Button size="sm" onClick={() => setWhatsNew(true)} data-testid="open-whats-new">
+              What’s new
+            </Button>
+          </div>
           <p className="small faint" style={{ margin: 0 }}>
             {siteConfig.name} v{__APP_VERSION__} · built{' '}
             {formatDate(__BUILD_DATE__, siteConfig.locale)} ·{' '}
@@ -72,6 +84,7 @@ export function AppSettings() {
           </p>
         </div>
       </Card>
+      {whatsNew ? <WhatsNewDialog onClose={() => setWhatsNew(false)} /> : null}
     </div>
   );
 }

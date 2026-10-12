@@ -72,3 +72,22 @@ describe('board editor model', () => {
     expect(validatePosition('4k3/pppppppp/p7/8/8/8/8/4K3 w - - 0 1')).toMatch(/pawns/);
   });
 });
+
+describe('board editor model in Chess960', () => {
+  it('lets the king castle from anywhere between its rooks, in X-FEN', () => {
+    // Position 274: king d1 between rooks c1 and g1.
+    const position = parseBoard('bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1');
+    expect(availableCastling(position.pieces)).toEqual({ K: false, Q: false, k: false, q: false });
+    expect(availableCastling(position.pieces, true)).toEqual({
+      K: true,
+      Q: true,
+      k: true,
+      q: true,
+    });
+    expect(toFen(position, true)).toBe('bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1');
+    expect(toFen(position)).toBe('bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w - - 0 1');
+    // With no rook left on the king's h-side, that right goes.
+    position.pieces.delete('g1');
+    expect(availableCastling(position.pieces, true)).toMatchObject({ K: false, Q: true });
+  });
+});

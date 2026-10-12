@@ -16,6 +16,7 @@ import type { Puzzle } from '@/features/puzzles/puzzleService';
 import { type BlindDepth, blindLevel, nextBlindLevel } from '@/features/puzzles/blind';
 import type { OwnThreat } from '@/features/drills/threats';
 import { daysBetween, localDateKey, trainingStreak } from '@/lib/dates';
+import { noteTrainingDay } from '@/features/notifications/trained';
 import {
   PUZZLE_REVIEW_STEPS_DAYS,
   type PuzzleReviewCard,
@@ -978,9 +979,14 @@ export function inspectBackup(raw: unknown): BackupPreview {
 export const useProgress = create<ProgressState>()(
   persist<ProgressState, [], [], PersistedProgress>(
     (set, get) => {
-      /** Today added to the training days, and the best streak kept up to date. */
+      /**
+       * Today added to the training days, and the best streak kept up to date. A
+       * day newly added is passed on to the relay, which then sends no reminder
+       * that day (only while this device has one: notifications/trained.ts).
+       */
       const training = (days: string[], today = localDateKey()) => {
         const trainingDays = withToday(days, today);
+        if (trainingDays !== days) noteTrainingDay(today);
         return {
           trainingDays,
           bestStreak:

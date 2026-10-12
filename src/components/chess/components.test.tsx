@@ -173,6 +173,28 @@ describe('EngineLines', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Play e4' }));
     expect(onPlayMove).toHaveBeenCalledWith('e2e4');
   });
+
+  it('reads a Chess960 line, castling as king takes rook', () => {
+    const onPlayMove = vi.fn();
+    // Position 274: the engine castles long by taking its own rook.
+    const fen = 'bnrknbrq/pppppppp/8/8/8/8/PPPPPPPP/BNRKNBRQ w KQkq - 0 1';
+    const lines = new Map([[1, info(['d1c1', 'd8c8', 'e2e4'], 10)]]);
+    render(
+      <EngineLines
+        chess960
+        fen={fen}
+        turn="white"
+        lines={lines}
+        count={1}
+        thinking={false}
+        onPlayMove={onPlayMove}
+        moveLabel="1."
+      />,
+    );
+    expect(screen.getByText('e4')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Play O-O-O' }));
+    expect(onPlayMove).toHaveBeenCalledWith('d1c1');
+  });
 });
 
 describe('MoveList', () => {

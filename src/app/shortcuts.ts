@@ -19,6 +19,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'Everywhere',
     shortcuts: [
       { keys: ['?'], action: 'Show this list' },
+      {
+        keys: ['Ctrl', 'K'],
+        action: 'Search lessons, openings, puzzles and settings (⌘ K on a Mac)',
+      },
       { keys: ['Esc'], action: 'Close dialogs and menus' },
       { keys: ['Tab'], action: 'Move between controls; the first Tab reveals “Skip to content”' },
     ],

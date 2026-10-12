@@ -7,13 +7,14 @@ import { siteConfig } from '../src/site.config';
  * rooms (relay/src/live), in this process, answering every browser's
  * WebSockets through Playwright's WebSocket routes — so two players in two
  * browser contexts meet and play through the real rules, without a server.
+ * Group rooms (a puzzle race for up to eight, `/v1/rooms/…`) go to the hub too.
  *
  * The relay's clock runs with real time, and `advance` moves it on (a first
  * move that never comes, a player gone long enough to be claimed against).
  */
 
 const LIVE_URL = new RegExp(
-  `^${siteConfig.syncRelay.replace(/^http/, 'ws').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/v1/(lobby|games/[^/?#]+)$`,
+  `^${siteConfig.syncRelay.replace(/^http/, 'ws').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/v1/(lobby|games/[^/?#]+|rooms/[^/?#]+)$`,
 );
 
 export interface LiveRelay {
@@ -33,7 +34,13 @@ export interface LiveRelay {
   stop(): Promise<void>;
 }
 
-export function startLiveRelay(): LiveRelay {
+/**
+ * `chess960Position`, when given, draws the start of every new Chess960 game
+ * (a spec that castles needs a position where castling comes in a few moves).
+ */
+export function startLiveRelay({
+  chess960Position,
+}: { chess960Position?: () => number } = {}): LiveRelay {
   let offset = 0;
   const now = () => Date.now() + offset;
   let queue: { at: number; run: () => void }[] = [];
@@ -56,7 +63,7 @@ export function startLiveRelay(): LiveRelay {
     }
   };
   const ticker = setInterval(fire, 50);
-  const hub = createLiveHub({ now, timers });
+  const hub = createLiveHub({ now, timers, chess960Position });
   const contexts: BrowserContext[] = [];
   const log: Record<string, unknown>[] = [];
 
@@ -66,8 +73,14 @@ export function startLiveRelay(): LiveRelay {
       await context.routeWebSocket(LIVE_URL, (ws) => {
         const path = new URL(ws.url()).pathname;
         const game = /^\/v1\/games\/(.+)$/.exec(path)?.[1];
+        const room = /^\/v1\/rooms\/(.+)$/.exec(path)?.[1];
         let closed = false;
-        const events = (game ? hub.openRoom.bind(hub, game) : hub.openLobby.bind(hub))({
+        const open = room
+          ? hub.openGroup.bind(hub, room)
+          : game
+            ? hub.openRoom.bind(hub, game)
+            : hub.openLobby.bind(hub);
+        const events = open({
           send: (text: string) => {
             if (text !== 'pong') log.push(JSON.parse(text) as Record<string, unknown>);
             ws.send(text);

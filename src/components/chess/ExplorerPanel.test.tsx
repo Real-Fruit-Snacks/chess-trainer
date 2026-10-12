@@ -19,6 +19,8 @@ describe('ExplorerPanel', () => {
     const toggle = screen.getByRole('switch', { name: 'Look up positions' });
     expect(toggle).not.toBeChecked();
     expect(screen.getByText(/uses the network/)).toBeInTheDocument();
+    // Lichess serves the explorer to signed-in accounts only: the learner knows before opting in.
+    expect(toggle).toHaveAccessibleDescription(/Needs a Lichess account, connected in Settings\./);
     fireEvent.click(toggle);
     expect(useSettings.getState().explorer).toBe(true);
     // Once on, the database choice takes the switch's place.
