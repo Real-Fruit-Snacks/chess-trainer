@@ -13,7 +13,7 @@
  * the layout-shift and label audits are gated individually because they do
  * not vary with CPU speed.
  */
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { launch } from 'chrome-launcher';
 import lighthouse from 'lighthouse';
 
@@ -23,6 +23,24 @@ const FLOORS = { accessibility: 0.95, 'best-practices': 0.9, seo: 0.9 };
 const PERF_FLOOR = 0.5;
 const CLS_LIMIT = 0.1;
 const BINARY_AUDITS = ['label-content-name-mismatch', 'color-contrast', 'errors-in-console'];
+
+/**
+ * The relay's host (`syncRelay` in src/site.config.ts). It answers only the app's own origins, so
+ * the page under audit, served from 127.0.0.1, is refused there (Play connects to the waiting room
+ * as it opens): those console errors say nothing about the page, and are left out.
+ */
+const RELAY_HOST = (() => {
+  const config = readFileSync(new URL('../src/site.config.ts', import.meta.url), 'utf8');
+  const relay = /syncRelay:\s*'([^']*)'/.exec(config)?.[1] ?? '';
+  return relay ? new URL(relay).host : null;
+})();
+
+/** Whether a console error is the relay refusing the audit's origin. */
+const relayRefusal = (item) =>
+  RELAY_HOST !== null &&
+  [item.description, item.sourceLocation?.url].some(
+    (text) => typeof text === 'string' && text.includes(RELAY_HOST),
+  );
 
 const jsonIndex = process.argv.indexOf('--json');
 const jsonPath = jsonIndex > -1 ? process.argv[jsonIndex + 1] : null;
@@ -69,9 +87,13 @@ try {
       failures.push(`${path}: cumulative layout shift ${cls.toFixed(3)} > ${CLS_LIMIT}`);
     for (const id of BINARY_AUDITS) {
       const audit = lhr.audits[id];
-      if (audit && audit.score !== null && audit.score < 1) {
-        failures.push(`${path}: audit "${id}" failed (${audit.title})`);
+      if (!audit || audit.score === null || audit.score >= 1) continue;
+      if (id === 'errors-in-console') {
+        const errors = (audit.details?.items ?? []).filter((item) => !relayRefusal(item));
+        if (errors.length === 0) continue;
+        for (const item of errors) console.error(`${path}: ${item.description}`);
       }
+      failures.push(`${path}: audit "${id}" failed (${audit.title})`);
     }
   }
 } finally {

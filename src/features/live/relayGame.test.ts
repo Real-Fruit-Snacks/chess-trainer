@@ -667,7 +667,8 @@ describe('Chess960 on the relay', () => {
     }
     expect(castled).toBeGreaterThan(0);
     expect(ended).toBeGreaterThan(0);
-  });
+    // Forty whole games through two move generators: slow under coverage, on a shared machine.
+  }, 60_000);
 
   it('plays from the start the room drew: castling onto the rook, takebacks, the record', async () => {
     vi.unstubAllGlobals();
