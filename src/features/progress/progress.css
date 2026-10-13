@@ -1,0 +1,228 @@
+.ratingchart {
+  margin: 0;
+}
+
+.ratingchart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  touch-action: pan-y;
+}
+
+.ratingchart__grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.ratingchart__tick {
+  font-size: 11px;
+  fill: var(--text-faint);
+  font-family: var(--font-sans);
+}
+
+.ratingchart__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.ratingchart__crosshair {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.ratingchart__marker {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.ratingchart__tooltip {
+  font-size: 0.85rem;
+  margin-top: 4px;
+  min-height: 1.4em;
+}
+
+/* minmax(0, …): a column is never wider than the screen because of a wide table or a long
+   row of figures inside it (they scroll or wrap within their card instead). */
+.progress__grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 900px) {
+  .progress__grid {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+}
+
+/* Weekly summary: a rise or a fall is shown by an arrow as well as the colour. */
+.weekly__cell--up {
+  color: var(--success);
+}
+
+.weekly__cell--down {
+  color: var(--danger);
+}
+
+.weekly__trend {
+  vertical-align: -1px;
+}
+
+/* Theme strengths / weaknesses: side by side only when each list has room for its names (the
+   card is narrow beside the others on a laptop, wide on a tablet), one above the other otherwise. */
+.themes-report {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+}
+
+.themes-report__heading {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 0 0 var(--space-2);
+}
+
+.themes-report__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The theme and its figure on one line, the bar under both: a long name wraps rather than
+   running into the bar, at any width. */
+.themes-report__list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name figure'
+    'bar bar';
+  align-items: baseline;
+  column-gap: var(--space-2);
+  row-gap: 2px;
+  font-size: 0.9rem;
+}
+
+.themes-report__list li > a {
+  grid-area: name;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.themes-report__figure {
+  grid-area: figure;
+  white-space: nowrap;
+}
+
+/* Each theme is a link to practise it: a target at least 24px high, more on a touch screen. */
+.themes-report__list a {
+  padding-block: 2px;
+}
+
+@media (pointer: coarse) {
+  .themes-report__list a {
+    padding-block: 6px;
+  }
+}
+
+.themes-report__bar {
+  grid-area: bar;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.themes-report__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--warning);
+  border-radius: var(--radius-pill);
+}
+
+.themes-report__bar--good > span {
+  background: var(--success);
+}
+
+/* ---------- Results by engine level and human-like rating ---------- */
+.levels {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: var(--space-2);
+}
+
+.levels__row {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) 1fr auto;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.levels__bar {
+  display: flex;
+  height: 12px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.levels__win {
+  background: var(--success);
+}
+
+.levels__draw {
+  background: var(--border-strong);
+}
+
+.levels__loss {
+  background: var(--danger);
+}
+
+.levels__score {
+  font-variant-numeric: tabular-nums;
+  min-width: 4.5em;
+  text-align: right;
+}
+
+/* Arcade bests */
+.arcade-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.arcade-results__row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.arcade-results__icon {
+  color: var(--accent);
+  display: inline-flex;
+  margin-top: 2px;
+}
+
+/* The week's figures fit a phone: labels and column titles wrap rather than push the
+   table past the card. */
+.weekly__table th {
+  white-space: normal;
+}
+
+.weekly__table thead th {
+  vertical-align: bottom;
+}

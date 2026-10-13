@@ -1,0 +1,118 @@
+/**
+ * Types for cloudflare.mjs, for the relay's tests: the two Durable Object
+ * classes, and as much of the runtime as they use.
+ */
+
+/** The object's end of a WebSocket accepted for hibernation. */
+export interface DurableSocket {
+  readyState: number;
+  send(message: string): void;
+  close(code?: number, reason?: string): void;
+  serializeAttachment(value: unknown): void;
+  deserializeAttachment(): unknown;
+}
+
+export interface DurableStorage {
+  get(key: string): Promise<unknown>;
+  put(key: string, value: unknown): Promise<void>;
+  deleteAll(): Promise<void>;
+  setAlarm(at: number): Promise<void>;
+  deleteAlarm(): Promise<void>;
+  /** When the alarm is set for (null: not set); without it, a woken room sets its alarm again. */
+  getAlarm?(): Promise<number | null>;
+}
+
+export interface DurableState {
+  storage: DurableStorage;
+  acceptWebSocket(ws: DurableSocket): void;
+  getWebSockets(): DurableSocket[];
+  setWebSocketAutoResponse(pair?: unknown): void;
+}
+
+export interface DurableNamespace {
+  idFromName(name: string): unknown;
+  get(id: unknown): { fetch(input: string | Request, init?: RequestInit): Promise<Response> };
+}
+
+export interface LiveEnv {
+  LIVE_LOBBY?: DurableNamespace;
+  LIVE_ROOMS?: DurableNamespace;
+  /** The group rooms (up to eight by link), one object each. */
+  LIVE_GROUPS?: DurableNamespace;
+  /** The relay's D1 database: where its push keys are (none: nobody is pushed). */
+  DB?: { prepare(sql: string): unknown };
+  ALLOWED_ORIGINS?: unknown;
+  /** The contact in the relay's push messages (mailto: or https:). */
+  PUSH_CONTACT?: unknown;
+  /** The key the waiting room's count hashes are made with (HMAC), when the relay has one. */
+  QUOTA_SECRET?: unknown;
+}
+
+/** The waiting room: one object (named 'lobby') for every socket of `GET /v1/lobby`. */
+export class LiveLobby {
+  constructor(state: DurableState, env: LiveEnv);
+  /**
+   * A WebSocket upgrade: 101 with the client's end of a new socket. POST
+   * https://live.internal/no-show with `{"key":…}` (a game's room, from inside): 204 counted, 400
+   * when it is not a key. Anything else: 426.
+   */
+  fetch(request: Request): Response | Promise<Response>;
+  /**
+   * Takes the object's end of a new socket: what `fetch` does, apart from the 101 response.
+   * `address`: the client's, counted by its /64 when it is an IPv6 one.
+   */
+  accept(ws: DurableSocket, address?: string): void;
+  webSocketMessage(ws: DurableSocket, message: string | ArrayBuffer): Promise<void>;
+  webSocketClose(ws: DurableSocket, code?: number, reason?: string, wasClean?: boolean): void;
+  webSocketError(ws: DurableSocket, error?: unknown): void;
+}
+
+/** One game: an object per game, named by the game's id. */
+export class LiveRoom {
+  constructor(state: DurableState, env: LiveEnv);
+  /**
+   * POST https://live.internal/create with a game's spec: 201 made, 409 when it
+   * exists, 400 when it is not one. A WebSocket upgrade: 101. Anything else: 426.
+   */
+  fetch(request: Request): Promise<Response>;
+  /**
+   * Takes the object's end of a new socket: what `fetch` does, apart from the 101 response
+   * (`address`, the client's, for the limit per address).
+   */
+  accept(ws: DurableSocket, address?: string): Promise<void>;
+  webSocketMessage(ws: DurableSocket, message: string | ArrayBuffer): Promise<void>;
+  webSocketClose(
+    ws: DurableSocket,
+    code?: number,
+    reason?: string,
+    wasClean?: boolean,
+  ): Promise<void>;
+  webSocketError(ws: DurableSocket, error?: unknown): Promise<void>;
+  /** Something is due: a flag, a first move, or the room's end (fails when not stored). */
+  alarm(): Promise<void>;
+}
+
+/** One group room (up to eight by link): an object per room, named by its id. */
+export class LiveGroup {
+  constructor(state: DurableState, env: LiveEnv);
+  /**
+   * POST https://live.internal/create with a room's spec: 201 made, 409 when it
+   * exists, 400 when it is not one. A WebSocket upgrade: 101. Anything else: 426.
+   */
+  fetch(request: Request): Promise<Response>;
+  /**
+   * Takes the object's end of a new socket: what `fetch` does, apart from the 101 response
+   * (`address`, the client's, for the limit per address).
+   */
+  accept(ws: DurableSocket, address?: string): Promise<void>;
+  webSocketMessage(ws: DurableSocket, message: string | ArrayBuffer): Promise<void>;
+  webSocketClose(
+    ws: DurableSocket,
+    code?: number,
+    reason?: string,
+    wasClean?: boolean,
+  ): Promise<void>;
+  webSocketError(ws: DurableSocket, error?: unknown): Promise<void>;
+  /** Something is due: a host's hand-over, the race's next step, or the room's end. */
+  alarm(): Promise<void>;
+}

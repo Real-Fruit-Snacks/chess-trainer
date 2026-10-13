@@ -1,0 +1,776 @@
+/* Live games: the waiting room (LivePage.tsx), the game (LiveGamePage.tsx) and the bar under the
+   header (LiveBar.tsx). */
+
+/* ---------- Play: the hub (PlayHubPage.tsx) ---------- */
+/* Phones: the computer first (one tap away), then a person, the open games, the games for two and
+   the player's name. From 900px: a person on the left, the computer and the open games beside it,
+   then the games for two and the name across the page. */
+.hub {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'computer' 'person' 'open' 'games' 'name';
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.hub__person {
+  grid-area: person;
+  min-width: 0;
+}
+
+.hub__computer {
+  grid-area: computer;
+  min-width: 0;
+}
+
+.hub__open {
+  grid-area: open;
+  min-width: 0;
+}
+
+.hub__games {
+  grid-area: games;
+  min-width: 0;
+}
+
+.hub__name {
+  grid-area: name;
+  min-width: 0;
+}
+
+.hub__corr {
+  grid-area: corr;
+  min-width: 0;
+}
+
+/* With correspondence games: their card right after a person's, the open games after it. */
+.hub--corr {
+  grid-template-areas: 'computer' 'person' 'corr' 'open' 'games' 'name';
+}
+
+@media (min-width: 900px) {
+  .hub {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    /* The second row takes what a person's card adds beyond the computer's: the open games stay
+       right under the computer rather than drifting down. */
+    grid-template-rows: auto 1fr auto auto;
+    grid-template-areas:
+      'person computer'
+      'person open'
+      'games games'
+      'name name';
+  }
+
+  .hub--corr {
+    grid-template-rows: auto 1fr auto auto auto;
+    grid-template-areas:
+      'person computer'
+      'person open'
+      'corr corr'
+      'games games'
+      'name name';
+  }
+}
+
+/* A correspondence game where it is your move. */
+.live__corr-turn {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* A card's icon beside its title. */
+.hub__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.hub__head > .live__title {
+  margin: 0;
+}
+
+.hub__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.hub__lead {
+  margin: 0 0 var(--space-3);
+}
+
+.hub__actions {
+  flex-wrap: wrap;
+}
+
+.hub__invite {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.hub__section-head > h2 {
+  font-size: 1.25rem;
+  margin: 0 0 var(--space-1);
+}
+
+.hub__section-head > p {
+  margin: 0 0 var(--space-3);
+  max-width: 70ch;
+}
+
+/* The games for two: one per row on a phone, all five abreast on a wide screen. */
+.hub__game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+
+/* A game for two. On a phone: the icon beside the name and the tagline, the links under them.
+   In the grid of a wider screen: a card of its own, the Play button at its bottom right. */
+.hub-game {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'icon name time'
+    'icon tagline tagline'
+    'practise practise play';
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.hub-game__icon {
+  grid-area: icon;
+  align-self: start;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.hub-game__name {
+  grid-area: name;
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.hub-game__time {
+  grid-area: time;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.hub-game__tagline {
+  grid-area: tagline;
+  margin: 0;
+  font-size: 0.925rem;
+  color: var(--text-muted);
+}
+
+.hub-game__practise {
+  grid-area: practise;
+  justify-self: start;
+}
+
+.hub-game__play {
+  grid-area: play;
+  justify-self: end;
+}
+
+@media (min-width: 600px) {
+  .hub-game {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr auto;
+    grid-template-areas:
+      'icon time'
+      'name name'
+      'tagline tagline'
+      'practise play';
+    align-items: start;
+    gap: var(--space-2);
+  }
+
+  .hub-game__practise,
+  .hub-game__play {
+    align-self: end;
+  }
+}
+
+/* The name card across the page: the name and the rating side by side, the notes under them. */
+@media (min-width: 900px) {
+  .hub__name .hub__name-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-2) var(--space-6);
+    align-items: center;
+  }
+
+  /* The grid spaces them now, not the stack. */
+  .hub__name .hub__name-body > * {
+    margin-top: 0;
+  }
+
+  .hub__name .hub__name-body > .live__aside {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------- The waiting room's pieces ---------- */
+.live__title {
+  font-size: 1.15rem;
+  margin: 0 0 var(--space-3);
+}
+
+/* A card's title with something beside it (the waiting time) or under it (the head count). */
+.card > .row--between:first-child > .live__title,
+.live__head > .live__title {
+  margin: 0;
+}
+
+.card > .row--between:first-child:has(> .live__title),
+.live__head {
+  margin-bottom: var(--space-3);
+}
+
+.live__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* No margin of their own below: in a stack, the stack's spacing above them stays. */
+.live__label {
+  margin-bottom: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.live__aside {
+  margin-bottom: 0;
+}
+
+.live__connection {
+  min-height: 24px;
+}
+
+/* A notice or a suggestion with its button: side by side when they fit. */
+.live__notice,
+.live__nudge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* The time controls: Lichess's quick pairing grid, the clock big and its speed under it. */
+.live__tcs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+@media (min-width: 480px) {
+  .live__tcs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.live__tc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 68px;
+  min-width: 0;
+  padding: var(--space-2) var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: center;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    transform var(--transition);
+}
+
+.live__tc:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.live__tc:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.live__tc:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.live__tc-time {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.live__tc--custom .live__tc-time {
+  font-size: 1.05rem;
+}
+
+.live__tc-speed {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Waiting */
+.live__elapsed {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.live__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.live__summary-icon {
+  flex: none;
+  color: var(--accent);
+}
+
+.live__share-hint {
+  margin: 0 0 var(--space-3);
+}
+
+.live__places {
+  list-style: none;
+  margin: var(--space-3) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.live__place {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.925rem;
+  overflow-wrap: anywhere;
+}
+
+.live__place-mark {
+  flex: none;
+}
+
+.live__place--done .live__place-mark {
+  color: var(--success);
+}
+
+.live__place--problem .live__place-mark {
+  color: var(--warning);
+}
+
+.live__allow {
+  margin-bottom: var(--space-3);
+}
+
+.live__actions {
+  margin-bottom: var(--space-3);
+}
+
+.live__nudge {
+  font-size: 0.925rem;
+}
+
+.live__later {
+  margin-top: var(--space-3);
+}
+
+/* The open games: who, then what, with Join beside both. */
+.live__seeks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.live__aside + .live__seeks {
+  margin-top: var(--space-2);
+}
+
+.live__seek {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'who join' 'what join';
+  align-items: center;
+  gap: 2px var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.live__seek:first-child {
+  border-top: 1px solid var(--border);
+}
+
+.live__seek-who {
+  grid-area: who;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.live__seek-name {
+  font-weight: 700;
+}
+
+.live__seek-rating {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.live__seek-what {
+  grid-area: what;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.live__seek-icon {
+  flex: none;
+  color: var(--accent);
+}
+
+.live__seek-join {
+  grid-area: join;
+}
+
+.live__empty {
+  max-width: 40ch;
+  margin: 0 auto;
+}
+
+.live__playas {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The game dialog: what the game is, with its icon. */
+.live__dialog-lead {
+  margin: 0;
+}
+
+.live__dialog-about {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 0.925rem;
+}
+
+.live__dialog-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+/* ---------- The game ---------- */
+/* An online page with nothing to show yet, or no longer (OnlineNotice): the page's header,
+   then the connection's line or the ways on; a card under it reads at a comfortable width. */
+.online-notice__status {
+  margin-bottom: var(--space-4);
+}
+
+.online-notice__card {
+  max-width: 620px;
+}
+
+.live-game__title {
+  font-size: 1.05rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.live-game__subtitle {
+  font-size: 1rem;
+  margin: 0 0 var(--space-2);
+}
+
+.live-game__status {
+  margin: var(--space-1) 0 0;
+  font-weight: 600;
+}
+
+.live-game__status--you {
+  color: var(--accent);
+}
+
+.live-game__note {
+  margin: var(--space-3) 0 0;
+}
+
+.live-game__error {
+  margin: var(--space-2) 0 0;
+  color: var(--danger);
+}
+
+.live-game__player {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A Lichess title (GM, IM…), as Lichess marks it. */
+.live-game__ptitle {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--warning);
+}
+
+.live-game__rating {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-game__player .badge {
+  align-self: center;
+}
+
+/* Blindfold: the last move and the peeks, with the Peek button beside them. */
+.live-game__blind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.live-game__blind-text {
+  flex: 1 1 16em;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.live-game__subtitle-line {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+}
+
+.live-game__armies {
+  margin: var(--space-1) 0 0;
+}
+
+/* A Chess960 game's position by number, beside the board: only where the page header's line that
+   names it is hidden (a phone held upright, global.css), so it is never said twice. */
+.live-game__variant {
+  display: none;
+}
+
+@media (max-width: 599px) and (orientation: portrait) {
+  .live-game__variant {
+    display: block;
+  }
+}
+
+/* Army Draft's draft (LiveDraft.tsx). */
+.live-draft__lead {
+  margin: var(--space-2) 0 var(--space-3);
+}
+
+.live-draft__ready {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+  font-weight: 600;
+}
+
+.live-game__first {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.live-game__alerts {
+  margin-top: var(--space-2);
+}
+
+.live-game__offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.live-game__left {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.live-game__left-text {
+  margin: 0;
+}
+
+.live-game__phrases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The list stays in the page while empty (a live region must be there before its first line), but
+   takes no room. */
+.live-game__chat {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 0.925rem;
+  overflow-wrap: anywhere;
+}
+
+.live-game__chat:not(:empty) {
+  margin-top: var(--space-3);
+}
+
+.live-game__chat-by {
+  font-weight: 600;
+}
+
+/* ---------- The bar under the header ---------- */
+.live-bar {
+  position: sticky;
+  top: var(--header-height);
+  /* Under the header (and its menus), over the page. */
+  z-index: 45;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.live-bar--paired {
+  background: var(--accent-soft);
+  border-bottom-color: var(--accent);
+}
+
+.live-bar--game {
+  background: var(--info-soft);
+}
+
+/* Focused controls scroll clear of the bar as well as of the header. */
+html:has(.live-bar) {
+  scroll-padding-top: calc(var(--header-height) + 56px);
+}
+
+.live-bar__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-height: 44px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.live-bar__icon {
+  color: var(--accent);
+}
+
+.live-bar__text {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.live-bar__time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.live-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+@media (forced-colors: active) {
+  .live__tc,
+  .live-bar {
+    border-color: CanvasText;
+  }
+}
+
+/* ---------- Watching (WatchGame.tsx), and the watchers a player sees ---------- */
+.live-game__watchers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: var(--space-2) 0 0;
+}
+
+.live-game__watchers-icon {
+  flex: none;
+  color: var(--accent);
+}
+
+/* A correspondence game's days left for the side to move, where a clock would be. */
+.live-game__days {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--accent);
+}
+
+/* The invitation to a correspondence game, while its other seat is open. */
+.live-game__invite {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.live-game__invite p {
+  margin: 0;
+}

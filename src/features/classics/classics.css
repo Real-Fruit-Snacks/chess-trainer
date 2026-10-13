@@ -1,0 +1,68 @@
+.classic-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.classic-card .card__title {
+  line-height: 1.3;
+}
+
+.classic-card__players {
+  color: var(--text);
+}
+
+/* Three lines of the story (two on a phone): the cards keep one height, the game the rest. */
+.classic-card__intro {
+  margin: var(--space-1) 0 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+.classic-card .card__foot {
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+
+.classics__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* Phones: each filter the full width; the five eras in two even rows, three then two. */
+@media (max-width: 599px) {
+  .classics__filters {
+    width: 100%;
+  }
+
+  .classics__filters > .segmented {
+    width: 100%;
+  }
+
+  .classics__filters > .segmented:not(:first-child) > .segmented__option {
+    flex: 1 1 0;
+  }
+
+  .classics__filters > .segmented:first-child {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .classics__filters > .segmented:first-child > .segmented__option {
+    grid-column: span 2;
+  }
+
+  .classics__filters > .segmented:first-child > .segmented__option:nth-child(n + 4) {
+    grid-column: span 3;
+  }
+
+  .classic-card__intro {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+}

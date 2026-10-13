@@ -1,0 +1,22 @@
+.lesson__text {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.lesson__text p {
+  margin-bottom: var(--space-3);
+}
+
+.lesson__text ul,
+.lesson__text ol {
+  margin: 0 0 var(--space-3);
+  padding-left: 1.3em;
+}
+
+.lesson__text li + li {
+  margin-top: 4px;
+}
+
+.lesson__text > :last-child {
+  margin-bottom: 0;
+}

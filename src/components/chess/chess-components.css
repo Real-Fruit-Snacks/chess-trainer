@@ -1,0 +1,641 @@
+/* ---------- Eval bar ---------- */
+.evalbar {
+  position: relative;
+  width: 28px;
+  flex: 0 0 28px;
+  border-radius: var(--radius-sm);
+  background: var(--eval-black);
+  /* Outlined so the bar stands out from a dark page background (non-text contrast). */
+  border: 1px solid var(--text-muted);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  box-shadow: var(--shadow-sm);
+}
+
+/* The last known score is kept between searches; it is shown toned down until a fresh one lands. */
+.evalbar--stale .evalbar__label {
+  opacity: 0.6;
+}
+
+.evalbar--flipped {
+  justify-content: flex-start;
+}
+
+.evalbar__white {
+  width: 100%;
+  background: var(--eval-white);
+  transition: height 400ms ease;
+}
+
+.evalbar__label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  line-height: 1;
+  padding: 4px 0;
+  pointer-events: none;
+  letter-spacing: -0.06em;
+}
+
+.evalbar__label--top {
+  top: 0;
+}
+
+.evalbar__label--bottom {
+  bottom: 0;
+}
+
+.evalbar__label--on-white {
+  color: #222;
+}
+
+.evalbar__label--on-black {
+  color: #eee;
+}
+
+/* ---------- Move list ---------- */
+.movelist {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 1px var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  align-content: start;
+  max-height: 320px;
+  overflow-y: auto;
+  /* Room for the focus ring of the first and last rows inside the scroller. */
+  padding: 3px var(--space-1) 3px 3px;
+  scroll-padding: 3px;
+}
+
+.movelist:focus-visible,
+.treemoves:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.movelist__number {
+  color: var(--text-faint);
+  padding: 3px 0;
+  text-align: right;
+  user-select: none;
+}
+
+.movelist__move {
+  text-align: left;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  transition: background var(--transition);
+}
+
+button.movelist__move:hover {
+  background: var(--surface-2);
+}
+
+.movelist__move[aria-current='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.movelist__move--blunder {
+  color: var(--danger);
+}
+
+.movelist__move--mistake {
+  color: var(--warning);
+}
+
+.movelist__move--inaccuracy {
+  color: var(--info);
+}
+
+.movelist__glyph {
+  font-size: 0.75em;
+  margin-left: 2px;
+  opacity: 0.8;
+}
+
+.movelist__empty {
+  grid-column: 1 / -1;
+  color: var(--text-faint);
+  font-family: var(--font-sans);
+  padding: var(--space-2) 0;
+}
+
+/* ---------- Move navigation ---------- */
+.movenav {
+  display: flex;
+  gap: var(--space-1);
+  justify-content: center;
+}
+
+/* ---------- Engine lines ---------- */
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.line {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 0.875rem;
+  min-height: 32px;
+  overflow: hidden;
+}
+
+.line__score {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  min-width: 3.4em;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.line__score--white {
+  color: var(--text);
+}
+
+.line__score--black {
+  color: var(--text-muted);
+}
+
+.line__pv {
+  white-space: nowrap;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  /* A long line fades out at the edge: an ellipsis was drawn over the figurines of the move it
+     cut (they are images, not letters). */
+  mask-image: linear-gradient(to right, #000 calc(100% - 2em), transparent);
+}
+
+.line__pv button {
+  color: inherit;
+  font: inherit;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+/* Touch screens: the line's first move, which plays it, is a finger-sized target. */
+@media (pointer: coarse) {
+  .line {
+    min-height: 40px;
+    align-items: center;
+  }
+
+  .line__pv {
+    line-height: 28px;
+  }
+
+  .line__pv button:first-of-type:not(:disabled) {
+    min-height: 28px;
+    padding: 0 6px;
+  }
+}
+
+.line__pv button:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.line__pv button:first-of-type {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.line__pv button:first-of-type:not(:disabled) {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+
+.engine-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Captured material ---------- */
+.material {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 20px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.material piece {
+  position: static;
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.material piece + piece {
+  margin-left: -6px;
+}
+
+.material__group {
+  display: inline-flex;
+  margin-right: 4px;
+}
+
+.material__diff {
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+/* ---------- Player bar ---------- */
+.playerbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.playerbar__name {
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.playerbar__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  display: inline-block;
+}
+
+.playerbar__dot--white {
+  background: #f5f5f5;
+}
+
+.playerbar__dot--black {
+  background: #222;
+}
+
+.playerbar__thinking {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- Clock ---------- */
+.clock {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  min-width: 4.5em;
+  text-align: center;
+}
+
+.clock--running {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.clock--low {
+  color: var(--danger);
+}
+
+.clock--running.clock--low {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 25%, transparent);
+}
+
+/* ---------- Move input ---------- */
+.moveinput {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.moveinput .input {
+  font-family: var(--font-mono);
+  flex: 1;
+  min-width: 0;
+}
+
+/* Play is as tall as the field beside it. */
+.moveinput > .btn {
+  align-self: stretch;
+}
+
+.moveinput__error {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+/* ---------- Tree move list (variations) ---------- */
+.treemoves {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  line-height: 1.9;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 3px var(--space-1) 3px 3px;
+  scroll-padding: 3px;
+}
+
+/* The empty list's sentence is prose, not notation. */
+.treemoves__empty {
+  font-family: var(--font-sans);
+}
+
+.treemoves__move {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 0 1px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  transition: background var(--transition);
+  white-space: nowrap;
+}
+
+.treemoves__move:hover {
+  background: var(--surface-2);
+}
+
+.treemoves__move--current,
+.treemoves__move[aria-current='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.treemoves__move--blunder {
+  color: var(--danger);
+}
+
+.treemoves__move--mistake {
+  color: var(--warning);
+}
+
+.treemoves__move--inaccuracy {
+  color: var(--info);
+}
+
+.treemoves__number {
+  color: var(--text-faint);
+  margin-right: 3px;
+  font-weight: 400;
+}
+
+.treemoves__glyph {
+  font-size: 0.8em;
+  margin-left: 1px;
+}
+
+/* A move the learner flagged in self-analysis. */
+.treemoves__flag {
+  display: inline-flex;
+  margin-left: 2px;
+  color: var(--warning);
+  vertical-align: -1px;
+}
+
+.treemoves__comment {
+  font-family: var(--font-sans);
+  font-style: italic;
+  color: var(--text-muted);
+  margin: 0 4px;
+}
+
+.treemoves__variations {
+  display: block;
+  margin: 2px 0 2px calc(var(--depth, 1) * 10px);
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border);
+  /* A fixed size: an em here would shrink with every nesting level. */
+  font-size: 0.8rem;
+  line-height: 1.8;
+}
+
+.treemoves__variation {
+  display: block;
+}
+
+.treemoves__variation .treemoves__move {
+  color: var(--text-muted);
+}
+
+.treemoves__variation .treemoves__move--current {
+  color: var(--accent-strong);
+}
+
+.treemoves__paren {
+  color: var(--text-faint);
+}
+
+.movenav__hint {
+  margin-left: var(--space-2);
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .movenav__hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+}
+
+/* ---------- Tablebase ---------- */
+.tablebase__moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.tablebase__move {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.tablebase__move:hover {
+  background: var(--surface-2);
+}
+
+.tablebase__move--win {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.tablebase__move--draw {
+  border-color: var(--border-strong);
+}
+
+.tablebase__move--loss {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---------- Evaluation graph ---------- */
+.evalgraph {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+}
+
+.evalgraph:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.evalgraph__bg {
+  fill: var(--eval-black);
+}
+
+.evalgraph__area {
+  fill: var(--eval-white);
+  opacity: 0.9;
+}
+
+.evalgraph__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.evalgraph__mid {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.evalgraph__cursor {
+  stroke: var(--info);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.evalgraph__marker {
+  stroke: #fff;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.evalgraph__marker--blunder {
+  fill: var(--danger);
+}
+
+.evalgraph__marker--mistake {
+  fill: var(--warning);
+}
+
+.evalgraph__marker--inaccuracy {
+  fill: var(--info);
+}
+
+/* ---------- Key moments ---------- */
+.moments {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.moments__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.moments__row .moments__item {
+  flex: 1;
+  min-width: 0;
+}
+
+.moments__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: var(--text);
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.moments__item:hover,
+.moments__item[aria-current='true'] {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.moments__move {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.moments__move--blunder {
+  color: var(--danger);
+}
+
+.moments__move--mistake {
+  color: var(--warning);
+}
+
+.moments__move--inaccuracy {
+  color: var(--info);
+}
+
+/* Key moments: the one-line explanation spans the row under the move */
+.moments__why {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+}
+
+.moments__why:empty {
+  display: none;
+}

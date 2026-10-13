@@ -1,0 +1,397 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # Nightly on main: the same jobs, and a test that only passes on a retry fails the run.
+  schedule:
+    - cron: '17 3 * * *'
+
+# The nightly run gets a group of its own, so it can never cancel the run that gates a deploy.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # A pull request is checked out as its merge commit, whose first parent is the base.
+          fetch-depth: 2
+
+      # Documentation-only pull requests skip the build, the browsers and the audits.
+      - name: Documentation only?
+        id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            node scripts/ci-changes.mjs HEAD^1 >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  quality:
+    name: Lint, typecheck & unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # The model, so the unit test that runs it on real positions is not skipped.
+      - uses: ./.github/actions/setup
+        with:
+          maia: 'true'
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Dead code and dependencies
+        run: npm run lint:dead
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests (fails below the coverage floor)
+        run: npm run test:coverage
+
+      - name: Validate puzzle data
+        run: npm run puzzles:verify
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  build:
+    name: Production build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: ./.github/actions/setup
+        with:
+          engine: 'true'
+          maia: 'true'
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_BASE_PATH: /
+
+      - name: Check the bundle budget
+        run: npm run bundle:check
+
+      - name: Upload build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # Each browser project split across runners (Playwright's --shard): the Chromium projects run
+  # the whole suite in four shards, Firefox and WebKit their cross-browser sample
+  # (CROSS_BROWSER_SPECS in playwright.config.ts), half as many tests but slower, in three.
+  # The Chromium shards run two tests at a time (the runners have four cores, and the whole
+  # Chromium suite passes two at a time on two); Firefox and WebKit, heavier, one.
+  # e2e-report merges the shards' reports.
+  e2e:
+    name: End-to-end (${{ matrix.project }}, shard ${{ matrix.shard }} of ${{ matrix.shards }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop-chromium, mobile-chromium, desktop-firefox, desktop-webkit]
+        shard: [1, 2, 3, 4]
+        exclude:
+          - project: desktop-firefox
+            shard: 4
+          - project: desktop-webkit
+            shard: 4
+        include:
+          - project: desktop-chromium
+            browser: chromium
+            shards: 4
+            workers: 2
+          - project: mobile-chromium
+            browser: chromium
+            shards: 4
+            workers: 2
+          - project: desktop-firefox
+            browser: firefox
+            shards: 3
+            workers: 1
+          - project: desktop-webkit
+            browser: webkit
+            shards: 3
+            workers: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: ./.github/actions/setup
+        with:
+          browser: ${{ matrix.browser }}
+
+      - name: Download build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dist
+          path: dist/
+
+      # The GitHub reporter annotates failures here; the blob report goes to e2e-report.
+      - name: Run Playwright
+        run: >-
+          npx playwright test --project="$PROJECT" --shard="$SHARD" --workers="$WORKERS"
+          --reporter=github,blob
+        env:
+          CI: 'true'
+          PROJECT: ${{ matrix.project }}
+          SHARD: ${{ matrix.shard }}/${{ matrix.shards }}
+          WORKERS: ${{ matrix.workers }}
+          # Pull requests and pushes keep two retries; the nightly run fails on any flaky test.
+          PLAYWRIGHT_FAIL_ON_FLAKY: ${{ github.event_name == 'schedule' && '1' || '0' }}
+
+      # Passed or failed, every shard's results go into the merged report. A re-run replaces them.
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: blob-report-${{ matrix.project }}-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 1
+          overwrite: true
+
+  # The shards' blob reports merged into one HTML report (traces and screenshots of failures
+  # included), also when some failed; nothing to merge when the end-to-end tests did not run.
+  e2e-report:
+    name: End-to-end report
+    needs: e2e
+    if: ${{ !cancelled() && needs.e2e.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: ./.github/actions/setup
+
+      - name: Download blob reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: blob-report-*
+          path: blob-report/
+          merge-multiple: true
+
+      # Exits with 1 when a test failed, after writing the report.
+      - name: Merge into one HTML report
+        run: npx playwright merge-reports --reporter html blob-report/
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+          overwrite: true
+
+  # The offline copy's launcher (launcher/, Go), on each system it ships for: what it does with
+  # ports, paths and consoles differs between them.
+  launcher:
+    name: Launcher (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: launcher/go.mod
+          # The launcher has no dependencies to cache.
+          cache: false
+
+      - name: Format, vet and test
+        working-directory: launcher
+        shell: bash
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Not formatted (run gofmt -w launcher): $unformatted"
+            exit 1
+          fi
+          go vet ./...
+          go test ./...
+
+  # The offline copy a release attaches (scripts/package-offline.mjs): packaged from this build,
+  # unzipped and tried in a browser with its own launcher.
+  offline:
+    name: Offline copy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build, launcher]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: ./.github/actions/setup
+        with:
+          browser: chromium
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: launcher/go.mod
+          cache: false
+
+      - name: Download build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Package the offline copy
+        run: npm run release:offline
+
+      - name: Try the download
+        run: |
+          mkdir -p release/check
+          unzip -q release/open-file-*-offline.zip -d release/check
+          OFFLINE_BUNDLE="$(ls -d release/check/open-file-*)" npm run e2e:offline
+        env:
+          CI: 'true'
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-report-offline
+          path: playwright-report/
+          retention-days: 7
+
+  production-path:
+    name: Production base path (desktop Chromium)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # A project site's path on GitHub Pages; playwright.config.ts follows it and serves the
+      # build with scripts/serve-dist.mjs, which answers deep links with 404.html as Pages does.
+      VITE_BASE_PATH: /open-file/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: ./.github/actions/setup
+        with:
+          engine: 'true'
+          maia: 'true'
+          browser: chromium
+
+      - name: Build for /open-file/
+        run: npm run build
+
+      - name: Smoke test, deep link and 404 fallback
+        run: npx playwright test --project=desktop-chromium e2e/release-0-12-meta.spec.ts
+        env:
+          CI: 'true'
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-report-production-path
+          path: playwright-report/
+          retention-days: 7
+
+  visual:
+    name: Visual snapshots
+    # The pixel baselines are rendered with Ubuntu 24.04's fonts; ubuntu-latest moves to
+    # Ubuntu 26 from 19 October 2026. Move this with the baselines (`--update-snapshots`).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: ./.github/actions/setup
+        with:
+          browser: chromium
+
+      - name: Download build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Compare snapshots
+        run: npm run e2e:visual
+        env:
+          CI: 'true'
+
+      - name: Upload snapshot diffs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: visual-diffs
+          path: test-results/
+          retention-days: 7
+
+  lighthouse:
+    name: Lighthouse
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: ./.github/actions/setup
+
+      - name: Download build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Serve the build
+        run: |
+          npm run preview -- --port 4173 --strictPort --host 127.0.0.1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:4173/ >/dev/null && break
+            sleep 1
+          done
+
+      - name: Audit with Lighthouse
+        run: npm run lighthouse -- --json lighthouse.json
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: lighthouse
+          path: lighthouse.json
+          retention-days: 7

@@ -1,0 +1,230 @@
+.hero {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+  align-items: center;
+  padding: var(--space-6) 0 var(--space-5);
+}
+
+@media (min-width: 800px) {
+  .hero {
+    grid-template-columns: 1.2fr 0.8fr;
+    padding: var(--space-8) 0 var(--space-6);
+  }
+}
+
+.hero__title {
+  margin: var(--space-3) 0;
+  font-size: clamp(2rem, 1.4rem + 2.8vw, 3.2rem);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.hero__lead {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  max-width: 56ch;
+  margin-bottom: var(--space-4);
+}
+
+.hero__art {
+  display: flex;
+  justify-content: center;
+}
+
+.miniboard {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  width: min(100%, 360px);
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-board);
+  transform: rotate(-3deg);
+}
+
+.miniboard__sq {
+  display: grid;
+  place-items: center;
+  background: #f0d9b5;
+}
+
+.miniboard piece {
+  position: static;
+  display: block;
+  width: 88%;
+  height: 88%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  pointer-events: none;
+}
+
+.miniboard__sq--dark {
+  background: #b58863;
+}
+
+.home__progress {
+  margin-bottom: var(--space-5);
+}
+
+.home__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.home__features {
+  margin: var(--space-4) 0 var(--space-6);
+}
+
+/* Wide screens: the nine features in three rows of three, the three levels side by side
+   (four columns left a lone card on a last row, or an empty fourth column). */
+@media (min-width: 900px) {
+  .home__features,
+  .home__levels {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.home__left {
+  white-space: nowrap;
+}
+
+.feature {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.feature__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.feature__cta {
+  margin-top: auto;
+  font-weight: 600;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.home__how {
+  margin-bottom: var(--space-6);
+}
+
+/* Welcome tour */
+.home__welcome {
+  margin-top: var(--space-4);
+}
+
+.home__steps {
+  margin: var(--space-3) 0;
+  padding-left: 1.3em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Today's plan */
+.home__today {
+  margin-top: var(--space-4);
+}
+
+/* For a returning learner the day comes first, where the introduction used to be. */
+.home__today--first {
+  margin-top: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.home__plan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+@media (min-width: 800px) {
+  .home__plan {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.home__plan-item {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  text-decoration: none;
+  background: var(--surface);
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.home__plan-item:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.home__plan-item.is-done {
+  opacity: 0.7;
+}
+
+.home__plan-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent-contrast);
+}
+
+.is-done .home__plan-check {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.home__plan-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.home__plan-title {
+  font-weight: 600;
+}
+
+.home__course {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--border);
+}
+
+/* The install and backup notices: spaced like the cards round them, and no room at all when
+   neither has anything to say. */
+.home__notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.home__notices:empty {
+  display: none;
+}

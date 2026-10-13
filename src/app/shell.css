@@ -1,0 +1,556 @@
+.shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Focus mode (a game on, the setting enabled): just the page, no chrome. The
+   double class outranks the landscape and desktop rules below, which also set
+   the chrome heights. */
+.shell.shell--focus {
+  --header-height: 0px;
+  --bottom-nav-height: 0px;
+}
+
+.shell--focus .shell__header,
+.shell--focus .shell__bottomnav,
+.shell--focus .shell__footer {
+  display: none;
+}
+
+/* ---------- Header ---------- */
+.shell__header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--header-height);
+  /* The status bar / notch strip is part of the header, so nothing scrolls under it. */
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(160%) blur(10px);
+  border-bottom: 1px solid var(--border);
+  /* Window Controls Overlay (installed desktop app) */
+  padding-left: env(titlebar-area-x, 0);
+  padding-right: calc(100% - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100%));
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.shell__header-inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.shell__header a,
+.shell__header button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.shell__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* On a narrow phone the name gives way before the buttons do (see below). */
+  min-width: 0;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--text);
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+
+.shell__brand:hover {
+  color: var(--text);
+}
+
+/* The name shortens, the logo stays, and the link keeps its full name for screen readers. */
+.shell__brand svg {
+  flex: none;
+}
+
+.shell__brand span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The smallest phones with a profile badge as well: the logo alone. */
+@media (max-width: 359px) {
+  .shell__header-inner:has(.shell__profile) .shell__brand span {
+    display: none;
+  }
+}
+
+.shell__nav {
+  display: none;
+  gap: var(--space-1);
+  margin-left: var(--space-2);
+}
+
+.shell__navlink {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.shell__navlink:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.shell__navlink.is-active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.shell__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.shell__install {
+  display: none;
+}
+
+.shell__profile {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  text-decoration: none;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell__profile:hover {
+  color: var(--text);
+}
+
+.shell__iconbtn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+
+.shell__navlink .icon--chevron-down {
+  margin-left: 4px;
+}
+
+.shell__iconbtn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* ---------- Main ---------- */
+.shell__main {
+  flex: 1;
+  padding-bottom: calc(var(--bottom-nav-height) + var(--space-5));
+  outline: none;
+}
+
+/* Focus lands here after navigation and the skip link; a ring round the whole page says nothing. */
+.shell__main:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Taller than the screen, so the footer stays below the fold while a page
+   chunk loads instead of showing at the bottom and then jumping away. */
+.shell__loading {
+  display: grid;
+  place-items: center;
+  align-content: start;
+  padding-top: 30vh;
+  min-height: 100dvh;
+}
+
+/* ---------- Footer ---------- */
+.shell__footer {
+  border-top: 1px solid var(--border);
+  padding: var(--space-4) 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: var(--bottom-nav-height);
+}
+
+.shell__footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  justify-content: space-between;
+}
+
+/* ---------- Bottom navigation (mobile) ---------- */
+.shell__bottomnav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* The height already includes the home-bar inset (tokens.css). */
+  height: var(--bottom-nav-height);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  display: grid;
+  /* minmax(0, …): five items share the width even at 320px, nothing pushes the bar wider. */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  z-index: 50;
+}
+
+.shell__bottomlink {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.shell__bottomlink > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell__bottomlink.is-active {
+  color: var(--accent);
+}
+
+.shell__bottomicon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+@media (min-width: 900px) {
+  .shell {
+    /* The bottom bar is not shown: nothing needs to make room for it. */
+    --bottom-nav-height: 0px;
+  }
+
+  .shell__nav {
+    display: flex;
+  }
+
+  .shell__install {
+    display: block;
+  }
+
+  .shell__bottomnav {
+    display: none;
+  }
+
+  .shell__main {
+    padding-bottom: var(--space-7);
+  }
+
+  .shell__footer {
+    margin-bottom: 0;
+  }
+}
+
+/* A window just wide enough for the header's links leaves no room for the install button
+   (Settings → App and Home's banner still offer it), and at first not for the name either: the
+   logo stands for it. */
+@media (min-width: 900px) and (max-width: 1199px) {
+  .shell__install {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1079px) {
+  .shell__brand span {
+    display: none;
+  }
+}
+
+/* ---------- Install banner ---------- */
+.install-banner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  margin-top: var(--space-4);
+}
+
+/* ---------- "More" menus ---------- */
+.more {
+  position: relative;
+}
+
+.more--sheet {
+  display: contents;
+}
+
+.more button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.more--sheet .shell__bottomlink {
+  width: 100%;
+  height: 100%;
+  background: none;
+  border: 0;
+}
+
+.more__menu {
+  position: absolute;
+  z-index: 60;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Desktop: one column per group. */
+.more--dropdown .more__menu {
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(230px, 1fr);
+  gap: var(--space-3);
+}
+
+.more--dropdown .more__label {
+  white-space: nowrap;
+}
+
+/* Phones: a bottom sheet over a dimmed page; each group is a list under its title. */
+.more--sheet .more__menu {
+  position: fixed;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: calc(var(--bottom-nav-height) + var(--space-2));
+  max-height: calc(100dvh - var(--header-height) - var(--bottom-nav-height) - var(--space-5));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Everything but the bottom bar, whose More button closes the sheet again. */
+.more__scrim {
+  position: fixed;
+  inset: 0 0 var(--bottom-nav-height);
+  z-index: 55;
+  background: rgba(10, 14, 12, 0.45);
+}
+
+.more__group {
+  display: flex;
+  flex-direction: column;
+}
+
+.more__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.more__heading {
+  padding: var(--space-1) var(--space-3) 2px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.more__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  text-decoration: none;
+  transition: background var(--transition);
+}
+
+.more__item:hover,
+.more__item.is-active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.more__item.is-active .more__label {
+  color: var(--accent);
+}
+
+.more__icon {
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.more__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.more__label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.more__blurb {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ---------- Crash page ---------- */
+/* Full page when the shell itself failed; a card inside <main> (the chrome stays) otherwise. */
+.crash {
+  padding: var(--space-8) var(--space-4);
+}
+
+.crash--inline {
+  margin: var(--space-5) 0;
+  padding: var(--space-5);
+}
+
+.crash__details {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+
+.crash__actions {
+  flex-wrap: wrap;
+}
+
+/* ---------- Keyboard shortcuts dialog ---------- */
+.shortcuts {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.shortcuts__title {
+  font-size: 0.95rem;
+  margin: 0 0 var(--space-2);
+}
+
+.shortcuts__list {
+  margin: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.shortcuts__row {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.shortcuts__row dt {
+  white-space: nowrap;
+}
+
+.shortcuts__row dd {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 480px) {
+  .shortcuts__row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+/* Phones held sideways, large ones included (no width cap): a shorter header and
+   bottom bar leave room for the board. Focus mode's 0px heights still win
+   (.shell.shell--focus above). */
+@media (orientation: landscape) and (max-height: 520px) {
+  .shell {
+    --header-height: calc(48px + env(safe-area-inset-top, 0px));
+  }
+
+  .shell__bottomlink {
+    flex-direction: row;
+    gap: 6px;
+  }
+
+  .shell__bottomicon {
+    font-size: 1rem;
+  }
+}
+
+/* The bottom bar itself is only there below the desktop breakpoint. */
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 899px) {
+  .shell {
+    --bottom-nav-height: calc(44px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---------- Windows High Contrast ---------- */
+@media (forced-colors: active) {
+  .shell__header,
+  .shell__bottomnav,
+  .more__menu {
+    border-color: CanvasText;
+  }
+
+  .shell__navlink.is-active,
+  .shell__bottomlink.is-active,
+  .more__item.is-active {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .more__item.is-active .more__label,
+  .more__item.is-active .more__blurb,
+  .more__item.is-active .more__icon {
+    color: inherit;
+  }
+}

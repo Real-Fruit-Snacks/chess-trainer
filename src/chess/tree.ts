@@ -1,0 +1,426 @@
+import { chess960Headers, isChess960Game, normalizeChess960Fen } from './chess960';
+import { normalizeFen, sanitizeFen, START_FEN } from './helpers';
+import {
+  NAG_GLYPHS,
+  type PgnCommand,
+  type PgnGame,
+  type PgnLine,
+  PgnParseError,
+  parsePgn,
+} from './pgn';
+import { type ChessRules, type PlayedMove, rulesFor, type Variant } from './rules';
+import type { Fen, MoveInput, San, Uci } from './types';
+
+export interface TreeNode {
+  readonly id: number;
+  /** SAN of the move that leads to this node ('' for the root). */
+  san: San;
+  /** The move in UCI as the engine reads it in the tree's variant (Chess960 castling: "e1h1"). */
+  uci: Uci;
+  /** Position after the move. */
+  fen: Fen;
+  /** Half-moves played from the start position to reach this node. */
+  ply: number;
+  parent: TreeNode | null;
+  /** First child is the main continuation; the rest are variations. */
+  children: TreeNode[];
+  /** Comment shown after the move (on the root: before the first move). */
+  comment?: string;
+  /** Comment written before the move, as at the start of a variation. */
+  commentBefore?: string;
+  /** `[%clk …]`-style commands carried in the move's comment, kept for export. */
+  commands?: PgnCommand[];
+  nags: number[];
+}
+
+let nextId = 1;
+
+function makeNode(
+  partial: Omit<TreeNode, 'id' | 'children' | 'nags'> & { nags?: number[] },
+): TreeNode {
+  return { id: nextId++, children: [], nags: [], ...partial };
+}
+
+function moveNumberPrefix(parentFen: Fen, forceNumber: boolean): string {
+  const parts = parentFen.split(' ');
+  const black = parts[1] === 'b';
+  const fullmove = parts[5] ?? '1';
+  if (black) return forceNumber ? `${fullmove}... ` : '';
+  return `${fullmove}. `;
+}
+
+/**
+ * A game as a tree of positions. The first child of every node is the main
+ * line; further children are variations, in display order. The moves follow
+ * the rules of the tree's variant: standard chess, or Chess960.
+ */
+export class GameTree {
+  readonly root: TreeNode;
+  current: TreeNode;
+  headers: Record<string, string> = {};
+  result = '*';
+  /** Standard chess or Chess960: how castling works, and what the PGN says. */
+  readonly variant: Variant;
+
+  /**
+   * The start position is normalised (see `normalizeFen`, and for Chess960
+   * `normalizeChess960Fen`), so stale castling flags never reach the board.
+   */
+  constructor(startFen: Fen = START_FEN, variant: Variant = 'standard') {
+    this.variant = variant;
+    const fen =
+      variant === 'chess960'
+        ? (normalizeChess960Fen(startFen) ?? startFen)
+        : startFen === START_FEN
+          ? startFen
+          : normalizeFen(startFen);
+    this.root = makeNode({ san: '', uci: '', fen, ply: 0, parent: null });
+    this.current = this.root;
+  }
+
+  get startFen(): Fen {
+    return this.root.fen;
+  }
+
+  /** The rules the tree's moves are played by. */
+  get rules(): ChessRules {
+    return rulesFor(this.variant);
+  }
+
+  /** Whether the game is Chess960. */
+  get chess960(): boolean {
+    return this.variant === 'chess960';
+  }
+
+  /** Plays a move from the current node; reuses an existing child when the move is already there. */
+  addMove(input: MoveInput | San, options: { navigate?: boolean } = {}): TreeNode | null {
+    const move = this.rules.play(this.current.fen, input);
+    if (!move) return null;
+    const node = this.attach(this.current, move);
+    if (options.navigate !== false) this.current = node;
+    return node;
+  }
+
+  private attach(parent: TreeNode, move: PlayedMove): TreeNode {
+    const existing = parent.children.find((c) => c.uci === move.uci);
+    if (existing) return existing;
+    const node = makeNode({
+      san: move.san,
+      uci: move.uci,
+      fen: move.after,
+      ply: parent.ply + 1,
+      parent,
+    });
+    parent.children.push(node);
+    return node;
+  }
+
+  goTo(node: TreeNode): void {
+    this.current = node;
+  }
+
+  back(): boolean {
+    if (!this.current.parent) return false;
+    this.current = this.current.parent;
+    return true;
+  }
+
+  forward(): boolean {
+    const next = this.current.children[0];
+    if (!next) return false;
+    this.current = next;
+    return true;
+  }
+
+  goStart(): void {
+    this.current = this.root;
+  }
+
+  /** Follows main continuations from the current node to the end of the line. */
+  goEnd(): void {
+    while (this.forward()) {
+      /* keep going */
+    }
+  }
+
+  /** Nodes from the first move down to `node` (root excluded). */
+  pathTo(node: TreeNode): TreeNode[] {
+    const path: TreeNode[] = [];
+    let cursor: TreeNode | null = node;
+    while (cursor?.parent) {
+      path.unshift(cursor);
+      cursor = cursor.parent;
+    }
+    return path;
+  }
+
+  /** The main line from the root. */
+  mainLine(): TreeNode[] {
+    const line: TreeNode[] = [];
+    let cursor = this.root.children[0];
+    while (cursor) {
+      line.push(cursor);
+      cursor = cursor.children[0];
+    }
+    return line;
+  }
+
+  /** Whether `node` lies on the main line. */
+  isMainLine(node: TreeNode): boolean {
+    let cursor: TreeNode | null = node;
+    while (cursor?.parent) {
+      if (cursor.parent.children[0] !== cursor) return false;
+      cursor = cursor.parent;
+    }
+    return true;
+  }
+
+  /** Makes `node`'s line the main line all the way back to the root. */
+  promoteToMain(node: TreeNode): void {
+    let cursor: TreeNode | null = node;
+    while (cursor?.parent) {
+      const siblings = cursor.parent.children;
+      const index = siblings.indexOf(cursor);
+      if (index > 0) {
+        siblings.splice(index, 1);
+        siblings.unshift(cursor);
+      }
+      cursor = cursor.parent;
+    }
+  }
+
+  /** Moves `node` one place up among its siblings. */
+  promote(node: TreeNode): void {
+    const siblings = node.parent?.children;
+    if (!siblings) return;
+    const index = siblings.indexOf(node);
+    if (index > 0) {
+      siblings.splice(index, 1);
+      siblings.splice(index - 1, 0, node);
+    }
+  }
+
+  /** Removes `node` and everything after it. */
+  deleteNode(node: TreeNode): void {
+    const parent = node.parent;
+    if (!parent) return;
+    parent.children = parent.children.filter((c) => c !== node);
+    // If the current node was inside the deleted subtree, step back to the parent.
+    let cursor: TreeNode | null = this.current;
+    while (cursor) {
+      if (cursor === node) {
+        this.current = parent;
+        break;
+      }
+      cursor = cursor.parent;
+    }
+  }
+
+  /** Sets or clears the comment shown after `node`'s move. */
+  setComment(node: TreeNode, text: string): void {
+    const trimmed = text.trim();
+    if (trimmed) node.comment = trimmed;
+    else delete node.comment;
+  }
+
+  /** Replaces the move-assessment glyph ($1–$6) on `node`; null removes it. */
+  setGlyph(node: TreeNode, nag: number | null): void {
+    node.nags = node.nags.filter((n) => n < 1 || n > 6);
+    if (nag !== null) node.nags.unshift(nag);
+  }
+
+  /** Removes all moves after the current node (main line and variations). */
+  truncateAfterCurrent(): void {
+    this.current.children = [];
+  }
+
+  /** The moves of the current line from the start, as UCI (for the engine). */
+  currentLineUci(): Uci[] {
+    return this.pathTo(this.current).map((n) => n.uci);
+  }
+
+  /** An independent copy (fresh node ids), positioned at the root. */
+  clone(): GameTree {
+    const copy = new GameTree(this.root.fen, this.variant);
+    copy.headers = { ...this.headers };
+    copy.result = this.result;
+    copyAnnotations(this.root, copy.root);
+    const copyChildren = (from: TreeNode, to: TreeNode) => {
+      for (const child of from.children) {
+        const node = makeNode({
+          san: child.san,
+          uci: child.uci,
+          fen: child.fen,
+          ply: child.ply,
+          parent: to,
+          nags: [...child.nags],
+        });
+        copyAnnotations(child, node);
+        to.children.push(node);
+        copyChildren(child, node);
+      }
+    };
+    copyChildren(this.root, copy.root);
+    return copy;
+  }
+
+  /**
+   * PGN movetext with variations, comments and glyphs. A Chess960 game always
+   * names its variant and start position (the classical one too).
+   */
+  toPgn(headers: Record<string, string> = {}): string {
+    const merged = { ...this.headers, ...headers };
+    if (this.chess960) {
+      Object.assign(merged, chess960Headers(this.root.fen));
+    } else if (this.root.fen !== START_FEN) {
+      merged.SetUp = '1';
+      merged.FEN = this.root.fen;
+    }
+    const headerText = Object.entries(merged)
+      .map(([key, value]) => `[${key} "${value.replace(/"/g, '\\"')}"]`)
+      .join('\n');
+    const opening = this.root.comment ? `${writeComment(this.root.comment)} ` : '';
+    const body = opening + writeLine(this.root, true);
+    const result = merged.Result ?? this.result;
+    const movetext = `${body} ${result}`.trim();
+    return headerText ? `${headerText}\n\n${wrap(movetext)}` : wrap(movetext);
+  }
+
+  /**
+   * Builds a tree from PGN text (supports variations, comments and NAGs). Throws a
+   * `PgnParseError` naming the first illegal move ("Illegal move Nf7 after Qh5").
+   * A Chess960 game (`[Variant "Chess960"]`, or a start only Chess960 has) is
+   * played by its rules.
+   */
+  static fromPgn(pgn: string): GameTree {
+    const game = parsePgn(pgn);
+    return GameTree.fromParsed(game);
+  }
+
+  static fromParsed(game: PgnGame): GameTree {
+    const variant: Variant = isChess960Game(game.headers) ? 'chess960' : 'standard';
+    let startFen: Fen = START_FEN;
+    if (game.headers.FEN) {
+      const fen =
+        variant === 'chess960'
+          ? normalizeChess960Fen(game.headers.FEN)
+          : sanitizeFen(game.headers.FEN);
+      if (!fen) {
+        throw new PgnParseError(`Invalid FEN header "${game.headers.FEN}"`, game.headers.FEN, 0);
+      }
+      startFen = fen;
+    }
+    const tree = new GameTree(startFen, variant);
+    tree.headers = { ...game.headers };
+    if (game.headers.FEN) tree.headers.FEN = startFen;
+    tree.result = game.result;
+    if (game.comment) tree.root.comment = game.comment;
+    const addLine = (parent: TreeNode, line: PgnLine) => {
+      let cursor = parent;
+      for (const entry of line) {
+        const move = tree.rules.play(cursor.fen, entry.san);
+        if (!move) {
+          const where = cursor.san ? `after ${cursor.san}` : 'at the start';
+          throw new PgnParseError(`Illegal move ${entry.san} ${where}`, entry.san, cursor.ply + 1);
+        }
+        const node = tree.attach(cursor, move);
+        if (entry.comment) node.comment = entry.comment;
+        if (entry.commentBefore) node.commentBefore = entry.commentBefore;
+        if (entry.commands.length) node.commands = [...entry.commands];
+        if (entry.nags.length) node.nags = [...entry.nags];
+        for (const variation of entry.variations) addLine(cursor, variation);
+        cursor = node;
+      }
+    };
+    addLine(tree.root, game.moves);
+    tree.current = tree.root;
+    return tree;
+  }
+}
+
+function copyAnnotations(from: TreeNode, to: TreeNode): void {
+  if (from.comment) to.comment = from.comment;
+  if (from.commentBefore) to.commentBefore = from.commentBefore;
+  if (from.commands) to.commands = from.commands.map((c) => ({ ...c }));
+}
+
+const CACHE_SIZE = 32;
+const parsed = new Map<string, GameTree>();
+
+/**
+ * `GameTree.fromPgn` memoised per PGN string (a small LRU), for callers that
+ * re-read the same repertoires on every render. Each call returns a fresh copy,
+ * so the result may be navigated or edited freely.
+ */
+export function parsePgnCached(pgn: string): GameTree {
+  const hit = parsed.get(pgn);
+  if (hit) {
+    // Refresh the entry's position so the least recently used one is evicted first.
+    parsed.delete(pgn);
+    parsed.set(pgn, hit);
+    return hit.clone();
+  }
+  const tree = GameTree.fromPgn(pgn);
+  parsed.set(pgn, tree);
+  if (parsed.size > CACHE_SIZE) {
+    const oldest = parsed.keys().next().value;
+    if (oldest !== undefined) parsed.delete(oldest);
+  }
+  return tree.clone();
+}
+
+function writeLine(from: TreeNode, forceNumber: boolean): string {
+  const out: string[] = [];
+  let node = from.children[0];
+  let needNumber = forceNumber;
+  let parent = from;
+  while (node) {
+    out.push(writeMove(node, parent.fen, needNumber));
+    needNumber = false;
+    // Variations of this move (siblings after it)
+    const siblings = parent.children.slice(1);
+    for (const sibling of siblings) {
+      const before = sibling.commentBefore ? `${writeComment(sibling.commentBefore)} ` : '';
+      out.push(
+        `(${before}${writeMove(sibling, parent.fen, true)}${sibling.children.length ? ' ' + writeLine(sibling, false) : ''})`,
+      );
+      needNumber = true;
+    }
+    if (node.comment || node.commands?.length) needNumber = true;
+    parent = node;
+    node = node.children[0];
+  }
+  return out.join(' ');
+}
+
+function writeComment(text: string, commands: PgnCommand[] = []): string {
+  const parts = commands.map((c) => `[%${c.name} ${c.args}]`.replace(/\s+\]/, ']'));
+  const prose = text.replace(/[{}]/g, '').trim();
+  if (prose) parts.push(prose);
+  return `{${parts.join(' ')}}`;
+}
+
+function writeMove(node: TreeNode, parentFen: Fen, forceNumber: boolean): string {
+  let text = moveNumberPrefix(parentFen, forceNumber) + node.san;
+  for (const nag of node.nags) text += NAG_GLYPHS[nag] ?? ` $${nag}`;
+  if (node.comment || node.commands?.length) {
+    text += ` ${writeComment(node.comment ?? '', node.commands ?? [])}`;
+  }
+  return text;
+}
+
+function wrap(text: string, width = 80): string {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let line = '';
+  for (const word of words) {
+    if (line.length + word.length + 1 > width && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.join('\n');
+}

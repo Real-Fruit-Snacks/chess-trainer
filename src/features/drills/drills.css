@@ -1,0 +1,242 @@
+.drills__section {
+  margin-bottom: var(--space-6);
+}
+
+.drills__section h2 {
+  margin-bottom: var(--space-3);
+}
+
+.drill-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.drill-card__meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* A long kind of drill wraps beside its difficulty, which stays at the bottom right. */
+.drill-card .card__foot {
+  align-items: flex-end;
+  margin-top: auto;
+}
+
+.drills__count {
+  font-weight: 400;
+}
+
+/* ---------- The endgame library: an index of rows ---------- */
+.endgame-index {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2) var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
+}
+
+.endgame-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--transition);
+}
+
+.endgame-row:hover {
+  border-color: var(--accent);
+  color: inherit;
+}
+
+.endgame-row--done {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+}
+
+.endgame-row__mark {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  color: var(--border-strong);
+}
+
+.endgame-row__mark.is-done {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--accent-contrast);
+}
+
+.endgame-row__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.endgame-row__title {
+  font-weight: 600;
+}
+
+/* One line of what the endgame is (none on a phone, where the row is for finding it). */
+.endgame-row__about {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 599px) {
+  .endgame-row__about {
+    display: none;
+  }
+}
+
+.endgame-row__end {
+  flex: none;
+}
+
+/* Timed drills (coordinates, vision) */
+.drill__prompt {
+  font-family: var(--font-mono);
+  font-size: clamp(2.4rem, 8vw, 4rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  text-align: center;
+  padding: var(--space-3) 0;
+  min-height: 1.2em;
+}
+
+.drill__prompt-ready {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  padding: var(--space-3) 0;
+}
+
+.vision__mode-label {
+  margin: 0 0 var(--space-2);
+}
+
+.drill__prompt--correct {
+  color: var(--success);
+}
+
+.drill__prompt--wrong {
+  color: var(--danger);
+}
+
+.drill__hud {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+.drill__timer {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+  margin: var(--space-2) 0 var(--space-3);
+}
+
+.drill__timer > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 100ms linear;
+}
+
+.drill__timer--low > span {
+  background: var(--danger);
+}
+
+/* Coordinates: the typed answer beside its label, the field as wide as a square name. */
+.drill__typed {
+  margin-top: var(--space-3);
+  align-items: center;
+}
+
+.drill__typed-input {
+  width: 5em;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+.drill__tip {
+  border-left: 3px solid var(--accent);
+  padding: var(--space-2) var(--space-3);
+  background: var(--accent-soft);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  font-size: 0.95rem;
+}
+
+/* Recall drill: the move sequence to follow in your head. */
+.drill__moves {
+  margin: 8px 0;
+  line-height: 1.6;
+  word-spacing: 2px;
+}
+
+/* Endgame ladder */
+.ladder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ladder__bar {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.ladder__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--success);
+  transition: width 300ms ease;
+}
+
+.ladder__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ladder__about {
+  margin: 0;
+  max-width: 72ch;
+}
+
+.drill-card--done {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+}
+
+/* What's the threat? */
+.threat__prompt {
+  margin: var(--space-2) 0;
+}
+
+.threat__miss {
+  margin: 0 0 var(--space-2);
+  color: var(--danger);
+}

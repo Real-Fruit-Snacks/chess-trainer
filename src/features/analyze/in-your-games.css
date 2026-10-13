@@ -1,0 +1,66 @@
+/* ---------- In your games (position search) ---------- */
+.ingames__tally {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.ingames__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ingames__count {
+  color: var(--text-muted);
+}
+
+.ingames__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: var(--space-2) 0 var(--space-1);
+  padding: 0;
+}
+
+.ingames__game {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.ingames__game:hover {
+  background: var(--surface-2);
+}
+
+.ingames__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.ingames__players {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

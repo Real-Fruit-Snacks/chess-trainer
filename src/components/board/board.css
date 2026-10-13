@@ -1,0 +1,312 @@
+/*
+ * Board container: always square, fills the width it is given. With
+ * coordinates on, a gutter down the left and along the bottom holds the rank
+ * numbers and file letters; the playing surface fills the rest.
+ */
+.board {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  container-type: inline-size;
+  --coord-gutter: 0px;
+}
+
+.board--coords {
+  --coord-gutter: clamp(16px, 5.5cqw, 24px);
+}
+
+.board__surface {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: var(--coord-gutter);
+  left: var(--coord-gutter);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-board);
+  overflow: hidden;
+}
+
+.board__cg,
+.board .cg-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+/* Theme colours come from settings via a CSS variable on .board */
+.board cg-board {
+  background-image: var(--board-bg);
+}
+
+/* Coordinates: one label per square, centred in the gutter beside or below it. */
+.board__coords {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--font-sans);
+  font-size: clamp(10px, 3cqw, 13px);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.board__ranks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--coord-gutter);
+  height: calc(100% - var(--coord-gutter));
+  display: grid;
+  grid-template-rows: repeat(8, 1fr);
+}
+
+.board__files {
+  position: absolute;
+  bottom: 0;
+  left: var(--coord-gutter);
+  width: calc(100% - var(--coord-gutter));
+  height: var(--coord-gutter);
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+}
+
+.board__ranks span,
+.board__files span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Slightly stronger highlights than the default theme for readability */
+.board cg-board square.last-move {
+  background-color: rgba(255, 204, 0, 0.42);
+}
+
+.board cg-board square.selected {
+  background-color: rgba(31, 111, 91, 0.55);
+}
+
+.board cg-board square.move-dest {
+  background: radial-gradient(rgba(31, 111, 91, 0.6) 22%, transparent 24%);
+}
+
+.board cg-board square.oc.move-dest {
+  background: radial-gradient(transparent 0%, transparent 78%, rgba(31, 111, 91, 0.45) 80%);
+}
+
+.board cg-board square.move-dest:hover,
+.board cg-board square.move-dest.hover {
+  background: rgba(31, 111, 91, 0.35);
+}
+
+/*
+ * High-contrast theme: highlights drawn from the Okabe–Ito colour-blind-safe
+ * palette (blue for the last move, orange for the selection, vermilion for
+ * check and wrong, bluish green for right), all at higher opacity.
+ */
+.board--theme-contrast cg-board square.last-move {
+  background-color: rgba(0, 114, 178, 0.5);
+}
+
+.board--theme-contrast cg-board square.selected {
+  background-color: rgba(230, 159, 0, 0.75);
+}
+
+.board--theme-contrast cg-board square.move-dest {
+  background: radial-gradient(rgba(0, 114, 178, 0.85) 24%, transparent 26%);
+}
+
+.board--theme-contrast cg-board square.oc.move-dest {
+  background: radial-gradient(transparent 0%, transparent 76%, rgba(0, 114, 178, 0.7) 78%);
+}
+
+.board--theme-contrast cg-board square.move-dest:hover,
+.board--theme-contrast cg-board square.move-dest.hover {
+  background: rgba(0, 114, 178, 0.45);
+}
+
+.board--theme-contrast cg-board square.check {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(213, 94, 0, 1) 0%,
+    rgba(213, 94, 0, 0.9) 25%,
+    rgba(213, 94, 0, 0.2) 89%,
+    rgba(213, 94, 0, 0) 100%
+  );
+}
+
+.board--theme-contrast cg-board square.hint {
+  background-color: rgba(0, 114, 178, 0.55);
+}
+
+.board--theme-contrast cg-board square.wrong {
+  background-color: rgba(213, 94, 0, 0.75);
+}
+
+.board--theme-contrast cg-board square.right {
+  background-color: rgba(0, 158, 115, 0.7);
+}
+
+/* Custom square highlights used by lessons */
+.board cg-board square.hint {
+  background-color: rgba(31, 111, 91, 0.45);
+}
+
+.board cg-board square.wrong {
+  background-color: rgba(214, 69, 65, 0.55);
+}
+
+.board cg-board square.right {
+  background-color: rgba(60, 170, 90, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board piece.anim {
+    transition: none;
+  }
+}
+
+/* Blindfold training: the board stays interactive but the pieces are invisible. */
+.board--blindfold piece {
+  visibility: hidden;
+}
+
+/* Keyboard control: the focused board shows a square cursor. */
+.board__cg:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+/* A white ring edged in near-black: at least 3:1 against light and dark squares in every theme. */
+.board__cursor {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  box-sizing: border-box;
+  border: 3px solid #fff;
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.9),
+    0 0 0 2px rgba(0, 0, 0, 0.9);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+@media (forced-colors: active) {
+  .board__cursor {
+    border-color: Highlight;
+    box-shadow: none;
+    outline: 2px solid CanvasText;
+  }
+}
+
+/* The "Describe position" button is for screen-reader and keyboard users. */
+.board__describe.sr-only--focusable:focus {
+  position: absolute !important;
+  left: 8px;
+  bottom: 8px;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 6px 10px;
+  clip: auto;
+  white-space: normal;
+  z-index: 4;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- Drag feel ---------- */
+/* The dragged piece grows under the finger. Chessground positions the piece with
+   an inline translate, which a scale on the piece itself would also scale, so the
+   bigger picture is a pseudo-element that overflows the piece's own box. */
+.board--magnify cg-board piece.dragging {
+  background-size: 0 0;
+  overflow: visible;
+}
+
+.board--magnify cg-board piece.dragging::before {
+  content: '';
+  position: absolute;
+  inset: -30%;
+  background-image: inherit;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* The mark on the square a dragged piece is over (see Board.tsx). */
+.board__dragtarget {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  pointer-events: none;
+  z-index: 3;
+  box-sizing: border-box;
+}
+
+.board__dragtarget--circle {
+  border-radius: 50%;
+  border: 0.35cqw solid rgba(20, 30, 20, 0.45);
+  transform: scale(0.82);
+}
+
+.board__dragtarget--square {
+  background: rgba(20, 85, 30, 0.28);
+}
+
+/* ---------- Premoves (live games) ---------- */
+/* A premove waiting for its turn: both squares tinted and ringed, so it reads apart from the last
+   move without relying on the colour alone. Blue on most boards; rust on the blue ones, where
+   blue would vanish; the Okabe–Ito reddish purple on the high-contrast board. */
+.board {
+  --premove-fill: rgba(36, 64, 160, 0.42);
+  --premove-ring: rgba(20, 38, 120, 0.9);
+  --premove-dot: rgba(36, 64, 160, 0.6);
+}
+
+.board--theme-blue,
+.board--theme-blue2,
+.board--theme-blue3,
+.board--theme-canvas,
+.board--theme-blue-marble,
+.board--theme-ice {
+  --premove-fill: rgba(176, 74, 36, 0.45);
+  --premove-ring: rgba(120, 44, 16, 0.9);
+  --premove-dot: rgba(176, 74, 36, 0.65);
+}
+
+.board--theme-contrast {
+  --premove-fill: rgba(204, 121, 167, 0.8);
+  --premove-ring: rgba(96, 30, 74, 1);
+  --premove-dot: rgba(204, 121, 167, 0.95);
+}
+
+.board cg-board square.current-premove {
+  background: var(--premove-fill);
+  box-shadow: inset 0 0 0 max(2px, 0.5cqw) var(--premove-ring);
+}
+
+.board cg-board square.premove-dest {
+  background: radial-gradient(var(--premove-dot) 22%, transparent 24%);
+}
+
+.board cg-board square.oc.premove-dest {
+  background: radial-gradient(transparent 0%, transparent 78%, var(--premove-dot) 80%);
+}
+
+.board cg-board square.premove-dest:hover,
+.board cg-board square.premove-dest.hover {
+  background: var(--premove-fill);
+}
+
+@media (forced-colors: active) {
+  .board cg-board square.current-premove {
+    forced-color-adjust: none;
+    background: Highlight;
+    box-shadow: inset 0 0 0 3px CanvasText;
+  }
+}

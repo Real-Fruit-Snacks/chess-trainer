@@ -1,0 +1,256 @@
+/* Simul (see SimulPage.tsx). */
+
+/* ---------- Setup ---------- */
+.simul__setup-layout {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .simul__setup-layout {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+}
+
+.simul__about h2,
+.simul__preview-title {
+  margin-top: 0;
+  font-size: 1.15rem;
+}
+
+/* The boards as they will start: the simul's own small boards, before it begins. */
+.simul__preview {
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.simul__list {
+  margin: 0;
+  padding-left: 1.2em;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.simul__title {
+  font-size: 1rem;
+  margin: 0;
+}
+
+/* ---------- The small boards ---------- */
+.simul__thumbs {
+  display: grid;
+  /* Wide enough for "Your move" beside the board number. */
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.simul-thumb {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+/* Waiting for you: a hint of the accent; the board on the big board: all of it. */
+.simul-thumb--move {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.simul-thumb.is-active {
+  border-color: var(--accent);
+}
+
+.simul-thumb__board .board__surface {
+  box-shadow: none;
+  border-radius: var(--radius-sm);
+}
+
+.simul-thumb__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.simul-thumb__number {
+  font-weight: 700;
+}
+
+.simul-thumb__state {
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.simul-thumb--move .simul-thumb__state {
+  color: var(--accent);
+}
+
+.simul-thumb--win .simul-thumb__state {
+  color: var(--success);
+}
+
+.simul-thumb--loss .simul-thumb__state {
+  color: var(--danger);
+}
+
+.simul-thumb__clock .clock {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0 4px;
+  font-size: 0.8rem;
+}
+
+/* The whole small board is one button, laid over it. */
+.simul-thumb__select {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.simul-thumb__select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---------- The strip under the big board (phones) ---------- */
+/* Every board's number and state with Next, right under the board: the thumbnails are
+   in the panel, which sits below the board on a phone held upright. */
+.simul__strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.simul__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.simul__chip-number {
+  font-weight: 700;
+}
+
+.simul__chip-state {
+  color: var(--text-muted);
+}
+
+.simul__chip--move {
+  border-color: var(--accent);
+}
+
+.simul__chip--move .simul__chip-state {
+  color: var(--accent);
+}
+
+.simul__chip--win .simul__chip-state {
+  color: var(--success);
+}
+
+.simul__chip--loss .simul__chip-state {
+  color: var(--danger);
+}
+
+.simul__chip.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: var(--selected-ring);
+}
+
+/* On the accent tint the state colours (red on dark green above all) fall short of 4.5:1. */
+.simul__chip.is-active .simul__chip-state {
+  color: var(--text);
+}
+
+.simul__strip-next {
+  margin-left: auto;
+}
+
+/* Wherever the panel sits beside the board, its thumbnails are in view: no strip. */
+@media (min-width: 900px), (orientation: landscape) and (max-height: 520px) {
+  .simul__strip {
+    display: none;
+  }
+}
+
+/* ---------- Moves ---------- */
+.simul__moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  max-height: 10em;
+  overflow-y: auto;
+}
+
+.simul__move {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* ---------- Summary ---------- */
+/* Scrolled to when the simul ends: clear of the sticky header. */
+.simul__summary-anchor {
+  scroll-margin-top: calc(var(--header-height) + 12px);
+}
+
+.simul__summary {
+  margin-bottom: var(--space-4);
+}
+
+.simul__summary h2 {
+  margin-top: 0;
+}
+
+.simul__results {
+  list-style: none;
+  margin: var(--space-3) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* The result wraps beside its Analyze button rather than pushing it onto a line of its own. */
+.simul__results li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.simul__count {
+  white-space: nowrap;
+}

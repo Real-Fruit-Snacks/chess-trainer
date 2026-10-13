@@ -1,0 +1,14 @@
+.study-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.study-card--done {
+  border-color: var(--success);
+}
+
+.study__moves {
+  margin: 8px 0 0;
+  word-break: break-word;
+}
