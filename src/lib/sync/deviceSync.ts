@@ -110,11 +110,15 @@ export type DeviceSyncPhase =
   | 'too-large'
   /** Another device synced with a newer version of the app. */
   | 'newer'
+  /** The relay takes no more changes for a while (a daily limit): syncing waits until `until`. */
+  | 'limited'
   | 'failed';
 
 export interface DeviceSyncStatus {
   phase: DeviceSyncPhase;
   error: string | null;
+  /** While `limited`: when syncing carries on by itself. */
+  until?: number | null;
   /**
    * What the last finished run did: what it brought in from the other devices
    * and what it sent them (null for nothing).
@@ -156,6 +160,11 @@ const STALE_MS = 60 * 1000;
 const REPORT_KEPT_MS = 60 * 1000;
 const NETWORK_RETRY_MS = 2 * 60 * 1000;
 const SERVER_RETRY_MS = 5 * 60 * 1000;
+/**
+ * A daily limit is waited out as the relay asks (until its midnight, UTC), but
+ * never longer than this, whatever it says: then it is asked again.
+ */
+export const LIMITED_MAX_WAIT_MS = 24 * 60 * 60 * 1000;
 
 export const STORAGE_FULL =
   'This device’s storage is full. Remove old analyses or games here, and syncing carries on.';
@@ -432,7 +441,9 @@ async function reconcile(
     if (remote === 'unchanged') throw storageFull();
     if (!on()) return { brought, sent: null };
     if (!remote) {
-      // Deleted from another device (or unused for a year): sync ends here, the data stays.
+      // Deleted from another device, or by the relay as unused (a year without a read or a
+      // write; a month for a copy never written after it was made): sync ends here, the data
+      // stays.
       await stopSync('deleted');
       throw new SyncStop('off', 'The synced copy was deleted.');
     }
@@ -567,10 +578,18 @@ const OLDER_COPY =
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 /** Busy answers in a row: each waits twice as long as the last, up to the server retry. */
 let busyStreak = 0;
+/**
+ * While the relay holds this device's changes back (a daily limit): runs wait
+ * for the retry timer, whatever else asks for one (a change, the clock, the app
+ * back on screen), unless the learner asks. Trying sooner only meets the same
+ * refusal, and spends the relay's requests.
+ */
+let limited = false;
 
 function failed(err: unknown): void {
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
+  limited = false;
   // Turned off while the run was under way: nothing to report or retry.
   if (!useDeviceSyncStore.getState().secret) {
     setStatus({ phase: 'off', error: null });
@@ -579,6 +598,7 @@ function failed(err: unknown): void {
   const retry = (ms: number) => {
     retryTimer = setTimeout(() => {
       retryTimer = null;
+      limited = false;
       void syncNow();
     }, ms);
   };
@@ -600,6 +620,15 @@ function failed(err: unknown): void {
       busyStreak++;
       setStatus({ phase: 'idle', error: null });
       retry(Math.min(SERVER_RETRY_MS, Math.max(err.retryAfterMs ?? 0, 1000 * 2 ** busyStreak)));
+    } else if (err.kind === 'limited') {
+      // Not before the relay said, nor in a moment if it named no time; a day at most.
+      const wait = Math.min(
+        LIMITED_MAX_WAIT_MS,
+        Math.max(err.retryAfterMs ?? SERVER_RETRY_MS, SERVER_RETRY_MS),
+      );
+      setStatus({ phase: 'limited', error: err.message, until: Date.now() + wait });
+      retry(wait);
+      limited = true;
     } else {
       setStatus({ phase: 'failed', error: err.message });
       retry(SERVER_RETRY_MS);
@@ -684,6 +713,9 @@ export function syncNow({ asked = false }: { asked?: boolean } = {}): Promise<vo
     askedAgain ||= asked;
     return running;
   }
+  // Held back by a daily limit: the retry waiting for its end runs then, or the learner now.
+  if (limited && !asked) return Promise.resolve();
+  limited = false;
   // A retry waiting after a failure is this run.
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
@@ -1007,6 +1039,7 @@ export async function stopSync(because?: 'deleted'): Promise<void> {
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
   busyStreak = 0;
+  limited = false;
   noRoom = null;
   cachedKeys = null;
   useDeviceSyncStore.getState().turnOff(because);

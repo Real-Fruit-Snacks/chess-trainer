@@ -130,6 +130,13 @@ describe('Settings → Notifications', () => {
     fireEvent.click(toggle('Daily reminder'));
     expect(await screen.findByRole('alert')).toHaveTextContent(/all the reminders it can keep/);
     expect(useSettings.getState().notifyReminder).toBe(false);
+
+    reminders.saveReminder.mockResolvedValue('limited');
+    fireEvent.click(toggle('Daily reminder'));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/from this network today/),
+    );
+    expect(useSettings.getState().notifyReminder).toBe(false);
   });
 
   it('explains what this device cannot do', () => {

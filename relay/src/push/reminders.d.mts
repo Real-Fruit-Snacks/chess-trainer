@@ -1,4 +1,5 @@
 /** Types for reminders.mjs, for the relay's tests. */
+import type { QuotaStore } from '../quota.mjs';
 import type { PushMessage, Subscription, VapidKeys } from './webpush.mjs';
 
 export interface Reminder {
@@ -41,6 +42,7 @@ export interface Respond {
 
 export const REMINDER_STEP_MINUTES: number;
 export const MAX_REMINDERS: number;
+export const NEW_REMINDERS_PER_ADDRESS: number;
 export const REMINDERS_PER_RUN: number;
 export const REMINDER_LATE_MS: number;
 export const REMINDER_KEEP_MS: number;
@@ -79,6 +81,11 @@ export function rateLimiter(
 export function createPushApi(options: {
   store: PushStore;
   allowedOrigins?: readonly string[];
+  /** Asked before a new reminder is kept: false refuses it with 429 (a platform's limit). */
   allowReminder?: (request: Request) => boolean | Promise<boolean>;
+  /** Where the daily counts are kept (the vault store's `quotas`); without them, no daily limit. */
+  quotas?: QuotaStore;
+  /** New reminders one address may make a UTC day (`NEW_REMINDERS_PER_ADDRESS`). */
+  newRemindersPerAddress?: number;
   now?: () => number;
 }): (request: Request, respond: Respond) => Promise<Response>;

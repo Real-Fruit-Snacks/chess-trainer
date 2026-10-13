@@ -590,7 +590,8 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
                 {opponent.name} is analysing the game: join them.
               </p>
             ) : null}
-            {view.error ? (
+            {/* While the result is up, it says what was refused (a rematch) itself. */}
+            {view.error && !resultOpen ? (
               <p className="small live-game__error" role="alert">
                 {view.error}
               </p>
@@ -661,6 +662,11 @@ function LiveBoard({ session, view }: { session: LiveGameSession; view: LiveGame
         {view.analysis?.by === opponentSide ? (
           <p className="muted" data-testid="live-analysis-offer">
             {opponent.name} is analysing the game: join them.
+          </p>
+        ) : null}
+        {view.error ? (
+          <p className="small live-game__error" role="alert">
+            {view.error}
           </p>
         ) : null}
       </Dialog>

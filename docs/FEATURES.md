@@ -761,7 +761,9 @@ tablet and computer, with no account:
   everything synced with it.
 - **Ending it:** _Turn off_ stops syncing on one device (its data stays); _Delete synced copy_
   deletes the encrypted copy, and every device keeps what it has — the others say so at their next
-  sync. A synced copy no device has used for a year is deleted. _Reset everything_ turns sync off
+  sync. A synced copy no device has used for a year is deleted, and one never changed after it was
+  made, after 30 days. A synced copy takes up to 1,000 changes a day: past that, changes wait on
+  the device and sync the next day, and the card says when. _Reset everything_ turns sync off
   on the device before clearing it.
 - **Limits:** up to 1.4 MB of compressed data — far more than the app's own storage caps produce.
   Data from a newer version of the app pauses the sync until the device is updated. When this

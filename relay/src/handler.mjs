@@ -7,13 +7,17 @@
  * the device with a key from the learner's recovery phrase, so the relay keeps
  * bytes it cannot read, and names nobody: no account, no email, no device. It
  * stores, per vault, the bytes, a version number, when it was last written
- * and read, and a hash of the vault's write token. Nothing is logged.
+ * and read, how often it was written that day, and a hash of the vault's write
+ * token. Nothing is logged.
  *
  *   GET    /v1/health            → 200 { ok, maxBytes, live? } (live: whether live games are on)
  *   GET    /v1/vaults/:id        → 200 the bytes, ETag "<version>"; 204 (no body) when
  *                                  X-Known-Version names the current version; 404
  *   PUT    /v1/vaults/:id        → 201 created (If-None-Match: *), 200 updated (If-Match: "<version>");
- *                                  412 when the version moved on (ETag: the current one); 413 too big
+ *                                  412 when the version moved on (ETag: the current one); 413 too big;
+ *                                  429 too soon, or a daily limit reached (Retry-After: until
+ *                                  midnight, UTC); 503 the relay's new vaults for the day are all
+ *                                  made; 507 the relay is full and makes no new vaults
  *   DELETE /v1/vaults/:id        → 204
  *   /v1/push/…                   → the push endpoints (push/reminders.mjs), when given
  *
@@ -22,7 +26,13 @@
  * random-looking bytes and a token another 32, both base64url. An unchanged
  * vault is answered with 204 rather than HTTP's 304, which some browsers do not
  * hand to a page as it is.
+ *
+ * Anyone can make a vault, so the relay limits them (`VaultLimits`): so many
+ * new vaults a day from one address, and from everyone; none once the database
+ * is nearly full; and so many writes a day to each vault. The counts are kept
+ * in the database (`quotas`, see quota.mjs), never the addresses.
  */
+import { secondsToMidnight, takeForAddress, takeForEveryone, utcDay } from './quota.mjs';
 
 /** Vault ids and tokens: 32 bytes in base64url, unpadded. */
 const KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -34,8 +44,35 @@ export const DEFAULT_MAX_BYTES = 1_400_000;
 export const DEFAULT_MIN_WRITE_INTERVAL_MS = 1_000;
 /** Vaults neither written nor read for this long are deleted (see `expireVaults`). */
 export const KEEP_UNUSED_MS = 365 * 24 * 60 * 60 * 1000;
+/**
+ * Vaults never written after they were made (a device turned sync on, and no
+ * change ever followed) are deleted once neither written nor read for this
+ * long: what a script making vaults leaves behind goes in a month, not a year.
+ */
+export const KEEP_ABANDONED_MS = 30 * 24 * 60 * 60 * 1000;
 /** A read counts as use when the last one is older than this (so reads seldom write). */
 const TOUCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The limits on vaults, by default. Days are UTC days.
+ * - `newVaultsPerAddress`: new vaults one address may make a day (an IPv6
+ *   address counts with its whole /64);
+ * - `newVaultsPerDay`: new vaults the relay makes a day, from everyone (with
+ *   `vaultWritesPerDay`, a bound on what a day's new vaults can write: half of
+ *   D1's free daily rows written);
+ * - `maxDbBytes`: no new vaults once the database is this big, leaving room
+ *   for the vaults kept to grow (D1's free plan holds 500 MB);
+ * - `maxVaults`: no new vaults once there are this many, where the store
+ *   cannot say how big the database is (250 full vaults fit in 500 MB);
+ * - `vaultWritesPerDay`: writes one vault takes a day (its making counts).
+ */
+export const DEFAULT_LIMITS = Object.freeze({
+  newVaultsPerAddress: 5,
+  newVaultsPerDay: 50,
+  maxDbBytes: 400_000_000,
+  maxVaults: 250,
+  vaultWritesPerDay: 1_000,
+});
 
 /**
  * @typedef {{
@@ -44,20 +81,29 @@ const TOUCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
  *   data: Uint8Array,
  *   updatedAt: number,
  *   touchedAt: number,
- * }} Vault
+ *   writesDay: string | null,
+ *   writes: number,
+ * }} Vault `writes`: how many times it was written on `writesDay` (a UTC day)
  *
  * @typedef {{
  *   get(id: string): Promise<Vault | null>,
  *   create(id: string, authHash: string, data: Uint8Array, now: number): Promise<boolean>,
- *   update(id: string, expected: number, data: Uint8Array, now: number):
- *     Promise<{ ok: true, version: number } | { ok: false, current: number | null }>,
+ *   update(id: string, expected: number, data: Uint8Array, now: number, writesPerDay?: number):
+ *     Promise<{ ok: true, version: number } | { ok: false, current: number | null, capped?: true }>,
  *   touch(id: string, now: number): Promise<void>,
  *   delete(id: string): Promise<boolean>,
- *   expire(before: number): Promise<number>,
+ *   expire(before: number, abandonedBefore?: number): Promise<number>,
+ *   count(): Promise<number>,
  * }} VaultStore
+ *   `update` refuses with `capped` when the vault has been written
+ *   `writesPerDay` times that day already
+ *
+ * @typedef {typeof DEFAULT_LIMITS} VaultLimits
  *
  * @typedef {{
  *   store: VaultStore,
+ *   quotas?: import('./quota.mjs').QuotaStore,
+ *   limits?: Partial<VaultLimits>,
  *   maxBytes?: number,
  *   allowedOrigins?: readonly string[],
  *   minWriteIntervalMs?: number,
@@ -66,6 +112,8 @@ const TOUCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
  *   push?: (request: Request, respond: import('./push/reminders.mjs').Respond) => Promise<Response>,
  *   now?: () => number,
  * }} RelayOptions
+ *   `quotas`: where the daily counts are kept; without them, new vaults are
+ *   not limited (the tests' relays)
  */
 
 /** The SHA-256 of a token, as lowercase hex. */
@@ -176,6 +224,7 @@ function corsHeaders(origin, allowed) {
 export function createRelay(options) {
   const {
     store,
+    quotas,
     maxBytes = DEFAULT_MAX_BYTES,
     allowedOrigins = ['*'],
     minWriteIntervalMs = DEFAULT_MIN_WRITE_INTERVAL_MS,
@@ -184,12 +233,25 @@ export function createRelay(options) {
     push,
     now = Date.now,
   } = options;
+  const limits = { ...DEFAULT_LIMITS, ...options.limits };
   /** The health check's answer: whether live games are on, when the caller says; whether push is. */
   const health = {
     ok: true,
     maxBytes,
     ...(live === undefined ? {} : { live }),
     ...(push ? { push: true } : {}),
+  };
+
+  /**
+   * Whether the database has no room for another vault: by its size where the
+   * store can tell it (D1 says with each query's answer), by how many vaults it
+   * holds otherwise.
+   * @param {import('./quota.mjs').QuotaStore} counts
+   */
+  const full = async (counts) => {
+    const bytes = await counts.bytes();
+    if (bytes !== null) return bytes >= limits.maxDbBytes;
+    return (await store.count()) >= limits.maxVaults;
   };
 
   return async function handle(request) {
@@ -253,11 +315,35 @@ export function createRelay(options) {
         if (data === null) return tooBig();
         if (data.byteLength === 0) return fail(400, 'An empty vault is not kept.');
         const at = now();
+        const untilMidnight = { 'Retry-After': String(secondsToMidnight(at)) };
         if (request.headers.get('If-None-Match')?.trim() === '*') {
+          // The cheapest refusals first: the platform's own limit (no database), then the room
+          // left (a query that reads no rows, before any count is taken: a full relay spends
+          // nobody's allowance), the address's count (a count at its limit writes nothing) and
+          // everyone's.
           if (allowCreate && !(await allowCreate(request))) {
             return fail(429, 'Too many new vaults from here: try again in a minute.', {
               'Retry-After': '60',
             });
+          }
+          if (quotas) {
+            if (await full(quotas)) {
+              return fail(507, 'The relay is full: it makes no new vaults for now.');
+            }
+            if (!(await takeForAddress(quotas, 'vault', request, limits.newVaultsPerAddress, at))) {
+              return fail(
+                429,
+                'Too many new vaults from here today: try again tomorrow.',
+                untilMidnight,
+              );
+            }
+            if (!(await takeForEveryone(quotas, 'vault', limits.newVaultsPerDay, at))) {
+              return fail(
+                503,
+                'The relay has made all the new vaults it makes today: try again tomorrow.',
+                untilMidnight,
+              );
+            }
           }
           const created = await store.create(id, authHash, data, at);
           if (created) return empty(201, { ETag: etag(1) });
@@ -280,8 +366,19 @@ export function createRelay(options) {
         if (at - vault.updatedAt < minWriteIntervalMs) {
           return fail(429, 'Too soon after the last change.', { 'Retry-After': '1' });
         }
-        const result = await store.update(id, expected, data, at);
+        const writtenOut = () =>
+          fail(
+            429,
+            'This vault has taken all the writes it takes today: try again tomorrow.',
+            untilMidnight,
+          );
+        // Spent already: refused without sending the data to the database at all.
+        if (vault.writesDay === utcDay(at) && vault.writes >= limits.vaultWritesPerDay) {
+          return writtenOut();
+        }
+        const result = await store.update(id, expected, data, at, limits.vaultWritesPerDay);
         if (result.ok) return empty(200, { ETag: etag(result.version) });
+        if (result.capped) return writtenOut();
         return result.current === null
           ? fail(404, 'No such vault.')
           : fail(412, 'The vault has changed since.', { ETag: etag(result.current) });
@@ -303,7 +400,12 @@ export function createRelay(options) {
   };
 }
 
-/** Deletes the vaults nobody has written or read for `KEEP_UNUSED_MS`. */
+/**
+ * Deletes the vaults nobody has written or read for `KEEP_UNUSED_MS`, and
+ * those never written after they were made that nobody has written or read for
+ * `KEEP_ABANDONED_MS`.
+ * @param {VaultStore} store
+ */
 export function expireVaults(store, now = Date.now()) {
-  return store.expire(now - KEEP_UNUSED_MS);
+  return store.expire(now - KEEP_UNUSED_MS, now - KEEP_ABANDONED_MS);
 }

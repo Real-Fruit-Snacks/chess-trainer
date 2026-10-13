@@ -6,7 +6,7 @@ import {
   type Message,
   type RelayClient,
 } from '@/test/fakeLiveHub';
-import { CLOSE, DUEL_RULES, GROUP_LIMITS } from '../../../relay/src/live/shared.mjs';
+import { ABUSE_LIMITS, CLOSE, DUEL_RULES, GROUP_LIMITS } from '../../../relay/src/live/shared.mjs';
 import { useLivePrefs } from './prefs';
 import { createRaceRoom, type PrepareRace, raceRoomStateOf, racing } from './raceRoom';
 import { makeGroupRoom, membershipOf, memberships, rememberMembership } from './rooms';
@@ -179,6 +179,35 @@ describe('a race room on the relay', () => {
     await relay.settle();
     expect(again.getView().missing).toBe(true);
     expect(membershipOf(id)).toBeNull();
+  });
+
+  it('tries again as usual when this member has the room open in all the tabs it takes', async () => {
+    vi.useFakeTimers();
+    try {
+      const id = await makeRoom();
+      const token = membershipOf(id)!.token;
+      const tabs = [];
+      for (let i = 0; i < ABUSE_LIMITS.socketsPerSeat; i++) {
+        const tab = relay.groupClient(id);
+        await tab.send({ t: 'hello', token });
+        tabs.push(tab);
+      }
+      const session = open(id);
+      await relay.settle();
+      // Refused as a full room is: still a member, and waiting to try again.
+      expect(relay.sockets.at(-1)!.closeCode).toBe(CLOSE.full);
+      expect(session.getView()).toMatchObject({ connection: 'connecting', missing: false });
+      expect(membershipOf(id)).not.toBeNull();
+      await tabs[0]!.leave();
+      await vi.advanceTimersByTimeAsync(1200);
+      await relay.settle();
+      expect(session.getView()).toMatchObject({
+        connection: 'open',
+        you: tabs[1]!.last('room')!.you,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('deals the puzzles on the host’s device, and races them by the room’s clock', async () => {

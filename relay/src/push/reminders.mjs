@@ -20,9 +20,12 @@
  *
  * Every request comes from the app's origins only (403 otherwise), with a body
  * of at most `PUSH_BODY_BYTES`, at most `PUSH_REQUESTS_PER_MINUTE` from one
- * address; the relay keeps `MAX_REMINDERS` at most.
+ * address; the relay keeps `MAX_REMINDERS` at most, and takes
+ * `NEW_REMINDERS_PER_ADDRESS` new ones a day from one address (counted in the
+ * database, as new vaults are: see ../quota.mjs).
  */
 import { hashToken, originAllowed, readBody } from '../handler.mjs';
+import { addressOf, secondsToMidnight, takeForAddress } from '../quota.mjs';
 import { sendPush, subscriptionOf, vapidKeys } from './webpush.mjs';
 
 /**
@@ -65,6 +68,8 @@ import { sendPush, subscriptionOf, vapidKeys } from './webpush.mjs';
 export const REMINDER_STEP_MINUTES = 15;
 /** The most reminders a relay keeps. */
 export const MAX_REMINDERS = 5000;
+/** New reminders one address may make a UTC day (an IPv6 address counts with its /64). */
+export const NEW_REMINDERS_PER_ADDRESS = 5;
 /**
  * Reminders sent by one cron run at most: a Worker on the free plan may make
  * 50 requests of its own per run. The rest wait for the next run.
@@ -335,8 +340,12 @@ export function rateLimiter(limit, windowMs) {
  *   store: PushStore,
  *   allowedOrigins?: readonly string[],
  *   allowReminder?: (request: Request) => boolean | Promise<boolean>,
+ *   quotas?: import('../quota.mjs').QuotaStore,
+ *   newRemindersPerAddress?: number,
  *   now?: () => number,
- * }} PushApiOptions `allowReminder`: asked before a new reminder is kept (a limit per address)
+ * }} PushApiOptions `allowReminder`: asked before a new reminder is kept (a
+ *   platform's limit per address); `quotas`: where the daily counts are kept
+ *   (the vault store's), for `newRemindersPerAddress`
  */
 
 /** A JSON object from the body, at most `PUSH_BODY_BYTES`; 'too-big', or null when it is no object. */
@@ -361,7 +370,14 @@ async function bodyOf(/** @type {Request} */ request) {
  * @param {PushApiOptions} options
  * @returns {(request: Request, respond: Respond) => Promise<Response>}
  */
-export function createPushApi({ store, allowedOrigins = ['*'], allowReminder, now = Date.now }) {
+export function createPushApi({
+  store,
+  allowedOrigins = ['*'],
+  allowReminder,
+  quotas,
+  newRemindersPerAddress = NEW_REMINDERS_PER_ADDRESS,
+  now = Date.now,
+}) {
   const limit = rateLimiter(PUSH_REQUESTS_PER_MINUTE, 60_000);
 
   return async function push(request, { json, empty, fail }) {
@@ -385,7 +401,7 @@ export function createPushApi({ store, allowedOrigins = ['*'], allowReminder, no
     if (!originAllowed(allowedOrigins, request.headers.get('Origin'))) {
       return fail(403, 'Pages on this origin cannot ask for reminders here.');
     }
-    if (!limit(request.headers.get('CF-Connecting-IP') ?? '', at)) {
+    if (!limit(addressOf(request), at)) {
       return fail(429, 'Too many requests: try again in a minute.', { 'Retry-After': '60' });
     }
     const body = await bodyOf(request);
@@ -435,12 +451,22 @@ export function createPushApi({ store, allowedOrigins = ['*'], allowReminder, no
     const tz = /** @type {string} */ (body.tz);
     const known = await store.reminder(key);
     if (!known) {
-      if ((await store.countReminders()) >= MAX_REMINDERS) {
-        return fail(503, 'This relay keeps all the reminders it can.');
-      }
+      // The cheapest refusals first: the platform's own limit (no database), the relay's
+      // total (a read), then the address's count for the day (a write when it is taken).
       if (allowReminder && !(await allowReminder(request))) {
         return fail(429, 'Too many new reminders from here: try again in a minute.', {
           'Retry-After': '60',
+        });
+      }
+      if ((await store.countReminders()) >= MAX_REMINDERS) {
+        return fail(503, 'This relay keeps all the reminders it can.');
+      }
+      if (
+        quotas &&
+        !(await takeForAddress(quotas, 'reminder', request, newRemindersPerAddress, at))
+      ) {
+        return fail(429, 'Too many new reminders from here today: try again tomorrow.', {
+          'Retry-After': String(secondsToMidnight(at)),
         });
       }
     }

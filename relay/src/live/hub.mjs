@@ -18,6 +18,10 @@
  * Group rooms (group.mjs: a puzzle race for up to eight, a game analysed
  * together) live here too, one per room id, made by the waiting room (or a
  * game's analysis room by the game's room) and opened with `openGroup`.
+ *
+ * `counted`, when given, hears of each write a game's or a group's room makes
+ * to its storage and each timer it sets or clears (on Cloudflare, each a row
+ * written): the tests count them.
  */
 import { createGroup, groupData } from './group.mjs';
 import { createLobby, lobbyData } from './lobby.mjs';
@@ -49,6 +53,7 @@ function loopTimers(/** @type {() => number} */ now) {
  *   timers?: Timers,
  *   notify?: import('./room.mjs').RoomPlatform['notify'],
  *   chess960Position?: () => number,
+ *   counted?: (room: string, what: 'store' | 'schedule' | 'remove') => void,
  * }} [options]
  */
 export function createLiveHub(options = {}) {
@@ -56,6 +61,7 @@ export function createLiveHub(options = {}) {
   const timers = options.timers ?? loopTimers(now);
   const notify = options.notify;
   const chess960Position = options.chess960Position;
+  const counted = options.counted ?? (() => undefined);
 
   /**
    * @typedef {{ data: import('./lobby.mjs').LobbyData, socket: Socket, open: boolean }} LobbyEntry
@@ -119,10 +125,19 @@ export function createLiveHub(options = {}) {
     }
   }
 
+  /** The waiting room's own storage (its counts per address, kept as hashes), in memory. */
+  const lobbyStore = new Map();
   const lobby = createLobby({
     connections: () => [...lobbySockets].filter((e) => e.open).map(conn),
     createGame,
     createGroup: makeGroup,
+    storage: {
+      get: async (key) => structuredClone(lobbyStore.get(key)),
+      put: async (key, value) => {
+        lobbyStore.set(key, structuredClone(value));
+      },
+    },
+    timers,
     now,
   });
 
@@ -141,13 +156,16 @@ export function createLiveHub(options = {}) {
       connections: () => [...entry.sockets].filter((s) => s.open).map(conn),
       load: async () => (entry.state ? structuredClone(entry.state) : null),
       store: async (state) => {
+        counted(id, 'store');
         entry.state = structuredClone(state);
       },
       remove: async () => {
+        counted(id, 'remove');
         entry.state = null;
         forgetGroup(id, entry);
       },
       schedule: (at) => {
+        counted(id, 'schedule');
         if (entry.timer !== null) timers.clear(entry.timer);
         entry.timer = null;
         if (at !== null) {
@@ -186,13 +204,16 @@ export function createLiveHub(options = {}) {
       connections: () => [...entry.sockets].filter((s) => s.open).map(conn),
       load: async () => (entry.state ? structuredClone(entry.state) : null),
       store: async (state) => {
+        counted(id, 'store');
         entry.state = structuredClone(state);
       },
       remove: async () => {
+        counted(id, 'remove');
         entry.state = null;
         forget(id, entry);
       },
       schedule: (at) => {
+        counted(id, 'schedule');
         if (entry.timer !== null) timers.clear(entry.timer);
         entry.timer = null;
         if (at !== null) {
@@ -224,7 +245,8 @@ export function createLiveHub(options = {}) {
     /**
      * A socket for the waiting room.
      * @param {Socket} socket
-     * @param {string} [address] the client's address, for the per-address limit
+     * @param {string} [address] the address the client counts under, for the limits per
+     *   address (an IPv6 address's /64, as `addressKey` gives it)
      * @returns {SocketEvents}
      */
     openLobby(socket, address = '') {
@@ -246,12 +268,13 @@ export function createLiveHub(options = {}) {
      * A socket for the room of game `id`.
      * @param {string} id
      * @param {Socket} socket
+     * @param {string} [address] the client's address, for the room's limit per address
      * @returns {SocketEvents}
      */
-    openRoom(id, socket) {
+    openRoom(id, socket, address = '') {
       const room = roomEntry(id);
       /** @type {RoomSocket} */
-      const entry = { data: roomData(now()), socket, open: true };
+      const entry = { data: roomData(now(), address), socket, open: true };
       room.sockets.add(entry);
       void room.room.open(conn(entry)).catch(() => undefined);
       return {
@@ -270,12 +293,13 @@ export function createLiveHub(options = {}) {
      * A socket for the group room `id`.
      * @param {string} id
      * @param {Socket} socket
+     * @param {string} [address] the client's address, for the room's limit per address
      * @returns {SocketEvents}
      */
-    openGroup(id, socket) {
+    openGroup(id, socket, address = '') {
       const group = groupEntry(id);
       /** @type {GroupSocket} */
-      const entry = { data: groupData(now()), socket, open: true };
+      const entry = { data: groupData(now(), address), socket, open: true };
       group.sockets.add(entry);
       void group.group.open(conn(entry)).catch(() => undefined);
       return {

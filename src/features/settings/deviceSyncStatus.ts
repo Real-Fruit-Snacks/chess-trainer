@@ -4,6 +4,16 @@ import type { SyncPart } from '@/lib/sync/parts';
 import { siteConfig } from '@/site.config';
 import { describeWhen } from './lichessStatus';
 
+/** When a wait ends, from `now`: "in 20 minutes", "in about 3 hours"; "later" when unknown. */
+export function resumesIn(until: number | null | undefined, now: number): string {
+  if (until === null || until === undefined) return 'later';
+  const minutes = Math.max(1, Math.ceil((until - now) / 60_000));
+  if (minutes === 1) return 'in a minute';
+  if (minutes < 60) return `in ${minutes} minutes`;
+  const hours = Math.round(minutes / 60);
+  return hours === 1 ? 'in about an hour' : `in about ${hours} hours`;
+}
+
 /** The device-sync card's status line: what the sync is doing, or when it last finished. */
 export function deviceSyncStatusLine(
   status: DeviceSyncStatus,
@@ -15,6 +25,8 @@ export function deviceSyncStatusLine(
       return 'Syncing…';
     case 'offline':
       return 'Offline: syncing carries on when this device is back online.';
+    case 'limited':
+      return `${status.error ?? 'The sync service is holding changes back for now.'} Changes made here wait, and syncing carries on by itself ${resumesIn(status.until, now)}.`;
     case 'too-large':
       return `${status.error ?? 'There is more to sync than the sync service keeps.'} Delete some imported games or saved analyses to make room.`;
     case 'newer':
@@ -33,7 +45,10 @@ export function deviceSyncStatusLine(
 
 /** Whether the status needs the learner's attention (shown as a warning, not a quiet line). */
 export const deviceSyncNeedsAttention = (status: DeviceSyncStatus): boolean =>
-  status.phase === 'too-large' || status.phase === 'newer' || status.phase === 'failed';
+  status.phase === 'too-large' ||
+  status.phase === 'newer' ||
+  status.phase === 'limited' ||
+  status.phase === 'failed';
 
 /** Each kind's name, for one and for more, in a list of changes. */
 const CHANGED: Record<SyncKind, [string, string]> = {

@@ -30,6 +30,7 @@
  * environment, no `cloudflare:workers` import) so the tests can run them under
  * Node against stand-ins.
  */
+import { addressKey } from '../address.mjs';
 import { originList } from '../handler.mjs';
 import { d1PushStore } from '../push/d1PushStore.mjs';
 import { pushContact, pushSender } from '../push/reminders.mjs';
@@ -57,6 +58,7 @@ const INTERNAL = 'https://live.internal';
  *   deleteAll(): Promise<void>,
  *   setAlarm(at: number): Promise<void>,
  *   deleteAlarm(): Promise<void>,
+ *   getAlarm?(): Promise<number | null>,
  * }} DurableStorage
  *
  * @typedef {{
@@ -139,6 +141,30 @@ async function createGroupRoom(env, spec) {
   if (response.status === 409) return 'exists';
   if (!response.ok) throw new Error(`The group room answered ${response.status}.`);
   return 'created';
+}
+
+/**
+ * What a room (a game's or a group's) keeps in its object's storage under
+ * `key`, and its one alarm. Deleting it deletes the state first and the alarm
+ * after, so that an alarm whose deletion fails comes again (Cloudflare
+ * retries an alarm that throws, unless it was deleted). `alarm` reads when the
+ * alarm is set for, so that a room woken from hibernation sets it only when it
+ * must.
+ * @param {DurableStorage} storage
+ * @param {string} key
+ */
+function roomStorage(storage, key) {
+  return {
+    load: async () => (await storage.get(key)) ?? null,
+    store: (/** @type {unknown} */ value) => storage.put(key, value),
+    remove: async () => {
+      await storage.deleteAll();
+      await storage.deleteAlarm();
+    },
+    schedule: (/** @type {number | null} */ at) =>
+      at === null ? storage.deleteAlarm() : storage.setAlarm(at),
+    alarm: storage.getAlarm ? async () => (await storage.getAlarm?.()) ?? null : undefined,
+  };
 }
 
 /** Lets the runtime answer `ping` with `pong`, when it can, so a ping never wakes the object. */
@@ -256,18 +282,27 @@ function socketsOf(state) {
   };
 }
 
-/** The waiting room: one object for every socket of `GET /v1/lobby`. */
+/**
+ * The waiting room: one object for every socket of `GET /v1/lobby`. Its
+ * storage keeps what each address has made lately, under a salted hash
+ * (lobby.mjs); the seeks live in their sockets' attachments. It sends the list of
+ * games at most twice a second, by a timer of half a second at most, which
+ * keeps the object awake that long.
+ */
 export class LiveLobby {
   /**
    * @param {DurableState} state
    * @param {LiveEnv} env
    */
   constructor(state, env) {
+    const storage = state.storage;
     this.sockets = socketsOf(state);
     this.lobby = createLobby({
       connections: () => this.sockets.open(),
       createGame: (spec) => createGame(env, spec),
       createGroup: (spec) => createGroupRoom(env, spec),
+      storage: { get: (key) => storage.get(key), put: (key, value) => storage.put(key, value) },
+      timers: { set: (at, run) => setTimeout(run, Math.max(0, at - Date.now())) },
       now: () => Date.now(),
     });
     answerPings(state);
@@ -285,10 +320,11 @@ export class LiveLobby {
    * Takes the object's end of a new socket into the waiting room: what `fetch`
    * does, apart from making the socket and the 101 response.
    * @param {DurableSocket} ws
-   * @param {string} [address] the client's address, for the limit per address
+   * @param {string} [address] the client's address, for the limits per address, which
+   *   count an IPv6 address by its /64 (`addressKey`)
    */
   accept(ws, address = '') {
-    this.lobby.open(this.sockets.accept(ws, lobbyData(address)));
+    this.lobby.open(this.sockets.accept(ws, lobbyData(address ? addressKey(address) : '')));
   }
 
   /**
@@ -326,13 +362,7 @@ export class LiveRoom {
     // Made once per instance: it reads the game from storage when first needed.
     this.room = createRoom({
       connections: () => this.sockets.open(),
-      load: async () => (await storage.get('game')) ?? null,
-      store: (game) => storage.put('game', game),
-      remove: async () => {
-        await storage.deleteAlarm();
-        await storage.deleteAll();
-      },
-      schedule: (at) => (at === null ? storage.deleteAlarm() : storage.setAlarm(at)),
+      ...roomStorage(storage, 'game'),
       createGame: (spec) => createGame(env, spec),
       createGroup: (spec) => createGroupRoom(env, spec),
       now: () => Date.now(),
@@ -353,13 +383,13 @@ export class LiveRoom {
     }
     if (!isUpgrade(request)) return new Response('Connect with a WebSocket.', { status: 426 });
     const [client, server] = socketPair();
-    await this.accept(server);
+    await this.accept(server, request.headers.get('CF-Connecting-IP') ?? '');
     return switching(client);
   }
 
   /** @param {Request} request */
   async create(request) {
-    /** @type {import('./lobby.mjs').GameSpec} */
+    /** @type {import('./room.mjs').RoomSpec} */
     let spec;
     try {
       spec = await request.json();
@@ -380,9 +410,10 @@ export class LiveRoom {
    * apart from making the socket and the 101 response. The socket then has a
    * while to say which seat it is.
    * @param {DurableSocket} ws
+   * @param {string} [address] the client's address, for the limit per address
    */
-  async accept(ws) {
-    await this.room.open(this.sockets.accept(ws, roomData(Date.now())));
+  async accept(ws, address = '') {
+    await this.room.open(this.sockets.accept(ws, roomData(Date.now(), address)));
   }
 
   /**
@@ -406,7 +437,10 @@ export class LiveRoom {
     return this.webSocketClose(ws);
   }
 
-  /** Something is due: a flag, a first move, a hello, or the room's end. */
+  /**
+   * Something is due: a flag, a first move, a hello, or the room's end. Fails
+   * when what it did could not be stored: the runtime then retries the alarm.
+   */
   alarm() {
     return this.room.timer();
   }
@@ -425,13 +459,7 @@ export class LiveGroup {
     // Made once per instance: it reads the room from storage when first needed.
     this.group = createGroup({
       connections: () => this.sockets.open(),
-      load: async () => (await storage.get('group')) ?? null,
-      store: (group) => storage.put('group', group),
-      remove: async () => {
-        await storage.deleteAlarm();
-        await storage.deleteAll();
-      },
-      schedule: (at) => (at === null ? storage.deleteAlarm() : storage.setAlarm(at)),
+      ...roomStorage(storage, 'group'),
       now: () => Date.now(),
     });
     answerPings(state);
@@ -449,7 +477,7 @@ export class LiveGroup {
     }
     if (!isUpgrade(request)) return new Response('Connect with a WebSocket.', { status: 426 });
     const [client, server] = socketPair();
-    await this.accept(server);
+    await this.accept(server, request.headers.get('CF-Connecting-IP') ?? '');
     return switching(client);
   }
 
@@ -476,9 +504,10 @@ export class LiveGroup {
    * apart from making the socket and the 101 response. The socket then has a
    * while to say hello.
    * @param {DurableSocket} ws
+   * @param {string} [address] the client's address, for the limit per address
    */
-  async accept(ws) {
-    await this.group.open(this.sockets.accept(ws, groupData(Date.now())));
+  async accept(ws, address = '') {
+    await this.group.open(this.sockets.accept(ws, groupData(Date.now(), address)));
   }
 
   /**
@@ -502,7 +531,11 @@ export class LiveGroup {
     return this.webSocketClose(ws);
   }
 
-  /** Something is due: a hello, a host's hand-over, the race's next step, or the room's end. */
+  /**
+   * Something is due: a hello, a host's hand-over, the race's next step, or
+   * the room's end. Fails when what it did could not be stored: the runtime
+   * then retries the alarm.
+   */
   alarm() {
     return this.group.timer();
   }

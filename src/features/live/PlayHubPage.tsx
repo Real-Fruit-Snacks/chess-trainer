@@ -241,7 +241,7 @@ function QuickPlayCard({
 
   const post = (tc: string) => {
     prefs.update({ tc });
-    useLobby.getState().post({
+    void useLobby.getState().post({
       game: 'chess',
       tc,
       color: prefs.color,

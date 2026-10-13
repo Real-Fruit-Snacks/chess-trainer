@@ -10,8 +10,12 @@ import { forgetReminderToken, keepReminderToken, reminderToken, timeZone } from 
  * unless the device has said that day was a training day (trained.ts).
  */
 
-/** The answers a reminder can get: kept, or why not. */
-export type ReminderAnswer = 'kept' | 'full' | 'failed';
+/**
+ * The answers a reminder can get: kept, or why not. `full`: the relay keeps all
+ * the reminders it can; `limited`: this network has set up all the new reminders
+ * it may today; `busy`: the relay asked to wait a minute.
+ */
+export type ReminderAnswer = 'kept' | 'full' | 'limited' | 'busy' | 'failed';
 
 /** A new token: 32 random bytes, base64url. */
 function newToken(): string {
@@ -49,6 +53,11 @@ export async function saveReminder(
       }),
     });
     if (response.status === 503) return 'full';
+    if (response.status === 429) {
+      // A wait of more than a minute is the limit per address, which lasts until tomorrow.
+      const seconds = Number(response.headers.get('Retry-After') ?? '60');
+      return Number.isFinite(seconds) && seconds > 60 ? 'limited' : 'busy';
+    }
     if (!response.ok) return 'failed';
     keepReminderToken(token);
     return 'kept';

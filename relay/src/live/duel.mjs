@@ -68,7 +68,9 @@ import { DUEL_RULES } from './shared.mjs';
  *   chat: { by: Seat, phrase: string }[],
  *   lastPhraseAt: { white: number, black: number },
  *   next: { id: string, seats: { white: string, black: string } } | null,
+ *   rematches?: number,
  * }} DuelState
+ *   `rematches`: how many rematches in a row led to this duel (none: 0; the room sets it).
  *
  * @typedef {{
  *   tell(make: (seat: Seat) => unknown): void,

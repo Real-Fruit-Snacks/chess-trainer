@@ -46,6 +46,10 @@ export interface GroupData {
   openedAt: number;
   rateStart: number;
   rateCount: number;
+  /** The client's address as the limits count it (`addressKey`); '' when not known. */
+  address: string;
+  /** The socket's refused messages lately (`refusedTooOften`). */
+  refused?: { start: number; count: number };
 }
 
 export interface GroupConn {
@@ -61,6 +65,11 @@ export interface GroupPlatform {
   store(state: GroupState): Promise<void>;
   remove(): Promise<void>;
   schedule(at: number | null): void | Promise<void>;
+  /**
+   * When the timer is set for (null: not set), read when a room wakes so that it sets the timer
+   * only when it must (none: the room's first save sets it).
+   */
+  alarm?: () => Promise<number | null>;
   now(): number;
 }
 
@@ -115,7 +124,7 @@ export interface GroupKindModule<S> {
   presence?(ctx: GroupContext, state: S, now: number): void;
 }
 
-export function groupData(now?: number): GroupData;
+export function groupData(now?: number, address?: string): GroupData;
 export function newGroup(spec: GroupSpec, now: number): GroupState;
 export function createGroup(platform: GroupPlatform): {
   create(spec: GroupSpec): Promise<void>;

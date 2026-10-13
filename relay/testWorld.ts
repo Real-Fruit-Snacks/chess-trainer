@@ -4,7 +4,9 @@
  * live-games.test.ts share it).
  */
 import { createLiveHub, type Socket, type SocketEvents } from './src/live/hub.mjs';
+import { BROADCAST_MS } from './src/live/lobby.mjs';
 import type { RoomPlatform } from './src/live/room.mjs';
+import { randomId } from './src/live/shared.mjs';
 
 export const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -18,10 +20,17 @@ export function world({
 }: { notify?: RoomPlatform['notify']; chess960Position?: () => number } = {}) {
   let time = 1_000_000;
   let queue: { at: number; run: () => void }[] = [];
+  /** What each room has written to its storage, and the timers it set: rows written on Cloudflare. */
+  const counts = new Map<string, { store: number; schedule: number; remove: number }>();
   const hub = createLiveHub({
     now: () => time,
     notify,
     chess960Position,
+    counted: (room, what) => {
+      const count = counts.get(room) ?? { store: 0, schedule: 0, remove: 0 };
+      count[what] += 1;
+      counts.set(room, count);
+    },
     timers: {
       set: (at, run) => {
         const handle = { at, run };
@@ -52,7 +61,11 @@ export function world({
   function jump(ms: number) {
     time += ms;
   }
-  return { hub, advance, jump, now: () => time };
+  /** The writes and timers of room `id` (a game's or a group's) so far. */
+  const writes = (id: string) => ({ store: 0, schedule: 0, remove: 0, ...counts.get(id) });
+  /** Lets the waiting room's list go out: it goes at most once in `BROADCAST_MS`. */
+  const listed = () => advance(BROADCAST_MS);
+  return { hub, advance, jump, now: () => time, writes, listed };
 }
 
 export type World = ReturnType<typeof world>;
@@ -96,6 +109,7 @@ export class Client {
 export const NAME_A = 'Patient Bishop';
 export const NAME_B = 'Swift Knight';
 
+/** A seek, with a secret of its own (its id is the secret's: see `seekIdOf`). */
 export function seek(over: Partial<Message> = {}): Message {
   return {
     t: 'seek',
@@ -104,6 +118,7 @@ export function seek(over: Partial<Message> = {}): Message {
     name: NAME_A,
     rating: 1500,
     private: false,
+    secret: randomId(32),
     ...over,
   };
 }

@@ -1,4 +1,4 @@
-import { fetchWithTimeout, isTimeoutError } from '@/lib/fetchWithTimeout';
+import { fetchWithTimeout, isTimeoutError, retryAfterSeconds } from '@/lib/fetchWithTimeout';
 import type { VaultKeys } from './vaultCrypto';
 
 /**
@@ -16,6 +16,13 @@ export type RelayErrorKind =
   | 'too-large'
   /** Too many writes at once: try again in a moment. */
   | 'busy'
+  /**
+   * A daily limit reached: no more until `retryAfterMs` (the relay's next
+   * midnight, UTC). Trying again sooner only gets the same answer.
+   */
+  | 'limited'
+  /** The relay is full: it makes no new synced copies. */
+  | 'full'
   /** Anything else the relay answered with. */
   | 'server';
 
@@ -32,9 +39,23 @@ export class RelayError extends Error {
 
 /** The relay keeps vaults up to this size (relay/src/handler.mjs, DEFAULT_MAX_BYTES). */
 export const RELAY_MAX_BYTES = 1_400_000;
+/**
+ * A wait the relay asks for up to this long is a moment (one write a second, a
+ * platform's limit a minute); a longer one is a daily limit.
+ */
+export const BUSY_MAX_MS = 60_000;
 /** A request gets this long, plus a second for every 25 KB it carries (slow connections). */
 const TIMEOUT_MS = 30_000;
 const timeoutFor = (bytes: number) => TIMEOUT_MS + Math.ceil(bytes / 25_000) * 1_000;
+
+/** What the learner is told for each refusal of a new synced copy, and of a change. */
+export const RELAY_MESSAGES = {
+  newCopiesToday: 'Too many synced copies were set up from this network today. Try again tomorrow.',
+  newCopiesEveryone:
+    'The sync service is not setting up new synced copies today. Try again tomorrow.',
+  full: 'The sync service is full and is not setting up new synced copies. Try again another day.',
+  changesToday: 'The synced copy has taken all the changes it can for today.',
+} as const;
 
 const vaultUrl = (relay: string, keys: VaultKeys) =>
   `${relay.replace(/\/+$/, '')}/v1/vaults/${keys.id}`;
@@ -61,21 +82,39 @@ const drain = (response: Response) =>
     () => undefined,
   );
 
-/** Turns a refusal into an error the sync can act on. */
-function refused(response: Response): RelayError {
+/**
+ * Turns a refusal into an error the sync can act on. `creating`: the request
+ * asked for a new synced copy, whose own refusals (a limit per network or per
+ * day, a full relay) say so.
+ */
+function refused(response: Response, creating = false): RelayError {
   if (response.status === 401 || response.status === 403) {
     return new RelayError('auth', 'The sync service did not accept this recovery phrase.');
   }
   if (response.status === 413) {
     return new RelayError('too-large', 'There is more to sync than the sync service keeps.');
   }
+  const seconds = retryAfterSeconds(response);
+  const wait = seconds === null ? null : seconds * 1000;
   if (response.status === 429) {
-    const seconds = Number(response.headers.get('Retry-After') ?? '1');
+    if (wait !== null && wait > BUSY_MAX_MS) {
+      return new RelayError(
+        'limited',
+        creating ? RELAY_MESSAGES.newCopiesToday : RELAY_MESSAGES.changesToday,
+        wait,
+      );
+    }
     return new RelayError(
       'busy',
       'The sync service asked to wait a moment.',
-      (Number.isFinite(seconds) ? Math.max(1, seconds) : 1) * 1000,
+      Math.max(1000, wait ?? 1000),
     );
+  }
+  if (creating && response.status === 503) {
+    return new RelayError('limited', RELAY_MESSAGES.newCopiesEveryone, wait);
+  }
+  if (response.status === 507) {
+    return new RelayError('full', creating ? RELAY_MESSAGES.full : 'The sync service is full.');
   }
   return new RelayError('server', `The sync service answered ${response.status}.`);
 }
@@ -159,7 +198,7 @@ export async function writeVault(
   if (response.status === 412 || (etag !== null && response.status === 404)) {
     return { ok: false, conflict: true };
   }
-  if (!response.ok) throw refused(response);
+  if (!response.ok) throw refused(response, etag === null);
   const tag = response.headers.get('ETag');
   if (!tag) throw new RelayError('server', 'The sync service did not say which version it kept.');
   return { ok: true, etag: tag };

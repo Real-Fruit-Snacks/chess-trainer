@@ -29,10 +29,22 @@
  * Who hears what: `tell(make)` gives each socket its own message (`make` gets
  * the member's id, or null for a visitor), `announce(message)` gives everyone
  * the same one, which must hold nothing private.
+ *
+ * Against abuse, as in a game's room (room.mjs): the room writes its state
+ * only when it has changed since it was last written, and sets its timer only
+ * when the deadline has moved, so a refusal or a message that changes nothing
+ * costs nothing. It takes `ABUSE_LIMITS.roomSocketsPerAddress` sockets from
+ * one address and `socketsPerSeat` on one member's token (one more is
+ * refused), and keeps `unsaid` sockets yet to say hello (one more sends the
+ * oldest of those away, so a member always gets back in); a socket refused
+ * too often is closed; and a socket for a room that is not there is closed at
+ * once, with nothing written for it.
  */
+import { addressKey } from '../address.mjs';
 import { hashToken } from '../handler.mjs';
 import { groupKind } from './groupKinds.mjs';
 import {
+  ABUSE_LIMITS,
   CLOSE,
   GROUP_LIMITS,
   isPhrase,
@@ -40,6 +52,7 @@ import {
   isRating,
   LIMITS,
   randomId,
+  refusedTooOften,
   SEAT_PATTERN,
 } from './shared.mjs';
 
@@ -80,7 +93,11 @@ import {
  *   openedAt: number,
  *   rateStart: number,
  *   rateCount: number,
+ *   address: string,
+ *   refused?: { start: number, count: number },
  * }} GroupData
+ *   `address`: the client's, as the limits count it (`addressKey`), or '' when
+ *   not known; `refused`: the socket's refused messages lately (`refusedTooOften`).
  *
  * @typedef {{
  *   data: GroupData,
@@ -95,8 +112,12 @@ import {
  *   store(state: GroupState): Promise<void>,
  *   remove(): Promise<void>,
  *   schedule(at: number | null): void | Promise<void>,
+ *   alarm?: () => Promise<number | null>,
  *   now(): number,
  * }} GroupPlatform
+ *   `alarm`: when the timer is set for (null: not set), read when a room
+ *   wakes, so that it sets the timer only when it must (none: the room's first
+ *   save sets it).
  *
  * @typedef {{ id: string, name: string, rating: number | null }} PublicMember
  * @typedef {PublicMember & { host: boolean }} Sender
@@ -138,8 +159,13 @@ import {
  *   `presence`: someone came, went, joined or left.
  */
 
-/** A new socket's data (kept with the socket: a Durable Object keeps it across hibernation). */
-export function groupData(now = Date.now()) {
+/**
+ * A new socket's data (kept with the socket: a Durable Object keeps it across
+ * hibernation), with the client's address, if known, as the limits count it:
+ * an IP address, or the key `addressKey` made of one already (an IPv6
+ * address's /64, kept as it is).
+ */
+export function groupData(now = Date.now(), address = '') {
   return /** @type {GroupData} */ ({
     id: randomId(16),
     member: null,
@@ -147,6 +173,7 @@ export function groupData(now = Date.now()) {
     openedAt: now,
     rateStart: 0,
     rateCount: 0,
+    address: !address || address.includes('/') ? address : addressKey(address),
   });
 }
 
@@ -241,6 +268,15 @@ export function createGroup(platform) {
   /** @type {GroupState | null} */
   let state = null;
   let loaded = false;
+  /** The state as it was last written (or loaded), as JSON: saving the same again writes nothing. */
+  /** @type {string | null} */
+  let written = null;
+  /**
+   * The deadline the platform's timer is set for (null: none); undefined while
+   * that is not known (a room just woken, or a timer that could not be set).
+   */
+  /** @type {number | null | undefined} */
+  let scheduled;
   /** Events run one at a time, in order. */
   /** @type {Promise<unknown>} */
   let queue = Promise.resolve();
@@ -258,6 +294,7 @@ export function createGroup(platform) {
   async function ensure() {
     if (loaded) return state;
     state = await platform.load();
+    written = state ? JSON.stringify(state) : null;
     loaded = true;
     return state;
   }
@@ -323,13 +360,38 @@ export function createGroup(platform) {
     tell(() => message);
   }
 
+  /**
+   * An error to one socket, counted against it: a socket refused more than
+   * `ABUSE_LIMITS.refusals` times in `refusalWindowMs` is closed instead (the
+   * count is kept in its data, saved so that it outlives hibernation). Whether
+   * the socket is still open.
+   * @param {GroupConn} conn
+   * @param {string} code
+   * @param {string} message
+   */
+  function refuseTo(conn, code, message) {
+    const tooOften = refusedTooOften(conn.data, platform.now());
+    conn.save();
+    if (tooOften) {
+      send(conn, {
+        t: 'error',
+        code: 'rate',
+        message: 'Too many refused messages: wait a moment.',
+      });
+      conn.close(CLOSE.policy, 'Too many refused messages.');
+      return false;
+    }
+    send(conn, { t: 'error', code, message });
+    return true;
+  }
+
   /** A refusal, followed by the room as it stands so the page catches up. */
   function refuse(
     /** @type {GroupConn} */ conn,
     /** @type {string} */ code,
     /** @type {string} */ message,
   ) {
-    send(conn, { t: 'error', code, message });
+    if (!refuseTo(conn, code, message)) return;
     if (state) send(conn, snapshot(state, conn.data.member, platform.now()));
   }
 
@@ -424,9 +486,49 @@ export function createGroup(platform) {
     return times.length > 0 ? Math.min(...times) : null;
   }
 
+  /** Writes the state, unless it is what was last written. */
+  async function write() {
+    if (!state) return;
+    const text = JSON.stringify(state);
+    if (text === written) return;
+    await platform.store(state);
+    written = text;
+  }
+
+  /** Sets the timer for `at` (null: none), unless it is set for that already. */
+  async function schedule(/** @type {number | null} */ at) {
+    if (scheduled === undefined && platform.alarm) {
+      try {
+        scheduled = await platform.alarm();
+      } catch {
+        // Not known: the timer is set below all the same.
+      }
+    }
+    if (at === scheduled) return;
+    scheduled = undefined;
+    await platform.schedule(at);
+    scheduled = at;
+  }
+
+  /**
+   * Stores the state and sets the timer on the next deadline, each only when
+   * it changed. A write or a timer the platform refuses (its allowance for the
+   * day used up) leaves the room going on as it is in memory: the next save
+   * tries again. Whether everything was stored.
+   */
   async function save(/** @type {number} */ now) {
-    if (state) await platform.store(state);
-    await platform.schedule(nextDeadline(now));
+    let stored = true;
+    try {
+      await write();
+    } catch {
+      stored = false;
+    }
+    try {
+      await schedule(nextDeadline(now));
+    } catch {
+      stored = false;
+    }
+    return stored;
   }
 
   /** Counts a message against the socket's allowance; false when it is used up (then closed). */
@@ -482,17 +584,19 @@ export function createGroup(platform) {
       const hash = SEAT_PATTERN.test(msg.token) ? await hashToken(msg.token) : '';
       const member = hash ? s.members.find((m) => sameText(m.tokenHash, hash)) : undefined;
       if (member) {
+        if (memberFull(conn, member.id)) {
+          // Its hello deadline goes with it.
+          await save(now);
+          return;
+        }
         conn.data.member = member.id;
         conn.data.visitor = false;
         conn.save();
         const changed = reconcile(s, now);
         send(conn, snapshot(s, member.id, now));
-        if (changed) {
-          changedMembers(s, now);
-          await save(now);
-        } else {
-          await platform.schedule(nextDeadline(now));
-        }
+        if (changed) changedMembers(s, now);
+        // Written if anything changed; the socket's hello deadline goes either way.
+        await save(now);
         return;
       }
       send(conn, {
@@ -509,7 +613,52 @@ export function createGroup(platform) {
     conn.data.visitor = true;
     conn.save();
     send(conn, snapshot(s, null, now));
-    await platform.schedule(nextDeadline(now));
+    await save(now);
+  }
+
+  /**
+   * Whether the room takes a new socket. One address has
+   * `ABUSE_LIMITS.roomSocketsPerAddress` here at most: one more is closed (and
+   * costs the room nothing more). Of the sockets yet to say hello the room
+   * keeps `ABUSE_LIMITS.unsaid`: one more sends the oldest of them away, as if
+   * its time to say hello were up, and never the new one, so that sockets held
+   * open without a word cannot keep a member out of their room. Only the
+   * sockets that came before it count, so that of many arriving at once the
+   * last are the ones refused.
+   * @param {GroupConn} conn
+   */
+  function admit(conn) {
+    const listed = sockets();
+    const at = listed.findIndex((c) => c.data.id === conn.data.id);
+    const before = at < 0 ? listed : listed.slice(0, at + 1);
+    const address = conn.data.address;
+    const fromThere = address ? before.filter((c) => c.data.address === address).length : 0;
+    if (fromThere > ABUSE_LIMITS.roomSocketsPerAddress) {
+      conn.close(CLOSE.full, 'Too many connections to this room from one address.');
+      return false;
+    }
+    const unsaid = before
+      .filter((c) => !c.data.member && !c.data.visitor && c.data.id !== conn.data.id)
+      .sort((a, b) => a.data.openedAt - b.data.openedAt);
+    const extra = unsaid.length + 1 - ABUSE_LIMITS.unsaid;
+    for (const old of unsaid.slice(0, Math.max(0, extra))) {
+      old.close(CLOSE.noHello, 'Say hello first.');
+    }
+    return true;
+  }
+
+  /**
+   * Whether a member has all the sockets one takes (`ABUSE_LIMITS.socketsPerSeat`)
+   * without `conn`: then `conn` is closed, as one past a full room is, and its
+   * app tries again a while later.
+   * @param {GroupConn} conn
+   * @param {string} member
+   */
+  function memberFull(conn, member) {
+    const others = sockets().filter((c) => c.data.member === member && c.data.id !== conn.data.id);
+    if (others.length < ABUSE_LIMITS.socketsPerSeat) return false;
+    conn.close(CLOSE.full, 'This room is open in too many tabs or windows.');
+    return true;
   }
 
   /**
@@ -522,7 +671,7 @@ export function createGroup(platform) {
    */
   async function join(conn, s, msg, now) {
     if (!isPlayerName(msg.name) || !isRating(msg.rating ?? null)) {
-      send(conn, { t: 'error', code: 'bad-request', message: 'That name or rating is not one.' });
+      refuseTo(conn, 'bad-request', 'That name or rating is not one.');
       return;
     }
     if (s.members.length >= GROUP_LIMITS.members) {
@@ -534,7 +683,7 @@ export function createGroup(platform) {
         )
         .sort((a, b) => (a.goneSince ?? 0) - (b.goneSince ?? 0))[0];
       if (!away) {
-        send(conn, { t: 'error', code: 'full', message: 'This room is full.' });
+        refuseTo(conn, 'full', 'This room is full.');
         return;
       }
       removeMember(s, away.id);
@@ -605,8 +754,9 @@ export function createGroup(platform) {
 
   return {
     /**
-     * Makes the room (called by the waiting room). Throws when it exists, or
-     * the spec is not a room's.
+     * Makes the room (called by the waiting room). Throws when it exists, the
+     * spec is not a room's, or it could not be written (then it does not
+     * exist: it may be made again).
      * @param {GroupSpec} spec
      */
     create(spec) {
@@ -614,18 +764,32 @@ export function createGroup(platform) {
         if (await ensure()) throw new Error('This room exists already.');
         const now = platform.now();
         state = newGroup(spec, now);
+        try {
+          await write();
+        } catch (err) {
+          state = null;
+          throw err;
+        }
+        // A timer that could not be set is set by the next save.
         await save(now);
       });
     },
 
     /**
-     * A socket has opened: it has `LIMITS.helloMs` to say hello.
-     * @param {GroupConn} _conn
+     * A socket has opened: it has `LIMITS.helloMs` to say hello. A socket for
+     * a room that is not there (any more) is closed at once, as one past the
+     * room's limits is; neither costs the room a write.
+     * @param {GroupConn} conn
      */
-    open(_conn) {
+    open(conn) {
       return serial(async () => {
-        await ensure();
-        await platform.schedule(nextDeadline(platform.now()));
+        const s = await ensure();
+        if (!s) {
+          conn.close(CLOSE.noGame, 'No such room.');
+          return;
+        }
+        if (!admit(conn)) return;
+        await save(platform.now());
       });
     },
 
@@ -669,7 +833,7 @@ export function createGroup(platform) {
           return;
         }
         if (!msg) {
-          send(conn, { t: 'error', code: 'bad-request', message: 'That is not a message.' });
+          refuseTo(conn, 'bad-request', 'That is not a message.');
           return;
         }
         if (!conn.data.member && !conn.data.visitor) {
@@ -686,7 +850,7 @@ export function createGroup(platform) {
         }
         if (!member) {
           if (msg.t === 'join') await join(conn, s, msg, now);
-          else send(conn, { t: 'error', code: 'not-member', message: 'Join the room first.' });
+          else refuseTo(conn, 'not-member', 'Join the room first.');
           return;
         }
         await memberMessage(conn, s, member, msg, now);
@@ -717,9 +881,16 @@ export function createGroup(platform) {
       });
     },
 
-    /** Something is due: a hello, a hand-over, the kind's next step, or the room's end. */
+    /**
+     * Something is due: a hello, a hand-over, the kind's next step, or the
+     * room's end. Throws when what it did could not be stored (or the room
+     * deleted): the platform then runs the timer again later (Cloudflare
+     * retries an alarm that fails, a few times).
+     */
     timer() {
       return serial(async () => {
+        // The timer that is running is spent.
+        scheduled = null;
         const s = await ensure();
         const now = platform.now();
         for (const conn of sockets()) {
@@ -731,23 +902,22 @@ export function createGroup(platform) {
             conn.close(CLOSE.noHello, 'Say hello first.');
           }
         }
-        if (!s) {
-          await platform.schedule(null);
-          return;
-        }
+        // No room (any more): nothing to wait for, and no timer is set.
+        if (!s) return;
         const expired =
           now >= s.createdAt + GROUP_LIMITS.ageMs ||
           (s.emptySince !== null && now >= s.emptySince + GROUP_LIMITS.emptyKeepMs);
         if (expired) {
           for (const conn of sockets()) conn.close(CLOSE.closed, 'The room is closed.');
-          state = null;
+          // Forgotten here only once it is gone from storage: should that fail, the timer comes again.
           await platform.remove();
-          await platform.schedule(null);
+          state = null;
+          written = null;
           return;
         }
         if (reconcile(s, now)) changedMembers(s, now);
         kindOf(s).timer(ctx, s.state, now);
-        await save(now);
+        if (!(await save(now))) throw new Error('The room could not be stored.');
       });
     },
   };

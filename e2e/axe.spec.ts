@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
+import { randomId } from '../relay/src/live/shared.mjs';
 import { type LiveRelay, startLiveRelay } from './live';
 
 /**
@@ -128,6 +129,7 @@ test.beforeAll(async () => {
       name: 'Patient Bishop',
       rating: 1500,
       private: false,
+      secret: randomId(32),
     }),
   );
   // And a duel, which the list shows with its own icon and words.
@@ -140,6 +142,7 @@ test.beforeAll(async () => {
       name: 'Swift Knight',
       rating: null,
       private: false,
+      secret: randomId(32),
     }),
   );
 });

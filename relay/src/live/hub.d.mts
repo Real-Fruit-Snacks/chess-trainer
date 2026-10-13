@@ -18,9 +18,10 @@ export interface Timers {
 
 export interface LiveHub {
   openLobby(socket: Socket, address?: string): SocketEvents;
-  openRoom(id: string, socket: Socket): SocketEvents;
-  /** A socket for a group room (a puzzle race for up to eight). */
-  openGroup(id: string, socket: Socket): SocketEvents;
+  /** A socket for a game's room (`address`, the client's, for the room's limit per address). */
+  openRoom(id: string, socket: Socket, address?: string): SocketEvents;
+  /** A socket for a group room (a puzzle race for up to eight, an analysis). */
+  openGroup(id: string, socket: Socket, address?: string): SocketEvents;
   games(): number;
   /** How many group rooms are kept. */
   groups(): number;
@@ -34,4 +35,6 @@ export function createLiveHub(options?: {
   notify?: RoomPlatform['notify'];
   /** Draws every new Chess960 game's start position (none: one of the 960 at random). */
   chess960Position?: () => number;
+  /** Hears of each write a room makes to its storage, and each timer it sets or clears. */
+  counted?: (room: string, what: 'store' | 'schedule' | 'remove') => void;
 }): LiveHub;

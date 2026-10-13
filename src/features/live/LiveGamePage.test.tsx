@@ -845,6 +845,25 @@ describe('LiveGamePage', () => {
     expect(screen.getByText('The analysis room')).toBeInTheDocument();
   });
 
+  it('says in the result why a rematch was refused, and on the board once it is shown', async () => {
+    const session = hold('relay', 'GAME', makeView({ moves: ['e2e4', 'e7e5'] }));
+    renderGame();
+    session.update({ status: 'over', result: '1-0', reason: 'resign' });
+    const dialog = openDialog('You won!')!;
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Rematch' }));
+    const words = 'No more rematches after 30 in a row: start a new game from Play.';
+    session.update({ error: words });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(words);
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(within(dialog).getByRole('link', { name: 'New opponent' })).toHaveAttribute(
+      'href',
+      '/play',
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Show the board' }));
+    await nextTask();
+    expect(screen.getByRole('alert')).toHaveTextContent(words);
+  });
+
   it('answers the opponent’s rematch offer', () => {
     const session = hold('relay', 'GAME', makeView({ moves: ['e2e4', 'e7e5'] }));
     renderGame();

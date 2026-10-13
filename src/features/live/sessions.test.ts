@@ -67,6 +67,7 @@ async function seated() {
     name: 'Patient Bishop',
     rating: null,
     private: false,
+    secret: randomId(32),
   });
   await theirs.send({
     t: 'seek',
@@ -75,6 +76,7 @@ async function seated() {
     name: 'Swift Knight',
     rating: 1400,
     private: false,
+    secret: randomId(32),
   });
   const paired = mine.last('paired')!;
   const game = paired.game as string;
@@ -435,8 +437,8 @@ async function seatedInDuel(game = 'judge') {
   const host = relay.lobbyClient();
   const mine = relay.lobbyClient();
   const seek = { t: 'seek', game, opts: {}, rating: null, private: false };
-  await host.send({ ...seek, name: 'Swift Knight' });
-  await mine.send({ ...seek, name: 'Patient Bishop' });
+  await host.send({ ...seek, name: 'Swift Knight', secret: randomId(32) });
+  await mine.send({ ...seek, name: 'Patient Bishop', secret: randomId(32) });
   const paired = mine.last('paired')!;
   const id = paired.game as string;
   rememberSeat(id, paired.seat as string, 'black', 'judge');

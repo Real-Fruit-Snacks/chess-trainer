@@ -116,7 +116,8 @@ sync sets `syncRelay` to `''`; one that hosts the relay itself runs `relay/src/s
 HTTPS (see `relay/README.md`).
 
 Deploying the 0.29 relay also sets its two crons (`triggers` in `relay/wrangler.jsonc`): the daily
-one, which deletes vaults unused for a year and reminders unheard of for 60 days, and one every 15
+one, which deletes vaults unused for a year (or never changed after they were made, for 30 days),
+reminders unheard of for 60 days and the day-old counts behind the limits per address, and one every 15
 minutes, which sends the daily reminders due (at most 25 a run, within the free plan's requests of
 its own). Push needs nothing to configure: the Worker makes its push tables in the same D1 database
 and its own key pair for Web Push (VAPID) the first time they are needed, and keeps the pair there.
@@ -126,8 +127,11 @@ server keeps the same in its SQLite file and sends the reminders every minute; i
 in memory, so a restart ends them, correspondence games included.
 
 The relay stores only sealed vaults under random names, keeps no logs, and deletes vaults unused for
-a year; `relay/README.md` shows how to cap the vaults each address can create (and the reminders,
-with `NEW_REMINDERS`). Moving the site to another address only needs the new origin in
+a year. It limits what one address, and everyone together, can make and write each day, so a script
+cannot fill its database or spend its free allowances from one connection; the limits can be
+changed in `vars` (`relay/README.md`, "Abuse"). A flood of requests from many addresses can still
+use up a day's allowance, until midnight UTC: to stop one before it counts, give the relay a domain
+on Cloudflare with a rate-limiting rule in front (the same section shows how). Moving the site to another address only needs the new origin in
 `ALLOWED_ORIGINS`: synced data is tied to the recovery phrase, not to the site. A new relay starts empty, though: after `syncRelay` changes, each device
 says its synced copy is gone and keeps its data, and turning sync on again starts a new phrase.
 

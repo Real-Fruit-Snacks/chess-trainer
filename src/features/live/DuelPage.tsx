@@ -317,7 +317,8 @@ function DuelScreen({ session, view }: { session: DuelSession; view: DuelView })
                 Focus
               </Button>
             </div>
-            {view.error ? (
+            {/* While the result is up, it says what was refused (a rematch) itself. */}
+            {view.error && !resultOpen ? (
               <p className="small live-game__error" role="alert">
                 {view.error}
               </p>
@@ -385,6 +386,11 @@ function DuelScreen({ session, view }: { session: DuelSession; view: DuelView })
         <p data-testid="duel-end-sentence">{duelEndSentence(view, opponent.name)}</p>
         {view.offers.rematch === them && !view.next ? (
           <p className="muted">{opponent.name} wants a rematch.</p>
+        ) : null}
+        {view.error ? (
+          <p className="small live-game__error" role="alert">
+            {view.error}
+          </p>
         ) : null}
       </Dialog>
     </div>

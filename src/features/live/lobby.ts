@@ -14,6 +14,7 @@ import {
   parseTimeControl,
   randomId,
   SEAT_PATTERN,
+  seekIdOf,
   type TimeControlSpec,
 } from '../../../relay/src/live/shared.mjs';
 import { setBarReason } from './bar';
@@ -58,14 +59,18 @@ import type {
  * A correspondence game is no post: `invite` has the waiting room make its
  * room at once (`create`), with this device's seat and one open for the friend
  * who gets the link; the seat is kept, and the board is where to go next.
+ *
+ * A post goes up with a secret made here, and under the id the secret gives
+ * (the first 16 bytes of its SHA-256: `seekIdOf`), which the relay checks.
+ * After a reconnection it goes up again with the same secret, so under the
+ * same id: the link shared before still finds it, and the relay hands it over
+ * from the old socket if it still holds it. Nobody without the secret can post
+ * under the id. A post's key (secret and id) is made ahead, as hashing takes a
+ * moment, so that posting is at once.
  */
 
 /** After nothing needs the waiting room any more, the connection stays this long. */
 export const LINGER_MS = 2000;
-/** A game posted again after a reconnection, refused (the relay still holds it under the old socket), is tried again this often… */
-export const REPOST_RETRY_MS = 5000;
-/** …this many times, about as long as a relay takes to notice a socket that died. */
-export const REPOST_TRIES = 12;
 const HEALTH_TIMEOUT_MS = 10_000;
 /** The socket that aborts a game that lost the race gives up after this long (the room aborts it anyway). */
 const ABORT_WITHIN_MS = 10_000;
@@ -88,6 +93,18 @@ const CHECK_MESSAGES: Record<
 const LICHESS_FAILED = 'Lichess did not take the game.';
 
 const isSide = (value: unknown): value is Side => value === 'white' || value === 'black';
+
+/** A post's secret, and its id: the secret's, as the relay checks. */
+interface SeekKey {
+  id: string;
+  secret: string;
+}
+
+/** A new post's key: a random secret, and the id it gives. */
+async function newSeekKey(): Promise<SeekKey> {
+  const secret = randomId(32);
+  return { id: await seekIdOf(secret), secret };
+}
 
 function playerOf(value: unknown): LivePlayer {
   const player = (typeof value === 'object' && value !== null ? value : {}) as Record<
@@ -213,12 +230,13 @@ export function createLobbyStore(): LobbyStore {
   let linger: ReturnType<typeof setTimeout> | null = null;
   /** The games the relay lists, this device's own included. */
   let listed: OpenGame[] = [];
-  /** This post has gone to the relay before: sending it again is a re-post. */
-  let sentBefore = false;
-  /** The seek in flight is a re-post (after a reconnection). */
-  let reposting = false;
-  let repostTimer: ReturnType<typeof setTimeout> | null = null;
-  let repostTries = 0;
+  /** The secret of the post (`mine`), sent with it every time it goes up. */
+  let secret: string | null = null;
+  /** The next post's key, made ahead: `spare` once made, `coming` while it is being made. */
+  let spare: SeekKey | null = null;
+  let coming = makeKey();
+  /** Posts and cancels so far: a post waiting for its key goes up only if nothing came after. */
+  let posts = 0;
   let lichess: LichessRun | null = null;
   /** A Lichess game won the race for the last post: a relay pairing that follows lost it. */
   let wonByLichess = false;
@@ -248,7 +266,7 @@ export function createLobbyStore(): LobbyStore {
     },
 
     post: (options) => {
-      if (disposed) return;
+      if (disposed) return Promise.resolve();
       const game: GameKind = options.game ?? 'chess';
       const duel = isDuel(game);
       const opts = gameOptions(game, options.opts ?? {});
@@ -257,41 +275,53 @@ export function createLobbyStore(): LobbyStore {
       const color: ColorChoice = duel ? 'random' : options.color;
       if (!opts || (!duel && !spec) || !(COLOR_CHOICES as readonly string[]).includes(color)) {
         set({ notice: 'That game cannot be posted.' });
-        return;
+        return Promise.resolve();
       }
-      // A new post replaces the one before, on Lichess too.
-      stopLichess();
-      clearRepost();
-      wonByLichess = false;
-      sentBefore = false;
-      reposting = false;
-      repostTries = 0;
-      if (game === 'chess' && spec) useLivePrefs.getState().update({ tc: spec.id, color });
-      const mine: MySeek = {
-        id: randomId(16),
-        game,
-        opts,
-        tc: spec?.id ?? null,
-        color,
-        private: options.private,
-        postedAt: Date.now(),
-        relay: relayConfigured() ? 'posting' : 'failed',
-        lichess: { status: 'off', rated: options.lichess?.rated ?? false, message: null },
+      const post = ++posts;
+      /** Puts the post up under its key (unless another post, or a cancel, came meanwhile). */
+      const begin = ({ id, secret: made }: SeekKey): void => {
+        if (disposed || post !== posts) return;
+        // A new post replaces the one before, on Lichess too.
+        stopLichess();
+        wonByLichess = false;
+        secret = made;
+        if (game === 'chess' && spec) useLivePrefs.getState().update({ tc: spec.id, color });
+        const mine: MySeek = {
+          id,
+          game,
+          opts,
+          tc: spec?.id ?? null,
+          color,
+          private: options.private,
+          postedAt: Date.now(),
+          relay: relayConfigured() ? 'posting' : 'failed',
+          lichess: { status: 'off', rated: options.lichess?.rated ?? false, message: null },
+        };
+        setMine(mine);
+        ensure();
+        if (socket.state === 'open') sendSeek();
+        // A game for people with the link stays off Lichess, where anyone could take it; Lichess
+        // plays chess only.
+        if (options.lichess && !options.private && game === 'chess' && spec) {
+          startLichess(mine.id, spec, color, options.lichess.rated);
+        }
       };
-      setMine(mine);
-      ensure();
-      if (socket.state === 'open') sendSeek();
-      // A game for people with the link stays off Lichess, where anyone could take it; Lichess
-      // plays chess only.
-      if (options.lichess && !options.private && game === 'chess' && spec) {
-        startLichess(mine.id, spec, color, options.lichess.rated);
+      // Its key is ready (made ahead) but for a post right after another: then it waits for it.
+      const key = takeKey();
+      if (!(key instanceof Promise)) {
+        begin(key);
+        return Promise.resolve();
       }
+      return key.then(begin, () => {
+        if (!disposed && post === posts) set({ notice: 'That game cannot be posted.' });
+      });
     },
 
     cancel: () => {
       const { mine } = get();
+      // A post still waiting for its key goes no further.
+      posts += 1;
       stopLichess();
-      clearRepost();
       if (mine) {
         socket.send({ t: 'cancel' });
         setMine(null);
@@ -348,6 +378,26 @@ export function createLobbyStore(): LobbyStore {
   }));
   const { getState: get, setState: set } = store;
 
+  /** Makes the next post's key, which becomes the spare once made (unless taken meanwhile). */
+  function makeKey(): Promise<SeekKey> {
+    const made = newSeekKey();
+    made.then(
+      (key) => {
+        if (coming === made) spare = key;
+      },
+      () => undefined,
+    );
+    return made;
+  }
+
+  /** The next post's key: at once when it is ready, else when it is; the one after is begun. */
+  function takeKey(): SeekKey | Promise<SeekKey> {
+    const key = spare ?? coming;
+    spare = null;
+    coming = makeKey();
+    return key;
+  }
+
   const socket = new LiveSocket(() => liveSocketUrl('/v1/lobby'), {
     open: onOpen,
     message: onMessage,
@@ -387,7 +437,6 @@ export function createLobbyStore(): LobbyStore {
 
   function disconnect(): void {
     socket.close();
-    clearRepost();
     listed = [];
     set({
       connection: get().connection === 'unavailable' ? 'unavailable' : 'idle',
@@ -399,7 +448,6 @@ export function createLobbyStore(): LobbyStore {
   /** The relay runs no live games (or this build has none): nothing to retry. */
   function becomeUnavailable(): void {
     socket.close();
-    clearRepost();
     listed = [];
     const { mine } = get();
     const patch: Partial<LobbyState> = { connection: 'unavailable', seeks: [], players: 0 };
@@ -414,17 +462,15 @@ export function createLobbyStore(): LobbyStore {
 
   function onOpen(): void {
     set({ connection: 'open' });
-    if (get().mine) {
-      // After a reconnection the same game goes up again, under the same id: its link still works.
-      reposting = sentBefore;
-      sendSeek();
-    }
+    // After a reconnection the same game goes up again, under the same id and
+    // secret: its link still works, and the relay hands it over from the old
+    // socket if it still holds that.
+    if (get().mine) sendSeek();
     if (joining !== null) sendJoin();
     if (inviting !== null) sendInvite();
   }
 
   function onDown({ opened }: { code: number; opened: boolean }): void {
-    clearRepost();
     if (inviting !== null && inviteSent) {
       // Its answer is lost with the socket: better to say so than to make a second game.
       inviting = null;
@@ -488,9 +534,9 @@ export function createLobbyStore(): LobbyStore {
       name: useLivePrefs.getState().name,
       rating: shownRating(),
       private: mine.private,
+      secret,
     });
     if (!sent) return;
-    sentBefore = true;
     if (mine.relay !== 'posting') setMine({ ...mine, relay: 'posting' });
   }
 
@@ -517,11 +563,6 @@ export function createLobbyStore(): LobbyStore {
     });
   }
 
-  function clearRepost(): void {
-    if (repostTimer !== null) clearTimeout(repostTimer);
-    repostTimer = null;
-  }
-
   function onMessage(message: Record<string, unknown>): void {
     switch (message.t) {
       case 'lobby': {
@@ -538,9 +579,6 @@ export function createLobbyStore(): LobbyStore {
         const seek = message.seek as { id?: unknown } | null;
         // An answer to an earlier post (replaced since) is not this one's.
         if (!mine || seek?.id !== mine.id) return;
-        clearRepost();
-        reposting = false;
-        repostTries = 0;
         setMine({ ...mine, relay: 'posted' });
         return;
       }
@@ -579,18 +617,6 @@ export function createLobbyStore(): LobbyStore {
       return;
     }
     if (mine?.relay === 'posting') {
-      if (reposting && repostTries < REPOST_TRIES) {
-        // Most likely the relay still holds the game under the socket that died: try again shortly.
-        repostTries += 1;
-        clearRepost();
-        repostTimer = setTimeout(() => {
-          repostTimer = null;
-          if (get().mine?.id !== mine.id) return;
-          reposting = true;
-          sendSeek();
-        }, REPOST_RETRY_MS);
-        return;
-      }
       setMine({ ...mine, relay: 'failed' }, { notice: text });
       return;
     }
@@ -620,7 +646,6 @@ export function createLobbyStore(): LobbyStore {
     }
     rememberSeat(game, seat, color, kind);
     stopLichess();
-    clearRepost();
     paired({
       source: 'relay',
       game,
@@ -750,7 +775,6 @@ export function createLobbyStore(): LobbyStore {
     }
     run.state = 'won';
     wonByLichess = true;
-    clearRepost();
     // The relay's post goes; a pairing it made meanwhile is aborted when it arrives.
     socket.send({ t: 'cancel' });
     paired({
@@ -785,7 +809,6 @@ export function createLobbyStore(): LobbyStore {
       disposed = true;
       if (linger !== null) clearTimeout(linger);
       linger = null;
-      clearRepost();
       stopLichess();
       socket.dispose();
     },

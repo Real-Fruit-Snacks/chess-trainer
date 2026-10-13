@@ -116,6 +116,7 @@ export const LIMITS: Readonly<{
   rateMessages: number;
   rateWindowMs: number;
   seeks: number;
+  privateSeeks: number;
   lobbySockets: number;
   socketsPerAddress: number;
   listed: number;
@@ -145,9 +146,30 @@ export const CLOSE: Readonly<{
   closed: number;
 }>;
 
+/** The limits against abuse, per address, seat and socket. */
+export const ABUSE_LIMITS: Readonly<{
+  refusals: number;
+  refusalWindowMs: number;
+  socketsPerSeat: number;
+  unsaid: number;
+  roomSocketsPerAddress: number;
+  rematches: number;
+  seeksPerAddress: number;
+  pairings: number;
+  pairingsWindowMs: number;
+}>;
+
+/** Counts a refused message against its socket: true when the socket is to be closed. */
+export function refusedTooOften(
+  data: { refused?: { start: number; count: number } },
+  now: number,
+): boolean;
+
 export function randomId(bytes: number): string;
 export const ID_PATTERN: RegExp;
 export const SEAT_PATTERN: RegExp;
+/** A seek's id from its poster's secret: the first 16 bytes of the secret's SHA-256, as an id. */
+export function seekIdOf(secret: string): Promise<string>;
 
 /** The kinds of group room (rooms for up to eight, by link). */
 export type GroupKind = 'race' | 'analysis';

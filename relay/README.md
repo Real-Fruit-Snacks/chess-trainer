@@ -34,8 +34,12 @@ So for each vault the relay holds:
 
 There are no accounts, emails or device names. The relay writes no logs, and
 the Worker's observability is off. Like any web server, Cloudflare (or your
-own host) sees the IP address of each request. A vault that nobody writes or
-reads for a year is deleted.
+own host) sees the IP address of each request. The relay counts the new vaults
+and reminders each address makes a day, for its limits (see [Abuse](#abuse)),
+but never stores the address: each count is under a hash of it with a random
+salt that is replaced every day. A vault that nobody writes or reads for a year
+is deleted, and so is one never written after it was made, once nobody has
+written or read it for 30 days.
 
 The data is a backup file, sealed:
 
@@ -54,12 +58,12 @@ sees none of it. See `src/lib/sync/vaultCrypto.ts` and
 
 ## API
 
-| Request                 | Answers                                                                                                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /v1/health`        | `200 {"ok":true,"maxBytes":…,"live":…,"push":true}` (`live`: whether live games are set up; `push`: whether the push endpoints are)                                      |
-| `GET /v1/vaults/:id`    | `200` the bytes with `ETag: "<version>"`; `204` (no body) when `X-Known-Version` names the current version; `404`                                                        |
-| `PUT /v1/vaults/:id`    | `201` created (`If-None-Match: *`); `200` replaced (`If-Match: "<version>"`); `412` changed meanwhile (its `ETag` is the current version); `413` too big; `429` too soon |
-| `DELETE /v1/vaults/:id` | `204`                                                                                                                                                                    |
+| Request                 | Answers                                                                                                                                                                                                                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/health`        | `200 {"ok":true,"maxBytes":…,"live":…,"push":true}` (`live`: whether live games are set up; `push`: whether the push endpoints are)                                                                                                                         |
+| `GET /v1/vaults/:id`    | `200` the bytes with `ETag: "<version>"`; `204` (no body) when `X-Known-Version` names the current version; `404`                                                                                                                                           |
+| `PUT /v1/vaults/:id`    | `201` created (`If-None-Match: *`); `200` replaced (`If-Match: "<version>"`); `412` changed meanwhile (its `ETag` is the current version); `413` too big; `429` too soon, or a daily limit reached; `503` no more new vaults today; `507` the relay is full |
+| `DELETE /v1/vaults/:id` | `204`                                                                                                                                                                                                                                                       |
 
 Notes:
 
@@ -67,7 +71,10 @@ Notes:
   gets `403`, and a missing one gets `401`.
 - Ids and tokens are 32 bytes in unpadded base64url (43 characters).
 - A vault holds at most 1,400,000 bytes.
-- A vault can be replaced at most once a second.
+- A vault can be replaced at most once a second, and 1,000 times a day.
+- Making a vault is limited per address and per day (see [Abuse](#abuse)). A
+  `429` or `503` says how long to wait in `Retry-After`: until the next
+  midnight UTC for a daily limit.
 - Writes go by version, so two devices writing at once never overwrite each
   other. The second write gets `412`, and that device merges and writes again.
 
@@ -148,8 +155,14 @@ go. An invitation nobody takes in 7 days expires.
 - A game room keeps the clock after each move of a game at once, for the
   game's record (`[%clk]` in its PGN). Watchers see what anyone may: the moves,
   the clocks, the names.
-- Nothing is logged. The waiting room uses each socket's IP address to allow at
-  most 10 sockets from one address, and keeps it no longer than the socket.
+- Nothing is logged. The waiting room and the rooms use each socket's IP
+  address (an IPv6 address by its /64) for their limits per address, and keep
+  it no longer than the socket. The waiting room also counts what each address
+  makes in an hour (games paired, invitations, group rooms) under a hash of the
+  address with a salt it replaces every day, so the counts outlive the sockets
+  but never name an address. Counts from an earlier day stay only until they
+  are written over, under a salt that is gone, so they match nobody. Nothing
+  about a waiting game is kept once its socket goes.
 
 ### Sockets and messages
 
@@ -160,30 +173,42 @@ go. An invitation nobody takes in 7 days expires.
 | `GET /v1/rooms/:id` | a group room: a race or an analysis, up to eight |
 
 All take sockets only from the app's origins (`ALLOWED_ORIGINS`, or `--origin`
-on the Node server); others get `403`. A message is JSON text of at most 2 KB
-(16 KB for a duel's host sending its rounds, a race room's host starting a race,
-and `create-room`, which may bring an analysis room's game), and a socket may
-send 20 every 10 seconds. The text `ping` is answered with `pong`.
+on the Node server); others get `403`. That keeps out pages on other sites, not
+scripts, which can name any origin: the limits in [Abuse](#abuse) are for those.
+A message is JSON text of at most 2,048 characters (16,384 for a duel's host
+sending its rounds, a race room's host starting a race, and `create-room`, which
+may bring an analysis room's game), and a socket may send 20 every 10 seconds.
+A socket whose messages are refused more than 10 times in a minute gets `error`
+`rate` and is closed. The text `ping` is answered with `pong`.
 
 The waiting room takes `seek` (post a game, or be paired with one waiting: the
 `game`, its `opts`, and for chess and its variants the time control and colour;
-a seek may bring its own `id`, which the relay keeps unless another socket holds
-it, so a game posted again after a reconnection keeps the link shared before),
+and its `secret`, 32 random bytes in base64url that only the poster's device
+knows; the game's id is the first 16 bytes of the secret's SHA-256 in
+base64url (`seekIdOf` in `src/live/shared.mjs`), and a seek naming another `id`
+is refused. So a game posted again after a reconnection, or after the relay
+restarts, keeps the link shared before, the same secret from a new socket takes
+it over from the old one, and nobody else can post under it; one address may
+have 5 games waiting),
 `cancel`, `join` (a game by its id) and `create` (a correspondence invitation:
 `game` `chess` or `chess960`, `tc` such as `3d`, `color` `white`, `black` or
-`random`, `name` and `rating`; 5 an hour from one socket). It sends `lobby`
+`random`, `name` and `rating`; 5 an hour from one address). It sends `lobby`
 (the public games and how many people are there), `posted`, `cancelled`,
 `paired` (the game and its kind, the player's seat token and colour, and the
 opponent), `created` (the invitation's game, `kind`, `opts`, `tc`, the poster's
 `seat` token and `color`), `gone` (the game to join is no longer there) and
-`error` (`busy` for too many invitations).
+`error` (`busy` past a limit: games waiting, games paired, invitations;
+`bad-request` for a seek with no secret, or an id that is not its secret's). The list
+goes out at most twice a second, and only when it has changed.
 
 A game room takes `hello` (the seat token, within 10 seconds), `move` (in UCI),
 `resign`, `abort`, `draw`, `takeback` and `rematch` (each an offer, an
 acceptance or a refusal), `claim` (a win or a draw, once the opponent has been
 gone 30 seconds) and `say` (a phrase); in Army Draft `army` (the army bought, in
 the first two minutes), in a blindfold game `peek`; once the game is over,
-`analyse` (its analysis room: see below). It sends `game` (the whole game, after
+`analyse` (its analysis room: see below). A rematch is refused (`error`
+`limit`) after 30 in a row: the players start a new game from Play. It sends
+`game` (the whole game, after
 `hello`), `move`, `undo`, `offers`, `end`, `present`, `say`, `rematch`, `draft`
 (an army is in), `peeks`, `watchers`, `analysis` and `error`. Clock times are
 what is left when the message is sent, never the relay's clock.
@@ -225,10 +250,15 @@ and the score), `progress` (a timed race), `end`, `present`, `say`, `offers`,
 `rematch` and `error`. A rematch swaps the colours, or the host.
 
 A socket closed by the relay gets a code: `1003` a message that is not text,
-`1008` too many messages, `1009` a message too big, `4004` no such game or seat
-(or a duel to watch), `4008` no `hello` in time, `4010` the game was deleted (or
-the Node server is stopping), `4029` the waiting room, or a game's watchers, are
-full. The limits are in `src/live/shared.mjs`, which the app imports too.
+`1008` too many messages, or too many refused, `1009` a message too big, `4004`
+no such game or seat (or a duel to watch; for a game that is not there, at once
+on connecting), `4008` no `hello` in time, `4010` the game was deleted (or the
+Node server is stopping), `4029` full: the waiting room, a game's watchers, 12
+sockets from one address in one room, or a seat with 6 sockets on it already
+(the newest is refused, and the app tries again later). A room keeps at most 20
+sockets that have not said `hello` yet: one more, and the oldest of them is
+closed with `4008`, so sockets that never say who they are cannot keep a
+player out. The limits are in `src/live/shared.mjs`, which the app imports too.
 
 ### Adding to the rooms
 
@@ -245,7 +275,12 @@ add a kind of room or a message:
   earliest, and `timer()` does what is due. Add the new deadline there.
 - Saving: every change goes through `save(now)`, which stores the state, sets the
   timer, then delivers the push messages queued with `nudge` (only to players
-  away, and only once the change is stored).
+  away, and only once the change is stored). It writes the state only when it
+  differs from what was last written, and moves the timer only when the
+  deadline moved, so a refusal or a repeated offer writes nothing; an object
+  woken from hibernation reads its alarm rather than setting it again. A
+  `timer()` that cannot store its change fails, and Cloudflare tries the alarm
+  again.
 - A duel is `src/live/duel.mjs`, run by the room through a small context; a new
   kind of room of rounds can follow it.
 
@@ -260,8 +295,9 @@ thing together: its kind. The kinds are `race`, a puzzle race
 A room is made through the waiting room:
 `{"t":"create-room","kind":"race","opts":{"format":"rounds","level":1500},"name":…,"rating":…}`
 makes it at once, with its maker as host, and answers `room-created` (`room`,
-the room's id; `kind`; `opts`; `token`, the maker's member token). The sockets
-of one address may make 10 rooms an hour (then `error` `busy`).
+the room's id; `kind`; `opts`; `token`, the maker's member token). One address
+may make 10 rooms an hour (then `error` `busy`), counted by the waiting room
+whether or not its sockets stay.
 
 A room's socket is `GET /v1/rooms/:id`. Within 10 seconds it says `hello`: with
 `token`, as that member (a reconnection keeps their place); without, as a
@@ -381,10 +417,10 @@ of its tree, each with its parent and children, the shared position, the
 drawings, the players' names and the result; the positions themselves are
 worked out from the moves when needed, and kept in memory only). It is deleted
 10 minutes after its last member left (a game's analysis room nobody joins, 10
-minutes after it was made), and 6 hours after it was made at most. The waiting room keeps when a
-socket made its rooms, for the limit, no longer than the socket. Close codes are
-those of games: `4004` no such room, `4008` no `hello` in time, `4010` the room
-was deleted, `4029` too many visitors.
+minutes after it was made), and 6 hours after it was made at most. Close codes
+are those of games: `4004` no such room, `4008` no `hello` in time, `4010` the
+room was deleted, `4029` too many visitors, 12 sockets from one address, or 6
+on one member's token.
 
 To add a kind of group room: a module like `src/live/raceRoom.mjs` or
 `src/live/analysisRoom.mjs`
@@ -394,8 +430,8 @@ To add a kind of group room: a module like `src/live/raceRoom.mjs` or
 `groupOptions` (both in `src/live/shared.mjs`). The room gives the module a
 context (`announce`, `tell`, `refuse`, `members`, `here`, `host`); the module's
 state is plain data kept with the room's, changed in place, and saved by the
-room after each call, which also keeps the one timer on the earliest of its own
-deadlines and the module's.
+room after each call (written only when it changed), which also keeps the one
+timer on the earliest of its own deadlines and the module's.
 
 ### On Cloudflare's free plan
 
@@ -408,9 +444,23 @@ or an alarm. The runtime answers `ping` itself, without waking the object.
 A socket that connects is a request to the Worker and one to its object. After
 that, every 20 messages a socket sends count as one more request; messages to
 the players are free. A room's alarms (a first move that never came, a fallen
-flag, a draft's or a duel round's end, the room's end) are requests too. Each
-move writes two rows: the game and its next alarm. On the free plan, Durable
-Objects get 100,000 requests and 100,000 written rows a day of their own.
+flag, a draft's or a duel round's end, the room's end) are requests too. On the
+free plan, Durable Objects get 100,000 requests and 100,000 written rows a day
+of their own. A room writes only what changed:
+
+| What happens                                       | Rows written                      |
+| -------------------------------------------------- | --------------------------------- |
+| a move                                             | 2 (the game and its next alarm)   |
+| an offer, a phrase, a player's last socket going   | 1                                 |
+| a step, a move or a drawing in an analysis room    | 1                                 |
+| a socket connecting and saying `hello`             | 2 (its deadline set, then lifted) |
+| a refusal, a repeated offer, a step to where it is | none                              |
+| a socket to a game or room that is not there       | none                              |
+
+The waiting room writes a row for each invitation or group room made, one or
+two for each game paired (its counts per address), and one a day for its salt. It
+sends its list after a short wait (half a second), which keeps it awake that
+long.
 
 A correspondence game's room keeps one alarm, days away: the earliest of the
 side to move's deadline, the invitation's expiry and the room's end. It sleeps
@@ -422,7 +472,8 @@ Each group room is a Durable Object of its own too (`LiveGroup`, the
 each result, each round's step (countdown, round, result) and each change of
 who is here, and its alarm wakes it for each step; a room nobody is in sleeps
 until its alarm deletes it. An analysis room writes a row for each change (a
-move, a step, a drawing), its tree with it, and has no alarm but its end; a
+move, a step, a drawing), its tree with it, and nothing for a message that
+changes nothing; it has no alarm but its end; a
 game's room asking for its analysis room is one request of its own to the
 group room's object.
 
@@ -464,8 +515,9 @@ service has not delivered yet.
   quarter hours (0 to 1,425); `tz` an IANA time zone (`Europe/London`);
   `trained` and `day` a date there (`2026-10-11`): no reminder that day.
 - Requests come from the app's origins only (`403` otherwise), with a body of
-  4 KB at most (`413`), 20 a minute from one address (`429`). The relay keeps
-  5,000 reminders at most.
+  4 KB at most (`413`), 20 a minute from one address (`429`). One address may
+  make 5 new reminders a day (`429`, `Retry-After` until midnight UTC). The
+  relay keeps 5,000 reminders at most.
 - A reminder nothing has been heard of for 60 days is deleted: the app keeps it
   again each time it starts.
 
@@ -478,6 +530,73 @@ makes itself on first use (no migration step):
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `push_keys`      | one: `id` 1, `public_key` (base64url), `private_key` (JWK)                                                                |
 | `push_reminders` | one per device: `key`, `endpoint`, `p256dh`, `auth`, `minute`, `tz`, `next_at`, `trained_day`, `created_at`, `touched_at` |
+
+## Abuse
+
+Anyone can reach the relay: there are no accounts, and a script can name any
+origin. Nobody can read or change someone else's vault, take a seat in someone
+else's game, or send text to a stranger; what is left to guard is the relay
+itself, and the free plan's daily allowances it shares with everyone. These
+limits keep one connection, or one address, from using them up:
+
+| What                                   | Limit                                                                                 | Past it                         |
+| -------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------- |
+| new vaults from one address            | 5 a day                                                                               | `429` until midnight UTC        |
+| new vaults from everyone               | 50 a day                                                                              | `503` until midnight UTC        |
+| the database's size                    | no new vaults past 400 MB (D1's free plan holds 500 MB)                               | `507`                           |
+| writes to one vault                    | one a second, 1,000 a day                                                             | `429`                           |
+| new reminders from one address         | 5 a day; 5,000 kept in all                                                            | `429` until midnight UTC; `503` |
+| sockets in the waiting room            | 10 from one address, 2,000 in all                                                     | closed, `4029`                  |
+| games waiting                          | 5 from one address; 100 public and 300 private in all                                 | `error` `busy`                  |
+| games paired, invitations, group rooms | 120, 5 and 10 an hour from one address                                                | `error` `busy`                  |
+| sockets in a room                      | 6 on one seat or member; 12 from one address; 20 yet to say `hello` (the oldest goes) | closed, `4029` (`4008`)         |
+| rematches in a row                     | 30                                                                                    | `error` `limit`                 |
+| messages from one socket               | 20 every 10 seconds; 10 refused in a minute                                           | closed, `1008`                  |
+
+An IPv6 address counts by its /64, the smallest block a home or phone is given,
+so changing the low bits of an address does not make a new one
+(`src/address.mjs`). A home given a larger block (a /56 or a /48) has more
+addresses to count by, which the counts for everyone (new vaults a day) still
+bound. A network many people share behind one IPv4 address, such as a school's,
+shares one allowance.
+Days are UTC days. The daily counts are kept in D1 (`quotas`, with the day's
+salt in `relay_meta`), and the waiting room's hourly ones in its own storage, so
+reconnecting, or reaching another of Cloudflare's locations, does not start
+them again. Neither keeps an address: each count is under a hash of the address
+with a random salt replaced every day, and D1's counts and salts are deleted
+within two days. A room writes only what changed (see [On Cloudflare's free
+plan](#on-cloudflares-free-plan)), so a refusal costs no row written.
+
+The limits are in `src/handler.mjs` (`DEFAULT_LIMITS`), `src/push/reminders.mjs`
+and `src/live/shared.mjs` (`LIMITS`, `GROUP_LIMITS`, `ABUSE_LIMITS`); the daily
+ones can be changed in `wrangler.jsonc` (see the variables below).
+
+What they do not cover: Cloudflare counts every request against the Worker's
+100,000 a day, refused ones too, and a busy game still writes for each move.
+Someone with many addresses, or a plain flood of requests, can still use up a
+day's allowance, and the relay then stops answering until midnight UTC. Nothing
+kept is lost, and on the free plan nothing is billed; on Workers Paid the same
+flood would be, so put the relay behind a firewall first.
+
+### Behind Cloudflare's firewall
+
+Requests that Cloudflare's firewall blocks never reach the Worker, so they do
+not count against its allowance. A `workers.dev` address has no firewall
+settings; a domain of your own on Cloudflare does:
+
+1. Give the Worker the domain, and turn off its `workers.dev` address, in
+   `wrangler.jsonc`:
+
+   ```jsonc
+   "workers_dev": false,
+   "routes": [{ "pattern": "sync.example.com", "custom_domain": true }]
+   ```
+
+2. In the domain's dashboard, under Security, add a rate-limiting rule for that
+   hostname: for example, block an IP address that makes more than 60 requests
+   in 10 seconds. The free plan includes one such rule.
+3. Deploy the relay, set `syncRelay` in `src/site.config.ts` to
+   `https://sync.example.com`, and deploy the app.
 
 ## Deploy on Cloudflare
 
@@ -522,20 +641,27 @@ syncs and plays live games whenever the computer is online.
 
 Settings in `wrangler.jsonc` (`vars`):
 
-| Variable            | Meaning                                                                                             |
-| ------------------- | --------------------------------------------------------------------------------------------------- |
-| `ALLOWED_ORIGINS`   | the app's origins, comma-separated (`*` allows any origin); live games take sockets from these only |
-| `MAX_BYTES`         | the largest vault accepted (at most 1,400,000 on D1)                                                |
-| `PUSH_CONTACT`      | optional: the contact in push messages' tokens, `mailto:` or `https:`                               |
-| `REMINDERS_PER_RUN` | optional: the most reminders one cron run sends (25)                                                |
+| Variable                    | Meaning                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `ALLOWED_ORIGINS`           | the app's origins, comma-separated (`*` allows any origin); live games take sockets from these only |
+| `MAX_BYTES`                 | the largest vault accepted (at most 1,400,000 on D1)                                                |
+| `PUSH_CONTACT`              | optional: the contact in push messages' tokens, `mailto:` or `https:`                               |
+| `REMINDERS_PER_RUN`         | optional: the most reminders one cron run sends (25)                                                |
+| `NEW_VAULTS_PER_ADDRESS`    | optional: new vaults one address may make a day (5)                                                 |
+| `NEW_VAULTS_PER_DAY`        | optional: new vaults the relay makes a day, from everyone (50)                                      |
+| `MAX_DB_BYTES`              | optional: no new vaults once the database is this big (400,000,000)                                 |
+| `MAX_VAULTS`                | optional: no new vaults once there are this many, should D1 not say how big the database is (250)   |
+| `VAULT_WRITES_PER_DAY`      | optional: writes one vault takes a day (1,000)                                                      |
+| `NEW_REMINDERS_PER_ADDRESS` | optional: new reminders one address may make a day (5)                                              |
 
 Without `PUSH_CONTACT`, push messages name the first `https` origin of
 `ALLOWED_ORIGINS`, or `mailto:relay@example.invalid` when there is none. Push
 services may write to it about a relay that misbehaves: set one you read.
 
 Two crons run (`triggers` in `wrangler.jsonc`, told apart by their schedule):
-once a day (`17 3 * * *`) vaults unused for a year and reminders unheard of for
-60 days are deleted; every 15 minutes (`*/15 * * * *`) the reminders due are
+once a day (`17 3 * * *`) vaults unused for a year (or, never written after
+they were made, for 30 days), reminders unheard of for 60 days, and the counts
+per address from before yesterday are deleted; every 15 minutes (`*/15 * * * *`) the reminders due are
 sent. A Worker on the free plan makes 50 requests of its own per run, so each
 run sends 25 at most and leaves the rest to the next; a reminder found more than
 an hour late waits for the next day. The push tables are made in the same D1
@@ -550,6 +676,8 @@ device makes a request when the app opens, a few seconds after each change, and
 every 5 minutes while the app is on screen, so a device in use all day makes a
 few hundred. If the relay outgrows the free plan, devices see a "could not be
 reached" or server error and try again later; Workers Paid lifts the limits.
+Each vault write is one row written (the table has no index but its key), and
+making a vault about four.
 
 To check it works:
 
@@ -557,11 +685,12 @@ To check it works:
 curl https://open-file-sync.<your-subdomain>.workers.dev/v1/health
 ```
 
-### Optional: fewer new vaults per address
+### Optional: a limit a minute as well
 
-Anyone can make vaults, since there are no accounts, and a script could fill the
-database with them. To limit how many vaults each address can create, add a
-rate-limiting binding called `NEW_VAULTS` to `wrangler.jsonc`, then deploy again:
+The relay counts new vaults and reminders per address a day itself (see
+[Abuse](#abuse)). To limit them a minute too, before anything is counted in D1,
+add a rate-limiting binding called `NEW_VAULTS` to `wrangler.jsonc`, then deploy
+again:
 
 ```jsonc
 "ratelimits": [
@@ -590,14 +719,19 @@ npm ci --prefix relay
 node relay/src/server.mjs --port 8787 --db relay.db --origin https://you.github.io
 ```
 
-| Option           | Default                  | Meaning                                              |
-| ---------------- | ------------------------ | ---------------------------------------------------- |
-| `--host`         | `127.0.0.1`              | the address to listen on                             |
-| `--port`         | `8787`                   |                                                      |
-| `--db`           | `relay.db`               | the SQLite file (`:memory:` keeps nothing)           |
-| `--origin`       | any                      | the app's origin; repeat it, or separate with commas |
-| `--max-bytes`    | 1,400,000                | the largest vault accepted                           |
-| `--push-contact` | the first `https` origin | the contact in push messages, `mailto:` or `https:`  |
+| Option                        | Default                  | Meaning                                              |
+| ----------------------------- | ------------------------ | ---------------------------------------------------- |
+| `--host`                      | `127.0.0.1`              | the address to listen on                             |
+| `--port`                      | `8787`                   |                                                      |
+| `--db`                        | `relay.db`               | the SQLite file (`:memory:` keeps nothing)           |
+| `--origin`                    | any                      | the app's origin; repeat it, or separate with commas |
+| `--max-bytes`                 | 1,400,000                | the largest vault accepted                           |
+| `--push-contact`              | the first `https` origin | the contact in push messages, `mailto:` or `https:`  |
+| `--new-vaults-per-address`    | 5                        | new vaults one address may make a day                |
+| `--new-vaults-per-day`        | 50                       | new vaults the relay makes a day, from everyone      |
+| `--max-db-bytes`              | 400,000,000              | no new vaults once the SQLite file is this big       |
+| `--vault-writes-per-day`      | 1,000                    | writes one vault takes a day                         |
+| `--new-reminders-per-address` | 5                        | new reminders one address may make a day             |
 
 A request body is kept only up to the vault limit, and the rest is dropped as it
 arrives, so an endless upload cannot fill the memory.
@@ -608,9 +742,11 @@ set `syncRelay` in `src/site.config.ts` to its address.
 
 The proxy must pass WebSocket upgrades on, for live games. Caddy does so by
 default; nginx needs `proxy_http_version 1.1` and the `Upgrade` and `Connection`
-headers set. Behind a proxy on the same machine, every socket seems to come from
-that machine, so the waiting room counts each player by the last address in the
-`X-Forwarded-For` header the proxy adds; so do the push endpoints' limits.
+headers set. Behind a proxy on the same machine, every request seems to come from
+that machine, so the relay counts each client by the last address in the
+`X-Forwarded-For` header, for every limit per address. Caddy adds it; nginx needs
+`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`. A request from
+the machine itself with no such header is not counted against any address.
 
 To try the app against a local relay while developing:
 
@@ -626,7 +762,10 @@ and the page's Content Security Policy names no relay.
 
 | File                                                                     | What it is                                                                                                      |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `src/handler.mjs`                                                        | the HTTP API as a Fetch API handler, over any vault store                                                       |
+| `src/handler.mjs`                                                        | the HTTP API as a Fetch API handler, over any vault store, and the vaults' limits                               |
+| `src/address.mjs`                                                        | the address a limit counts by: IPv4 as it is, IPv6 by its /64                                                   |
+| `src/quota.mjs`                                                          | the daily counts per address, under a salted hash, in D1, SQLite or memory                                      |
+| `src/vaultSchema.mjs`                                                    | the vaults' table, its migration and its queries, the same in D1 and SQLite                                     |
 | `src/worker.mjs`                                                         | the Cloudflare Worker: the handler and push endpoints over D1, the two crons, and live games' sockets passed on |
 | `src/d1Store.mjs`                                                        | vaults in D1 (base64 text, so a vault fits D1's 2 MB row)                                                       |
 | `src/server.mjs`                                                         | the Node server, live games and push included                                                                   |
@@ -654,6 +793,8 @@ and the page's Content Security Policy names no relay.
 | `src/**/*.d.mts`                                                         | types for TypeScript callers (the tests, and the app for `shared.mjs`, `army.mjs` and `duelRules.mjs`)          |
 | `package.json`                                                           | the relay's two packages, chess.js and chessops (`npm ci` installs them)                                        |
 | `relay.test.ts`                                                          | the vault API's tests                                                                                           |
+| `limits.test.ts`, `address.test.ts`                                      | the limits on vaults and reminders, the migration, the counts kept; the address a limit counts by               |
+| `live-lobby-limits.test.ts`, `live-room-limits.test.ts`                  | the waiting room's and the rooms' limits, and the rows they write                                               |
 | `live.test.ts`                                                           | live games' tests: the rules, the waiting room and the rooms                                                    |
 | `live-games.test.ts`                                                     | the variants' and the duels' tests                                                                              |
 | `testWorld.ts`                                                           | the live tests' world: a hub on a clock the tests move                                                          |

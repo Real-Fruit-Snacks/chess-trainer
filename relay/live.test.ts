@@ -12,6 +12,7 @@ import {
   LIMITS,
   parseTimeControl,
   randomId,
+  seekIdOf,
   speedOf,
 } from './src/live/shared.mjs';
 import { hashToken } from './src/handler.mjs';
@@ -132,12 +133,14 @@ describe('the waiting room', () => {
     expect(a.last('posted')).toMatchObject({
       seek: { tc: '5+3', color: 'random', name: NAME_A, rating: 1500, private: false },
     });
+    await w.listed();
     expect(b.last('lobby')).toMatchObject({
       seeks: [{ tc: '5+3', color: 'random', name: NAME_A, rating: 1500 }],
       players: 2,
     });
     await a.send({ t: 'cancel' });
     expect(a.last('cancelled')).toBeDefined();
+    await w.listed();
     expect(b.last('lobby')).toMatchObject({ seeks: [] });
   });
 
@@ -150,6 +153,7 @@ describe('the waiting room', () => {
     // Both want black: no pairing; a different time control: none either.
     await b.send(seek({ color: 'black', name: NAME_B }));
     await c.send(seek({ tc: '3+0', name: 'Quiet Rook' }));
+    await w.listed();
     expect(c.last('lobby')!.seeks).toHaveLength(3);
     await c.send(seek({ color: 'white', name: 'Quiet Rook' }));
     // The oldest compatible game waits longest: a's.
@@ -161,6 +165,7 @@ describe('the waiting room', () => {
     expect(c.last('paired')).toMatchObject({ color: 'white', opponent: { name: NAME_A } });
     expect(a.last('paired')!.game).toBe(c.last('paired')!.game);
     expect(a.last('paired')!.seat).not.toBe(c.last('paired')!.seat);
+    await w.listed();
     expect(b.last('lobby')!.seeks).toEqual([expect.objectContaining({ name: NAME_B })]);
     expect(w.hub.games()).toBe(1);
   });
@@ -181,35 +186,38 @@ describe('the waiting room', () => {
     expect(a.last('lobby')!.seeks).toEqual([]);
   });
 
-  it('keeps the id a seek brings, so a link shared before a reconnection still works', async () => {
+  it('keeps the id a seek brings, its secret’s, so a link shared before a reconnection still works', async () => {
     const w = world();
-    const id = randomId(16);
+    const secret = randomId(32);
+    const id = await seekIdOf(secret);
     const a = new Client((s) => w.hub.openLobby(s));
-    await a.send(seek({ id, private: true }));
+    await a.send(seek({ id, secret, private: true }));
     expect(a.last('posted')).toMatchObject({ seek: { id, private: true } });
+    // Without an id, the seek's id is its secret's all the same.
+    const plain = new Client((s) => w.hub.openLobby(s));
+    const plainSecret = randomId(32);
+    await plain.send(seek({ secret: plainSecret, private: true }));
+    expect(plain.last('posted')).toMatchObject({ seek: { id: await seekIdOf(plainSecret) } });
     // The connection drops; the poster comes back and posts the same game again.
     await a.leave();
     const back = new Client((s) => w.hub.openLobby(s));
-    await back.send(seek({ id, private: true }));
+    await back.send(seek({ id, secret, private: true }));
     expect(back.last('posted')).toMatchObject({ seek: { id } });
-    // Another socket cannot take an id that is held.
+    // Another socket cannot post under the id without its secret, nor without one at all.
     const other = new Client((s) => w.hub.openLobby(s));
     await other.send(seek({ id, name: NAME_B }));
     expect(other.last('error')).toMatchObject({ code: 'bad-request' });
+    await other.send(seek({ id, name: NAME_B, secret: undefined }));
+    expect(other.all('error')).toHaveLength(2);
     expect(other.last('posted')).toBeUndefined();
     // The poster may post again under its own id (a reconnection that raced the old socket).
-    await back.send(seek({ id, private: true, tc: '3+2' }));
+    await back.send(seek({ id, secret, private: true, tc: '3+2' }));
     expect(back.last('posted')).toMatchObject({ seek: { id, tc: '3+2' } });
     // The link still leads to the poster.
     const friend = new Client((s) => w.hub.openLobby(s));
     await friend.send({ t: 'join', seek: id, name: NAME_B, rating: null });
     expect(back.last('paired')).toMatchObject({ tc: '3+2', opponent: { name: NAME_B } });
     expect(friend.last('paired')).toMatchObject({ opponent: { name: NAME_A } });
-    // Something that is not an id is replaced by one of the relay's own.
-    const odd = new Client((s) => w.hub.openLobby(s));
-    await odd.send(seek({ id: 'not-an-id', private: true }));
-    const made = (odd.last('posted')!.seek as { id: string }).id;
-    expect(made).toMatch(/^[A-Za-z0-9_-]{22}$/);
   });
 
   it('says when a game to join is gone, and drops a seek with its socket', async () => {
@@ -219,6 +227,7 @@ describe('the waiting room', () => {
     await a.send(seek());
     const id = (a.last('posted')!.seek as { id: string }).id;
     await a.leave();
+    await w.listed();
     expect(b.last('lobby')).toMatchObject({ seeks: [], players: 1 });
     await b.send({ t: 'join', seek: id, name: NAME_B, rating: null });
     expect(b.last('gone')).toEqual({ t: 'gone', seek: id });

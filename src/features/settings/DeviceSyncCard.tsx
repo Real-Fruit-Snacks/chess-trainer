@@ -255,8 +255,9 @@ function DeviceSync() {
           {stoppedBecause === 'deleted' ? (
             <Alert tone="warning">
               <p style={{ margin: 0 }} data-testid="sync-stopped">
-                The synced copy was deleted — from another device, or after a year unused — so this
-                device stopped syncing. Everything on it is still here.
+                The synced copy was deleted — from another device, or by the sync service after it
+                went unused — so this device stopped syncing. Everything on it is still here. Turn
+                sync on again to make a new synced copy.
               </p>
               <div className="row" style={{ marginTop: 8 }}>
                 <Button size="sm" onClick={() => useDeviceSyncStore.getState().clearStopped()}>

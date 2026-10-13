@@ -14,6 +14,7 @@ import type {
   DurableStorage,
   LiveEnv,
 } from './src/live/cloudflare.mjs';
+import { BROADCAST_MS } from './src/live/lobby.mjs';
 import { CLOSE, DAY_MS, LIMITS, randomId } from './src/live/shared.mjs';
 import {
   acceptKey,
@@ -53,6 +54,7 @@ function seek(over: Partial<Message> = {}): Message {
     name: NAME_A,
     rating: 1500,
     private: false,
+    secret: randomId(32),
     ...over,
   };
 }
@@ -897,16 +899,23 @@ describe('live games on Cloudflare', () => {
   });
 
   it('hears of a socket’s end once: its seek goes, and its player is gone from the game', async () => {
+    // The waiting room sends its list at most twice a second, by a timer.
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(T0);
+    const listed = () => vi.advanceTimersByTimeAsync(BROADCAST_MS);
     const { lobby, a, b, room, state, pa, pb } = await pairOnCloudflare();
     const c = new FakeSocket();
     lobby.accept(c);
     await lobby.webSocketMessage(c, JSON.stringify(seek({ tc: '3+0', name: 'Quiet Rook' })));
+    await listed();
     expect(a.last('lobby')).toMatchObject({ seeks: [{ name: 'Quiet Rook' }], players: 3 });
     c.leave();
     lobby.webSocketClose(c, 1001, '', true);
+    await listed();
     expect(a.last('lobby')).toMatchObject({ seeks: [], players: 2 });
     const heard = a.all('lobby').length;
     lobby.webSocketError(c, new Error('Gone.'));
+    await listed();
     expect(a.all('lobby')).toHaveLength(heard);
     expect(b.last('lobby')).toMatchObject({ players: 2 });
     // A close the runtime has not answered yet is answered with the client's own code.
@@ -916,10 +925,12 @@ describe('live games on Cloudflare', () => {
     lobby.accept(plain);
     lobby.webSocketClose(polite, 4000, 'Bye.', true);
     lobby.webSocketClose(plain, 1005, '', true);
+    await listed();
     expect(polite.closedWith).toEqual({ code: 4000, reason: '' });
     expect(plain.closedWith).toEqual({ code: 1000, reason: '' });
     expect(a.last('lobby')).toMatchObject({ players: 2 });
 
+    vi.setSystemTime(T0);
     const white = await seated(room, pa.seat);
     const black = await seated(room, pb.seat);
     await room.webSocketMessage(white, JSON.stringify({ t: 'move', uci: 'e2e4', ply: 0 }));
@@ -1086,7 +1097,14 @@ describe('live games on Cloudflare', () => {
     const cf = fakeCloudflare();
     const lobbyState = new FakeState();
     const lobby = new LiveLobby(lobbyState, cf.env);
-    const { room, state } = cf.roomOf(randomId(16));
+    const id = randomId(16);
+    const { room, state } = cf.roomOf(id);
+    // A room with a game in it (one with none closes a socket at once: live-room-limits.test.ts).
+    const seat = (n: string) => ({ name: n, rating: null, seatHash: 'a'.repeat(64) });
+    const spec = { id, tc: '5+3', white: seat(NAME_A), black: seat(NAME_B) };
+    await room.fetch(
+      new Request('https://live.internal/create', { method: 'POST', body: JSON.stringify(spec) }),
+    );
     const headers = { Upgrade: 'websocket', 'CF-Connecting-IP': '203.0.113.7' };
     const toLobby = new Request('https://relay.test/v1/lobby', { headers });
     const toRoom = new Request(`https://relay.test/v1/games/${randomId(16)}`, { headers });
@@ -1103,14 +1121,19 @@ describe('live games on Cloudflare', () => {
     expect(server.deserializeAttachment()).toMatchObject({ address: '203.0.113.7', seek: null });
     expect(server.last('lobby')).toMatchObject({ players: 1 });
 
-    // A room's socket has a while to say which seat it is.
+    // A room's socket has a while to say which seat it is; the room counts it by its address.
     expect(roomAnswer.init.status).toBe(101);
-    expect(state.sockets[0].deserializeAttachment()).toMatchObject({ seat: null, openedAt: T0 });
+    expect(state.sockets[0].deserializeAttachment()).toMatchObject({
+      seat: null,
+      openedAt: T0,
+      address: '203.0.113.7',
+    });
     expect(state.storage.alarm).toBe(T0 + LIMITS.helloMs);
     at(LIMITS.helloMs);
     await room.alarm();
     expect(state.sockets[0].closedWith?.code).toBe(CLOSE.noHello);
-    expect(state.storage.alarm).toBeNull();
+    // Then the game's own deadline: White's first move.
+    expect(state.storage.alarm).toBe(T0 + LIMITS.firstMoveMs);
   });
 });
 

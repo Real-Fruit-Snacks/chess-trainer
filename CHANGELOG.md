@@ -6,6 +6,53 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.1] - 2026-10-13
+
+The relay is harder to abuse. Nobody could read another learner's data or take their seat before;
+now no single connection or address can fill the relay's database or spend its free daily
+allowances for everyone either.
+
+### Security
+
+- **Sync: limits on new synced copies.** One address may make 5 synced copies a day and everyone
+  together 50, and none is made once the relay's database reaches 400 MB, so the copies already
+  there keep room to grow. Before, a script could fill the database in a few hundred requests, and
+  the copies would have been kept for a year. An IPv6 address counts by its /64, the smallest block
+  a home or phone is given. The counts are kept under a hash of the address with a salt replaced
+  every day, and deleted within two days: the relay still stores no address. A relay that is full
+  says so without spending anyone's allowance.
+- **Sync: limits on writes.** A synced copy takes 1,000 changes a day (a learner's busiest day
+  makes a few hundred), so one copy cannot spend the database's daily writes. Each change is also
+  half as costly to the relay's allowance as before. A copy never changed after it was made is
+  deleted after 30 days unused, not a year.
+- **Reminders.** One address may set up 5 daily reminders a day.
+- **Live games: the waiting room.** What one address makes (120 games paired, 5 correspondence
+  invitations and 10 group rooms an hour) is counted in the waiting room's own storage, so
+  connecting again no longer starts the count over. One address may have 5 games waiting, and
+  private games have their own limit (300) apart from the 100 listed. A waiting game's id is now
+  made from a secret only the poster's device holds, so nobody else can take its link over, even
+  while the poster reconnects or after the relay restarts. The list of games goes out at most
+  twice a second, and only when it changed.
+- **Live games: the rooms.** A game or group room writes only what changed, so refused messages,
+  repeated offers and steps to where the analysis already is cost the relay nothing; before, one
+  connection could spend a day's writes in under an hour. A room takes 12 connections from one
+  address and 6 on one seat, and at most 20 that have not yet said who they are (one more pushes
+  the oldest of those out, so they cannot keep a player out of their own game). A connection
+  refused more than 10 times in a minute is closed, and one to a game that is not there writes
+  nothing.
+- **Behind a firewall.** The relay's README explains how to put it on a domain of your own behind
+  Cloudflare's rate limiting, the one guard against a flood of requests from many addresses.
+
+### Changed
+
+- **Sync waits out a daily limit.** When the relay says a limit lasts until tomorrow, the sync
+  card says so and when syncing resumes, and the device stops asking until then (_Sync now_ still
+  tries). Turning sync on when the relay takes no more new copies says why.
+- **Daily reminders** say when this network has set up all the reminders it may today, or the
+  relay asks to wait a minute, rather than that the relay could not be reached.
+- **A game in a seventh tab** waits to connect until one of the six before it closes.
+- **Rematches.** After 30 in a row, a new game starts from Play; the result dialog says so.
+
 ## [0.31.0] - 2026-10-12
 
 Chess Trainer is now **Open File**: a name of its own, and an icon to go with it.

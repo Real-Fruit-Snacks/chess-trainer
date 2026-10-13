@@ -220,6 +220,22 @@ describe('the daily reminder', () => {
       await saveReminder(17, { endpoint: 'https://fcm.googleapis.com/fcm/send/x', keys: KEYS }),
     ).toBe('failed');
   });
+
+  it('tells the limit until tomorrow from a wait of a minute', async () => {
+    pushRelay();
+    const subscription = { endpoint: 'https://fcm.googleapis.com/fcm/send/x', keys: KEYS };
+    const refuse = (seconds: string) =>
+      vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          new Response('{}', { status: 429, headers: { 'Retry-After': seconds } }),
+        );
+    refuse('7200');
+    expect(await saveReminder(17, subscription)).toBe('limited');
+    refuse('60');
+    expect(await saveReminder(17, subscription)).toBe('busy');
+    expect(reminderToken()).toBeNull();
+  });
 });
 
 describe('what this browser can do', () => {

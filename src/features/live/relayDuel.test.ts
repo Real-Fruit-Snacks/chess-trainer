@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type FakeLiveRelay, installFakeLiveRelay, type Message } from '@/test/fakeLiveHub';
-import { DUEL_RULES } from '../../../relay/src/live/shared.mjs';
+import { DUEL_RULES, randomId } from '../../../relay/src/live/shared.mjs';
 import { createRelayDuel, type PrepareDuel } from './relayDuel';
 import { seatOf } from './seats';
 import type { DuelItems, DuelSession, GameOptions } from './types';
@@ -44,8 +44,8 @@ async function newDuel(game: string, opts: GameOptions, { host = true } = {}) {
   const first = relay.lobbyClient();
   const second = relay.lobbyClient();
   const seek = { t: 'seek', game, opts, rating: null, private: false };
-  await first.send({ ...seek, name: host ? ME : THEM });
-  await second.send({ ...seek, name: host ? THEM : ME });
+  await first.send({ ...seek, name: host ? ME : THEM, secret: randomId(32) });
+  await second.send({ ...seek, name: host ? THEM : ME, secret: randomId(32) });
   const [mine, theirs] = host ? [first, second] : [second, first];
   const id = mine.last('paired')!.game as string;
   const opponent = relay.roomClient(id);

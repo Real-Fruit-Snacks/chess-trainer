@@ -14,7 +14,13 @@ import {
   chess960StartFen as relayStartFen,
 } from '../../../relay/src/live/chess960.mjs';
 import { endOf, playUci, replay } from '../../../relay/src/live/rules.mjs';
-import { analysisRoomId, CLOSE, LIMITS, randomId } from '../../../relay/src/live/shared.mjs';
+import {
+  ABUSE_LIMITS,
+  analysisRoomId,
+  CLOSE,
+  LIMITS,
+  randomId,
+} from '../../../relay/src/live/shared.mjs';
 import {
   CHESS960_POSITIONS,
   Chess960Game,
@@ -52,8 +58,25 @@ afterEach(() => {
 async function newGame(color: 'white' | 'black' = 'white', tc = '5+3') {
   const mine = relay.lobbyClient();
   const theirs = relay.lobbyClient();
-  await mine.send({ t: 'seek', tc, color, name: ME, rating: 1500, private: false });
-  await theirs.send({ t: 'seek', tc, color: 'random', name: THEM, rating: null, private: false });
+  const secret = () => randomId(32);
+  await mine.send({
+    t: 'seek',
+    tc,
+    color,
+    name: ME,
+    rating: 1500,
+    private: false,
+    secret: secret(),
+  });
+  await theirs.send({
+    t: 'seek',
+    tc,
+    color: 'random',
+    name: THEM,
+    rating: null,
+    private: false,
+    secret: secret(),
+  });
   const paired = mine.last('paired')!;
   const game = paired.game as string;
   const opponent = relay.roomClient(game);
@@ -490,6 +513,27 @@ describe('a game on the relay', () => {
     expect(second.session.getView()).toMatchObject({ missing: true, connection: 'closed' });
   });
 
+  it('tries again as usual when its seat is open in all the tabs it takes, and gets in once one goes', async () => {
+    vi.useFakeTimers();
+    const { game, seat } = await newGame('white');
+    const tabs = [];
+    for (let i = 0; i < ABUSE_LIMITS.socketsPerSeat; i++) {
+      const tab = relay.roomClient(game);
+      await tab.send({ t: 'hello', seat });
+      tabs.push(tab);
+    }
+    const { session } = open(game, seat);
+    await relay.settle();
+    // Refused as a full room is: the other tabs keep their sockets, and this one waits.
+    expect(relay.sockets.at(-1)!.closeCode).toBe(CLOSE.full);
+    expect(session.getView()).toMatchObject({ connection: 'connecting', missing: false });
+    expect(tabs.every((tab) => tab.closed === null)).toBe(true);
+    await tabs[0]!.leave();
+    await vi.advanceTimersByTimeAsync(1200);
+    await relay.settle();
+    expect(session.getView()).toMatchObject({ connection: 'open', you: 'white', error: null });
+  });
+
   it('stays away once closed', async () => {
     const { game, seat } = await newGame('white');
     const { session } = open(game, seat);
@@ -515,8 +559,8 @@ async function newVariant(
   const mine = relay.lobbyClient();
   const theirs = relay.lobbyClient();
   const seek = { t: 'seek', game, opts, tc: '5+3', rating: null, private: false };
-  await mine.send({ ...seek, color: 'white', name: ME });
-  await theirs.send({ ...seek, color: 'random', name: THEM });
+  await mine.send({ ...seek, color: 'white', name: ME, secret: randomId(32) });
+  await theirs.send({ ...seek, color: 'random', name: THEM, secret: randomId(32) });
   const paired = mine.last('paired')!;
   const id = paired.game as string;
   const opponent = relay.roomClient(id);

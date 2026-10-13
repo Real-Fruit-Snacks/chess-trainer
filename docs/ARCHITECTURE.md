@@ -1048,11 +1048,17 @@ is the only key, shown as a recovery phrase, and a tiny relay keeps one sealed f
 - **Relay** (`relay/src/handler.mjs`, platform-free; `worker.mjs` for Cloudflare with `d1Store.mjs`,
   `server.mjs` for Node with `sqliteStore.mjs`). `GET/PUT/DELETE /v1/vaults/:id` with ETag
   concurrency (`If-None-Match: *` creates), 1.4 MB per vault (base64 in a D1 row of at most 2 MB),
-  one write per second per vault, CORS for the app's origin, no logs; a daily cron deletes vaults
-  unused for a year. A body is read as it arrives and refused (`413`) once past the limit, whatever
-  its `Content-Length` says. The Worker's base64 is `node:buffer`'s (the `nodejs_compat` flag):
-  JavaScript base64 of a full vault would spend the free plan's 10 ms of CPU many times over. An
-  optional rate-limit binding, `NEW_VAULTS`, caps the vaults each address can create.
+  one write per second and 1,000 a day per vault, CORS for the app's origin, no logs; a daily cron
+  deletes vaults unused for a year (never changed after they were made: 30 days) and the day-old
+  counts. A body is read as it arrives and refused (`413`) once past the limit, whatever its
+  `Content-Length` says. The Worker's base64 is `node:buffer`'s (the `nodejs_compat` flag):
+  JavaScript base64 of a full vault would spend the free plan's 10 ms of CPU many times over.
+  Limits against abuse (`DEFAULT_LIMITS` in `handler.mjs`): 5 new vaults a day per address (an
+  IPv6 address by its /64, `address.mjs`), 50 a day in all, none past 400 MB of database; the
+  counts are kept in D1 under a salted hash of the address (`quota.mjs`), so they hold across
+  isolates and locations. The app reads a long `Retry-After` as a limit until tomorrow
+  (`RelayError` `limited`, the sync's `limited` phase) and waits it out. An optional rate-limit
+  binding, `NEW_VAULTS`, adds a limit a minute.
   `relay/README.md` covers its API, deployment and what it can see.
 - **Tests.** `relay/relay.test.ts` runs the handler over every store (D1 through a stand-in over
   `node:sqlite`). The app's unit tests run the real relay behind a `fetch` stub
@@ -1076,13 +1082,17 @@ who are away.
   game's kind, and a Chess960 game is `chess960.mjs`'s. `lobby.mjs` is the waiting room: one seek
   per socket, living as long as the socket; a public seek that matches one already waiting (the
   same game, options and time control, colours that fit) is paired with the oldest at once; any
-  seek can be joined by its id. Pairing makes the room, under a new random id, with the hashes of
+  seek can be joined by its id, which is the SHA-256 of a secret only the poster's device holds
+  (`seekIdOf`), so only that device can post the seek again, after a reconnection or a restart.
+  What one address makes is counted for the hour in the waiting room's own storage, under a salted
+  hash. Pairing makes the room, under a new random id, with the hashes of
   two new seat tokens and sends each player their own. `room.mjs` is one game: seats taken only
   with a token, legal moves only on the mover's turn, the clocks kept by the room (they start with
   Black's first move; each side's first move has 45 seconds), offers that lapse with a move,
   takebacks of one move or two (never past the first moves), claims against a player gone 30
   seconds, rematches with the colours swapped. Times go out as durations, never the relay's clock.
-  Events run one at a time; every change is stored, and the room's next deadline (a flag, a first
+  Events run one at a time; every change is stored (only when the state differs from what was
+  last written, so refusals and repeats write nothing), and the room's next deadline (a flag, a first
   move, a socket's hello, a draft's or a round's end, a correspondence deadline, an invitation's
   expiry, its own end) is its one timer. Who hears what is explicit: `tell(make)` reaches each
   player with their own message, `show(message)` the watchers, `announce(message)` both.
@@ -1123,7 +1133,7 @@ who are away.
   game to watch.
 - **Correspondence.** A time control of days (`1d` … `14d`; `parseTimeControl` gives its
   `perMoveMs`) is offered only for `CORRESPONDENCE_GAMES` (chess and Chess960), and only by
-  invitation: the waiting room's `create` (5 an hour from a socket) makes the room at once with the
+  invitation: the waiting room's `create` (5 an hour from an address) makes the room at once with the
   poster's seat and an open one. Whoever has the link watches until they send `join`; the room
   takes one message at a time, so the first gets the seat, its token to that socket alone. Each
   move gives the mover's days back and starts the other's; a deadline that passes is a loss on

@@ -11,7 +11,14 @@ import {
   type RelayClient,
   stubHealth,
 } from '@/test/fakeLiveHub';
-import { LIMITS, MIN_RATING, parseTimeControl } from '../../../relay/src/live/shared.mjs';
+import { BROADCAST_MS } from '../../../relay/src/live/lobby.mjs';
+import {
+  LIMITS,
+  MIN_RATING,
+  parseTimeControl,
+  randomId,
+  seekIdOf,
+} from '../../../relay/src/live/shared.mjs';
 
 vi.mock('./lichessLive', () => ({
   checkLichessLive: vi.fn(),
@@ -42,7 +49,6 @@ import {
   LINGER_MS,
   type LobbyStore,
   NOT_ALLOWED_MESSAGE,
-  REPOST_RETRY_MS,
   UNAVAILABLE_NOTICE,
 } from './lobby';
 import { useLivePrefs } from './prefs';
@@ -89,7 +95,10 @@ const lobbySocket = () => relay.openSockets('/v1/lobby')[0];
 const sentToLobby = (): Message[] =>
   relay.sockets.filter((s) => s.path === '/v1/lobby').flatMap((s) => s.sentMessages());
 
-/** Another player in the waiting room, with a game posted. */
+/** Lets the relay's list go out: it goes to everyone at most once in `BROADCAST_MS`. */
+const listed = () => relay.advance(BROADCAST_MS);
+
+/** Another player in the waiting room, with a game posted (and listed). */
 async function otherPlayer(seek: Partial<Message> = {}): Promise<RelayClient> {
   const other = relay.lobbyClient();
   await other.send({
@@ -99,11 +108,15 @@ async function otherPlayer(seek: Partial<Message> = {}): Promise<RelayClient> {
     name: THEM,
     rating: null,
     private: false,
+    secret: randomId(32),
     ...seek,
   });
-  await relay.settle();
+  await listed();
   return other;
 }
+
+/** A post's secret, as the app makes them (32 random bytes). */
+const SECRET = expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) as string;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -191,6 +204,7 @@ describe('the waiting room', () => {
     await relay.settle();
     expect(state()).toMatchObject({ connection: 'idle', seeks: [], players: 0 });
     expect(relay.openSockets()).toHaveLength(0);
+    await listed();
     expect(other.last('lobby')).toMatchObject({ players: 1 });
   });
 
@@ -200,7 +214,7 @@ describe('the waiting room', () => {
     const other = await otherPlayer({ tc: '3+0' });
     // The other game waited longer: it is listed first.
     await relay.advance(1000);
-    post({ tc: '5+3', color: 'white', private: false });
+    await post({ tc: '5+3', color: 'white', private: false });
     const mine = state().mine!;
     expect(mine).toMatchObject({
       tc: '5+3',
@@ -224,7 +238,11 @@ describe('the waiting room', () => {
       name: ME,
       rating: 1524,
       private: false,
+      secret: SECRET,
     });
+    // The id is the secret's (the relay checks it), as the link shared is.
+    expect(await seekIdOf(sentToLobby().at(-1)!.secret as string)).toBe(mine.id);
+    await listed();
     expect(other.last('lobby')!.seeks).toEqual([
       expect.objectContaining({ tc: '3+0', name: THEM }),
       {
@@ -242,7 +260,7 @@ describe('the waiting room', () => {
 
     state().cancel();
     expect(state().mine).toBeNull();
-    await relay.settle();
+    await listed();
     expect(other.last('lobby')!.seeks).toHaveLength(1);
     expect(useLiveBar.getState().active).toBe(false);
     release();
@@ -250,7 +268,7 @@ describe('the waiting room', () => {
 
   it('stays connected while its game waits, wherever the player goes', async () => {
     vi.useFakeTimers();
-    post({ private: true });
+    await post({ private: true });
     expect(state().connection).toBe('connecting');
     await relay.settle();
     expect(state().mine?.relay).toBe('posted');
@@ -266,18 +284,18 @@ describe('the waiting room', () => {
 
   it('shows a rating only when asked, within the relay’s range', async () => {
     useProgress.setState({ puzzleRating: 40 });
-    post();
+    await post();
     await relay.settle();
     expect(sentToLobby().at(-1)).toMatchObject({ rating: MIN_RATING });
     useLivePrefs.getState().update({ showRating: false });
-    post();
+    await post();
     await relay.settle();
     expect(sentToLobby().at(-1)).toMatchObject({ rating: null });
   });
 
   it('pairs at once with a matching game, and keeps the seat', async () => {
     const other = await otherPlayer({ tc: '5+3' });
-    post({ tc: '5+3' });
+    await post({ tc: '5+3' });
     await relay.settle();
     const pairing = state().pairing!;
     expect(pairing).toMatchObject({
@@ -297,7 +315,7 @@ describe('the waiting room', () => {
   });
 
   it('posts a duel with its options, hosts it, and goes to the duel’s page when paired', async () => {
-    post({ game: 'race', opts: { format: 'window', level: 1500 }, tc: null, color: 'black' });
+    await post({ game: 'race', opts: { format: 'window', level: 1500 }, tc: null, color: 'black' });
     expect(state().mine).toMatchObject({
       game: 'race',
       opts: { format: 'window', level: 1500 },
@@ -322,6 +340,7 @@ describe('the waiting room', () => {
       name: THEM,
       rating: null,
       private: false,
+      secret: randomId(32),
     });
     await relay.settle();
     const pairing = state().pairing!;
@@ -340,7 +359,7 @@ describe('the waiting room', () => {
     useLichess.setState({
       account: { id: 'me', username: 'Me', token: 't', connectedAt: 1, expiresAt: null },
     });
-    post({ game: 'army', opts: { budget: 20 }, tc: '10+0', lichess: { rated: false } });
+    await post({ game: 'army', opts: { budget: 20 }, tc: '10+0', lichess: { rated: false } });
     await relay.settle();
     expect(state().mine).toMatchObject({
       game: 'army',
@@ -364,7 +383,7 @@ describe('the waiting room', () => {
     expect(state().seeks).toEqual([
       expect.objectContaining({ game: 'judge', opts: {}, tc: null, name: THEM }),
     ]);
-    post({ game: 'arbiter', opts: { pace: 'fast' } as never, tc: null });
+    await post({ game: 'arbiter', opts: { pace: 'fast' } as never, tc: null });
     expect(state().notice).toBe('That game cannot be posted.');
     expect(state().mine).toBeNull();
     release();
@@ -389,19 +408,36 @@ describe('the waiting room', () => {
     expect(state().notice).toBe(GONE_NOTICE);
   });
 
+  it('puts up the last of posts made at once, and nothing cancelled while its key was made', async () => {
+    // The second post's key is still being made (one is made ahead): it waits for it.
+    const first = post({ tc: '3+0' });
+    const second = post({ tc: '5+3' });
+    await Promise.all([first, second]);
+    expect(state().mine).toMatchObject({ tc: '5+3', relay: 'posting' });
+    await relay.settle();
+    expect(state().mine).toMatchObject({ tc: '5+3', relay: 'posted' });
+    const third = post({ tc: '10+0' });
+    const fourth = post({ tc: '15+10' });
+    state().cancel();
+    await Promise.all([third, fourth]);
+    await relay.settle();
+    expect(state().mine).toBeNull();
+    expect(sentToLobby().at(-1)).toEqual({ t: 'cancel' });
+  });
+
   it('will not join its own game, and refuses a game that cannot be posted', async () => {
-    post({ private: true });
+    await post({ private: true });
     await relay.settle();
     state().join(state().mine!.id);
     expect(state().notice).toMatch(/you posted/);
     state().clearNotice();
-    post({ tc: '0+0' });
+    await post({ tc: '0+0' });
     expect(state().notice).toBe('That game cannot be posted.');
   });
 
   it('posts the game again under the same id after a dropped connection, so its link works', async () => {
     vi.useFakeTimers();
-    post({ private: true });
+    await post({ private: true });
     await relay.settle();
     const id = state().mine!.id;
     relay.drop(lobbySocket()!);
@@ -411,10 +447,10 @@ describe('the waiting room', () => {
     await relay.settle();
     expect(state().connection).toBe('open');
     expect(state().mine).toMatchObject({ id, relay: 'posted' });
-    expect(sentToLobby().filter((m) => m.t === 'seek')).toEqual([
-      expect.objectContaining({ id }),
-      expect.objectContaining({ id }),
-    ]);
+    // The same id and the same secret, both times.
+    const [first, again] = sentToLobby().filter((m) => m.t === 'seek');
+    expect(first).toMatchObject({ id, secret: SECRET });
+    expect(again).toMatchObject({ id, secret: first!.secret });
     // The link shared before the drop still finds the game.
     const friend = relay.lobbyClient();
     await friend.send({ t: 'join', seek: id, name: THEM, rating: null });
@@ -422,9 +458,9 @@ describe('the waiting room', () => {
     expect(state().pairing).toMatchObject({ source: 'relay', opponent: { name: THEM } });
   });
 
-  it('keeps trying to post again while the relay still holds the game under the lost socket', async () => {
+  it('takes its game back at once while the relay still holds it under the lost socket', async () => {
     vi.useFakeTimers();
-    post({ private: true });
+    await post({ private: true });
     await relay.settle();
     const id = state().mine!.id;
     const lost = lobbySocket()!;
@@ -434,17 +470,41 @@ describe('the waiting room', () => {
     await vi.advanceTimersByTimeAsync(1200);
     await relay.settle();
     expect(state().connection).toBe('open');
-    // Refused (the id is held), quietly tried again.
-    expect(state().mine).toMatchObject({ id, relay: 'posting' });
+    // The secret proves the game this device's: the relay hands it over from the lost socket.
+    expect(state().mine).toMatchObject({ id, relay: 'posted' });
     expect(state().notice).toBeNull();
-    await vi.advanceTimersByTimeAsync(REPOST_RETRY_MS);
+    const friend = relay.lobbyClient();
+    await friend.send({ t: 'join', seek: id, name: THEM, rating: null });
     await relay.settle();
-    expect(state().mine?.relay).toBe('posting');
-    relay.forget(lost);
+    expect(state().pairing).toMatchObject({ source: 'relay', opponent: { name: THEM } });
+    expect(lobbySocket()).not.toBe(lost);
+  });
+
+  it('makes a new secret for each game, and nobody else can post under its id', async () => {
+    vi.useFakeTimers();
+    await post({ private: true });
     await relay.settle();
-    await vi.advanceTimersByTimeAsync(REPOST_RETRY_MS);
+    const id = state().mine!.id;
+    const stranger = relay.lobbyClient();
+    // The id is the secret's: without the secret, nobody else can post under it.
+    expect(await seekIdOf(sentToLobby().at(-1)!.secret as string)).toBe(id);
+    const theirs = { t: 'seek', id, tc: '10+0', color: 'random', name: THEM, private: true };
+    await stranger.send(theirs);
+    expect(stranger.last('error')).toMatchObject({ message: 'That game cannot be posted.' });
+    // Not once the game is gone from the relay either.
+    relay.drop(lobbySocket()!);
+    await relay.settle();
+    await stranger.send({ ...theirs, secret: randomId(32) });
+    expect(stranger.last('posted')).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1200);
     await relay.settle();
     expect(state().mine).toMatchObject({ id, relay: 'posted' });
+    await post({ private: true });
+    await relay.settle();
+    const seeks = sentToLobby().filter((m) => m.t === 'seek');
+    expect(seeks.at(-1)!.secret).toEqual(SECRET);
+    expect(seeks.at(-1)!.secret).not.toBe(seeks[0]!.secret);
+    expect(seeks.at(-1)!.id).not.toBe(id);
   });
 
   it('pings every 25 seconds and gives up a connection that has gone quiet', async () => {
@@ -515,7 +575,7 @@ describe('the waiting room', () => {
       const without = createLobbyStore();
       expect(without.getState().connection).toBe('unavailable');
       const release = without.getState().watch();
-      without.getState().post({ tc: '5+3', color: 'random', private: false, lichess: null });
+      await without.getState().post({ tc: '5+3', color: 'random', private: false, lichess: null });
       expect(without.getState().mine?.relay).toBe('failed');
       without.getState().join('a'.repeat(22));
       expect(without.getState().notice).toBe(UNAVAILABLE_NOTICE);
@@ -531,7 +591,7 @@ describe('the waiting room', () => {
     stubHealth(false);
     relay.offline = true;
     state().watch();
-    post();
+    await post();
     await relay.settle();
     expect(state().connection).toBe('unavailable');
     expect(state().mine?.relay).toBe('failed');
@@ -564,7 +624,7 @@ describe('looking on Lichess as well', () => {
   });
 
   it('keeps faster games here only', async () => {
-    post({ tc: '3+2', lichess: { rated: false } });
+    await post({ tc: '3+2', lichess: { rated: false } });
     expect(state().mine?.lichess).toEqual({
       status: 'not-allowed',
       rated: false,
@@ -578,19 +638,19 @@ describe('looking on Lichess as well', () => {
 
   it('says what stands in the way: permission, sign-in, the connection', async () => {
     vi.mocked(checkLichessLive).mockResolvedValueOnce('needs-permission');
-    post({ lichess: { rated: true } });
+    await post({ lichess: { rated: true } });
     expect(state().mine?.lichess.status).toBe('checking');
     await flush();
     expect(state().mine?.lichess).toMatchObject({ status: 'needs-permission', rated: true });
     expect(state().mine?.lichess.message).toMatch(/Lichess/);
 
     vi.mocked(checkLichessLive).mockResolvedValueOnce('signed-out');
-    post({ lichess: { rated: false } });
+    await post({ lichess: { rated: false } });
     await flush();
     expect(state().mine?.lichess.status).toBe('signed-out');
 
     vi.mocked(checkLichessLive).mockResolvedValueOnce('offline');
-    post({ lichess: { rated: false } });
+    await post({ lichess: { rated: false } });
     await flush();
     expect(state().mine?.lichess).toMatchObject({
       status: 'failed',
@@ -599,12 +659,12 @@ describe('looking on Lichess as well', () => {
 
     // Without a Lichess account at all.
     useLichess.setState({ account: null });
-    post({ lichess: { rated: false } });
+    await post({ lichess: { rated: false } });
     expect(state().mine?.lichess.status).toBe('signed-out');
     expect(startLichessSeek).not.toHaveBeenCalled();
     // A game for people with the link never goes to Lichess.
     useLichess.setState({ account });
-    post({ private: true, lichess: { rated: false } });
+    await post({ private: true, lichess: { rated: false } });
     await flush();
     expect(state().mine?.lichess.status).toBe('off');
   });
@@ -613,7 +673,7 @@ describe('looking on Lichess as well', () => {
     const lichess = lichessSeek();
     vi.mocked(startLichessSeek).mockReturnValue(lichess.seek);
     const other = relay.lobbyClient();
-    post({ tc: '10+0', color: 'white', lichess: { rated: true } });
+    await post({ tc: '10+0', color: 'white', lichess: { rated: true } });
     await relay.settle();
     expect(startLichessSeek).toHaveBeenCalledWith({
       tc: parseTimeControl('10+0'),
@@ -624,6 +684,7 @@ describe('looking on Lichess as well', () => {
     lichess.posted.resolve();
     await flush();
     expect(state().mine?.lichess).toMatchObject({ status: 'posted', rated: true });
+    await listed();
     expect(other.last('lobby')!.seeks).toHaveLength(1);
 
     lichess.started.resolve(lichessStart());
@@ -641,7 +702,7 @@ describe('looking on Lichess as well', () => {
     });
     expect(state().mine).toBeNull();
     expect(playSound).toHaveBeenCalledWith('notify');
-    await relay.settle();
+    await listed();
     expect(sentToLobby().at(-1)).toEqual({ t: 'cancel' });
     expect(other.last('lobby')!.seeks).toEqual([]);
     expect(lichess.seek.cancel).not.toHaveBeenCalled();
@@ -650,7 +711,7 @@ describe('looking on Lichess as well', () => {
   it('keeps the post here when Lichess fails, and takes no notice of its own withdrawal', async () => {
     const failing = lichessSeek();
     vi.mocked(startLichessSeek).mockReturnValueOnce(failing.seek);
-    post({ lichess: { rated: false } });
+    await post({ lichess: { rated: false } });
     await flush();
     failing.started.reject(new Error('Lichess refused the seek.'));
     await flush();
@@ -663,7 +724,7 @@ describe('looking on Lichess as well', () => {
 
     const withdrawn = lichessSeek();
     vi.mocked(startLichessSeek).mockReturnValueOnce(withdrawn.seek);
-    post({ lichess: { rated: false } });
+    await post({ lichess: { rated: false } });
     await flush();
     state().cancel();
     expect(withdrawn.seek.cancel).toHaveBeenCalled();
@@ -675,7 +736,7 @@ describe('looking on Lichess as well', () => {
   it('aborts a relay game paired after Lichess had already started one', async () => {
     const lichess = lichessSeek();
     vi.mocked(startLichessSeek).mockReturnValue(lichess.seek);
-    post({ tc: '10+0', lichess: { rated: false } });
+    await post({ tc: '10+0', lichess: { rated: false } });
     await relay.settle();
     lichess.posted.resolve();
     // Someone takes the post here at the same moment Lichess pairs it.
@@ -687,6 +748,7 @@ describe('looking on Lichess as well', () => {
       name: THEM,
       rating: null,
       private: false,
+      secret: randomId(32),
     });
     const relayGame = other.last('paired')!;
     lichess.started.resolve(lichessStart({ gameId: 'Race0001' }));
@@ -713,7 +775,7 @@ describe('looking on Lichess as well', () => {
   it('aborts a Lichess game that starts after the relay paired the post', async () => {
     const lichess = lichessSeek({ cancelAborts: false });
     vi.mocked(startLichessSeek).mockReturnValue(lichess.seek);
-    post({ tc: '10+0', private: false, lichess: { rated: false } });
+    await post({ tc: '10+0', private: false, lichess: { rated: false } });
     await relay.settle();
     lichess.posted.resolve();
     await flush();
@@ -734,9 +796,9 @@ describe('looking on Lichess as well', () => {
     const first = lichessSeek();
     const second = lichessSeek();
     vi.mocked(startLichessSeek).mockReturnValueOnce(first.seek).mockReturnValueOnce(second.seek);
-    post({ lichess: { rated: false } });
+    await post({ lichess: { rated: false } });
     await flush();
-    post({ tc: '15+10', lichess: { rated: true } });
+    await post({ tc: '15+10', lichess: { rated: true } });
     expect(first.seek.cancel).toHaveBeenCalled();
     await flush();
     expect(state().mine).toMatchObject({
@@ -753,7 +815,7 @@ describe('the relay’s limits', () => {
   it('shows what the relay refuses, once', async () => {
     state().watch();
     await relay.settle();
-    for (let i = 0; i <= LIMITS.rateMessages; i++) post({ private: true });
+    for (let i = 0; i <= LIMITS.rateMessages; i++) await post({ private: true });
     await relay.settle();
     expect(state().notice).toMatch(/Too many messages/);
   });

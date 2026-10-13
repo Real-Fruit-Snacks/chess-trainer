@@ -386,8 +386,10 @@ export const LIMITS = Object.freeze({
   /** Messages per socket in any `rateWindowMs`, beyond which the socket is closed. */
   rateMessages: 20,
   rateWindowMs: 10_000,
-  /** Open games in the waiting room at once (public and private). */
+  /** Public games waiting in the waiting room at once… */
   seeks: 100,
+  /** …and private ones (never listed), counted apart so that neither can fill the other. */
+  privateSeeks: 300,
   /** Sockets in the waiting room at once, and from one address. */
   lobbySockets: 2000,
   socketsPerAddress: 10,
@@ -415,7 +417,7 @@ export const LIMITS = Object.freeze({
   watchers: 20,
   /** A correspondence game's invitation waits this long for someone to take its open seat. */
   inviteMs: 7 * DAY_MS,
-  /** Invitations one socket may make in `invitesWindowMs`. */
+  /** Invitations one address may make in `invitesWindowMs`. */
   invites: 5,
   invitesWindowMs: 60 * 60_000,
   /** A correspondence game's room is kept this long after the end… */
@@ -440,6 +442,57 @@ export const CLOSE = Object.freeze({
 });
 
 /**
+ * The limits against abuse (README.md, "Abuse"): what one address, one seat and
+ * one socket may do, so that no one connection can use up the free plan's daily
+ * allowances (requests, rows written) for everyone.
+ */
+export const ABUSE_LIMITS = Object.freeze({
+  /** Refused messages one socket may send in `refusalWindowMs`; one more, and it is closed. */
+  refusals: 10,
+  refusalWindowMs: 60_000,
+  /**
+   * Sockets on one seat at once (a player's token in a game, a member's in a
+   * group room); one more is refused, and tries again later as the app does.
+   */
+  socketsPerSeat: 6,
+  /**
+   * Sockets yet to say hello in one room (a game's or a group's) at once; one
+   * more sends the oldest of them away, so that a player's own socket always gets in.
+   */
+  unsaid: 20,
+  /** Sockets one address may have open in one room at once. */
+  roomSocketsPerAddress: 12,
+  /** Rematches in a row from one pairing; then a new game is made from Play. */
+  rematches: 30,
+  /** Games one address may have waiting in the waiting room at once (public and private). */
+  seeksPerAddress: 5,
+  /**
+   * Games one address may be paired into in `pairingsWindowMs`: enough for a
+   * club playing blitz all evening behind one address.
+   */
+  pairings: 120,
+  pairingsWindowMs: 60 * 60_000,
+});
+
+/**
+ * Counts a refused message against its socket: true when the socket has been
+ * refused more than `ABUSE_LIMITS.refusals` times in `refusalWindowMs`, and is
+ * to be closed (`CLOSE.policy`). The count is kept in `data`, the socket's own
+ * data: save it (`conn.save()`) so that it outlives hibernation.
+ * @param {{ refused?: { start: number, count: number } }} data
+ * @param {number} now
+ */
+export function refusedTooOften(data, now) {
+  const window = data.refused;
+  if (!window || now - window.start >= ABUSE_LIMITS.refusalWindowMs) {
+    data.refused = { start: now, count: 1 };
+    return false;
+  }
+  window.count++;
+  return window.count > ABUSE_LIMITS.refusals;
+}
+
+/**
  * `bytes` random bytes in unpadded base64url: game, seek and seat ids.
  * @param {number} bytes
  */
@@ -452,8 +505,23 @@ export function randomId(bytes) {
 
 /** Game ids and seek ids: 16 random bytes (22 characters). */
 export const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
-/** Seat tokens: 32 random bytes (43 characters). */
+/** Seat tokens and seeks' secrets: 32 random bytes (43 characters). */
 export const SEAT_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+/**
+ * A seek's id, from the secret its poster made (`randomId(32)`): the first 16
+ * bytes of the secret's SHA-256, as an id. Only whoever holds the secret can
+ * post under the id, while the id (in the game's link, and in the list for a
+ * public game) gives the secret away to nobody.
+ * @param {string} secret
+ * @returns {Promise<string>}
+ */
+export async function seekIdOf(secret) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
+  let text = '';
+  for (const byte of new Uint8Array(digest).slice(0, 16)) text += String.fromCharCode(byte);
+  return btoa(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 /* ------------------------------------------------------------------ */
 /* Group rooms                                                        */

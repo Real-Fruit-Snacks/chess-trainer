@@ -18,6 +18,8 @@ export interface DurableStorage {
   deleteAll(): Promise<void>;
   setAlarm(at: number): Promise<void>;
   deleteAlarm(): Promise<void>;
+  /** When the alarm is set for (null: not set); without it, a woken room sets its alarm again. */
+  getAlarm?(): Promise<number | null>;
 }
 
 export interface DurableState {
@@ -49,7 +51,10 @@ export class LiveLobby {
   constructor(state: DurableState, env: LiveEnv);
   /** A WebSocket upgrade: 101 with the client's end of a new socket; 426 for anything else. */
   fetch(request: Request): Response;
-  /** Takes the object's end of a new socket: what `fetch` does, apart from the 101 response. */
+  /**
+   * Takes the object's end of a new socket: what `fetch` does, apart from the 101 response.
+   * `address`: the client's, counted by its /64 when it is an IPv6 one.
+   */
   accept(ws: DurableSocket, address?: string): void;
   webSocketMessage(ws: DurableSocket, message: string | ArrayBuffer): Promise<void>;
   webSocketClose(ws: DurableSocket, code?: number, reason?: string, wasClean?: boolean): void;
@@ -64,8 +69,11 @@ export class LiveRoom {
    * exists, 400 when it is not one. A WebSocket upgrade: 101. Anything else: 426.
    */
   fetch(request: Request): Promise<Response>;
-  /** Takes the object's end of a new socket: what `fetch` does, apart from the 101 response. */
-  accept(ws: DurableSocket): Promise<void>;
+  /**
+   * Takes the object's end of a new socket: what `fetch` does, apart from the 101 response
+   * (`address`, the client's, for the limit per address).
+   */
+  accept(ws: DurableSocket, address?: string): Promise<void>;
   webSocketMessage(ws: DurableSocket, message: string | ArrayBuffer): Promise<void>;
   webSocketClose(
     ws: DurableSocket,
@@ -74,7 +82,7 @@ export class LiveRoom {
     wasClean?: boolean,
   ): Promise<void>;
   webSocketError(ws: DurableSocket, error?: unknown): Promise<void>;
-  /** Something is due: a flag, a first move, a hello, or the room's end. */
+  /** Something is due: a flag, a first move, a hello, or the room's end (fails when not stored). */
   alarm(): Promise<void>;
 }
 
@@ -86,8 +94,11 @@ export class LiveGroup {
    * exists, 400 when it is not one. A WebSocket upgrade: 101. Anything else: 426.
    */
   fetch(request: Request): Promise<Response>;
-  /** Takes the object's end of a new socket: what `fetch` does, apart from the 101 response. */
-  accept(ws: DurableSocket): Promise<void>;
+  /**
+   * Takes the object's end of a new socket: what `fetch` does, apart from the 101 response
+   * (`address`, the client's, for the limit per address).
+   */
+  accept(ws: DurableSocket, address?: string): Promise<void>;
   webSocketMessage(ws: DurableSocket, message: string | ArrayBuffer): Promise<void>;
   webSocketClose(
     ws: DurableSocket,

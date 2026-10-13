@@ -350,7 +350,10 @@ export type LichessSeekStatus =
 
 /** The game this device has posted. */
 export interface MySeek {
-  /** Stays the same across reconnections: the relay's seek and the share link use it. */
+  /**
+   * Its secret's (`seekIdOf`), so it stays the same across reconnections: the relay's seek and
+   * the share link use it.
+   */
   id: string;
   game: GameKind;
   opts: GameOptions;
@@ -413,8 +416,11 @@ export interface LobbyState {
   notice: string | null;
   /** The waiting room page is showing: stay connected while the returned function is not called. */
   watch(): () => void;
-  /** Posts a game (replacing this device's posted one), or pairs with a matching one at once. */
-  post(options: PostOptions): void;
+  /**
+   * Posts a game (replacing this device's posted one), or pairs with a matching one at once.
+   * Done when it resolves: at once, unless the post's id (made ahead) is still being made.
+   */
+  post(options: PostOptions): Promise<void>;
   cancel(): void;
   /** Joins a posted game by its id (from the list, or from a shared link). */
   join(seekId: string): void;

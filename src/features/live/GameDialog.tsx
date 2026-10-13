@@ -171,7 +171,7 @@ export function GameDialog({
       useLobby.getState().invite({ game, tc, color });
       return;
     }
-    useLobby.getState().post({
+    void useLobby.getState().post({
       game,
       opts,
       tc: duel ? null : tc,

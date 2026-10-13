@@ -8,6 +8,7 @@ import {
   deviceSyncNeedsAttention,
   deviceSyncStatusLine,
   listOf,
+  resumesIn,
 } from './deviceSyncStatus';
 
 const NOW = 1_791_000_000_000;
@@ -41,10 +42,30 @@ describe('deviceSyncStatusLine', () => {
     expect(deviceSyncStatusLine(status({ phase: 'newer' }), NOW, NOW)).toMatch(/Update the app/);
   });
 
-  it('flags the states the learner has to act on', () => {
+  it('says when syncing carries on after a daily limit', () => {
+    const limited = status({
+      phase: 'limited',
+      error: 'The synced copy has taken all the changes it can for today.',
+      until: NOW + 3 * 60 * 60_000,
+    });
+    expect(deviceSyncStatusLine(limited, NOW - 60_000, NOW)).toBe(
+      'The synced copy has taken all the changes it can for today. Changes made here wait, and syncing carries on by itself in about 3 hours.',
+    );
+    expect(deviceSyncStatusLine(status({ phase: 'limited', until: null }), NOW, NOW)).toMatch(
+      /carries on by itself later\.$/,
+    );
+    expect(resumesIn(NOW + 20 * 60_000, NOW)).toBe('in 20 minutes');
+    expect(resumesIn(NOW + 30_000, NOW)).toBe('in a minute');
+    expect(resumesIn(NOW - 5_000, NOW)).toBe('in a minute');
+    expect(resumesIn(NOW + 70 * 60_000, NOW)).toBe('in about an hour');
+    expect(resumesIn(NOW + 20 * 60 * 60_000, NOW)).toBe('in about 20 hours');
+  });
+
+  it('flags the states the learner has to act on, or should know of', () => {
     expect(deviceSyncNeedsAttention(status({ phase: 'failed' }))).toBe(true);
     expect(deviceSyncNeedsAttention(status({ phase: 'newer' }))).toBe(true);
     expect(deviceSyncNeedsAttention(status({ phase: 'too-large' }))).toBe(true);
+    expect(deviceSyncNeedsAttention(status({ phase: 'limited' }))).toBe(true);
     expect(deviceSyncNeedsAttention(status({ phase: 'offline' }))).toBe(false);
     expect(deviceSyncNeedsAttention(status({ phase: 'done' }))).toBe(false);
   });

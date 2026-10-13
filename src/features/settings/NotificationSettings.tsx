@@ -42,7 +42,21 @@ function blockedText(here: NotificationsHere): string | null {
   }
 }
 
-const answerText = (answer: ReminderAnswer) => (answer === 'full' ? RELAY_FULL : NO_RELAY);
+const RELAY_LIMITED = 'Too many reminders were set up from this network today. Try again tomorrow.';
+const RELAY_BUSY = 'The relay asked to wait a moment. Try again in a minute.';
+
+function answerText(answer: ReminderAnswer) {
+  switch (answer) {
+    case 'full':
+      return RELAY_FULL;
+    case 'limited':
+      return RELAY_LIMITED;
+    case 'busy':
+      return RELAY_BUSY;
+    default:
+      return NO_RELAY;
+  }
+}
 
 /**
  * Settings → App → Notifications, for this device only: live games (shown by

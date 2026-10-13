@@ -22,6 +22,7 @@ import {
   forgetSyncBase,
   joinLink,
   joinSync,
+  LIMITED_MAX_WAIT_MS,
   START_DELAY_MS,
   stopSync,
   syncNow,
@@ -299,6 +300,118 @@ describe('syncing', () => {
     expect(useDeviceSync.getState()).toMatchObject({ phase: 'failed' });
     expect(useDeviceSync.getState().error).toMatch(/older copy/);
     expect(takeSnapshot().progress.attempts[0]?.id).toBe('n1');
+  });
+});
+
+describe('the relay’s daily limits', () => {
+  const HOUR = 60 * 60 * 1000;
+  /** The relay's clock: 21:00 UTC, three hours before its midnight. */
+  let relayNow = Date.UTC(2026, 9, 12, 21);
+
+  beforeEach(() => {
+    relayNow = Date.UTC(2026, 9, 12, 21);
+  });
+
+  /** A relay that takes one write a vault a day: making it is that write. */
+  async function writtenOut() {
+    relay.reconfigure({ limits: { vaultWritesPerDay: 1 }, now: () => relayNow });
+    await turnOn();
+    await afterStartUp(); // nothing to send
+    load(solvePuzzle(takeSnapshot(), 'n1', T));
+    relay.requests = [];
+    await syncNow();
+  }
+
+  it('waits out a limit on changes until the relay’s day ends, asking nothing meanwhile', async () => {
+    await writtenOut();
+    expect(relay.requests).toEqual([
+      { method: 'GET', status: 204 },
+      { method: 'PUT', status: 429 },
+    ]);
+    const status = useDeviceSync.getState();
+    expect(status).toMatchObject({
+      phase: 'limited',
+      error: 'The synced copy has taken all the changes it can for today.',
+    });
+    // Until the relay's midnight, three hours on.
+    const left = (status.until ?? 0) - Date.now();
+    expect(left).toBeGreaterThan(3 * HOUR - 60_000);
+    expect(left).toBeLessThanOrEqual(3 * HOUR);
+
+    // More changes, the clock, the connection coming back: none of them asks the relay.
+    relay.requests = [];
+    load(solvePuzzle(takeSnapshot(), 'n2', T + 1000));
+    await vi.advanceTimersByTimeAsync(CHANGE_DELAY_MS + 10 * 60 * 1000);
+    window.dispatchEvent(new Event('online'));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(relay.requests).toEqual([]);
+    expect(useDeviceSync.getState().phase).toBe('limited');
+
+    // The relay's next day: everything waiting goes, in one write.
+    relayNow += 3 * HOUR;
+    await vi.advanceTimersByTimeAsync(3 * HOUR);
+    await vi.waitFor(() => expect(useDeviceSync.getState().phase).toBe('done'));
+    expect(relay.requests.filter((r) => r.method === 'PUT')).toEqual([
+      { method: 'PUT', status: 200 },
+    ]);
+    const vault = await (await otherDevice((await currentPhrase()) ?? [])).read();
+    expect(vault.snapshot.progress.attempts.map((a) => a.id).slice(0, 2)).toEqual(['n2', 'n1']);
+  });
+
+  it('tries again at once when the learner asks', async () => {
+    await writtenOut();
+    relay.requests = [];
+    await syncNow({ asked: true });
+    expect(relay.requests.map((r) => r.status)).toEqual([204, 429]);
+    expect(useDeviceSync.getState().phase).toBe('limited');
+  });
+
+  it('waits a day at most, whatever the relay asks', async () => {
+    await turnOn();
+    await afterStartUp();
+    load(solvePuzzle(takeSnapshot(), 'n1', T));
+    // A relay that has the vault unchanged, and asks for a wait of four months.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: RequestInit = {}) =>
+        Promise.resolve(
+          init.method === 'PUT'
+            ? new Response(null, { status: 429, headers: { 'Retry-After': '9999999' } })
+            : new Response(null, { status: 204, headers: { ETag: '"1"' } }),
+        ),
+      ),
+    );
+    await syncNow();
+    const { phase, until } = useDeviceSync.getState();
+    expect(phase).toBe('limited');
+    expect((until ?? 0) - Date.now()).toBeLessThanOrEqual(LIMITED_MAX_WAIT_MS);
+    expect((until ?? 0) - Date.now()).toBeGreaterThan(LIMITED_MAX_WAIT_MS - 60_000);
+  });
+
+  it('explains why turning sync on did not make a synced copy, and tries nothing by itself', async () => {
+    const quotas = relay.store.quotas;
+    const now = () => relayNow;
+    relay.reconfigure({ quotas, now, limits: { newVaultsPerAddress: 0 } });
+    expect(await turnOnSync()).toEqual({
+      ok: false,
+      reason: 'Too many synced copies were set up from this network today. Try again tomorrow.',
+    });
+    relay.reconfigure({ quotas, now, limits: { newVaultsPerDay: 0 } });
+    expect(await turnOnSync()).toEqual({
+      ok: false,
+      reason: 'The sync service is not setting up new synced copies today. Try again tomorrow.',
+    });
+    relay.reconfigure({ now, quotas: { ...quotas, bytes: () => Promise.resolve(10 ** 12) } });
+    expect(await turnOnSync()).toEqual({
+      ok: false,
+      reason:
+        'The sync service is full and is not setting up new synced copies. Try again another day.',
+    });
+    expect(relay.requests.map((r) => r.status)).toEqual([429, 503, 507]);
+    expect(useDeviceSyncStore.getState().secret).toBeNull();
+    expect(relay.store.size()).toBe(0);
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+    expect(relay.requests).toHaveLength(3);
   });
 });
 

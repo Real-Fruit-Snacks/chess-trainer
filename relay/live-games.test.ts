@@ -14,6 +14,7 @@ import {
 import { hashToken } from './src/handler.mjs';
 import { createRoom, type RoomState } from './src/live/room.mjs';
 import {
+  ABUSE_LIMITS,
   BLINDFOLD_PEEKS,
   CLOSE,
   DUEL_RULES,
@@ -196,6 +197,7 @@ describe('the waiting room’s games', () => {
     await b.send(seek({ ...WINDOW, name: NAME_B }));
     await c.send(seek({ name: 'Quiet Rook' }));
     expect(a.last('paired')).toBeUndefined();
+    await w.listed();
     expect(c.last('lobby')!.seeks).toEqual([
       expect.objectContaining({ game: 'race', opts: RACE.opts }),
       expect.objectContaining({ game: 'race', opts: WINDOW.opts }),
@@ -210,6 +212,7 @@ describe('the waiting room’s games', () => {
       opponent: { name: NAME_B },
     });
     expect(b.last('paired')).toMatchObject({ kind: 'race', opts: RACE.opts, color: 'black' });
+    await w.listed();
     expect(c.last('lobby')!.seeks).toEqual([expect.objectContaining({ game: 'chess' })]);
   });
 
@@ -322,7 +325,8 @@ describe('an Army Draft game', () => {
     await white.send({ t: 'hello' });
     expect(white.last('game')).toMatchObject({ draft: { armies: { white: mine, black: null } } });
 
-    await w.advance(10_000);
+    // A minute on (within the draft's two): White's refusals so far no longer count against it.
+    await w.advance(ABUSE_LIMITS.refusalWindowMs);
     await black.send({ t: 'army', army: theirs });
     const fen = draftFen(mine, theirs);
     for (const player of [white, black]) {

@@ -52,6 +52,8 @@ export interface DuelState {
   chat: { by: Seat; phrase: string }[];
   lastPhraseAt: { white: number; black: number };
   next: { id: string; seats: { white: string; black: string } } | null;
+  /** How many rematches in a row led to this duel (none: 0). */
+  rematches?: number;
 }
 
 export interface DuelContext {

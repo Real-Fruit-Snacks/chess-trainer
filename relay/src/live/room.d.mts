@@ -7,6 +7,12 @@ import type { PushMessage, Subscription } from '../push/webpush.mjs';
 
 export type Color = 'white' | 'black';
 
+/** A game's spec as a room takes it: the waiting room's, and for a rematch how many led to it. */
+export type RoomSpec = GameSpec & {
+  /** How many rematches in a row led to this game (none: 0). */
+  rematches?: number;
+};
+
 export interface Seat {
   name: string;
   rating: number | null;
@@ -60,6 +66,8 @@ export interface GameState {
   chat: { by: Color; phrase: string }[];
   lastPhraseAt: { white: number; black: number };
   next: { id: string; seats: { white: string; black: string } } | null;
+  /** How many rematches in a row led to this game (none: 0). */
+  rematches?: number;
 }
 
 export type RoomState = GameState | DuelState;
@@ -72,6 +80,10 @@ export interface RoomData {
   openedAt: number;
   rateStart: number;
   rateCount: number;
+  /** The client's address as the limits count it (`addressKey`); '' when not known. */
+  address: string;
+  /** The socket's refused messages lately (`refusedTooOften`). */
+  refused?: { start: number; count: number };
 }
 
 export interface RoomConn {
@@ -87,7 +99,12 @@ export interface RoomPlatform {
   store(state: RoomState): Promise<void>;
   remove(): Promise<void>;
   schedule(at: number | null): void | Promise<void>;
-  createGame(spec: GameSpec): Promise<void>;
+  /**
+   * When the timer is set for (null: not set), read when a room wakes so that it sets the timer
+   * only when it must (none: the room's first save sets it).
+   */
+  alarm?: () => Promise<number | null>;
+  createGame(spec: RoomSpec): Promise<void>;
   /** Makes a group room, or finds it made: a game's analysis room (none: games are not analysed together). */
   createGroup?: (spec: GroupSpec) => Promise<'created' | 'exists'>;
   now(): number;
@@ -100,10 +117,10 @@ export interface RoomPlatform {
   chess960Position?: () => number;
 }
 
-export function roomData(now?: number): RoomData;
-export function newGame(spec: GameSpec, now: number, draw?: () => number): GameState;
+export function roomData(now?: number, address?: string): RoomData;
+export function newGame(spec: RoomSpec, now: number, draw?: () => number): GameState;
 export function createRoom(platform: RoomPlatform): {
-  create(spec: GameSpec): Promise<void>;
+  create(spec: RoomSpec): Promise<void>;
   open(conn: RoomConn): Promise<void>;
   message(conn: RoomConn, text: string): Promise<void>;
   close(conn: RoomConn): Promise<void>;

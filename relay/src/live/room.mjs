@@ -54,7 +54,20 @@
  * arrives, whatever its own clock says. The room also keeps the mover's time
  * after each move (`clocks`, in the snapshot), which a game's record writes
  * beside its moves; a correspondence game keeps none.
+ *
+ * Against abuse (each write and each alarm set is a row written, which the
+ * free plan counts per day for every room together): the room writes its
+ * state only when it has changed since it was last written, and sets its
+ * timer only when the deadline has moved, so a refusal or a message that
+ * changes nothing costs nothing. A room takes `ABUSE_LIMITS.roomSocketsPerAddress`
+ * sockets from one address and `socketsPerSeat` on one seat (one more is
+ * refused), and keeps `unsaid` sockets yet to say hello (one more sends the
+ * oldest of those away, so a player always gets back in); a socket refused
+ * too often is closed; and a rematch is refused once `ABUSE_LIMITS.rematches`
+ * in a row have led to the game. A socket for a game that is not there is
+ * closed at once, and nothing is written for it.
  */
+import { addressKey } from '../address.mjs';
 import { hashToken } from '../handler.mjs';
 import { subscriptionOf } from '../push/webpush.mjs';
 import { armyProblem, draftFen, parseArmy, randomArmy } from './army.mjs';
@@ -69,6 +82,7 @@ import {
 import { chess960StartFen, isChess960Position, randomChess960Position } from './chess960.mjs';
 import { cannotMate, endOf, playUci, replay } from './rules.mjs';
 import {
+  ABUSE_LIMITS,
   ANALYSIS_ROOM,
   analysisRoomId,
   BLINDFOLD_PEEKS,
@@ -81,6 +95,7 @@ import {
   LIMITS,
   parseTimeControl,
   randomId,
+  refusedTooOften,
   SEAT_PATTERN,
 } from './shared.mjs';
 
@@ -90,6 +105,9 @@ const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 /**
  * @typedef {'white' | 'black'} Color
  * @typedef {import('./lobby.mjs').GameSpec} GameSpec
+ * @typedef {GameSpec & { rematches?: number }} RoomSpec
+ *   A game's spec as a room takes it: the waiting room's, and for a rematch
+ *   how many rematches in a row led to it.
  * @typedef {import('./army.mjs').Army} Army
  * @typedef {import('./duel.mjs').DuelState} DuelState
  * @typedef {import('../push/webpush.mjs').Subscription} Subscription
@@ -125,7 +143,9 @@ const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
  *   chat: { by: Color, phrase: string }[],
  *   lastPhraseAt: { white: number, black: number },
  *   next: { id: string, seats: { white: string, black: string } } | null,
+ *   rematches?: number,
  * }} GameState
+ *   `rematches`: how many rematches in a row led to this game (none: 0).
  *
  * @typedef {GameState | DuelState} RoomState
  *
@@ -136,7 +156,12 @@ const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
  *   openedAt: number,
  *   rateStart: number,
  *   rateCount: number,
+ *   address: string,
+ *   refused?: { start: number, count: number },
  * }} RoomData
+ *   `address`: the client's, as the limits count it (`addressKey`), or '' when
+ *   not known (a socket from the Node server's own machine); `refused`: the
+ *   socket's refused messages lately (`refusedTooOften`).
  *
  * @typedef {{
  *   data: RoomData,
@@ -151,12 +176,16 @@ const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
  *   store(state: RoomState): Promise<void>,
  *   remove(): Promise<void>,
  *   schedule(at: number | null): void | Promise<void>,
- *   createGame(spec: GameSpec): Promise<void>,
+ *   alarm?: () => Promise<number | null>,
+ *   createGame(spec: RoomSpec): Promise<void>,
  *   createGroup?: (spec: import('./group.mjs').GroupSpec) => Promise<'created' | 'exists'>,
  *   now(): number,
  *   notify?: (subscription: Subscription, message: PushMessage) => Promise<'sent' | 'gone' | 'failed'>,
  *   chess960Position?: () => number,
  * }} RoomPlatform
+ *   `alarm`: when the timer is set for (null: not set), read when a room
+ *   wakes, so that it sets the timer only when it must (none: the room's first
+ *   save sets it)
  *   `createGroup`: makes a group room, or finds it made (the game's analysis
  *   room; none: games are not analysed together)
  *   `notify`: pushes a message to a player away from a correspondence game
@@ -165,8 +194,13 @@ const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
  *   960 at random); the end-to-end tests fix it, to reach castling in a few moves
  */
 
-/** A new socket's data (kept with the socket: a Durable Object keeps it across hibernation). */
-export function roomData(now = Date.now()) {
+/**
+ * A new socket's data (kept with the socket: a Durable Object keeps it across
+ * hibernation), with the client's address, if known, as the limits count it:
+ * an IP address, or the key `addressKey` made of one already (an IPv6
+ * address's /64, kept as it is).
+ */
+export function roomData(now = Date.now(), address = '') {
   return /** @type {RoomData} */ ({
     id: randomId(16),
     seat: null,
@@ -174,8 +208,13 @@ export function roomData(now = Date.now()) {
     openedAt: now,
     rateStart: 0,
     rateCount: 0,
+    address: !address || address.includes('/') ? address : addressKey(address),
   });
 }
+
+/** How many rematches in a row led to a spec's game. @param {RoomSpec} spec */
+const rematchesOf = (spec) =>
+  Number.isSafeInteger(spec.rematches) && Number(spec.rematches) > 0 ? Number(spec.rematches) : 0;
 
 /** @param {Color} color */
 const other = (color) => (color === 'white' ? 'black' : 'white');
@@ -264,7 +303,7 @@ function send(conn, message) {
 /**
  * The state of a new game of chess (or of a variant of it). A Chess960 game
  * starts from the position the spec names (a rematch's), or else one `draw` picks.
- * @param {GameSpec} spec
+ * @param {RoomSpec} spec
  * @param {number} now
  * @param {() => number} [draw]
  * @returns {GameState}
@@ -327,6 +366,7 @@ export function newGame(spec, now, draw = randomChess960Position) {
     chat: [],
     lastPhraseAt: { white: 0, black: 0 },
     next: null,
+    rematches: rematchesOf(spec),
   };
 }
 
@@ -337,6 +377,15 @@ export function createRoom(platform) {
   /** @type {RoomState | null} */
   let state = null;
   let loaded = false;
+  /** The state as it was last written (or loaded), as JSON: saving the same again writes nothing. */
+  /** @type {string | null} */
+  let written = null;
+  /**
+   * The deadline the platform's timer is set for (null: none); undefined while
+   * that is not known (a room just woken, or a timer that could not be set).
+   */
+  /** @type {number | null | undefined} */
+  let scheduled;
   /** The position, rebuilt from the moves when the room wakes. */
   /** @type {import('./rules.mjs').RulesGame | null} */
   let chess = null;
@@ -357,6 +406,7 @@ export function createRoom(platform) {
   async function ensure() {
     if (loaded) return state;
     state = await platform.load();
+    written = state ? JSON.stringify(state) : null;
     chess =
       state && !isDuel(state.game)
         ? replay(state.moves, state.startFen ?? null, state.game ?? 'chess')
@@ -617,10 +667,51 @@ export function createRoom(platform) {
       : refuse(conn, s, seat, 'over', 'The game is over.', now);
   }
 
+  /** Writes the state, unless it is what was last written. */
+  async function write() {
+    if (!state) return;
+    const text = JSON.stringify(state);
+    if (text === written) return;
+    await platform.store(state);
+    written = text;
+  }
+
+  /** Sets the timer for `at` (null: none), unless it is set for that already. */
+  async function schedule(/** @type {number | null} */ at) {
+    if (scheduled === undefined && platform.alarm) {
+      try {
+        scheduled = await platform.alarm();
+      } catch {
+        // Not known: the timer is set below all the same.
+      }
+    }
+    if (at === scheduled) return;
+    scheduled = undefined;
+    await platform.schedule(at);
+    scheduled = at;
+  }
+
+  /**
+   * Stores the state and sets the timer on the next deadline (each only when
+   * it changed), then delivers the push messages queued with `nudge`. A write
+   * or a timer the platform refuses (its allowance for the day used up) leaves
+   * the room going on as it is in memory: the next save tries again, and the
+   * push messages wait for it. Whether everything was stored.
+   */
   async function save(/** @type {number} */ now) {
-    if (state) await platform.store(state);
-    await platform.schedule(nextDeadline(now));
-    await deliver();
+    let stored = true;
+    try {
+      await write();
+    } catch {
+      stored = false;
+    }
+    try {
+      await schedule(nextDeadline(now));
+    } catch {
+      stored = false;
+    }
+    if (stored) await deliver();
+    return stored;
   }
 
   /**
@@ -664,7 +755,12 @@ export function createRoom(platform) {
         forgot = true;
       }
     }
-    if (forgot && state) await platform.store(state);
+    if (!forgot) return;
+    try {
+      await write();
+    } catch {
+      // Forgotten in memory: the next save writes it.
+    }
   }
 
   /**
@@ -746,6 +842,38 @@ export function createRoom(platform) {
     return true;
   }
 
+  /**
+   * Counts a refused message against its socket (in the socket's data, saved
+   * so that the count outlives hibernation). A socket refused more than
+   * `ABUSE_LIMITS.refusals` times in `refusalWindowMs` is closed: false then,
+   * and nothing more is to be sent to it.
+   * @param {RoomConn} conn
+   * @param {number} now
+   */
+  function counted(conn, now) {
+    const tooOften = refusedTooOften(conn.data, now);
+    conn.save();
+    if (!tooOften) return true;
+    send(conn, { t: 'error', code: 'rate', message: 'Too many refused messages: wait a moment.' });
+    conn.close(CLOSE.policy, 'Too many refused messages.');
+    return false;
+  }
+
+  /**
+   * An error to one socket, counted against it (`counted`), and then, if it
+   * is still open, what `then` gives (the game as it stands, say).
+   * @param {RoomConn} conn
+   * @param {string} code
+   * @param {string} message
+   * @param {number} now
+   * @param {(() => unknown) | null} [then]
+   */
+  function refuseTo(conn, code, message, now, then = null) {
+    if (!counted(conn, now)) return;
+    send(conn, { t: 'error', code, message });
+    if (then) send(conn, then());
+  }
+
   /** A refusal, followed by the game as it stands so the player's board catches up. */
   function refuse(
     /** @type {RoomConn} */ conn,
@@ -755,8 +883,7 @@ export function createRoom(platform) {
     /** @type {string} */ message,
     /** @type {number} */ now,
   ) {
-    send(conn, { t: 'error', code, message });
-    send(conn, snapshot(s, seat, now));
+    refuseTo(conn, code, message, now, () => snapshot(s, seat, now));
   }
 
   /**
@@ -824,13 +951,10 @@ export function createRoom(platform) {
    * @param {number} now
    */
   async function analyse(conn, s, seat, now) {
-    const no = (/** @type {string} */ code, /** @type {string} */ message) => {
-      send(conn, { t: 'error', code, message });
-      send(
-        conn,
+    const no = (/** @type {string} */ code, /** @type {string} */ message) =>
+      refuseTo(conn, code, message, now, () =>
         seat ? snapshot(s, seat, now) : chessSnapshot(/** @type {GameState} */ (s), null, now),
       );
-    };
     if (isDuel(s.game)) return no('bad-request', 'A duel has no game to analyse.');
     const g = /** @type {GameState} */ (s);
     if (g.status !== 'over') return no('not-now', 'The game is still on.');
@@ -856,7 +980,8 @@ export function createRoom(platform) {
   /**
    * A rematch: offered, accepted or declined. Accepted, it makes the next game
    * — the same game with the same options — with the seats swapped: the colours
-   * in a game of chess, the host in a duel.
+   * in a game of chess, the host in a duel. After `ABUSE_LIMITS.rematches` in
+   * a row, the players start a new game from Play instead.
    * @param {RoomConn} conn
    * @param {RoomState} s
    * @param {Color} seat
@@ -867,6 +992,11 @@ export function createRoom(platform) {
     const opponent = other(seat);
     if (s.status !== 'over') return refuse(conn, s, seat, 'not-now', 'The game is still on.', now);
     if (s.next) return send(conn, { t: 'rematch', ...nextView(s, seat) });
+    const rematches = s.rematches ?? 0;
+    if ((msg.op === 'offer' || msg.op === 'accept') && rematches >= ABUSE_LIMITS.rematches) {
+      const words = `No more rematches after ${ABUSE_LIMITS.rematches} in a row: start a new game from Play.`;
+      return refuse(conn, s, seat, 'limit', words, now);
+    }
     const offered = s.offers.rematch;
     if (msg.op === 'accept' || (msg.op === 'offer' && offered === opponent)) {
       if (offered !== opponent) {
@@ -883,6 +1013,7 @@ export function createRoom(platform) {
           opts: s.opts ?? {},
           tc: isDuel(s.game) ? null : /** @type {GameState} */ (s).tc.id,
           position: position ?? null,
+          rematches: rematches + 1,
           white: {
             name: s.black.name,
             rating: s.black.rating,
@@ -1106,11 +1237,11 @@ export function createRoom(platform) {
 
       case 'push': {
         if (!isCorrespondence(s) || s.status === 'over') {
-          send(conn, { t: 'error', code: 'not-now', message: 'This game pushes nothing.' });
+          refuseTo(conn, 'not-now', 'This game pushes nothing.', now);
           return;
         }
         if (msg.sub !== null && !subscriptionOf(msg.sub)) {
-          send(conn, { t: 'error', code: 'bad-request', message: 'That is not a subscription.' });
+          refuseTo(conn, 'bad-request', 'That is not a subscription.', now);
           return;
         }
         if (keepSubscription(s, seat, msg.sub)) return save(now);
@@ -1145,7 +1276,7 @@ export function createRoom(platform) {
     send(conn, chessSnapshot(/** @type {GameState} */ (s), null, now));
     countWatchers();
     // The socket owes no hello any more: its deadline goes.
-    await platform.schedule(nextDeadline(now));
+    await save(now);
   }
 
   /**
@@ -1170,7 +1301,7 @@ export function createRoom(platform) {
       await analyse(conn, s, null, now);
       return;
     }
-    send(conn, { t: 'error', code: 'watching', message: 'Watchers can only watch.' });
+    refuseTo(conn, 'watching', 'Watchers can only watch.', now);
   }
 
   /**
@@ -1185,12 +1316,13 @@ export function createRoom(platform) {
   async function join(conn, s, msg, now) {
     const color = s.open ?? null;
     if (!color || s.status !== 'playing') {
-      send(conn, { t: 'error', code: 'taken', message: 'This game has both its players.' });
-      send(conn, chessSnapshot(s, null, now));
+      refuseTo(conn, 'taken', 'This game has both its players.', now, () =>
+        chessSnapshot(s, null, now),
+      );
       return;
     }
     if (!isPlayerName(msg.name) || !isRating(msg.rating ?? null)) {
-      send(conn, { t: 'error', code: 'bad-request', message: 'That name or rating is not one.' });
+      refuseTo(conn, 'bad-request', 'That name or rating is not one.', now);
       return;
     }
     const seat = randomId(32);
@@ -1217,36 +1349,101 @@ export function createRoom(platform) {
     await save(now);
   }
 
+  /**
+   * Whether the room takes a new socket. One address has
+   * `ABUSE_LIMITS.roomSocketsPerAddress` here at most: one more is closed (and
+   * costs the room nothing more). Of the sockets yet to say hello the room
+   * keeps `ABUSE_LIMITS.unsaid`: one more sends the oldest of them away, as if
+   * its time to say hello were up, and never the new one, so that sockets held
+   * open without a word cannot keep a player out of their own game. Only the
+   * sockets that came before it count, so that of many arriving at once the
+   * last are the ones refused.
+   * @param {RoomConn} conn
+   */
+  function admit(conn) {
+    const listed = platform.connections();
+    const at = listed.findIndex((c) => c.data.id === conn.data.id);
+    const before = at < 0 ? listed : listed.slice(0, at + 1);
+    const address = conn.data.address;
+    const fromThere = address ? before.filter((c) => c.data.address === address).length : 0;
+    if (fromThere > ABUSE_LIMITS.roomSocketsPerAddress) {
+      conn.close(CLOSE.full, 'Too many connections to this game from one address.');
+      return false;
+    }
+    const unsaid = before
+      .filter((c) => !c.data.seat && !c.data.watch && c.data.id !== conn.data.id)
+      .sort((a, b) => a.data.openedAt - b.data.openedAt);
+    const extra = unsaid.length + 1 - ABUSE_LIMITS.unsaid;
+    for (const old of unsaid.slice(0, Math.max(0, extra))) {
+      old.close(CLOSE.noHello, 'Say which seat first.');
+    }
+    return true;
+  }
+
+  /**
+   * Whether a seat has all the sockets it takes (`ABUSE_LIMITS.socketsPerSeat`)
+   * without `conn`: then `conn` is closed, as one past a full room is, and its
+   * app tries again a while later.
+   * @param {RoomConn} conn
+   * @param {Color} color
+   */
+  function seatFull(conn, color) {
+    const others = platform
+      .connections()
+      .filter((c) => c.data.seat === color && c.data.id !== conn.data.id);
+    if (others.length < ABUSE_LIMITS.socketsPerSeat) return false;
+    conn.close(CLOSE.full, 'This game is open in too many tabs or windows.');
+    return true;
+  }
+
   return {
     /**
      * Makes the game (called by the waiting room, or by the room of a game
-     * that ends in a rematch).
-     * @param {GameSpec} spec
+     * that ends in a rematch). Throws when it exists, or when it could not be
+     * written (then it does not exist: it may be made again).
+     * @param {RoomSpec} spec
      */
     create(spec) {
       return serial(async () => {
         if (await ensure()) throw new Error('This game exists already.');
         const now = platform.now();
         if (isDuel(spec.game)) {
-          state = newDuel(spec, now);
+          const duel = newDuel(spec, now);
+          duel.rematches = rematchesOf(spec);
+          state = duel;
           chess = null;
         } else {
           const game = newGame(spec, now, platform.chess960Position);
           state = game;
           chess = replay([], game.startFen ?? null, game.game ?? 'chess');
         }
+        try {
+          await write();
+        } catch (err) {
+          state = null;
+          chess = null;
+          throw err;
+        }
+        // A timer that could not be set is set by the next save.
         await save(now);
       });
     },
 
     /**
      * A socket has opened: it has `LIMITS.helloMs` to say which seat it is.
-     * @param {RoomConn} _conn
+     * A socket for a game that is not there (any more) is closed at once, as
+     * one past the room's limits is; neither costs the room a write.
+     * @param {RoomConn} conn
      */
-    open(_conn) {
+    open(conn) {
       return serial(async () => {
-        await ensure();
-        await platform.schedule(nextDeadline(platform.now()));
+        const s = await ensure();
+        if (!s) {
+          conn.close(CLOSE.noGame, 'No such game.');
+          return;
+        }
+        if (!admit(conn)) return;
+        await save(platform.now());
       });
     },
 
@@ -1281,7 +1478,7 @@ export function createRoom(platform) {
           return;
         }
         if (!msg) {
-          send(conn, { t: 'error', code: 'bad-request', message: 'That is not a message.' });
+          refuseTo(conn, 'bad-request', 'That is not a message.', now);
           return;
         }
         const seat = conn.data.seat;
@@ -1309,10 +1506,14 @@ export function createRoom(platform) {
             conn.close(CLOSE.noGame, 'Not a seat in this game.');
             return;
           }
+          if (seatFull(conn, color)) {
+            // Its hello deadline goes with it.
+            await save(now);
+            return;
+          }
           conn.data.seat = color;
           conn.save();
-          const subscribed = 'push' in msg && keepSubscription(s, color, msg.push);
-          const wasGone = s.goneSince[color] !== null;
+          if ('push' in msg) keepSubscription(s, color, msg.push);
           s.goneSince[color] = null;
           send(conn, snapshot(s, color, now));
           const duel = isDuel(s.game);
@@ -1327,9 +1528,10 @@ export function createRoom(platform) {
           );
           show({ t: 'present', ...present(), gone: null });
           // A duel starts once both players are here (and its rounds are in).
-          const started = duel && duelMaybeStart(duelContext, /** @type {DuelState} */ (s), now);
-          if (wasGone || started || subscribed) await save(now);
-          else await platform.schedule(nextDeadline(now));
+          if (duel) duelMaybeStart(duelContext, /** @type {DuelState} */ (s), now);
+          // Written if anything changed (back from gone, a duel started, a subscription); the
+          // socket's hello deadline goes either way.
+          await save(now);
           return;
         }
         if (msg.t === 'hello') {
@@ -1390,9 +1592,16 @@ export function createRoom(platform) {
       });
     },
 
-    /** Something is due: a flag, a first move, a hello, or the room's end. */
+    /**
+     * Something is due: a flag, a first move, a hello, or the room's end.
+     * Throws when what it did could not be stored (or the room deleted): the
+     * platform then runs the timer again later (Cloudflare retries an alarm
+     * that fails, a few times), with the state as it was last stored.
+     */
     timer() {
       return serial(async () => {
+        // The timer that is running is spent.
+        scheduled = null;
         const s = await ensure();
         const now = platform.now();
         for (const conn of platform.connections()) {
@@ -1400,20 +1609,19 @@ export function createRoom(platform) {
             conn.close(CLOSE.noHello, 'Say which seat first.');
           }
         }
-        if (!s) {
-          await platform.schedule(null);
-          return;
-        }
+        // No game (any more): nothing to wait for, and no timer is set.
+        if (!s) return;
         const expired =
           now >= s.createdAt + roomAgeOf(s) ||
           (s.status === 'over' && s.endedAt !== null && now >= s.endedAt + keepAfterEndOf(s));
         if (expired) {
           for (const conn of platform.connections())
             conn.close(CLOSE.closed, 'The game is closed.');
+          // Forgotten here only once it is gone from storage: should that fail, the timer comes again.
+          await platform.remove();
           state = null;
           chess = null;
-          await platform.remove();
-          await platform.schedule(null);
+          written = null;
           return;
         }
         if (isDuel(s.game)) {
@@ -1433,7 +1641,7 @@ export function createRoom(platform) {
             }
           }
         }
-        await save(now);
+        if (!(await save(now))) throw new Error('The game could not be stored.');
       });
     },
   };

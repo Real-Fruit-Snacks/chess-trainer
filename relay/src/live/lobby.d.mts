@@ -1,6 +1,9 @@
 /** Types for lobby.mjs, for the relay's tests. */
 import type { GroupSpec } from './group.mjs';
 
+/** The list of games goes to everyone at most this often: changes in between wait for the next. */
+export const BROADCAST_MS: number;
+
 export interface SeatSpec {
   name: string;
   rating: number | null;
@@ -37,14 +40,15 @@ export interface Seek {
 
 export interface LobbyData {
   id: string;
+  /** The address the socket counts under (an IPv6 address's /64); empty when not known. */
   address: string;
   seek: Seek | null;
   rateStart: number;
   rateCount: number;
-  /** When this socket made its recent invitations (correspondence games). */
-  invites?: number[];
-  /** When this socket made its recent group rooms. */
-  rooms?: number[];
+  /** The socket's refused messages lately (`refusedTooOften`). */
+  refused?: { start: number; count: number };
+  /** The socket was refused as it came (the waiting room, or its address, was full). */
+  turnedAway?: boolean;
 }
 
 export interface LobbyConn {
@@ -54,11 +58,20 @@ export interface LobbyConn {
   save(): void;
 }
 
+/** The lobby's own storage: its counts per address (as salted hashes). */
+export interface LobbyStorage {
+  get(key: string): Promise<unknown>;
+  put(key: string, value: unknown): Promise<void>;
+}
+
 export interface LobbyPlatform {
   connections(): LobbyConn[];
   createGame(spec: GameSpec): Promise<void>;
   /** Makes a group room, or finds it made already (none: rooms are not made here); throws when it cannot. */
   createGroup?: (spec: GroupSpec) => Promise<'created' | 'exists'>;
+  storage: LobbyStorage;
+  /** Runs `run` at `at`, a time on `now`'s clock. */
+  timers: { set(at: number, run: () => void): unknown };
   now(): number;
 }
 

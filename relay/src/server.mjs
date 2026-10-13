@@ -1,25 +1,36 @@
 #!/usr/bin/env node
 /**
- * The relay as a plain Node server, its vaults, push keys and reminders in a
- * SQLite file and its live games in memory (a restart loses the games under
- * way, correspondence games too): for hosting it yourself, or trying the app
- * against a local relay.
+ * The relay as a plain Node server, its vaults, push keys, reminders and daily
+ * counts in a SQLite file and its live games in memory (a restart loses the
+ * games under way, correspondence games too): for hosting it yourself, or
+ * trying the app against a local relay.
  *
  *   node relay/src/server.mjs --port 8787 --db relay.db --origin https://example.github.io
  *
  * Options: --host (default 127.0.0.1), --port (8787), --db (relay.db; ':memory:' keeps nothing),
  * --origin (the app's origin, repeatable or comma-separated; default any), --max-bytes,
  * --push-contact (the contact in push messages, mailto: or https:; default the first
- * https origin). Put it behind HTTPS (a reverse proxy) for anything but local use:
- * the app only talks to an https relay, apart from localhost.
+ * https origin). The limits (see handler.mjs and push/reminders.mjs), days being UTC days:
+ * --new-vaults-per-address (5), --new-vaults-per-day (50), --max-db-bytes (400,000,000),
+ * --vault-writes-per-day (1,000), --new-reminders-per-address (5). Put it behind HTTPS (a
+ * reverse proxy) for anything but local use: the app only talks to an https relay, apart
+ * from localhost.
  *
- * Every minute it sends the reminders due; once a day it deletes vaults unused
- * for a year and reminders unheard of for 60 days.
+ * Every minute it sends the reminders due; once a day it deletes vaults long
+ * unused, reminders unheard of for 60 days, and the daily counts of the days
+ * before yesterday.
  */
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRelay, DEFAULT_MAX_BYTES, expireVaults, originAllowed } from './handler.mjs';
+import { addressKey } from './address.mjs';
+import {
+  createRelay,
+  DEFAULT_LIMITS,
+  DEFAULT_MAX_BYTES,
+  expireVaults,
+  originAllowed,
+} from './handler.mjs';
 import { createLiveHub } from './live/hub.mjs';
 import { ID_PATTERN } from './live/shared.mjs';
 import { refuse, upgrade } from './live/websocket.mjs';
@@ -27,11 +38,13 @@ import {
   createPushApi,
   expireReminders,
   MAX_REMINDERS,
+  NEW_REMINDERS_PER_ADDRESS,
   pushContact,
   pushSender,
   sendDueReminders,
 } from './push/reminders.mjs';
 import { sqlitePushStore } from './push/sqlitePushStore.mjs';
+import { expireQuotas } from './quota.mjs';
 import { sqliteStore } from './sqliteStore.mjs';
 
 const MINUTE = 60 * 1000;
@@ -47,7 +60,8 @@ const LOOPBACK = /^(?:127\.|::1$|::ffff:127\.)/;
  * as too big; the rest is read and dropped, so a request that never ends cannot
  * fill the memory. The client's address goes to the handler as
  * CF-Connecting-IP, as on Cloudflare (whatever the client sent in it is
- * dropped), for the limits per address.
+ * dropped), for the limits per address, which count it as on Cloudflare too
+ * (an IPv6 address by its /64: see address.mjs).
  * @param {(request: Request) => Promise<Response>} handle
  * @param {{ maxBodyBytes?: number }} [options]
  */
@@ -105,6 +119,16 @@ function clientAddress(req) {
 }
 
 /**
+ * The address the live games' limits count a socket under, as on Cloudflare:
+ * an IPv6 address by its /64 (`addressKey`). Empty when not known (not counted).
+ * @param {import('node:http').IncomingMessage} req
+ */
+function countedAddress(req) {
+  const address = clientAddress(req);
+  return address ? addressKey(address) : '';
+}
+
+/**
  * Live games on a Node server: WebSocket upgrades of `/v1/lobby` (the waiting
  * room), `/v1/games/:id` (a game) and `/v1/rooms/:id` (a group room) go to
  * `hub`, which keeps everything in memory. A socket from a page on an origin
@@ -131,10 +155,10 @@ export function attachLive(server, { hub = createLiveHub(), allowedOrigins = ['*
     if (!ws) return;
     const events =
       room !== undefined
-        ? hub.openGroup(room, ws)
+        ? hub.openGroup(room, ws, countedAddress(req))
         : game === undefined
-          ? hub.openLobby(ws, clientAddress(req))
-          : hub.openRoom(game, ws);
+          ? hub.openLobby(ws, countedAddress(req))
+          : hub.openRoom(game, ws, countedAddress(req));
     ws.on('message', (text) => void events.message(text).catch(() => undefined));
     ws.on('close', () => void events.close().catch(() => undefined));
   });
@@ -167,10 +191,10 @@ if (invokedDirectly) {
   const args = readArgs(process.argv.slice(2));
   const one = (name, fallback) => args.get(name)?.at(-1) ?? fallback;
   /** A whole-number option, or the server does not start (a typo must not lift a limit). */
-  const whole = (name, fallback, max = Number.MAX_SAFE_INTEGER) => {
+  const whole = (name, fallback, max = Number.MAX_SAFE_INTEGER, min = 1) => {
     const value = Number(one(name, String(fallback)));
-    if (!Number.isSafeInteger(value) || value < 1 || value > max) {
-      console.error(`--${name} takes a whole number from 1 to ${max}.`);
+    if (!Number.isSafeInteger(value) || value < min || value > max) {
+      console.error(`--${name} takes a whole number from ${min} to ${max}.`);
       process.exit(2);
     }
     return value;
@@ -184,16 +208,40 @@ if (invokedDirectly) {
     console.error('--push-contact takes a mailto: or https: address.');
     process.exit(2);
   }
+  const limits = {
+    newVaultsPerAddress: whole(
+      'new-vaults-per-address',
+      DEFAULT_LIMITS.newVaultsPerAddress,
+      undefined,
+      0,
+    ),
+    newVaultsPerDay: whole('new-vaults-per-day', DEFAULT_LIMITS.newVaultsPerDay, undefined, 0),
+    maxDbBytes: whole('max-db-bytes', DEFAULT_LIMITS.maxDbBytes),
+    vaultWritesPerDay: whole('vault-writes-per-day', DEFAULT_LIMITS.vaultWritesPerDay),
+  };
+  const newRemindersPerAddress = whole(
+    'new-reminders-per-address',
+    NEW_REMINDERS_PER_ADDRESS,
+    undefined,
+    0,
+  );
   const store = sqliteStore(one('db', 'relay.db'));
   const pushStore = sqlitePushStore(one('db', 'relay.db'));
   const allowedOrigins = origins.filter(Boolean);
   const contact = pushContact(allowedOrigins, contactOption);
   const handle = createRelay({
     store,
+    quotas: store.quotas,
+    limits,
     allowedOrigins,
     maxBytes,
     live: true,
-    push: createPushApi({ store: pushStore, allowedOrigins }),
+    push: createPushApi({
+      store: pushStore,
+      allowedOrigins,
+      quotas: store.quotas,
+      newRemindersPerAddress,
+    }),
   });
   const server = nodeServer(handle, { maxBodyBytes: maxBytes });
   const hub = createLiveHub({ notify: pushSender({ store: pushStore, contact }) });
@@ -202,7 +250,11 @@ if (invokedDirectly) {
     console.log(`Open File relay (sync, live games and push) on http://${host}:${port}`);
   });
   const sweep = () =>
-    void Promise.all([expireVaults(store), expireReminders(pushStore)]).catch(() => undefined);
+    void Promise.all([
+      expireVaults(store),
+      expireReminders(pushStore),
+      expireQuotas(store.quotas),
+    ]).catch(() => undefined);
   sweep();
   setInterval(sweep, DAY).unref();
   // The reminders due, every minute; a run still sending lets the next one pass.

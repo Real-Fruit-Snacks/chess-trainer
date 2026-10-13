@@ -511,6 +511,25 @@ describe('DuelPage', () => {
     ).toBeVisible();
   });
 
+  it('says in the result why a rematch was refused', () => {
+    const session = hold(
+      makeView({
+        status: 'over',
+        items: puzzles(5) as never,
+        result: '0-1',
+        reason: 'score',
+        score: { white: 1, black: 2 },
+      }),
+    );
+    renderDuel();
+    const dialog = openDialog('You lost')!;
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Rematch' }));
+    const words = 'No more rematches after 30 in a row: start a new game from Play.';
+    session.update({ error: words });
+    expect(within(openDialog('You lost')!).getByRole('alert')).toHaveTextContent(words);
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+
   it('asks before resigning a duel under way', () => {
     const session = hold(
       makeView({

@@ -1,23 +1,35 @@
 /**
  * The relay as a Cloudflare Worker, its vaults in a D1 database (the `DB`
- * binding, see ../wrangler.jsonc), and its push keys and daily reminders in
- * tables of their own there (made on first use). Settings, from the Worker's
- * variables:
+ * binding, see ../wrangler.jsonc), and its push keys, daily reminders and
+ * daily counts in tables of their own there (made on first use). Settings,
+ * from the Worker's variables:
  *
- *   ALLOWED_ORIGINS    the app's origins, comma-separated ("*" for any)
- *   MAX_BYTES          the largest vault accepted, in bytes
- *   PUSH_CONTACT       the contact in the relay's push messages, mailto: or
- *                      https: (the first https origin of ALLOWED_ORIGINS when unset)
- *   REMINDERS_PER_RUN  the most reminders one cron run sends (25: the free
- *                      plan's 50 requests a run, with room to spare)
+ *   ALLOWED_ORIGINS            the app's origins, comma-separated ("*" for any)
+ *   MAX_BYTES                  the largest vault accepted, in bytes
+ *   PUSH_CONTACT               the contact in the relay's push messages, mailto: or
+ *                              https: (the first https origin of ALLOWED_ORIGINS when unset)
+ *   REMINDERS_PER_RUN          the most reminders one cron run sends (25: the free
+ *                              plan's 50 requests a run, with room to spare)
+ *   NEW_VAULTS_PER_ADDRESS     new vaults one address may make a UTC day (5)
+ *   NEW_VAULTS_PER_DAY         new vaults the relay makes a UTC day, from everyone (50)
+ *   MAX_DB_BYTES               no new vaults once the database is this big (400,000,000)
+ *   MAX_VAULTS                 no new vaults once there are this many, should D1 not
+ *                              say how big the database is (250)
+ *   VAULT_WRITES_PER_DAY       writes one vault takes a UTC day (1,000)
+ *   NEW_REMINDERS_PER_ADDRESS  new reminders one address may make a UTC day (5)
+ *
+ * Each is a whole number; one that is not leaves the default (the daily counts
+ * of new vaults and reminders may be 0: none at all). The counts are kept in
+ * D1, so they hold across Cloudflare's locations and isolates.
  *
  * With a rate-limiting binding named NEW_VAULTS (optional, see ../README.md),
- * each address may create only so many vaults a minute; one named
+ * each address may also create only so many vaults a minute; one named
  * NEW_REMINDERS does the same for reminders.
  *
  * Two crons (`controller.cron` tells them apart): DAILY_CRON deletes vaults
- * unused for a year and reminders unheard of for 60 days; every other one
- * (every 15 minutes) sends the reminders due.
+ * long unused, reminders unheard of for 60 days, and the daily counts of the
+ * days before yesterday; every other one (every 15 minutes) sends the
+ * reminders due.
  *
  * Live games are two Durable Objects (live/cloudflare.mjs): the bindings
  * LIVE_LOBBY and LIVE_ROOMS. WebSocket upgrades of `/v1/lobby` and
@@ -27,6 +39,7 @@
 import { d1Store } from './d1Store.mjs';
 import {
   createRelay,
+  DEFAULT_LIMITS,
   DEFAULT_MAX_BYTES,
   expireVaults,
   originAllowed,
@@ -38,10 +51,12 @@ import { d1PushStore } from './push/d1PushStore.mjs';
 import {
   createPushApi,
   expireReminders,
+  NEW_REMINDERS_PER_ADDRESS,
   pushContact,
   REMINDERS_PER_RUN,
   sendDueReminders,
 } from './push/reminders.mjs';
+import { addressOf, expireQuotas, wholeSetting } from './quota.mjs';
 
 // The runtime finds the Durable Object classes among the main module's exports.
 export { LiveGroup, LiveLobby, LiveRoom };
@@ -76,6 +91,23 @@ function relayFor(env) {
 const originsOf = (env) => originList(env.ALLOWED_ORIGINS);
 
 /**
+ * The vaults' store, with the daily counts, one per set of bindings (its
+ * tables are checked once), shared by the requests and the crons.
+ * @type {WeakMap<object, ReturnType<typeof d1Store>>}
+ */
+const vaultStores = new WeakMap();
+
+/** @param {Record<string, unknown>} env */
+function vaultStoreFor(env) {
+  let store = vaultStores.get(env);
+  if (!store) {
+    store = d1Store(/** @type {{ prepare(sql: string): any }} */ (env.DB));
+    vaultStores.set(env, store);
+  }
+  return store;
+}
+
+/**
  * The push data's store, one per set of bindings (its tables are checked once).
  * @type {WeakMap<object, import('./push/reminders.mjs').PushStore>}
  */
@@ -91,13 +123,9 @@ function pushStoreFor(env) {
   return store;
 }
 
-/** The address a request came from (Cloudflare says), for the limits per address. */
-const addressOf = (/** @type {Request} */ request) =>
-  request.headers.get('CF-Connecting-IP') ?? 'unknown';
-
 /**
  * Asks a rate-limiting binding, when there is one, whether a request's address
- * may make one more of something.
+ * (an IPv6 address by its /64, see address.mjs) may make one more of something.
  * @param {unknown} binding
  * @returns {((request: Request) => Promise<boolean>) | undefined}
  */
@@ -108,6 +136,23 @@ function limitBy(binding) {
     : undefined;
 }
 
+/**
+ * The limits on vaults, from the Worker's variables (see above).
+ * @param {Record<string, unknown>} env
+ * @returns {import('./handler.mjs').VaultLimits}
+ */
+const vaultLimits = (env) => ({
+  newVaultsPerAddress: wholeSetting(
+    env.NEW_VAULTS_PER_ADDRESS,
+    DEFAULT_LIMITS.newVaultsPerAddress,
+    0,
+  ),
+  newVaultsPerDay: wholeSetting(env.NEW_VAULTS_PER_DAY, DEFAULT_LIMITS.newVaultsPerDay, 0),
+  maxDbBytes: wholeSetting(env.MAX_DB_BYTES, DEFAULT_LIMITS.maxDbBytes),
+  maxVaults: wholeSetting(env.MAX_VAULTS, DEFAULT_LIMITS.maxVaults),
+  vaultWritesPerDay: wholeSetting(env.VAULT_WRITES_PER_DAY, DEFAULT_LIMITS.vaultWritesPerDay),
+});
+
 /** Whether live games are set up: both Durable Object bindings are there. */
 const liveIn = (/** @type {Record<string, unknown>} */ env) =>
   Boolean(env.LIVE_LOBBY && env.LIVE_ROOMS);
@@ -115,8 +160,11 @@ const liveIn = (/** @type {Record<string, unknown>} */ env) =>
 /** @param {Record<string, unknown>} env */
 function makeRelay(env) {
   const maxBytes = Number(env.MAX_BYTES ?? DEFAULT_MAX_BYTES);
+  const store = vaultStoreFor(env);
   return createRelay({
-    store: d1Store(env.DB),
+    store,
+    quotas: store.quotas,
+    limits: vaultLimits(env),
     allowedOrigins: originsOf(env),
     maxBytes: Number.isFinite(maxBytes) && maxBytes > 0 ? maxBytes : DEFAULT_MAX_BYTES,
     allowCreate: limitBy(env.NEW_VAULTS),
@@ -125,21 +173,30 @@ function makeRelay(env) {
       store: pushStoreFor(env),
       allowedOrigins: originsOf(env),
       allowReminder: limitBy(env.NEW_REMINDERS),
+      quotas: store.quotas,
+      newRemindersPerAddress: wholeSetting(
+        env.NEW_REMINDERS_PER_ADDRESS,
+        NEW_REMINDERS_PER_ADDRESS,
+        0,
+      ),
     }),
   });
 }
 
 /**
  * What a cron run does: the daily one forgets the vaults and reminders long
- * unused; the others send the reminders due.
+ * unused, and the daily counts no longer needed; the others send the
+ * reminders due.
  * @param {string | undefined} cron
  * @param {Record<string, unknown>} env
  */
 async function scheduledRun(cron, env) {
   const store = pushStoreFor(env);
   if (cron === DAILY_CRON) {
-    await expireVaults(d1Store(env.DB));
+    const vaults = vaultStoreFor(env);
+    await expireVaults(vaults);
     await expireReminders(store);
+    await expireQuotas(vaults.quotas);
     return;
   }
   const limit = Number(env.REMINDERS_PER_RUN ?? REMINDERS_PER_RUN);

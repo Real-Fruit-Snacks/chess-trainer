@@ -256,6 +256,7 @@ describe('a Chess960 game on the relay', () => {
     expect(fischer.last('paired')).toBeUndefined();
     expect(faster.last('paired')).toBeUndefined();
     expect(fischer.last('posted')).toMatchObject({ seek: { game: 'chess960', tc: '5+3' } });
+    await w.listed();
     const lobby = chess.last('lobby') as { seeks: Message[] };
     expect(lobby.seeks.map((s) => [s.game, s.tc])).toEqual([
       ['chess', '5+3'],

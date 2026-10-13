@@ -96,10 +96,16 @@ study:write`, and `board:play` for live games on Lichess (optional: the sync wor
     vault fails to open or is refused, and the device keeps its data.
   - **What the relay sees.** A random-looking name, the ciphertext's size and the times of requests.
     It sees no account, email or device name. It keeps no logs, and it deletes vaults unused for a
-    year. Like any server, it sees requesters' IP addresses.
+    year (one never changed after it was made, after 30 days). Like any server, it sees requesters'
+    IP addresses; for its daily limits it counts the vaults each address makes under a hash of the
+    address with a random salt replaced every day, and never stores the address.
   - **Abuse.** The relay reads a request body as it arrives and refuses it past 1.4 MB, whatever
-    its `Content-Length` says, and takes at most one write a second per vault. An optional
-    rate-limit binding caps the vaults each address can create.
+    its `Content-Length` says, and takes at most one write a second, and 1,000 a day, per vault. One
+    address (an IPv6 address by its /64) may make 5 vaults a day and everyone together 50, and no
+    vault is made once the database reaches 400 MB, so existing vaults keep room to grow. An
+    optional rate-limit binding adds a limit a minute. The free plan's daily allowances can still be
+    used up by a flood of requests from many addresses; the relay then stops until midnight UTC,
+    and nothing kept is lost (see `relay/README.md`, "Abuse").
   - **Limits.** A relay can refuse service or delete a vault: devices then stop syncing and keep their
     data. Anyone holding the phrase holds the data, so the app tells learners to keep it to
     themselves, and to join only with a phrase from their own devices: a device that joins with
@@ -123,8 +129,9 @@ study:write`, and `board:play` for live games on Lichess (optional: the sync wor
     reaches another player. Lichess chat is not shown.
   - **What the relay sees.** The made-up names, the ratings players choose to show, the moves (and
     the clock after each, for the game's record), the phrases sent, and, like any server, each
-    socket's IP address (used only to allow at most 10 sockets from one address, and to count the
-    rooms an address makes, and kept no longer than the socket). It keeps no logs; a game room is
+    socket's IP address (an IPv6 address by its /64, used only for the limits per address, and kept
+    no longer than the socket; the waiting room's hourly counts per address are kept under a hash
+    of the address with a salt replaced every day). It keeps no logs; a game room is
     deleted 10 minutes after its game ends, 6 hours after it was made at most, and a posted game
     goes with its socket. A correspondence game's room is kept until 7 days after its end, a year
     after it was made at most, and an invitation nobody takes expires after 7 days. Live games are
@@ -141,10 +148,17 @@ study:write`, and `board:play` for live games on Lichess (optional: the sync wor
     own room, with the game's real moves, under an id derived from the game's (SHA-256), which the
     waiting room never gives out (its rooms' ids are random): anyone with the game's link — the
     players and those they sent it to — can open it, and nobody can plant other moves under it.
-  - **Abuse.** Sockets come only from the app's origins; a message is at most 2 KB, a socket may send
-    20 every 10 seconds, the waiting room holds at most 100 games and 2,000 sockets, and one phrase
-    every 2 seconds is passed on per player. A socket may make 5 correspondence invitations an
-    hour, and the sockets of one address 10 race rooms an hour.
+  - **Abuse.** Sockets come only from the app's origins (which keeps out other sites' pages, not
+    scripts); a message is at most 2,048 characters, a socket may send 20 every 10 seconds and is
+    closed after 10 refusals in a minute, and one phrase every 2 seconds is passed on per player.
+    The waiting room holds at most 2,000 sockets (10 from one address), 100 public and 300 private
+    games waiting (5 from one address), and one address may be paired into 120 games, make 5
+    correspondence invitations and 10 group rooms an hour, counted whether or not its sockets stay.
+    A waiting game's id is the SHA-256 of a secret only its poster's device holds, so nobody else
+    can post under it, even after the relay restarts. A room takes 12 sockets from one address, 6
+    on one seat and 20 that have not said who they are (one more pushes the oldest of those out, so
+    they cannot keep a player out), and 30 rematches in a row. A room writes only what changed, so
+    refused and repeated messages cost no storage writes.
 - **Notifications.** Push goes through the browsers' own push services, and the relay learns no
   more than it needs to deliver:
   - **Subscriptions.** A browser's push subscription (its push service's address and keys) reaches
@@ -166,8 +180,8 @@ study:write`, and `board:play` for live games on Lichess (optional: the sync wor
   - **Notices.** The service worker shows only a checked notice (a title and a line of text of
     bounded length) and opens only the app's own plain paths; anything else opens Home.
   - **Abuse.** The push endpoints take requests only from the app's origins, with bodies of 4 KB at
-    most, 20 a minute from one address; an optional rate-limit binding (`NEW_REMINDERS`) caps the
-    reminders each address can create.
+    most, 20 a minute from one address, and 5 new reminders a day from one address (counted as new
+    vaults are); an optional rate-limit binding (`NEW_REMINDERS`) adds a limit a minute.
 - **The offline copy's launcher.** It listens on the loopback addresses only (127.0.0.1 and ::1),
   so no other computer can reach it; it answers only GET and HEAD, with files from inside the
   copy's app folder (the path is cleaned first, and the folder refuses `..` and, on Windows,
