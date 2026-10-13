@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.3] - 2026-10-13
+
+### Fixed
+
+- **The README** named the offline copy's launcher _Start Chess Trainer_; it is _Start Open File_.
+
+### Changed
+
+- **Tools.** Playwright 1.64 (and the browsers its tests run in), Vite 8.3, jsdom 30.1.2, knip 6.41,
+  typescript-eslint 8.71.2 and the React plugin 6.1.2; the GitHub Actions that upload, download
+  and set up Node move to their latest patch releases.
+
 ## [0.31.2] - 2026-10-13
 
 The last of the relay's loose ends against abuse: connecting costs it nothing, chatter is written

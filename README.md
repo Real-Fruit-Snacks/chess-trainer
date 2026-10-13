@@ -154,8 +154,8 @@ which it works offline; _Download every puzzle_ in Settings keeps all 48,000 puz
 
 Every [release](https://github.com/Real-Fruit-Snacks/open-file/releases/latest) has an offline
 copy, `open-file-<version>-offline.zip` (about 190 MB): the whole app, with every lesson and
-puzzle, the full engine and the human-like opponent. Unzip it and double-click **Start Chess
-Trainer** (the `.exe` on Windows, the `.command` on macOS; `start-open-file.sh` on Linux). It
+puzzle, the full engine and the human-like opponent. Unzip it and double-click **Start Open
+File** (the `.exe` on Windows, the `.command` on macOS; `start-open-file.sh` on Linux). It
 opens in your browser at `http://localhost:8064/`, with no internet connection and nothing to
 install; the README inside says what to click the first time Windows or macOS asks about it.
 
